@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kingdom — Crown of Embers</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="game-wrap">
+    <canvas id="game"></canvas>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+      <div class="hud-left">
+        <div id="hud-day" class="hud-pill"><span class="icon" id="hud-phase-icon">☀</span> <span id="hud-day-text">Dag 1</span> · <span id="hud-phase-text">Morgen</span></div>
+        <div id="hud-base" class="hud-pill">🏰 <span id="hud-base-text">Lejr</span></div>
+      </div>
+      <div class="hud-center">
+        <div id="hud-objective" class="hud-objective">Byg din base op og overlev natten</div>
+      </div>
+      <div class="hud-right">
+        <div id="hud-coins" class="hud-pill big">🪙 <span id="hud-coins-text">0</span></div>
+        <div id="hud-hp" class="hud-pill">❤ <span id="hud-hp-text">5/5</span></div>
+        <div id="hud-weapon" class="hud-pill">⚔ <span id="hud-weapon-text">Intet våben</span></div>
+        <div id="hud-pop" class="hud-pill">👥 <span id="hud-pop-text">0</span> · 🏹 <span id="hud-arch-text">0</span> · 🔨 <span id="hud-build-text">0</span></div>
+      </div>
+    </div>
+
+    <!-- contextual prompt -->
+    <div id="prompt" class="hidden"></div>
+
+    <!-- Start screen -->
+    <div id="start-screen" class="overlay">
+      <div class="overlay-card">
+        <h1>K I N G D O M</h1>
+        <h2>Crown of Embers</h2>
+        <p class="tag">Et lille rige i en mørk skov. Saml guld, rekruttér dine undersåtter, byg dine mure — og overlev grådighedens natlige horder.</p>
+        <div class="controls">
+          <div><kbd>A</kbd> / <kbd>D</kbd> &nbsp;eller&nbsp; <kbd>←</kbd> <kbd>→</kbd> &nbsp;— rid til siderne</div>
+          <div><kbd>Shift</kbd> — galop</div>
+          <div>Stå ved et <b>mærke</b>, en butik eller en <b>vagabond</b> og <b>hold <kbd>↓</kbd>/<kbd>S</kbd></b> for at betale</div>
+          <div><kbd>M</kbd> lyd · <kbd>P</kbd> pause</div>
+        </div>
+        <div class="goal-line">🎯 Mål: Byg dit slot færdigt og overlev natten derefter.</div>
+        <div class="btn-row">
+          <button id="btn-start" class="btn primary">Nyt spil</button>
+          <button id="btn-continue" class="btn hidden">Fortsæt</button>
+        </div>
+        <p class="hint">Tip: Bueskytter jager om dagen og forsvarer murene om natten. Hold dit guld i bevægelse.</p>
+      </div>
+    </div>
+
+    <!-- End screen -->
+    <div id="end-screen" class="overlay hidden">
+      <div class="overlay-card">
+        <h1 id="end-title">Riget faldt</h1>
+        <p id="end-text" class="tag"></p>
+        <div class="btn-row">
+          <button id="btn-restart" class="btn primary">Spil igen</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="pause-screen" class="overlay hidden">
+      <div class="overlay-card small">
+        <h1>Pause</h1>
+        <p class="tag">Tryk <kbd>P</kbd> for at fortsætte</p>
+      </div>
+    </div>
+
+    <!-- Dev Tools Panel (toggle with ` backtick) -->
+    <div id="dev-panel" class="hidden">
+      <div class="dev-header">🛠 Dev Tools &nbsp;<kbd>`</kbd></div>
+      <div id="dev-stats" class="dev-stats"></div>
+
+      <div class="dev-section">
+        <div class="dev-label">Guld</div>
+        <div class="dev-row">
+          <button class="dev-btn" onclick="DEV.addCoins(10)">+10 🪙</button>
+          <button class="dev-btn" onclick="DEV.addCoins(50)">+50 🪙</button>
+          <button class="dev-btn" onclick="DEV.addCoins(60)">Max 🪙</button>
+        </div>
+      </div>
+
+      <div class="dev-section">
+        <div class="dev-label">Tid</div>
+        <div class="dev-row">
+          <button class="dev-btn" onclick="DEV.skipToNight()">→ Nat 🌙</button>
+          <button class="dev-btn" onclick="DEV.skipToDay()">→ Dag ☀</button>
+        </div>
+      </div>
+
+      <div class="dev-section">
+        <div class="dev-label">Base &amp; Helbredelse</div>
+        <div class="dev-row">
+          <button class="dev-btn" onclick="DEV.upgradeBase()">Opgradér base ⬆</button>
+          <button class="dev-btn" onclick="DEV.healAll()">Fuld helbred 💚</button>
+        </div>
+      </div>
+
+      <div class="dev-section">
+        <div class="dev-label">Spawn fjende</div>
+        <div class="dev-row">
+          <button class="dev-btn" onclick="DEV.doSpawnEnemy('imp')">Imp</button>
+          <button class="dev-btn" onclick="DEV.doSpawnEnemy('runner')">Runner</button>
+          <button class="dev-btn" onclick="DEV.doSpawnEnemy('brute')">Brute</button>
+          <button class="dev-btn" onclick="DEV.doSpawnEnemy('boss')">Boss</button>
+        </div>
+        <div class="dev-row" style="margin-top:4px">
+          <button class="dev-btn dev-danger" onclick="DEV.killAll()">💀 Dræb alle fjender</button>
+        </div>
+      </div>
+
+      <div class="dev-section">
+        <div class="dev-label">Spiller</div>
+        <div class="dev-row">
+          <button class="dev-btn" id="dev-god-btn" onclick="DEV.toggleGodMode()">God mode: ⚫ FRA</button>
+        </div>
+      </div>
+
+      <div class="dev-section">
+        <div class="dev-label">Giv våben</div>
+        <div class="dev-row">
+          <button class="dev-btn" onclick="DEV.giveWeapon('rusty_sword')">Rustent sværd</button>
+          <button class="dev-btn" onclick="DEV.giveWeapon('sword')">Sværd</button>
+          <button class="dev-btn" onclick="DEV.giveWeapon('short_bow')">Kortbue</button>
+        </div>
+        <div class="dev-row" style="margin-top:4px">
+          <button class="dev-btn" onclick="DEV.giveWeapon('flame_sword')" style="color:#ff9a6a">Flammesværd</button>
+          <button class="dev-btn" onclick="DEV.giveWeapon('dark_bow')" style="color:#c06aff">Mørkets bue</button>
+          <button class="dev-btn" onclick="DEV.giveWeapon('kings_sword')" style="color:#f2c14e">Kongens sværd</button>
+        </div>
+        <div class="dev-row" style="margin-top:4px">
+          <button class="dev-btn dev-danger" onclick="if(Game.state==='play'){player.weapon=null;floaty(player.x,'Våben droppet','#c8c8c8');}">Drop våben</button>
+        </div>
+      </div>
+
+      <div class="dev-section">
+        <div class="dev-label">Spilhastighed</div>
+        <div class="dev-row">
+          <button class="dev-btn dev-speed-btn dev-active" id="dev-spd-1" onclick="DEV.setSpeed(1)">×1</button>
+          <button class="dev-btn dev-speed-btn" id="dev-spd-2" onclick="DEV.setSpeed(2)">×2</button>
+          <button class="dev-btn dev-speed-btn" id="dev-spd-4" onclick="DEV.setSpeed(4)">×4</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js?v=3"></script>
+</body>
+</html>
