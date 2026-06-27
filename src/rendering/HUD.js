@@ -55,7 +55,8 @@ export const UI = {
     const wEl=document.getElementById("hud-weapon-text"), wPill=document.getElementById("hud-weapon");
     if (player.weapon) {
       const w=WEAPONS[player.weapon];
-      wEl.textContent=w.name+" ("+RARITY_NAME[w.rarity]+")";
+      const upgs=(player.weaponUpgrades||[]).length;
+      wEl.textContent=w.name+" ("+RARITY_NAME[w.rarity]+")"+(upgs>0?" ×"+upgs:"");
       wPill.style.borderColor=RARITY_COL[w.rarity]+"99";
       wPill.style.color=RARITY_COL[w.rarity];
     } else { wEl.textContent="Intet våben"; wPill.style.borderColor=""; wPill.style.color=""; }

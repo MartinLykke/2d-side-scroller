@@ -21,6 +21,9 @@ export const Game = {
   shopIdx: 0,
   diffMult: 1.0,
   rarityBonus: 0,
+  upgradeMenuOpen: false,
+  upgradeOptions: null,
+  upgradeIdx: 0,
 };
 
 // All mutable entity arrays and per-play variables live here so every
@@ -44,6 +47,7 @@ export const state = {
   locations: [],
   groundBows: [],
   groundHammers: [],
+  spells: [],
   vagrantTimer: 1,
   animalTimer: 2,
   pendingHammers: 0,

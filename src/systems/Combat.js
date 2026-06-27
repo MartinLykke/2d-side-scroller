@@ -1,6 +1,6 @@
 import { CFG } from '../config/config.js';
 import { ENEMY_TYPES } from '../config/enemies.js';
-import { WEAPONS } from '../config/weapons.js';
+import { WEAPONS, effectiveWeapon } from '../config/weapons.js';
 import { clamp, dist, rand } from '../util/math.js';
 import { groundY } from '../canvas.js';
 import { Game, state } from '../state.js';
@@ -81,6 +81,7 @@ export function killEnemy(e) {
   for (let k = 0; k < t.reward; k++) spawnCoin(e.x + rand(-18, 18), 1, -40, rand(-60, 60));
   spawnParticles(e.x, groundY - 24, 12, t.color === "#1f1830" ? "#ff2a6a" : "#6a2a4a", 80, 100);
   Audio.enemyDie();
+  if (window._addXP) window._addXP(t.reward * 8);
 
   if (e.locIdx !== undefined && state.locations[e.locIdx]) {
     const loc = state.locations[e.locIdx];
@@ -254,6 +255,82 @@ function updateLocEnemy(e, t, dt) {
   }
 }
 
+// ---------- Magic spells ----------
+function dealAoE(x, dmg, radius, col) {
+  for (const e of state.enemies) {
+    if (!e.fleeing && dist(e.x, x) < radius) {
+      e.hp -= dmg; e.flash = 0.14;
+      if (e.hp <= 0) killEnemy(e);
+    }
+  }
+  spawnParticles(x, groundY - 10, 14, col, 100, 90);
+}
+
+function chainLightning(x, dmg, bounces) {
+  if (bounces <= 0) return;
+  let nearest = null, nd = 220;
+  for (const e of state.enemies) {
+    const d = dist(e.x, x);
+    if (!e.fleeing && d < nd && d > 10) { nd = d; nearest = e; }
+  }
+  if (!nearest) return;
+  nearest.hp -= Math.max(1, Math.floor(dmg * 0.6)); nearest.flash = 0.14;
+  spawnParticles(nearest.x, groundY - 24, 5, "#ffffaa", 50, 70);
+  if (nearest.hp <= 0) killEnemy(nearest);
+  else chainLightning(nearest.x, dmg * 0.6, bounces - 1);
+}
+
+function castSpell(player, wBase, tgt) {
+  const sy = groundY - 72;
+  const ang = Math.atan2((groundY - 28) - sy, tgt.x - player.x);
+  const spd = wBase.spellType === "waterjet" ? 480 : wBase.spellType === "meteor" ? 180 : 330;
+  const ew = effectiveWeapon(player.weapon, player.weaponUpgrades || []);
+  state.spells.push({
+    x: player.x, y: sy,
+    vx: Math.cos(ang) * spd,
+    vy: Math.sin(ang) * spd,
+    spellType: wBase.spellType || "arcane",
+    dmg: ew.dmg,
+    life: 2.2,
+    col: wBase.col,
+    aoe: wBase.spellType === "meteor" || wBase.spellType === "void",
+  });
+  Audio.bow();
+}
+
+export function updateSpells(dt) {
+  if (!state.spells || !state.spells.length) return;
+  const { spells, enemies } = state;
+  for (let i = spells.length - 1; i >= 0; i--) {
+    const sp = spells[i];
+    sp.x += sp.vx * dt;
+    sp.y += sp.vy * dt;
+    const grav = sp.spellType === "meteor" ? 650 : sp.spellType === "waterjet" ? 80 : 280;
+    sp.vy += grav * dt;
+    sp.life -= dt;
+    const hitGround = sp.y > groundY - 8;
+    if (sp.life <= 0 || hitGround) {
+      if (sp.aoe && hitGround) dealAoE(sp.x, sp.dmg, 90, sp.col);
+      spells.splice(i, 1);
+      continue;
+    }
+    let hit = false;
+    for (const e of enemies) {
+      if (e.fleeing) continue;
+      const et = ENEMY_TYPES[e.type];
+      if (dist(sp.x, e.x) < et.w * 0.75 && Math.abs(sp.y - (groundY + (e.fy || 0) - 24)) < 44) {
+        e.hp -= sp.dmg; e.flash = 0.14; Audio.hit();
+        spawnParticles(e.x, groundY + (e.fy || 0) - 24, 6, sp.col, 60, 80);
+        if (e.hp <= 0) killEnemy(e);
+        if (sp.aoe) dealAoE(sp.x, Math.max(1, Math.floor(sp.dmg * 0.5)), 85, sp.col);
+        if (sp.spellType === "lightning") chainLightning(sp.x, sp.dmg, 1);
+        hit = true; break;
+      }
+    }
+    if (hit) spells.splice(i, 1);
+  }
+}
+
 // ---------- Player attack ----------
 export function updatePlayerAttack(dt) {
   const { player, enemies } = state;
@@ -261,7 +338,8 @@ export function updatePlayerAttack(dt) {
   if (player.swing > 0) player.swing -= dt;
   player.attackCd -= dt;
   if (player.attackCd > 0) return;
-  const w = WEAPONS[player.weapon];
+  const wBase = WEAPONS[player.weapon];
+  const w = effectiveWeapon(player.weapon, player.weaponUpgrades || []);
   let tgt = null, bd = w.range;
   for (const e of enemies) {
     if (e.fleeing) continue;
@@ -271,12 +349,14 @@ export function updatePlayerAttack(dt) {
   if (!tgt) return;
   player.dir = Math.sign(tgt.x - player.x) || player.dir;
   player.swing = 0.32;
-  if (w.type === "melee") {
+  if (wBase.type === "melee") {
     tgt.hp -= w.dmg; tgt.flash = 0.14; Audio.hit();
-    spawnParticles(tgt.x, groundY - 28, 4, w.col);
+    spawnParticles(tgt.x, groundY - 28, 4, wBase.col);
     if (tgt.hp <= 0) killEnemy(tgt);
-  } else {
+  } else if (wBase.type === "ranged") {
     shootArrow(player.x, groundY - 72, tgt);
+  } else {
+    castSpell(player, wBase, tgt);
   }
   player.attackCd = w.speed;
 }

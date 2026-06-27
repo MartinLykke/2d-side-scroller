@@ -2,7 +2,7 @@
 
 // ---------- Bootstrap ----------
 import { CFG, WALL_SLOTS, PORTALS, STATIONS_X } from './config/config.js';
-import { WEAPONS, RARITY_COL } from './config/weapons.js';
+import { WEAPONS, RARITY_COL, WEAPON_UPGRADES } from './config/weapons.js';
 import { ENEMY_TYPES } from './config/enemies.js';
 import { LOC_DEFS } from './config/locations.js';
 import { clamp, dist, lerp, rand, randInt, pick } from './util/math.js';
@@ -15,7 +15,7 @@ import { saveGame, hasSave, loadGame, deleteSave } from './systems/SaveSystem.js
 import { updateSpawning, planNight, spawnCoin, floaty, spawnParticles, spawnVagrant, spawnAnimal, spawnEnemy, buildLocations, spawnLocLoot } from './systems/SpawnSystem.js';
 import { updatePayment, updateCoins } from './systems/Economy.js';
 import { updateUnits, updateAssignments, updateVagrants, updateAnimals, nearestEnemy } from './systems/AI.js';
-import { updateEnemies, updateArrows, updatePlayerAttack, killEnemy } from './systems/Combat.js';
+import { updateEnemies, updateArrows, updatePlayerAttack, updateSpells, killEnemy } from './systems/Combat.js';
 
 import { FX, initFX, updateFX, biomeAt } from './rendering/Effects.js';
 import { render, drawEntityShadows } from './rendering/Renderer.js';
@@ -45,6 +45,13 @@ const SHOP_ITEMS = [
   { weaponId: 'void_bow',      price: 62, tier: 5 },
   { weaponId: 'sunblade',      price: 95, tier: 6 },
   { weaponId: 'dragons_bow',   price: 90, tier: 6 },
+  { weaponId: 'void_tome',     price: 88, tier: 6 },
+  { weaponId: 'fire_tome',     price: 14, tier: 2 },
+  { weaponId: 'hydro_tome',    price: 12, tier: 2 },
+  { weaponId: 'lightning_tome',price: 38, tier: 4 },
+  { weaponId: 'meteor_tome',   price: 44, tier: 4 },
+  { weaponId: 'arcane_tome',   price: 65, tier: 5 },
+  { weaponId: 'shadow_tome',   price: 62, tier: 5 },
 ];
 window._SHOP_ITEMS = SHOP_ITEMS;
 
@@ -66,11 +73,59 @@ function pickupWeapon(weaponId) {
   const { player, lootItems } = state;
   if (player.weapon) lootItems.push({ x: player.x + rand(-60, 60), weaponId: player.weapon });
   player.weapon = weaponId;
-  const w = WEAPONS[weaponId];
+  player.weaponUpgrades = [];
   state.weaponPickup = { weaponId, timer: 3.8 };
   Audio.upgrade();
 }
 window._pickupWeapon = pickupWeapon;
+
+// ---------- XP & Level-up ----------
+function xpToNext(level) { return 60 + level * 45; }
+
+function addXP(amount) {
+  const { player } = state;
+  if (!player || Game.state !== "play") return;
+  player.xp = (player.xp || 0) + amount;
+  floaty(player.x, "+" + amount + " xp", "#9bd05a");
+  while (player.xp >= xpToNext(player.level || 1)) {
+    player.xp -= xpToNext(player.level || 1);
+    player.level = (player.level || 1) + 1;
+    player.pendingUpgrade = true;
+    floaty(player.x, "⬆ Niveau " + player.level + "!", "#f2c14e");
+    Audio.upgrade();
+  }
+}
+window._addXP = addXP;
+
+function checkUpgrade() {
+  const { player } = state;
+  if (!player || !player.pendingUpgrade || Game.upgradeMenuOpen) return;
+  player.pendingUpgrade = false;
+  if (!player.weapon) return;
+  const wDef = WEAPONS[player.weapon];
+  const pool = [
+    ...(WEAPON_UPGRADES.generic || []),
+    ...(WEAPON_UPGRADES[wDef.type] || []),
+  ];
+  const applied = (player.weaponUpgrades || []).map(u => u.id);
+  const available = pool.filter(u => !applied.includes(u.id));
+  if (available.length === 0) { floaty(player.x, "Våben fuldt opgraderet!", "#f2c14e"); return; }
+  const shuffled = available.slice().sort(() => Math.random() - 0.5);
+  Game.upgradeOptions = shuffled.slice(0, Math.min(3, shuffled.length));
+  Game.upgradeMenuOpen = true;
+  Game.upgradeIdx = 0;
+}
+
+function applyUpgrade(idx) {
+  const opt = Game.upgradeOptions?.[idx];
+  if (!opt) { Game.upgradeMenuOpen = false; return; }
+  const { player } = state;
+  if (!player.weaponUpgrades) player.weaponUpgrades = [];
+  player.weaponUpgrades.push(opt);
+  Game.upgradeMenuOpen = false;
+  floaty(player.x, "⬆ " + opt.name + "!", "#f2c14e");
+  Audio.upgrade();
+}
 
 // ---------- Stations ----------
 function buildStations() {
@@ -81,7 +136,7 @@ function buildStations() {
     id:"base", x:()=>base.x, paid:0,
     cost:()=>base.level<4?CFG.baseUpgradeCost[base.level]:0,
     label:()=>base.level<4?`Opgradér ${baseName(base.level)} → ${baseName(base.level+1)}`:"Slottet er fuldt udbygget",
-    onPaid:()=>upgradeBase(),
+    onPaid:()=>{ upgradeBase(); addXP(30); },
   });
   state.stations.push({
     id:"bow", x:()=>STATIONS_X.bow, paid:0,
@@ -112,14 +167,12 @@ function buildStations() {
       id:"wall", wall:w, x:()=>w.x, paid:0,
       cost:()=>{
         if (!w.commissioned) return CFG.wallCost;
-        {
         if (w.buildProgress < 1) return 0;
         if (w.level < 5) return CFG.wallUpgradeCosts[w.level - 1];
         return 0;
       },
       label:()=>{
         if (!w.commissioned) return "Byg mur";
-        {
         if (w.buildProgress < 1) return "Bygges...";
         if (w.level < 5) return `Opgradér mur (lvl ${w.level}→${w.level+1})`;
         return "Mur (maks niveau 5)";
@@ -127,11 +180,11 @@ function buildStations() {
       onPaid:()=>{
         if (!w.commissioned) {
           w.commissioned=true; w.level=1; w.maxHp=CFG.wallHp[1]; w.hp=0; w.buildProgress=0;
-          floaty(w.x,"🚧 Mur bestilt");
+          floaty(w.x,"🚧 Mur bestilt"); addXP(15);
         } else if (w.level < 5) {
           w.level++; w.maxHp=CFG.wallHp[w.level];
           w.buildProgress=clamp(w.hp/w.maxHp,0.2,1);
-          floaty(w.x,`⬆ Mur niveau ${w.level}`,"#9bd05a");
+          floaty(w.x,`⬆ Mur niveau ${w.level}`,"#9bd05a"); addXP(20);
         }
         Audio.build();
       },
@@ -162,6 +215,7 @@ function newGame() {
   state.groundBows      = [];
   state.groundHammers   = [];
   state.lootItems       = [];
+  state.spells          = [];
   state.weaponPickup    = null;
   state.payCooldown     = 0;
   state.lastPaidStation = null;
@@ -262,6 +316,7 @@ function triggerLocation(loc, idx) {
     state.enemies.push({ x:ex, vx:0, type, hp:ENEMY_TYPES[type].hp, maxHp:ENEMY_TYPES[type].hp, dir:state.player.x<ex?-1:1, attackCd:0, carry:0, anim:rand(0,6), flash:0, fleeing:false, portal:null, locIdx:idx, home:loc.x });
   }
   floaty(loc.x, LOC_DEFS[loc.type].emoji+" "+LOC_DEFS[loc.type].name+"!", "#ff8a6a");
+  addXP(25 + loc.enemyCount * 5);
 }
 
 function updateLootItems() {
@@ -325,12 +380,14 @@ function update(dt) {
   updateLocations();
   updateEnemies(dt);
   updateArrows(dt);
+  updateSpells(dt);
   updateCoins(dt);
   updateLootItems();
   updateWeaponPickup(dt);
   updateParticles(dt);
   updateFloats(dt);
   updateSpawning(dt);
+  checkUpgrade();
   updateCamera();
   checkEndConditions();
   updateAutosave(dt);
@@ -440,11 +497,22 @@ window.addEventListener("keydown", (e) => {
   if (k === "m") UI.toggleMute();
   if (k === "p") DEV.toggle();
   if (k === "escape") {
-    Game.inventoryOpen = false; Game.shopOpen = false;
+    Game.inventoryOpen = false; Game.shopOpen = false; Game.upgradeMenuOpen = false;
     if (Game.state === "play" || Game.state === "pause") Game.togglePause();
   }
 
   if (Game.state !== "play") return;
+
+  if (Game.upgradeMenuOpen) {
+    if (k === "1") { applyUpgrade(0); e.preventDefault(); return; }
+    if (k === "2") { applyUpgrade(1); e.preventDefault(); return; }
+    if (k === "3") { applyUpgrade(2); e.preventDefault(); return; }
+    if (k === "arrowleft")  { Game.upgradeIdx = Math.max(0, Game.upgradeIdx - 1); e.preventDefault(); return; }
+    if (k === "arrowright") { Game.upgradeIdx = Math.min((Game.upgradeOptions?.length || 1) - 1, Game.upgradeIdx + 1); e.preventDefault(); return; }
+    if (k === "e" || k === "enter") { applyUpgrade(Game.upgradeIdx); e.preventDefault(); return; }
+    e.preventDefault(); return;
+  }
+
   if (k === "i") { Game.inventoryOpen = !Game.inventoryOpen; Game.shopOpen = false; }
   if (k === "b" && !Game.inventoryOpen) tryOpenShop();
   if (Game.shopOpen) handleShopKeys(k, e);

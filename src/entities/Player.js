@@ -8,5 +8,6 @@ export function makePlayer() {
     invuln: 0, hurt: 0, knock: 0, regen: 0,
     weapon: null, attackCd: 0, swing: 0,
     jumpH: 0, jumpVy: 0,
+    xp: 0, level: 1, weaponUpgrades: [], pendingUpgrade: false,
   };
 }

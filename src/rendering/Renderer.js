@@ -1,7 +1,7 @@
 import { clamp, lerp, lerpColor, rgb, withA, shade, hazeColor, atmo, dist } from '../util/math.js';
 import { CFG, STATIONS_X } from '../config/config.js';
 import { ENEMY_TYPES } from '../config/enemies.js';
-import { WEAPONS, RARITY_COL, RARITY_NAME } from '../config/weapons.js';
+import { WEAPONS, RARITY_COL, RARITY_NAME, WEAPON_UPGRADES } from '../config/weapons.js';
 import { LOC_DEFS } from '../config/locations.js';
 import { ctx, W, H, groundY } from '../canvas.js';
 import { Game, state } from '../state.js';
@@ -22,6 +22,21 @@ export function groundShadow(x, w, a) {
 
 function roundedRect(x, y, w, h, r) {
   ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+
+function drawTomeIcon(col, s) {
+  s = s || 1;
+  roundedRect(-8*s, -11*s, 16*s, 17*s, 2*s);
+  ctx.fillStyle = "rgba(20,14,28,0.85)"; ctx.fill();
+  ctx.strokeStyle = col; ctx.lineWidth = 1.5*s; ctx.stroke();
+  ctx.strokeStyle = col; ctx.lineWidth = s;
+  ctx.beginPath(); ctx.moveTo(0, -11*s); ctx.lineTo(0, 6*s); ctx.stroke();
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.75;
+  const tg = ctx.createRadialGradient(0, -18*s, 1, 0, -18*s, 6*s);
+  tg.addColorStop(0, col); tg.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = tg; ctx.beginPath(); ctx.arc(0, -18*s, 6*s, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, -18*s, 2.5*s, 0, Math.PI*2); ctx.fill();
 }
 
 function drawHpBar(x, y, w, frac, color) {
@@ -526,10 +541,19 @@ export function drawPlayer(dark) {
         ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.28+sw*0.4;
         ctx.strokeStyle=w.col; ctx.lineWidth=5; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(len,0); ctx.stroke(); ctx.restore();
       }
-    } else {
+    } else if (w.type === "ranged") {
       ctx.strokeStyle=w.col; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(px+14,groundY-58,10,-1.25,1.25); ctx.stroke();
       ctx.strokeStyle="rgba(230,216,168,0.65)"; ctx.lineWidth=1;
       ctx.beginPath(); ctx.moveTo(px+14+10*Math.cos(-1.25),groundY-58+10*Math.sin(-1.25)); ctx.lineTo(px+14+10*Math.cos(1.25),groundY-58+10*Math.sin(1.25)); ctx.stroke();
+    } else {
+      const upgCount = (player.weaponUpgrades || []).length;
+      ctx.save(); ctx.translate(px+12, groundY-58);
+      if (sw > 0 || upgCount > 0) {
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=(sw>0?0.55*sw/0.32:0.18)+(upgCount*0.1);
+        ctx.fillStyle=w.col; ctx.beginPath(); ctx.arc(0,0,14,0,Math.PI*2); ctx.fill(); ctx.restore();
+      }
+      drawTomeIcon(w.col, 1.15);
+      ctx.restore();
     }
     ctx.restore();
   }
@@ -784,10 +808,12 @@ export function drawLootItems() {
       const len=clamp(w.range*0.28,12,26);
       ctx.beginPath(); ctx.moveTo(-len/2,0); ctx.lineTo(len/2,0); ctx.stroke();
       ctx.lineWidth=5; ctx.beginPath(); ctx.moveTo(-len*0.3,-5); ctx.lineTo(-len*0.3,5); ctx.stroke();
-    } else {
+    } else if (w.type==="ranged") {
       ctx.beginPath(); ctx.arc(0,0,9,-1.3,1.3); ctx.stroke();
       ctx.strokeStyle="#e8d8a8"; ctx.lineWidth=1;
       ctx.beginPath(); ctx.moveTo(9*Math.cos(-1.3),9*Math.sin(-1.3)); ctx.lineTo(9*Math.cos(1.3),9*Math.sin(1.3)); ctx.stroke();
+    } else {
+      drawTomeIcon(w.col, 1);
     }
     ctx.restore();
     ctx.save(); ctx.font="10px Trebuchet MS"; ctx.textAlign="center";
@@ -836,10 +862,12 @@ function drawWeaponPickupOverlay() {
     ctx.beginPath(); ctx.moveTo(-len/2,-2); ctx.lineTo(len/2,-2); ctx.stroke();
     ctx.lineWidth=7; ctx.beginPath(); ctx.moveTo(-len*0.35,-10); ctx.lineTo(-len*0.35,6); ctx.stroke();
     if (w.rarity>=2) { ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.4; ctx.strokeStyle=w.col; ctx.lineWidth=8; ctx.beginPath(); ctx.moveTo(-len/2,-2); ctx.lineTo(len/2,-2); ctx.stroke(); ctx.restore(); }
-  } else {
+  } else if (w.type==="ranged") {
     ctx.strokeStyle=w.col; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(0,0,16,-1.3,1.3); ctx.stroke();
     ctx.strokeStyle="#e8d8a8"; ctx.lineWidth=1.5;
     ctx.beginPath(); ctx.moveTo(16*Math.cos(-1.3),16*Math.sin(-1.3)); ctx.lineTo(16*Math.cos(1.3),16*Math.sin(1.3)); ctx.stroke();
+  } else {
+    drawTomeIcon(w.col, 1.8);
   }
   ctx.restore();
   // text
@@ -891,9 +919,11 @@ function drawInventoryOverlay() {
       ctx.save(); ctx.translate(10,-58); ctx.rotate(-0.22);
       ctx.strokeStyle=ww.col; ctx.lineWidth=2.5; ctx.lineCap="round";
       ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(len,0); ctx.stroke(); ctx.restore();
-    } else {
+    } else if (ww.type==="ranged") {
       ctx.strokeStyle=WEAPONS[player.weapon].col; ctx.lineWidth=2;
       ctx.beginPath(); ctx.arc(14,-58,9,-1.25,1.25); ctx.stroke();
+    } else {
+      ctx.save(); ctx.translate(12,-58); drawTomeIcon(ww.col, 1.1); ctx.restore();
     }
   }
   ctx.restore();
@@ -913,7 +943,7 @@ function drawInventoryOverlay() {
     ctx.font="13px Trebuchet MS"; ctx.fillStyle="rgba(255,255,255,0.65)";
     ctx.fillText(RARITY_NAME[ww.rarity], rx, H/2-58);
     ctx.fillStyle="rgba(200,200,200,0.8)";
-    ctx.fillText("Type:        "+( ww.type==="melee"?"Nærkamp":"Bue"), rx, H/2-32);
+    ctx.fillText("Type:        "+(ww.type==="melee"?"Nærkamp":ww.type==="ranged"?"Bue":"Magi"), rx, H/2-32);
     ctx.fillText("Skade:       "+ww.dmg, rx, H/2-12);
     ctx.fillText("Rækkevidde: "+ww.range+" px", rx, H/2+10);
     ctx.fillText("Hastighed:  "+ww.speed+"x", rx, H/2+32);
@@ -925,10 +955,12 @@ function drawInventoryOverlay() {
       ctx.beginPath(); ctx.moveTo(-len/2,-4); ctx.lineTo(len/2,-4); ctx.stroke();
       ctx.lineWidth=9; ctx.beginPath(); ctx.moveTo(-len*0.32,-14); ctx.lineTo(-len*0.32,8); ctx.stroke();
       if (ww.rarity>=2) { ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.35; ctx.strokeStyle=ww.col; ctx.lineWidth=10; ctx.beginPath(); ctx.moveTo(-len/2,-4); ctx.lineTo(len/2,-4); ctx.stroke(); ctx.restore(); }
-    } else {
+    } else if (ww.type==="ranged") {
       ctx.strokeStyle=ww.col; ctx.lineWidth=4; ctx.beginPath(); ctx.arc(0,0,20,-1.3,1.3); ctx.stroke();
       ctx.strokeStyle="#e8d8a8"; ctx.lineWidth=2;
       ctx.beginPath(); ctx.moveTo(20*Math.cos(-1.3),20*Math.sin(-1.3)); ctx.lineTo(20*Math.cos(1.3),20*Math.sin(1.3)); ctx.stroke();
+    } else {
+      drawTomeIcon(ww.col, 2.2);
     }
     ctx.restore();
   } else {
@@ -982,11 +1014,15 @@ function drawShopOverlay() {
       ctx.strokeStyle=canAfford?w.col:"rgba(100,100,100,0.6)"; ctx.lineWidth=3; ctx.lineCap="round";
       ctx.beginPath(); ctx.moveTo(-len/2,0); ctx.lineTo(len/2,0); ctx.stroke();
       ctx.lineWidth=5; ctx.beginPath(); ctx.moveTo(-len*0.3,-6); ctx.lineTo(-len*0.3,6); ctx.stroke();
-    } else {
+    } else if (w.type==="ranged") {
       ctx.strokeStyle=canAfford?w.col:"rgba(100,100,100,0.6)"; ctx.lineWidth=2.5;
       ctx.beginPath(); ctx.arc(0,0,10,-1.3,1.3); ctx.stroke();
       ctx.strokeStyle="#e8d8a8"; ctx.lineWidth=1;
       ctx.beginPath(); ctx.moveTo(10*Math.cos(-1.3),10*Math.sin(-1.3)); ctx.lineTo(10*Math.cos(1.3),10*Math.sin(1.3)); ctx.stroke();
+    } else {
+      ctx.globalAlpha = canAfford ? 1 : 0.4;
+      drawTomeIcon(w.col, 0.95);
+      ctx.globalAlpha = 1;
     }
     ctx.lineCap="butt"; ctx.restore();
     // Name
@@ -1002,6 +1038,121 @@ function drawShopOverlay() {
   ctx.textAlign="center"; ctx.font="13px Trebuchet MS";
   ctx.fillStyle="#f2c14e";
   ctx.fillText("Dine mønter: "+player.coins+"🪙", cx, cy+panelH/2-12);
+  ctx.restore();
+}
+
+// ---------- Magic spells ----------
+export function drawSpells() {
+  if (!state.spells || !state.spells.length) return;
+  for (const sp of state.spells) {
+    ctx.save(); ctx.translate(sp.x, sp.y);
+    switch (sp.spellType) {
+      case "fireball": {
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.7;
+        const fg=ctx.createRadialGradient(0,0,1,0,0,13);
+        fg.addColorStop(0,"rgba(255,220,120,0.95)"); fg.addColorStop(0.5,"rgba(255,100,30,0.7)"); fg.addColorStop(1,"rgba(255,50,0,0)");
+        ctx.fillStyle=fg; ctx.beginPath(); ctx.arc(0,0,13,0,Math.PI*2); ctx.fill(); ctx.restore();
+        ctx.fillStyle="#ffcc80"; ctx.beginPath(); ctx.arc(0,0,5,0,Math.PI*2); ctx.fill(); break;
+      }
+      case "meteor": {
+        ctx.fillStyle="#4a3020"; ctx.beginPath(); ctx.arc(0,0,9,0,Math.PI*2); ctx.fill();
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.65;
+        ctx.fillStyle="#ff8840"; ctx.beginPath(); ctx.arc(-2,-4,15,0,Math.PI*2); ctx.fill(); ctx.restore(); break;
+      }
+      case "waterjet": {
+        ctx.save(); ctx.globalAlpha=0.85;
+        ctx.fillStyle="#4ab8e8"; ctx.beginPath(); ctx.arc(0,0,8,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle="#a0e8ff"; ctx.beginPath(); ctx.arc(0,0,3,0,Math.PI*2); ctx.fill(); ctx.restore(); break;
+      }
+      case "lightning": {
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.9;
+        ctx.fillStyle="#ffffaa"; ctx.beginPath(); ctx.arc(0,0,12,0,Math.PI*2); ctx.fill(); ctx.restore();
+        ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(0,0,4,0,Math.PI*2); ctx.fill(); break;
+      }
+      case "arcane": {
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.72;
+        const ag=ctx.createRadialGradient(0,0,1,0,0,11);
+        ag.addColorStop(0,"rgba(200,180,255,0.9)"); ag.addColorStop(1,"rgba(120,60,255,0)");
+        ctx.fillStyle=ag; ctx.beginPath(); ctx.arc(0,0,11,0,Math.PI*2); ctx.fill(); ctx.restore();
+        ctx.fillStyle="#e0d0ff"; ctx.beginPath(); ctx.arc(0,0,4,0,Math.PI*2); ctx.fill(); break;
+      }
+      case "shadow": {
+        ctx.save(); ctx.globalAlpha=0.55;
+        ctx.fillStyle="#200030"; ctx.beginPath(); ctx.arc(0,0,14,0,Math.PI*2); ctx.fill(); ctx.restore();
+        ctx.fillStyle="#cc44ff"; ctx.beginPath(); ctx.arc(0,0,5,0,Math.PI*2); ctx.fill(); break;
+      }
+      case "void": {
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.82;
+        const vg=ctx.createRadialGradient(0,0,2,0,0,19);
+        vg.addColorStop(0,"rgba(255,240,160,0.9)"); vg.addColorStop(0.4,"rgba(180,100,255,0.6)"); vg.addColorStop(1,"rgba(80,20,160,0)");
+        ctx.fillStyle=vg; ctx.beginPath(); ctx.arc(0,0,19,0,Math.PI*2); ctx.fill(); ctx.restore();
+        ctx.fillStyle="#ffe060"; ctx.beginPath(); ctx.arc(0,0,7,0,Math.PI*2); ctx.fill(); break;
+      }
+      default: {
+        ctx.fillStyle=sp.col||"#ffffff"; ctx.beginPath(); ctx.arc(0,0,6,0,Math.PI*2); ctx.fill(); break;
+      }
+    }
+    ctx.restore();
+  }
+}
+
+// ---------- Upgrade menu ----------
+function drawUpgradeMenu() {
+  if (!Game.upgradeMenuOpen || !Game.upgradeOptions) return;
+  const opts = Game.upgradeOptions;
+  const { player } = state;
+  if (!player || !player.weapon) return;
+  const w = WEAPONS[player.weapon], rc = RARITY_COL[w.rarity];
+  const cx = W/2, cy = H/2;
+  ctx.save();
+  ctx.fillStyle = "rgba(6,4,14,0.9)"; ctx.fillRect(0,0,W,H);
+  ctx.textAlign = "center";
+  ctx.font = "bold 20px Trebuchet MS"; ctx.fillStyle = "#f2c14e";
+  ctx.fillText("⬆ Niveau " + player.level + "! Vælg en opgradering", cx, cy - 158);
+  ctx.font = "13px Trebuchet MS"; ctx.fillStyle = rc;
+  const upgs = (player.weaponUpgrades||[]).length;
+  ctx.fillText(w.name + (upgs > 0 ? "  (+" + upgs + " opgraderinger)" : ""), cx, cy - 132);
+  const cardW = 185, cardH = 168, gap = 14;
+  const totalW = opts.length * cardW + (opts.length - 1) * gap;
+  const sx = cx - totalW/2;
+  for (let i = 0; i < opts.length; i++) {
+    const opt = opts[i], ox = sx + i*(cardW+gap), oy = cy - 78, sel = i === Game.upgradeIdx;
+    roundedRect(ox, oy, cardW, cardH, 12);
+    ctx.fillStyle = sel ? "rgba(242,193,78,0.16)" : "rgba(255,255,255,0.04)"; ctx.fill();
+    ctx.strokeStyle = sel ? "#f2c14e" : "rgba(200,180,120,0.22)"; ctx.lineWidth = sel ? 2 : 1; ctx.stroke();
+    ctx.textAlign = "center";
+    ctx.font = "bold 12px Trebuchet MS";
+    ctx.fillStyle = sel ? "#f2c14e" : "#907860";
+    ctx.fillText("[" + (i+1) + "]", ox+cardW/2, oy+22);
+    ctx.font = "bold 15px Trebuchet MS";
+    ctx.fillStyle = sel ? "#f0e6cf" : "#c8b890";
+    ctx.fillText(opt.name, ox+cardW/2, oy+50);
+    ctx.font = "11px Trebuchet MS"; ctx.fillStyle = "rgba(200,190,170,0.72)";
+    ctx.fillText(opt.desc, ox+cardW/2, oy+70);
+    let yy = oy + 96;
+    if (opt.effect.dmg)        { ctx.fillStyle="#9bd05a"; ctx.font="12px Trebuchet MS"; ctx.fillText("+" + opt.effect.dmg + " skade", ox+cardW/2, yy); yy+=20; }
+    if (opt.effect.speedBonus) { ctx.fillStyle="#6ab4ff"; ctx.font="12px Trebuchet MS"; ctx.fillText("+" + Math.round(opt.effect.speedBonus*100) + "% hurtigere angreb", ox+cardW/2, yy); yy+=20; }
+    if (opt.effect.range)      { ctx.fillStyle="#f2c14e"; ctx.font="12px Trebuchet MS"; ctx.fillText("+" + opt.effect.range + " px rækkevidde", ox+cardW/2, yy); yy+=20; }
+  }
+  ctx.textAlign = "center"; ctx.font = "11px Trebuchet MS"; ctx.fillStyle = "rgba(180,180,180,0.45)";
+  ctx.fillText("◀▶ naviger  ·  E/Enter vælg  ·  1/2/3 direkte  ·  Esc annuller", cx, cy + cardH/2 + 46);
+  ctx.restore();
+}
+
+// ---------- XP bar ----------
+function drawXpBar() {
+  const { player } = state;
+  if (!player || !player.level) return;
+  const xpNeeded = 60 + player.level * 45;
+  const frac = clamp((player.xp||0) / xpNeeded, 0, 1);
+  const bx = 20, by = H - 48, bw = 150, bh = 7;
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,0.5)"; roundedRect(bx-6, by-22, bw+12, bh+30, 6); ctx.fill();
+  ctx.font = "bold 11px Trebuchet MS"; ctx.textAlign = "left";
+  ctx.fillStyle = "#f2c14e"; ctx.fillText("Niveau " + player.level, bx, by-7);
+  ctx.fillStyle = "rgba(255,255,255,0.12)"; ctx.fillRect(bx, by, bw, bh);
+  ctx.fillStyle = "#9bd05a"; ctx.fillRect(bx, by, bw*frac, bh);
+  ctx.strokeStyle = "rgba(255,255,255,0.18)"; ctx.lineWidth=1; ctx.strokeRect(bx, by, bw, bh);
   ctx.restore();
 }
 
@@ -1038,7 +1189,7 @@ export function render() {
   drawEntityShadows(); drawPortals(dark); drawWalls(dark); drawBase(dark);
   drawStations(); drawCoins(); drawGroundBows(); drawGroundHammers(); drawLootItems();
   drawAnimals(); drawVagrants(); drawUnits(); drawEnemies(dark);
-  drawPlayer(dark); drawArrows(); drawParticles(); drawCampLight(dark); drawFloats();
+  drawPlayer(dark); drawArrows(); drawSpells(); drawParticles(); drawCampLight(dark); drawFloats();
   ctx.restore();
 
   drawTreeLayer(trees.fore,1.06,0.04,20,0.45);
@@ -1052,4 +1203,6 @@ export function render() {
   drawWeaponPickupOverlay();
   drawInventoryOverlay();
   drawShopOverlay();
+  drawUpgradeMenu();
+  if (Game.state === "play") drawXpBar();
 }
