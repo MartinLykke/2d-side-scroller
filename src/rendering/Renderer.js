@@ -375,9 +375,20 @@ function drawHumanoid(x, anim, bodyCol, headCol, tool, dir, moving) {
     ctx.strokeStyle="rgba(230,216,168,0.8)"; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(8+Math.cos(-1.2)*9,groundY-28-bob+Math.sin(-1.2)*9); ctx.lineTo(8+Math.cos(1.2)*9,groundY-28-bob+Math.sin(1.2)*9); ctx.stroke();
   } else if (tool==="hammer") {
-    ctx.fillStyle="rgba(0,0,0,0.2)"; roundedRect(-5,groundY-26-bob,10,10,2); ctx.fill();
-    ctx.strokeStyle="#6a4a2a"; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(7,groundY-30-bob); ctx.lineTo(11,groundY-22-bob); ctx.stroke();
-    ctx.fillStyle="#8a8a92"; ctx.fillRect(6,groundY-34-bob,8,5);
+    // Leather apron
+    ctx.fillStyle="#3a200a"; ctx.fillRect(-4,groundY-30-bob,8,4);
+    ctx.fillStyle="#4a2e10";
+    ctx.beginPath(); ctx.moveTo(-5,groundY-28-bob); ctx.lineTo(5,groundY-28-bob); ctx.lineTo(6,groundY-14-bob); ctx.lineTo(-6,groundY-14-bob); ctx.fill();
+    ctx.fillStyle="#5a3a16"; ctx.fillRect(-3,groundY-26-bob,6,2);
+    // Work cap over head
+    ctx.fillStyle="#5a3a18"; ctx.beginPath(); ctx.arc(0,groundY-39-bob,6,Math.PI,0); ctx.fill();
+    ctx.fillStyle="#3e2610"; ctx.fillRect(-8,groundY-39-bob,16,3);
+    // Hammer
+    ctx.strokeStyle="#7a5a2a"; ctx.lineWidth=2.5; ctx.lineCap="round";
+    ctx.beginPath(); ctx.moveTo(6,groundY-33-bob); ctx.lineTo(12,groundY-21-bob); ctx.stroke();
+    ctx.lineCap="butt";
+    ctx.fillStyle="#9a9aaa"; ctx.fillRect(6,groundY-36-bob,9,5);
+    ctx.fillStyle="#aaaabc"; ctx.fillRect(6,groundY-36-bob,9,2);
   } else if (tool==="scythe") {
     ctx.fillStyle="#c9a24a"; ctx.beginPath(); ctx.ellipse(0,groundY-42-bob,8,2.6,0,0,Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.arc(0,groundY-43-bob,4,Math.PI,0); ctx.fill();
@@ -739,6 +750,26 @@ export function drawGroundBows() {
   }
 }
 
+export function drawGroundHammers() {
+  if (!state.groundHammers) return;
+  const t = performance.now()/1000;
+  for (const h of state.groundHammers) {
+    const bob = Math.sin(t*2.2+h.x*0.01)*2.5, yy = groundY-16+bob, alpha = h.claimed ? 0.35 : 0.72;
+    groundShadow(h.x, 8, 0.18);
+    ctx.save(); ctx.globalAlpha=alpha; ctx.translate(h.x, yy); ctx.rotate(0.3+Math.sin(t*1.1+h.x*0.005)*0.06);
+    ctx.strokeStyle="#7a5a2a"; ctx.lineWidth=2.5; ctx.lineCap="round";
+    ctx.beginPath(); ctx.moveTo(0,8); ctx.lineTo(0,-8); ctx.stroke();
+    ctx.lineCap="butt";
+    ctx.fillStyle="#9a9aaa"; ctx.fillRect(-5,-12,10,5);
+    ctx.fillStyle="#bbbbcc"; ctx.fillRect(-5,-12,10,2);
+    ctx.restore();
+    if (!h.claimed) {
+      ctx.save(); ctx.globalAlpha=0.5+0.2*Math.sin(t*3+h.x*0.01); ctx.globalCompositeOperation="lighter";
+      ctx.fillStyle="#f2a230"; ctx.beginPath(); ctx.arc(h.x, yy, 13, 0, Math.PI*2); ctx.fill(); ctx.restore();
+    }
+  }
+}
+
 export function drawLootItems() {
   if (!state.lootItems) return;
   const t=performance.now()/1000;
@@ -779,19 +810,23 @@ export function drawOffscreenIndicators() {
 function drawWeaponPickupOverlay() {
   const wp = state.weaponPickup;
   if (!wp) return;
-  const a = clamp(wp.timer / 1.2, 0, 1); // full opacity then fade out in last 1.2s
+  const a = clamp(wp.timer / 1.0, 0, 1);
   if (a <= 0) return;
   const w = WEAPONS[wp.weaponId], rc = RARITY_COL[w.rarity];
   const cx = W/2, cy = H*0.32;
+  const elapsed = 3.8 - wp.timer;
+  const entryScale = elapsed < 0.25 ? (0.6 + 0.4 * (elapsed / 0.25)) : 1;
   ctx.save();
   ctx.globalAlpha = a;
+  ctx.translate(cx, cy); ctx.scale(entryScale, entryScale); ctx.translate(-cx, -cy);
   // panel
-  roundedRect(cx-160, cy-62, 320, 124, 14);
-  ctx.fillStyle = "rgba(12,10,20,0.88)"; ctx.fill();
-  ctx.strokeStyle = rc + "cc"; ctx.lineWidth = 2; ctx.stroke();
-  // glow
-  ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=a*0.18;
-  ctx.fillStyle=rc; roundedRect(cx-160,cy-62,320,124,14); ctx.fill();
+  const panelW2 = w.rarity >= 3 ? 340 : 320, panelH2 = w.rarity >= 3 ? 134 : 124;
+  roundedRect(cx-panelW2/2, cy-panelH2/2, panelW2, panelH2, 14);
+  ctx.fillStyle = "rgba(12,10,20,0.92)"; ctx.fill();
+  ctx.strokeStyle = rc + "dd"; ctx.lineWidth = w.rarity >= 3 ? 2.5 : 2; ctx.stroke();
+  // glow (stronger for epic/legendary)
+  ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=a*(w.rarity >= 3 ? 0.28 : 0.18);
+  ctx.fillStyle=rc; roundedRect(cx-panelW2/2,cy-panelH2/2,panelW2,panelH2,14); ctx.fill();
   ctx.restore(); ctx.globalAlpha=a;
   // weapon icon (draw a simple stylised icon)
   ctx.save(); ctx.translate(cx-90, cy+4);
@@ -913,7 +948,8 @@ function drawShopOverlay() {
   if (!items) return;
   const { player } = state;
   const cx=W/2, cy=H/2;
-  const cols=5, rows=2, cellW=120, cellH=90, padX=20, padY=20;
+  const cols=5, cellW=120, cellH=90, padX=20, padY=20;
+  const rows=Math.ceil(items.length/cols);
   const panelW=cols*cellW+padX*2, panelH=rows*cellH+padY*2+48;
   ctx.save();
   // Dim background
@@ -1000,7 +1036,7 @@ export function render() {
   ctx.save(); ctx.translate(-Game.cam,0);
   drawGroundTexture(dark); drawGroundDeco(dark); drawLocations(dark);
   drawEntityShadows(); drawPortals(dark); drawWalls(dark); drawBase(dark);
-  drawStations(); drawCoins(); drawGroundBows(); drawLootItems();
+  drawStations(); drawCoins(); drawGroundBows(); drawGroundHammers(); drawLootItems();
   drawAnimals(); drawVagrants(); drawUnits(); drawEnemies(dark);
   drawPlayer(dark); drawArrows(); drawParticles(); drawCampLight(dark); drawFloats();
   ctx.restore();

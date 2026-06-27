@@ -57,7 +57,7 @@ export function spawnEnemy(type, portal) {
 
 export function planNight() {
   const d = Game.day;
-  Game.nightQuota   = Math.round(3 + d * 3.5 + Math.pow(d * 0.7, 1.6));
+  Game.nightQuota   = Math.round((3 + d * 3.5 + Math.pow(d * 0.7, 1.6)) * (Game.diffMult || 1));
   Game.nightSpawned = 0;
   Game.spawnTimer   = 0;
 }
@@ -97,7 +97,8 @@ export function makeLocation(x, type, r) {
   let weaponId = null;
   if (r() < 0.70) {
     const rarMin = def.wRar[0], rarMax = def.wRar[1];
-    const targetRar = rarMin + Math.floor(r() * (rarMax - rarMin + 1));
+    const bonus = Game.rarityBonus || 0;
+    const targetRar = clamp(rarMin + Math.floor(r() * (rarMax - rarMin + 1)) + bonus, 0, 4);
     const wList = Object.keys(WEAPONS).filter(k => WEAPONS[k].rarity === targetRar);
     if (wList.length) weaponId = wList[Math.floor(r() * wList.length)];
   }

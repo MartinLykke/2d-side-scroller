@@ -19,6 +19,8 @@ export const Game = {
   wallSlots: {},
   shopOpen: false,
   shopIdx: 0,
+  diffMult: 1.0,
+  rarityBonus: 0,
 };
 
 // All mutable entity arrays and per-play variables live here so every

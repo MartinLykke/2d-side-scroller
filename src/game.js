@@ -30,16 +30,21 @@ window._KEYS = keys;
 window._DEV_GOD_MODE = false;
 
 const SHOP_ITEMS = [
-  { weaponId: 'rusty_sword', price: 6,  tier: 1 },
-  { weaponId: 'short_bow',   price: 9,  tier: 1 },
-  { weaponId: 'sword',       price: 16, tier: 2 },
-  { weaponId: 'crossbow',    price: 22, tier: 2 },
-  { weaponId: 'war_axe',     price: 28, tier: 3 },
-  { weaponId: 'long_bow',    price: 33, tier: 3 },
-  { weaponId: 'flame_sword', price: 48, tier: 4 },
-  { weaponId: 'gilded_spear',price: 44, tier: 4 },
-  { weaponId: 'kings_sword', price: 80, tier: 5 },
-  { weaponId: 'dark_bow',    price: 75, tier: 5 },
+  { weaponId: 'rusty_sword',   price: 6,  tier: 1 },
+  { weaponId: 'short_bow',     price: 9,  tier: 1 },
+  { weaponId: 'sword',         price: 16, tier: 2 },
+  { weaponId: 'crossbow',      price: 22, tier: 2 },
+  { weaponId: 'war_axe',       price: 28, tier: 3 },
+  { weaponId: 'long_bow',      price: 33, tier: 3 },
+  { weaponId: 'flame_sword',   price: 48, tier: 4 },
+  { weaponId: 'gilded_spear',  price: 44, tier: 4 },
+  { weaponId: 'shadow_axe',    price: 58, tier: 4 },
+  { weaponId: 'kings_sword',   price: 80, tier: 5 },
+  { weaponId: 'dark_bow',      price: 75, tier: 5 },
+  { weaponId: 'thunder_blade', price: 68, tier: 5 },
+  { weaponId: 'void_bow',      price: 62, tier: 5 },
+  { weaponId: 'sunblade',      price: 95, tier: 6 },
+  { weaponId: 'dragons_bow',   price: 90, tier: 6 },
 ];
 window._SHOP_ITEMS = SHOP_ITEMS;
 
@@ -62,7 +67,7 @@ function pickupWeapon(weaponId) {
   if (player.weapon) lootItems.push({ x: player.x + rand(-60, 60), weaponId: player.weapon });
   player.weapon = weaponId;
   const w = WEAPONS[weaponId];
-  state.weaponPickup = { weaponId, timer: 5.0 };
+  state.weaponPickup = { weaponId, timer: 3.8 };
   Audio.upgrade();
 }
 window._pickupWeapon = pickupWeapon;
@@ -261,10 +266,11 @@ function triggerLocation(loc, idx) {
 
 function updateLootItems() {
   const { lootItems, player } = state;
-  if (!keys["f"]) return;
   for (let i=lootItems.length-1;i>=0;i--) {
     const it=lootItems[i];
-    if (dist(it.x,player.x)<50) { pickupWeapon(it.weaponId); lootItems.splice(i,1); break; }
+    if (dist(it.x,player.x)<50) {
+      if (!player.weapon || keys["f"]) { pickupWeapon(it.weaponId); lootItems.splice(i,1); break; }
+    }
   }
 }
 
@@ -333,6 +339,11 @@ function update(dt) {
 // ---------- Game flow ----------
 Game.start = function(continueGame) {
   Audio.init(); Audio.resume();
+  const activeDiff = document.querySelector('.diff-btn.diff-active');
+  const diff = activeDiff ? activeDiff.dataset.diff : 'normal';
+  if (diff === 'easy')      { Game.diffMult = 0.65; Game.rarityBonus = 1; }
+  else if (diff === 'hard') { Game.diffMult = 1.65; Game.rarityBonus = 1; }
+  else                      { Game.diffMult = 1.0;  Game.rarityBonus = 0; }
   if (continueGame && hasSave()) { newGame(); loadGame(); }
   else newGame();
   import('./rendering/Effects.js').then(({clearTreeCache})=>clearTreeCache());
@@ -417,12 +428,21 @@ function handleShopKeys(k, e) {
   }
 }
 
+document.querySelectorAll('.diff-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('diff-active'));
+    btn.classList.add('diff-active');
+  });
+});
+
 window.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
   if (k === "m") UI.toggleMute();
-  if (k === "p" && (Game.state === "play" || Game.state === "pause")) Game.togglePause();
-  if (k === "escape") { Game.inventoryOpen = false; Game.shopOpen = false; }
-  if (e.key === "`") DEV.toggle();
+  if (k === "p") DEV.toggle();
+  if (k === "escape") {
+    Game.inventoryOpen = false; Game.shopOpen = false;
+    if (Game.state === "play" || Game.state === "pause") Game.togglePause();
+  }
 
   if (Game.state !== "play") return;
   if (k === "i") { Game.inventoryOpen = !Game.inventoryOpen; Game.shopOpen = false; }
