@@ -1,0 +1,73 @@
+import { CFG } from '../config/config.js';
+import { clamp, dist, rand } from '../util/math.js';
+import { groundY } from '../canvas.js';
+import { Game, state } from '../state.js';
+import { Audio } from './Audio.js';
+import { spawnCoin, spawnParticles } from './SpawnSystem.js';
+
+function flyingCoin(fromX, toX) {
+  state.particles.push({
+    x: fromX, y: groundY - 60, vx: 0, vy: 0, life: 0.32,
+    color: "#f2c14e", size: 3,
+    toX, fromX, fromY: groundY - 60, toY: groundY - 50, t: 0, fly: true,
+  });
+}
+
+export function updatePayment(dt) {
+  const { player, stations } = state;
+  const keys = window._KEYS || {};
+  state.payCooldown -= dt;
+
+  let near = null, nd = CFG.payRange;
+  for (const s of stations) {
+    const c = s.cost();
+    if (c <= 0) continue;
+    const d = dist(player.x, s.x());
+    if (d < nd) { nd = d; near = s; }
+  }
+
+  if (state.lastPaidStation && state.lastPaidStation !== near && state.lastPaidStation.paid > 0) {
+    for (let i = 0; i < state.lastPaidStation.paid; i++)
+      spawnCoin(state.lastPaidStation.x() + rand(-20, 20), 1, -10);
+    state.lastPaidStation.paid = 0;
+  }
+
+  if (!near) { state.lastPaidStation = null; return; }
+  state.lastPaidStation = near;
+
+  const payHeld = keys["arrowdown"] || keys["s"];
+  if (player.coins > 0 && payHeld && state.payCooldown <= 0) {
+    player.coins--;
+    near.paid++;
+    state.payCooldown = CFG.payInterval;
+    flyingCoin(player.x, near.x());
+    Audio.pay();
+    if (near.paid >= near.cost()) {
+      near.paid = 0;
+      near.onPaid();
+    }
+  }
+}
+
+export function updateCoins(dt) {
+  const { coins, player } = state;
+  for (let i = coins.length - 1; i >= 0; i--) {
+    const c = coins[i];
+    if (!c.settled) {
+      c.vy += 520 * dt;
+      c.y  += c.vy * dt;
+      c.x  += (c.vx || 0) * dt;
+      if (c.y >= groundY) { c.y = groundY; c.vy = 0; c.vx = 0; c.settled = true; }
+    }
+    const d = dist(c.x, player.x);
+    if (c.settled && d < 90 && player.coins < CFG.maxCoinsCarry) {
+      c.x += Math.sign(player.x - c.x) * 320 * dt;
+      if (d < 22) {
+        player.coins = clamp(player.coins + c.value, 0, CFG.maxCoinsCarry);
+        coins.splice(i, 1);
+        Audio.coin();
+        spawnParticles(player.x, groundY - 50, 3, "#f2c14e", 30, 40);
+      }
+    }
+  }
+}

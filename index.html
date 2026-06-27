@@ -132,7 +132,7 @@
           <button class="dev-btn" onclick="DEV.giveWeapon('kings_sword')" style="color:#f2c14e">Kongens sværd</button>
         </div>
         <div class="dev-row" style="margin-top:4px">
-          <button class="dev-btn dev-danger" onclick="if(Game.state==='play'){player.weapon=null;floaty(player.x,'Våben droppet','#c8c8c8');}">Drop våben</button>
+          <button class="dev-btn dev-danger" onclick="DEV.dropWeapon()">Drop våben</button>
         </div>
       </div>
 
@@ -147,6 +147,6 @@
     </div>
   </div>
 
-  <script src="game.js?v=3"></script>
+  <script type="module" src="src/game.js"></script>
 </body>
 </html>
