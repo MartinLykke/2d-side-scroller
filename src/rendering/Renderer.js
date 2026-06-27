@@ -30,6 +30,18 @@ function drawHpBar(x, y, w, frac, color) {
   ctx.fillStyle=color; ctx.fillRect(x-w/2,y,w*frac,3);
 }
 
+function drawFocusHalo(x, y, rx, ry, col, alpha) {
+  ctx.save();
+  ctx.globalCompositeOperation="lighter";
+  const g=ctx.createRadialGradient(x,y,8,x,y,rx);
+  g.addColorStop(0,withA(col,alpha));
+  g.addColorStop(0.48,withA(col,alpha*0.28));
+  g.addColorStop(1,withA(col,0));
+  ctx.fillStyle=g;
+  ctx.beginPath(); ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
 function drawHeart(x, y, s, col) {
   ctx.fillStyle=col; ctx.beginPath();
   ctx.moveTo(x,y+s*0.9); ctx.bezierCurveTo(x-s*1.4,y-s*0.4,x-s*0.4,y-s*1.2,x,y-s*0.4);
@@ -134,6 +146,16 @@ function drawCampfire(x) {
   const flame=(h,w,col,wob)=>{ const sway=Math.sin(t*8+wob)*2+wind; ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(x-w,groundY-6); ctx.quadraticCurveTo(x-w*0.6+sway,groundY-h*0.6,x+sway*1.4,groundY-h*fl); ctx.quadraticCurveTo(x+w*0.6+sway,groundY-h*0.6,x+w,groundY-6); ctx.quadraticCurveTo(x,groundY-2,x-w,groundY-6); ctx.fill(); };
   flame(34,11,"rgba(226,88,30,0.92)",0); flame(26,8,"rgba(255,150,40,0.95)",1.7);
   flame(17,5,"rgba(255,210,90,0.97)",3.1); flame(9,2.6,"rgba(255,244,200,0.98)",4.6);
+}
+
+function drawBackgroundReadabilityWash(dark) {
+  const a=0.09+0.08*(1-dark);
+  const g=ctx.createLinearGradient(0,groundY-260,0,groundY+20);
+  g.addColorStop(0,"rgba(190,220,226,0)");
+  g.addColorStop(0.58,`rgba(206,224,212,${a})`);
+  g.addColorStop(1,`rgba(28,42,30,${0.08+dark*0.08})`);
+  ctx.fillStyle=g;
+  ctx.fillRect(0,Math.max(0,groundY-270),W,290);
 }
 
 function drawTent(x, col) {
@@ -327,9 +349,19 @@ export function drawCoins() {
 function drawHumanoid(x, anim, bodyCol, headCol, tool, dir, moving) {
   ctx.save(); ctx.translate(x,0); if (dir<0) ctx.scale(-1,1);
   const bob=moving?Math.abs(Math.sin(anim))*1.2:0;
+  ctx.save();
+  ctx.globalAlpha=0.35;
+  ctx.strokeStyle="rgba(8,7,12,0.85)";
+  ctx.lineWidth=5;
+  ctx.lineCap="round";
+  ctx.beginPath(); ctx.moveTo(-3,groundY-15); ctx.lineTo(-3,groundY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(3,groundY-15); ctx.lineTo(3,groundY); ctx.stroke();
+  roundedRect(-7,groundY-36-bob,14,23,5); ctx.stroke();
+  ctx.restore();
   legs(0,groundY-15,anim,moving?5:0,bodyCol);
   ctx.fillStyle=bodyCol; roundedRect(-5,groundY-34-bob,10,20,4); ctx.fill();
   ctx.fillStyle="rgba(0,0,0,0.18)"; roundedRect(2,groundY-34-bob,3,20,2); ctx.fill();
+  ctx.fillStyle="rgba(255,255,255,0.14)"; roundedRect(-4,groundY-33-bob,3,14,2); ctx.fill();
   ctx.fillStyle=headCol; ctx.beginPath(); ctx.arc(0,groundY-38-bob,5,0,Math.PI*2); ctx.fill();
   ctx.fillStyle="rgba(0,0,0,0.22)"; ctx.beginPath(); ctx.arc(-1,groundY-40-bob,5,Math.PI*1.05,Math.PI*2); ctx.fill();
   if (tool==="bow") {
@@ -384,6 +416,12 @@ export function drawEnemies(dark) {
     const drawYOff = e.fy || 0;
     ctx.save(); ctx.translate(e.x, drawYOff); if (e.dir<0) ctx.scale(-1,1);
     const w=t.w, bob=Math.abs(Math.sin(e.anim*2))*2, s=Math.sin(e.anim*3);
+    ctx.save();
+    ctx.globalAlpha=0.5;
+    ctx.strokeStyle="rgba(8,6,12,0.9)";
+    ctx.lineWidth=Math.max(4,w*0.18);
+    roundedRect(-w/2-1,groundY-w-7-bob,w+2,w+8,w*0.42); ctx.stroke();
+    ctx.restore();
     ctx.strokeStyle=e.flash>0?"#fff":t.color; ctx.lineWidth=Math.max(2,w*0.12); ctx.lineCap="round";
     ctx.beginPath(); ctx.moveTo(-w*0.25,groundY-8-bob); ctx.lineTo(-w*0.25+s*5,groundY); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(w*0.25,groundY-8-bob); ctx.lineTo(w*0.25-s*5,groundY); ctx.stroke();
@@ -414,16 +452,28 @@ export function drawEnemies(dark) {
 export function drawPlayer(dark) {
   const { player } = state;
   const x=player.x, bob=player.bob, gallop=player.gallop;
+  drawFocusHalo(x, groundY-36-bob-player.jumpH, 92, 52, [255,210,110], 0.11+0.12*dark);
   ctx.save();
   if (player.invuln>0&&Math.floor(player.invuln*12)%2===0) ctx.globalAlpha=0.45;
   ctx.translate(x,-bob - player.jumpH); if (player.dir<0) ctx.scale(-1,1);
   const px=0, moving=Math.abs(player.vx)>1, s=moving?Math.sin(gallop*2):0;
+  ctx.save();
+  ctx.globalAlpha=0.5;
+  ctx.strokeStyle="rgba(6,5,10,0.92)";
+  ctx.lineWidth=5;
+  ctx.lineJoin="round";
+  roundedRect(px-22,groundY-49,48,27,12); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(px+18,groundY-44); ctx.lineTo(px+30,groundY-64); ctx.lineTo(px+40,groundY-62); ctx.lineTo(px+38,groundY-52); ctx.lineTo(px+26,groundY-40); ctx.closePath(); ctx.stroke();
+  ctx.restore();
   ctx.fillStyle="#2a2230"; ctx.strokeStyle="#2a2230"; ctx.lineWidth=3;
   ctx.beginPath(); ctx.moveTo(px-14,groundY-26+bob); ctx.lineTo(px-14+s*8,groundY+bob); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(px+12,groundY-26+bob); ctx.lineTo(px+12-s*8,groundY+bob); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(px-8,groundY-26+bob); ctx.lineTo(px-8-s*8,groundY+bob); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(px+18,groundY-26+bob); ctx.lineTo(px+18+s*8,groundY+bob); ctx.stroke();
   roundedRect(px-20,groundY-46,44,22,10); ctx.fill();
+  ctx.fillStyle="rgba(255,255,255,0.08)"; roundedRect(px-17,groundY-44,18,7,5); ctx.fill();
+  ctx.fillStyle="#5f3b28"; roundedRect(px-8,groundY-50,18,8,4); ctx.fill();
+  ctx.fillStyle="#d1a75a"; ctx.fillRect(px-5,groundY-52,11,2);
   ctx.beginPath(); ctx.moveTo(px+18,groundY-44); ctx.lineTo(px+30,groundY-64); ctx.lineTo(px+40,groundY-62); ctx.lineTo(px+38,groundY-52); ctx.lineTo(px+26,groundY-40); ctx.closePath(); ctx.fill();
   const tail=windSway(px,4)+Math.sin(gallop)*2;
   ctx.beginPath(); ctx.moveTo(px-20,groundY-44); ctx.quadraticCurveTo(px-34-tail,groundY-40,px-30-tail,groundY-22); ctx.lineTo(px-24-tail*0.6,groundY-30); ctx.quadraticCurveTo(px-26,groundY-40,px-18,groundY-40); ctx.fill();
@@ -433,6 +483,7 @@ export function drawPlayer(dark) {
   const cape=(moving?Math.sin(gallop*2)*4:0)+windSway(px,3);
   ctx.fillStyle="#5a182e"; ctx.beginPath(); ctx.moveTo(px-4,groundY-66); ctx.quadraticCurveTo(px-16-cape,groundY-52,px-22-cape*1.4,groundY-32); ctx.lineTo(px-8,groundY-40); ctx.quadraticCurveTo(px-6,groundY-54,px+2,groundY-64); ctx.fill();
   ctx.fillStyle="#7a2440"; roundedRect(px-6,groundY-70,16,26,6); ctx.fill();
+  ctx.fillStyle="rgba(255,255,255,0.12)"; roundedRect(px-4,groundY-68,4,18,3); ctx.fill();
   ctx.fillStyle="rgba(0,0,0,0.18)"; roundedRect(px+4,groundY-70,6,26,4); ctx.fill();
   ctx.fillStyle="#caa483"; ctx.beginPath(); ctx.arc(px+2,groundY-74,6,0,Math.PI*2); ctx.fill();
   ctx.fillStyle="#3a2e2a"; ctx.beginPath(); ctx.arc(px+4,groundY-75,1.1,0,Math.PI*2); ctx.fill();
@@ -448,6 +499,15 @@ export function drawPlayer(dark) {
       const baseAng=-0.22, swingOff=sw>0?-0.9*(sw/0.32):0;
       ctx.translate(px+10,groundY-58); ctx.rotate(baseAng+swingOff);
       const len=clamp(w.range*0.42,18,40);
+      if (sw>0) {
+        ctx.save();
+        ctx.globalCompositeOperation="lighter";
+        ctx.globalAlpha=clamp(sw/0.32,0,1)*0.42;
+        ctx.strokeStyle=w.col;
+        ctx.lineWidth=8;
+        ctx.beginPath(); ctx.arc(12,2,len*0.9,-0.6,0.9); ctx.stroke();
+        ctx.restore();
+      }
       ctx.strokeStyle=w.col; ctx.lineWidth=2.5; ctx.lineCap="round";
       ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(len,0); ctx.stroke();
       ctx.strokeStyle="rgba(0,0,0,0.5)"; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(-4,-3); ctx.lineTo(-4,3); ctx.stroke();
@@ -483,10 +543,12 @@ export function drawAnimals() {
 }
 
 export function drawArrows() {
-  ctx.strokeStyle="#e8d8a8"; ctx.lineWidth=2;
   for (const ar of state.arrows) {
     const ang=Math.atan2(ar.vy,ar.vx);
     ctx.save(); ctx.translate(ar.x,ar.y); ctx.rotate(ang);
+    ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.28;
+    ctx.strokeStyle="#f2c14e"; ctx.lineWidth=5; ctx.beginPath(); ctx.moveTo(-18,0); ctx.lineTo(3,0); ctx.stroke(); ctx.restore();
+    ctx.strokeStyle="#e8d8a8"; ctx.lineWidth=2;
     ctx.beginPath(); ctx.moveTo(-7,0); ctx.lineTo(5,0); ctx.stroke();
     ctx.fillStyle="#e8d8a8"; ctx.beginPath(); ctx.moveTo(5,0); ctx.lineTo(1,-2); ctx.lineTo(1,2); ctx.fill();
     ctx.restore();
@@ -496,6 +558,15 @@ export function drawArrows() {
 export function drawParticles() {
   for (const p of state.particles) {
     ctx.globalAlpha=p.fly?1:clamp(p.life*1.5,0,1);
+    if (!p.fly && p.life>0.12) {
+      ctx.save();
+      ctx.globalCompositeOperation="lighter";
+      ctx.globalAlpha=clamp(p.life,0,1)*0.18;
+      ctx.fillStyle=p.color;
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.size*2.2,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+      ctx.globalAlpha=p.fly?1:clamp(p.life*1.5,0,1);
+    }
     ctx.fillStyle=p.color; ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);
   }
   ctx.globalAlpha=1;
@@ -513,9 +584,10 @@ export function drawFloats() {
 
 export function drawCampLight(dark) {
   const { base } = state;
+  drawFocusHalo(base.x, groundY-24, 170, 68, [255,158,70], 0.08+0.14*Math.max(dark,Game.isNight?1:0));
   for (const s of FX.smoke) { const k=s.t/s.life; ctx.globalAlpha=(1-k)*0.16; ctx.fillStyle="rgba(58,54,58,1)"; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill(); }
   ctx.globalAlpha=1;
-  const warm=Math.max(dark,Game.isNight?0.55:0)*0.95;
+  const warm=Math.max(0.22,dark,Game.isNight?0.55:0)*0.95;
   if (warm>0.05) {
     ctx.save(); ctx.globalCompositeOperation="lighter";
     const fl=FX.flicker, R=240*fl;
@@ -915,6 +987,7 @@ export function render() {
   drawTreeLayer(trees.mid,0.46,0.50,9);
   drawGodrays(dark);
   drawTreeLayer(trees.near,0.70,0.28,14);
+  drawBackgroundReadabilityWash(dark);
 
   const bi=biomeAt(Game.cam+W/2);
   const gg=ctx.createLinearGradient(0,groundY,0,H);
