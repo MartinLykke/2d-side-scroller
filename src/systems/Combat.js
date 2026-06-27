@@ -8,37 +8,46 @@ import { Audio } from './Audio.js';
 import { spawnCoin, spawnParticles, floaty, spawnLocLoot } from './SpawnSystem.js';
 
 // ---------- Arrow shooting ----------
+// All callers shoot at enemies; hitKind defaults to "enemy".
+// Flying enemies push "player"-targeted arrows directly into state.arrows.
 export function shootArrow(x, y, target) {
   const tx = target.x, ty = groundY - 24;
   const ang = Math.atan2(ty - y, tx - x);
   const sp  = 560;
   state.arrows.push({
-    x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
-    target, life: 1.2,
-    hitKind: (target.type !== undefined) ? "enemy" : (target.alive !== undefined ? "animal" : "enemy"),
+    x, y,
+    vx: Math.cos(ang) * sp,
+    vy: Math.sin(ang) * sp,
+    target,
+    life: 1.2,
+    hitKind: "enemy",
   });
   Audio.bow();
 }
 
 export function updateArrows(dt) {
-  const { arrows, enemies, animals } = state;
+  const { arrows, enemies, animals, player } = state;
   for (let i = arrows.length - 1; i >= 0; i--) {
     const ar = arrows[i];
     ar.x += ar.vx * dt; ar.y += ar.vy * dt; ar.vy += 420 * dt; ar.life -= dt;
     let hit = false;
 
-    for (const e of enemies) {
-      if (e.fleeing) continue;
-      if (dist(ar.x, e.x) < ENEMY_TYPES[e.type].w * 0.7 && ar.y > groundY - 44) {
-        e.hp--; e.flash = 0.12; Audio.hit();
-        spawnParticles(e.x, groundY - 24, 4, "#8a2a4a");
-        hit = true;
-        if (e.hp <= 0) killEnemy(e);
-        break;
+    if (ar.hitKind !== "player") {
+      for (const e of enemies) {
+        if (e.fleeing) continue;
+        const et = ENEMY_TYPES[e.type];
+        const enemyDrawY = et.flying ? groundY + (e.fy || -80) : groundY - 24;
+        if (dist(ar.x, e.x) < et.w * 0.7 && Math.abs(ar.y - enemyDrawY) < 40) {
+          e.hp--; e.flash = 0.12; Audio.hit();
+          spawnParticles(e.x, enemyDrawY, 4, "#8a2a4a");
+          hit = true;
+          if (e.hp <= 0) killEnemy(e);
+          break;
+        }
       }
     }
 
-    if (!hit) {
+    if (!hit && ar.hitKind !== "player") {
       for (const a of animals) {
         if (a.alive && dist(ar.x, a.x) < 16 && ar.y > groundY - 36) {
           a.alive = false;
@@ -50,6 +59,19 @@ export function updateArrows(dt) {
         }
       }
     }
+
+    if (!hit && ar.hitKind === "player") {
+      if (dist(ar.x, player.x) < 18 && Math.abs(ar.y - (groundY - 50)) < 50) {
+        if (player.invuln <= 0 && !window._DEV_GOD_MODE) {
+          player.hp -= 1; player.invuln = CFG.playerInvuln; player.hurt = 0.35;
+          player.knock = (player.x < ar.x ? -1 : 1) * -120;
+          spawnParticles(player.x, groundY - 50, 4, "#c1453b");
+          Audio.hit();
+        }
+        hit = true;
+      }
+    }
+
     if (hit || ar.life <= 0 || ar.y > groundY - 6) arrows.splice(i, 1);
   }
 }
@@ -72,6 +94,27 @@ export function killEnemy(e) {
   if (idx >= 0) state.enemies.splice(idx, 1);
 }
 
+// ---------- Shared damage helper ----------
+// Applies one melee hit from enemy `e` (of type `t`) to the player.
+// Returns true if the hit connected (i.e. player was not invulnerable).
+function meleeHitPlayer(e, t, knockForce) {
+  const { player } = state;
+  if (player.invuln > 0 || window._DEV_GOD_MODE) return false;
+  player.hp    -= t.meleeDmg;
+  player.invuln = CFG.playerInvuln;
+  player.hurt   = 0.35;
+  player.knock  = Math.sign(player.x - e.x) * knockForce;
+  spawnParticles(player.x, groundY - 50, 6, "#c1453b");
+  if (player.coins > 0) {
+    player.coins--;
+    floaty(player.x, "−1🪙", "#ff6a4a");
+  } else {
+    floaty(player.x, `−${t.meleeDmg}❤`, "#ff6a4a");
+  }
+  Audio.hit();
+  return true;
+}
+
 // ---------- Enemy AI ----------
 function wallAt(side, x) {
   let best = null;
@@ -89,6 +132,38 @@ export function updateEnemies(dt) {
     const e = enemies[i];
     const t = ENEMY_TYPES[e.type];
     if (e.home !== undefined) { updateLocEnemy(e, t, dt); continue; }
+
+    if (t.flying) {
+      e.anim += dt * 5;
+      if (e.flash > 0) e.flash -= dt;
+      e.attackCd -= dt;
+      if (e.shootCd !== undefined) e.shootCd -= dt;
+      if (e.fleeing) {
+        const tx = e.portal ? e.portal.x : (e.x < CFG.baseX ? 0 : CFG.worldWidth);
+        e.dir = Math.sign(tx - e.x); e.x += e.dir * t.speed * 1.6 * dt;
+        if (dist(e.x, tx) < 40) enemies.splice(i, 1);
+        continue;
+      }
+      // Fly toward base
+      e.dir = Math.sign(base.x - e.x) || e.dir;
+      e.x += e.dir * t.speed * dt;
+      // Shoot arrow at player if in range
+      if (e.shootCd !== undefined && e.shootCd <= 0 && dist(e.x, player.x) < 380) {
+        const arrowY = groundY + (e.fy || -80);
+        state.arrows.push({ x: e.x, y: arrowY, vx: Math.sign(player.x - e.x) * 320, vy: 180, target: {x: player.x}, life: 1.5, hitKind: "player" });
+        e.shootCd = 2.2;
+        Audio.bow();
+      }
+      // Damage player if directly overhead
+      if (dist(e.x, player.x) < 28 && e.attackCd <= 0 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
+        player.hp -= 1; player.invuln = CFG.playerInvuln; player.hurt = 0.35;
+        spawnParticles(player.x, groundY - 50, 5, "#c1453b");
+        Audio.hit();
+        e.attackCd = 1.5; e.fleeing = true;
+      }
+      continue;
+    }
+
     e.anim += dt * 5;
     if (e.flash > 0) e.flash -= dt;
     e.attackCd -= dt;
@@ -145,17 +220,11 @@ export function updateEnemies(dt) {
       continue;
     }
 
-    if (dist(e.x, player.x) < 30 && e.attackCd <= 0) {
-      if (player.invuln <= 0 && !window._DEV_GOD_MODE) {
-        const dmg = e.type === "boss" ? 3 : e.type === "brute" ? 2 : 1;
-        player.hp -= dmg; player.invuln = CFG.playerInvuln; player.hurt = 0.35;
-        player.knock = (player.x < e.x ? -1 : 1) * 230;
-        spawnParticles(player.x, groundY - 50, 7, "#c1453b");
-        if (player.coins > 0) { player.coins--; e.carry++; floaty(player.x, "−1🪙", "#ff6a4a"); }
-        else floaty(player.x, "−" + dmg + "❤", "#ff6a4a");
-        Audio.hit();
-      }
-      e.fleeing = true; e.attackCd = 1;
+    if (dist(e.x, player.x) < 30 && player.jumpH <= 20 && e.attackCd <= 0) {
+      const hadCoins = player.coins > 0;
+      if (meleeHitPlayer(e, t, 230) && hadCoins) e.carry++;
+      e.fleeing = true;
+      e.attackCd = 1;
       continue;
     }
 
@@ -176,15 +245,7 @@ function updateLocEnemy(e, t, dt) {
     e.x += dir * t.speed * dt;
     if (dp < 32 && e.attackCd <= 0) {
       e.attackCd = 1.0;
-      if (player.invuln <= 0 && !window._DEV_GOD_MODE) {
-        const dmg = e.type === "boss" ? 3 : e.type === "brute" ? 2 : 1;
-        player.hp -= dmg; player.invuln = CFG.playerInvuln; player.hurt = 0.35;
-        player.knock = (player.x < e.x ? -1 : 1) * 220;
-        spawnParticles(player.x, groundY - 50, 6, "#c1453b");
-        if (player.coins > 0) { player.coins--; floaty(player.x, "−1🪙", "#ff6a4a"); }
-        else floaty(player.x, "−" + dmg + "❤", "#ff6a4a");
-        Audio.hit();
-      }
+      meleeHitPlayer(e, t, 220);
     }
   } else if (dist(e.x, e.home) > 50) {
     const dir = Math.sign(e.home - e.x);

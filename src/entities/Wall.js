@@ -7,5 +7,5 @@ export function makeWall(slot) {
 }
 
 export function wallHeight(w) {
-  return w.level === 2 ? 64 : 42;
+  return [0, 44, 64, 86, 112, 150][w.level] || 44;
 }

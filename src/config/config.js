@@ -17,8 +17,8 @@ export const CFG = {
   baseUpgradeCost: [0, 12, 28, 55],
   baseMaxHp: [0, 60, 90, 130, 180],
   wallCost: 6,
-  wallUpgradeCost: 14,
-  wallHp: [0, 40, 90],
+  wallUpgradeCosts: [14, 22, 35, 55],
+  wallHp: [0, 45, 90, 150, 220, 320],
   bowCost: 4,
   hammerCost: 3,
   farmCost: 10,
@@ -28,6 +28,7 @@ export const STATIONS_X = {
   bow:    CFG.baseX - 130,
   hammer: CFG.baseX + 130,
   farm:   CFG.baseX - 300,
+  shop:   CFG.baseX + 300,
 };
 
 export const WALL_SLOTS = [

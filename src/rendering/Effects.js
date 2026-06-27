@@ -204,13 +204,26 @@ let treeCache = null;
 export function getTrees() {
   if (treeCache && treeCache.seed===Game.treeSeed) return treeCache;
   const r=mulberry32(Game.treeSeed||1);
-  const far=[],mid=[],near=[],fore=[],hills=[];
+  const far=[],mid=[],near=[],fore=[],hills=[],mountains=[];
   for (let x=-100;x<CFG.worldWidth+100;x+=110) far.push(makeTree(x+r()*80, 72, r));
   for (let x=-100;x<CFG.worldWidth+100;x+=86)  mid.push(makeTree(x+r()*64, 120, r));
   for (let x=-100;x<CFG.worldWidth+100;x+=70)  near.push(makeTree(x+r()*48, 178, r));
   for (let x=-100;x<CFG.worldWidth+100;x+=520) fore.push(makeTree(x+r()*220, 150, r));
   for (let x=-300;x<CFG.worldWidth+300;x+=170) hills.push({ x:x+r()*120, h:50+r()*130, w:200+r()*230 });
-  treeCache={ seed:Game.treeSeed, far, mid, near, fore, hills };
+  for (let x=-600;x<CFG.worldWidth+600;x+=320) {
+    const w=200+r()*160, h=110+r()*140;
+    const nPts=6+((r()*4)|0);
+    const pts=[];
+    for (let k=0;k<=nPts;k++) {
+      const t=k/nPts, ox=(t-0.5)*w*2;
+      const envelope=Math.max(0,1-Math.pow((t-0.5)*2,2));
+      const jitter=(r()-0.5)*h*0.35;
+      pts.push([ox, h*envelope+jitter*envelope]);
+    }
+    const peak=pts.reduce((bi,p,i)=>p[1]>pts[bi][1]?i:bi,0);
+    mountains.push({ x:x+r()*180, h, w, pts, peak });
+  }
+  treeCache={ seed:Game.treeSeed, far, mid, near, fore, hills, mountains };
   return treeCache;
 }
 export function clearTreeCache() { treeCache=null; }
@@ -331,6 +344,31 @@ export function drawHills(hills, dark) {
   }
 }
 
+export function drawMountains(mountains, dark) {
+  const haze=hazeColor(dark), off=Game.cam*0.06;
+  for (const m of mountains) {
+    const px=m.x-off; if (px<-m.w*2||px>W+m.w*2) continue;
+    // body: cool atmospheric grey-blue, independent of biome
+    const bodyCol=lerpColor([88,100,122],haze,0.40+dark*0.35);
+    ctx.fillStyle=rgb(bodyCol); ctx.beginPath();
+    ctx.moveTo(px-m.w, groundY+4);
+    // jagged profile using pre-generated offsets
+    for (let k=0;k<m.pts.length;k++) { ctx.lineTo(px+m.pts[k][0], groundY+4-m.pts[k][1]); }
+    ctx.lineTo(px+m.w, groundY+4); ctx.closePath(); ctx.fill();
+    // snow cap on the top 30%
+    const snowH=m.h*0.28, peakX=px+m.pts[m.peak][0], peakY=groundY+4-m.h;
+    ctx.fillStyle=rgb(lerpColor([235,240,248],[180,195,215],dark*0.5));
+    ctx.beginPath(); ctx.moveTo(peakX-m.w*0.2, groundY+4-m.h+snowH);
+    ctx.lineTo(peakX, peakY); ctx.lineTo(peakX+m.w*0.18, groundY+4-m.h+snowH*0.9);
+    ctx.closePath(); ctx.fill();
+    // subtle edge highlight
+    ctx.strokeStyle=rgb(lerpColor([200,210,225],[80,90,110],dark*0.6));
+    ctx.lineWidth=1.2; ctx.globalAlpha=0.35;
+    ctx.beginPath(); ctx.moveTo(peakX, peakY); ctx.lineTo(peakX+m.w*0.18, groundY+4-m.h+snowH*0.9); ctx.stroke();
+    ctx.globalAlpha=1;
+  }
+}
+
 export function drawFogBand(y, h, dark, intensity) {
   const bi=biomeAt(Game.cam+W/2);
   const a=intensity*(0.16+0.1*Math.sin(Game.windT*0.2))*(1-0.4*dark);
@@ -344,12 +382,16 @@ export function drawGodrays(dark) {
   if (dark>0.55||lastSun.isMoon) return;
   const a=0.06*(1-dark*1.6); if (a<=0) return;
   ctx.save(); ctx.globalCompositeOperation="lighter";
-  const sx=lastSun.cx, sy=lastSun.cy, shift=Math.sin(Game.windT*0.3)*8;
+  const sx=lastSun.cx, sy=lastSun.cy;
+  const rayOrigin = sy + 36; // start below the sun disc so rays don't emerge from inside it
+  const shift=Math.sin(Game.windT*0.3)*8;
   for (let i=-2;i<=2;i++) {
     const topx=sx+i*7+shift*0.3, botx=sx+i*46+shift, wTop=9, wBot=26;
-    const grad=ctx.createLinearGradient(0,sy,0,groundY);
+    const grad=ctx.createLinearGradient(0,rayOrigin,0,groundY);
     grad.addColorStop(0,`rgba(255,240,190,${a})`); grad.addColorStop(1,"rgba(255,240,190,0)");
-    ctx.fillStyle=grad; ctx.beginPath(); ctx.moveTo(topx-wTop,sy); ctx.lineTo(topx+wTop,sy); ctx.lineTo(botx+wBot,groundY); ctx.lineTo(botx-wBot,groundY); ctx.closePath(); ctx.fill();
+    ctx.fillStyle=grad;
+    ctx.beginPath(); ctx.moveTo(topx-wTop,rayOrigin); ctx.lineTo(topx+wTop,rayOrigin);
+    ctx.lineTo(botx+wBot,groundY); ctx.lineTo(botx-wBot,groundY); ctx.closePath(); ctx.fill();
   }
   ctx.restore();
 }

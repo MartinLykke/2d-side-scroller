@@ -63,7 +63,9 @@ export const UI = {
     let near=null, nd=CFG.payRange;
     for (const s of stations) { const c=s.cost(); if (c<=0) continue; const d=dist(player.x,s.x()); if (d<nd) { nd=d; near=s; } }
     const vagNear=state.vagrants.find(v=>dist(player.x,v.x)<46&&Math.abs(v.vx)<1);
-    const nearLoc=locations&&locations.find(l=>!l.triggered&&dist(player.x,l.x)<(LOC_DEFS[l.type]?.trig||130)*1.6);
+    const lootNear=state.lootItems&&state.lootItems.find(it=>dist(player.x,it.x)<50);
+    const shopSt=stations.find(s=>s.id==="shop");
+    const nearShop=shopSt&&state.base.level>=2&&dist(player.x,shopSt.x())<100;
     if (near) {
       this.prompt.classList.remove("hidden");
       const prog=near.paid>0?` (${near.paid}/${near.cost()})` : "";
@@ -71,6 +73,13 @@ export const UI = {
     } else if (vagNear) {
       this.prompt.classList.remove("hidden");
       this.prompt.innerHTML=`Rekruttér undersåt &nbsp;<span class="cost">1🪙</span> &nbsp;<span class="hold">hold ↓/S</span>`;
+    } else if (lootNear) {
+      this.prompt.classList.remove("hidden");
+      const w=WEAPONS[lootNear.weaponId];
+      this.prompt.innerHTML=`Saml op: ${w.name} &nbsp;<span class="hold">tryk F</span>`;
+    } else if (nearShop && !Game.shopOpen) {
+      this.prompt.classList.remove("hidden");
+      this.prompt.innerHTML=`B - Åbn butik 🏪`;
     } else {
       this.prompt.classList.add("hidden");
     }

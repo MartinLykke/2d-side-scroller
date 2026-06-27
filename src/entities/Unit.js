@@ -7,5 +7,6 @@ export function makeUnit(role, x) {
     maxHp: role === "archer" ? 6 : 5,
     cooldown: 0, anim: rand(0, 6),
     wall: null, retreating: false, workTimer: 0, panic: 0,
+    patrolDir: Math.random() < 0.5 ? -1 : 1,
   };
 }

@@ -32,40 +32,55 @@ function peasantAI(u, dt) {
 function archerAI(u, dt) {
   if (Game.isNight) {
     const threat = nearestEnemy(u.x, 99999);
-    let post, wall = null;
-    if (threat) {
-      const side = threat.x < CFG.baseX ? -1 : 1;
-      for (const w of state.walls) {
-        if (!w.commissioned || w.hp <= 0 || w.side !== side) continue;
-        if (!wall || dist(w.x, CFG.baseX) > dist(wall.x, CFG.baseX)) wall = w;
-      }
-      post = wall ? wall.x : CFG.baseX + side * 110;
-    } else { post = u.x; }
+    const side = threat ? (threat.x < CFG.baseX ? -1 : 1) : (u.patrolDir > 0 ? 1 : -1);
+    let wall = null;
+    for (const w of state.walls) {
+      if (!w.commissioned || w.hp <= 0 || w.side !== side) continue;
+      if (!wall || dist(w.x, CFG.baseX) > dist(wall.x, CFG.baseX)) wall = w;
+    }
     u.wall = wall;
+    let post;
+    if (wall) {
+      const wid = wall.x;
+      if (!Game.wallSlots[wid]) Game.wallSlots[wid] = 0;
+      const slot = Game.wallSlots[wid]++;
+      u.onWall = slot < wall.level;
+      const innerDir = Math.sign(CFG.baseX - wall.x);
+      const behind = slot - wall.level;
+      post = u.onWall ? wall.x : wall.x + innerDir * (behind + 1) * 26;
+    } else {
+      u.onWall = false;
+      post = CFG.baseX + side * 110;
+    }
     moveToward(u, post, 84, dt);
-    const tgt = nearestEnemy(u.x, 440);
+    const tgt = nearestEnemy(u.x, 520);
     if (tgt && u.cooldown <= 0) {
-      shootArrow(u.x, groundY - (u.wall ? wallHeight(u.wall) + 16 : 40), tgt);
-      u.cooldown = 0.8; u.dir = Math.sign(tgt.x - u.x) || u.dir;
+      const shootH = u.onWall && u.wall ? wallHeight(u.wall) + 16 : 40;
+      shootArrow(u.x, groundY - shootH, tgt);
+      u.cooldown = 0.8;
+      u.dir = Math.sign(tgt.x - u.x) || u.dir;
     }
   } else {
-    const dayFoe = nearestEnemy(u.x, 420);
-    if (dayFoe) {
-      if (dist(u.x, dayFoe.x) > 260) moveToward(u, dayFoe.x, 58, dt);
-      else if (u.cooldown <= 0) { shootArrow(u.x, groundY - 36, dayFoe); u.cooldown = 1.1; u.dir = Math.sign(dayFoe.x - u.x) || u.dir; }
+    // Attack any enemy within range; chase those slightly beyond attack range
+    const closeFoe = nearestEnemy(u.x, 500);
+    if (closeFoe) {
+      const d = dist(u.x, closeFoe.x);
+      if (d > 240) moveToward(u, closeFoe.x, 64, dt);
+      else {
+        // hold position and shoot
+        u.dir = Math.sign(closeFoe.x - u.x) || u.dir;
+        if (u.cooldown <= 0) {
+          shootArrow(u.x, groundY - 36, closeFoe);
+          u.cooldown = 1.1;
+        }
+      }
     } else {
-      let prey = null, pd = 520;
-      for (const a of state.animals) {
-        if (!a.alive) continue;
-        const d = dist(u.x, a.x); if (d < pd) { pd = d; prey = a; }
-      }
-      if (prey) {
-        if (dist(u.x, prey.x) > 260) moveToward(u, prey.x, 55, dt);
-        else if (u.cooldown <= 0) { shootArrow(u.x, groundY - 36, prey); u.cooldown = 1.3; u.dir = Math.sign(prey.x - u.x) || u.dir; }
-      } else {
-        if (dist(u.x, u.targetX) < 8 || Math.random() < 0.004) u.targetX = CFG.baseX + rand(-360, 360);
-        moveToward(u, u.targetX, 34, dt);
-      }
+      // March outward in patrol direction until hitting world edge, then flip
+      const margin = 500;
+      const outerEdge = u.patrolDir > 0 ? CFG.worldWidth - margin : margin;
+      if (dist(u.x, outerEdge) < 60) u.patrolDir *= -1;
+      u.dir = u.patrolDir;
+      u.x += u.patrolDir * 58 * dt;
     }
   }
 }
@@ -124,6 +139,8 @@ const AI_HANDLERS = {
 
 export function updateUnits(dt) {
   const { units } = state;
+  // Reset per-frame wall slot counter so archerAI can stagger archers across wall positions.
+  Game.wallSlots = {};
   for (let i = units.length - 1; i >= 0; i--) {
     const u = units[i];
     const px0 = u.x;

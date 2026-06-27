@@ -15,6 +15,10 @@ export const Game = {
   pendingWin: false,
   autosaveTimer: 0,
   windT: 0,
+  inventoryOpen: false,
+  wallSlots: {},
+  shopOpen: false,
+  shopIdx: 0,
 };
 
 // All mutable entity arrays and per-play variables live here so every
@@ -34,6 +38,7 @@ export const state = {
   portals: [],
   stations: [],
   lootItems: [],
+  weaponPickup: null,
   locations: [],
   groundBows: [],
   vagrantTimer: 1,

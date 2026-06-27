@@ -50,21 +50,27 @@ export function spawnEnemy(type, portal) {
     dir: portal.side > 0 ? -1 : 1,
     state: "advance", target: null, attackCd: 0,
     carry: 0, anim: rand(0, 6), flash: 0, fleeing: false, portal,
+    fy: t.flying ? -(80 + rand(0, 30)) : 0,
+    shootCd: t.flying ? rand(0.5, 2) : 0,
   });
 }
 
 export function planNight() {
   const d = Game.day;
-  Game.nightQuota   = Math.round(3 + d * 2.2);
+  Game.nightQuota   = Math.round(3 + d * 3.5 + Math.pow(d * 0.7, 1.6));
   Game.nightSpawned = 0;
   Game.spawnTimer   = 0;
 }
 
 function nightEnemyType() {
   const d = Game.day, r = Math.random();
-  if (d >= 4 && Game.nightSpawned === 0 && Game.nightQuota >= 16 && d % 3 === 0) return "boss";
-  if (d >= 3 && r < 0.18) return "brute";
-  if (r < 0.35 + d * 0.02) return "runner";
+  if (d >= 6 && r < 0.07) return "necro";
+  if (d >= 4 && r < 0.13) return "flier";
+  if (d >= 5 && r < 0.10) return "demon";
+  if (d >= 3 && r < 0.18) return "ogre";
+  if (d >= 4 && Game.nightSpawned === 0 && Game.nightQuota >= 20 && d % 4 === 0) return "boss";
+  if (d >= 3 && r < 0.22) return "brute";
+  if (r < 0.40 + d * 0.02) return "runner";
   return "imp";
 }
 
@@ -82,15 +88,6 @@ export function updateSpawning(dt) {
       Game.nightSpawned++;
     }
   }
-}
-
-export function pickupWeapon(weaponId) {
-  const { player, lootItems } = state;
-  if (player.weapon) lootItems.push({ x: player.x + rand(-20, 20), weaponId: player.weapon });
-  player.weapon = weaponId;
-  const w = WEAPONS[weaponId];
-  // floaty imported here to avoid circular dep — called from caller instead
-  return w;
 }
 
 export function makeLocation(x, type, r) {

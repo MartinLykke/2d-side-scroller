@@ -5,7 +5,7 @@ import { CFG, WALL_SLOTS, PORTALS, STATIONS_X } from './config/config.js';
 import { WEAPONS, RARITY_COL } from './config/weapons.js';
 import { ENEMY_TYPES } from './config/enemies.js';
 import { LOC_DEFS } from './config/locations.js';
-import { clamp, dist, rand, randInt, pick } from './util/math.js';
+import { clamp, dist, lerp, rand, randInt, pick } from './util/math.js';
 import { canvas, ctx, W, H, groundY, resize } from './canvas.js';
 import { Game, state } from './state.js';
 
@@ -29,6 +29,20 @@ import { makeUnit } from './entities/Unit.js';
 window._KEYS = keys;
 window._DEV_GOD_MODE = false;
 
+const SHOP_ITEMS = [
+  { weaponId: 'rusty_sword', price: 6,  tier: 1 },
+  { weaponId: 'short_bow',   price: 9,  tier: 1 },
+  { weaponId: 'sword',       price: 16, tier: 2 },
+  { weaponId: 'crossbow',    price: 22, tier: 2 },
+  { weaponId: 'war_axe',     price: 28, tier: 3 },
+  { weaponId: 'long_bow',    price: 33, tier: 3 },
+  { weaponId: 'flame_sword', price: 48, tier: 4 },
+  { weaponId: 'gilded_spear',price: 44, tier: 4 },
+  { weaponId: 'kings_sword', price: 80, tier: 5 },
+  { weaponId: 'dark_bow',    price: 75, tier: 5 },
+];
+window._SHOP_ITEMS = SHOP_ITEMS;
+
 // ---------- Game state helpers (exposed for DEV) ----------
 function upgradeBase() {
   const { base } = state;
@@ -45,10 +59,10 @@ window._upgradeBase = upgradeBase;
 
 function pickupWeapon(weaponId) {
   const { player, lootItems } = state;
-  if (player.weapon) lootItems.push({ x: player.x + rand(-20, 20), weaponId: player.weapon });
+  if (player.weapon) lootItems.push({ x: player.x + rand(-60, 60), weaponId: player.weapon });
   player.weapon = weaponId;
   const w = WEAPONS[weaponId];
-  floaty(player.x, "⚔ " + w.name, RARITY_COL[w.rarity]);
+  state.weaponPickup = { weaponId, timer: 5.0 };
   Audio.upgrade();
 }
 window._pickupWeapon = pickupWeapon;
@@ -82,14 +96,42 @@ function buildStations() {
     label:()=>state.farmBuilt?"Gården producerer guld":"Byg gård (passiv guldindkomst)",
     onPaid:()=>{ state.farmBuilt=true; state.pendingFarmers++; floaty(STATIONS_X.farm,"🌾 Gård bygget"); Audio.build(); },
   });
+  state.stations.push({
+    id:"shop", x:()=>STATIONS_X.shop, paid:0,
+    cost:()=>0,
+    label:()=>"🏪 Butik",
+    onPaid:()=>{},
+  });
   walls.forEach(w=>{
     state.stations.push({
       id:"wall", wall:w, x:()=>w.x, paid:0,
-      cost:()=>{ if (!w.commissioned) return CFG.wallCost; if (w.level<2&&w.buildProgress>=1) return CFG.wallUpgradeCost; return 0; },
-      label:()=>{ if (!w.commissioned) return "Byg mur"; if (w.buildProgress<1) return "Bygges..."; if (w.level<2) return "Opgradér mur → sten"; return "Mur (maks)"; },
+      cost:()=>{
+        if (!w.commissioned) {
+          if (!state.units.some(u=>u.role==="builder")) return 0;
+          return CFG.wallCost;
+        }
+        if (w.buildProgress < 1) return 0;
+        if (w.level < 5) return CFG.wallUpgradeCosts[w.level - 1];
+        return 0;
+      },
+      label:()=>{
+        if (!w.commissioned) {
+          if (!state.units.some(u=>u.role==="builder")) return "🔨 Kræver en bygger";
+          return "Byg mur";
+        }
+        if (w.buildProgress < 1) return "Bygges...";
+        if (w.level < 5) return `Opgradér mur (lvl ${w.level}→${w.level+1})`;
+        return "Mur (maks niveau 5)";
+      },
       onPaid:()=>{
-        if (!w.commissioned) { w.commissioned=true; w.level=1; w.maxHp=CFG.wallHp[1]; w.hp=0; w.buildProgress=0; floaty(w.x,"🚧 Mur bestilt"); }
-        else if (w.level<2) { w.level=2; w.maxHp=CFG.wallHp[2]; w.buildProgress=clamp(w.hp/w.maxHp,0.2,1); floaty(w.x,"⛰ Stenmur"); }
+        if (!w.commissioned) {
+          w.commissioned=true; w.level=1; w.maxHp=CFG.wallHp[1]; w.hp=0; w.buildProgress=0;
+          floaty(w.x,"🚧 Mur bestilt");
+        } else if (w.level < 5) {
+          w.level++; w.maxHp=CFG.wallHp[w.level];
+          w.buildProgress=clamp(w.hp/w.maxHp,0.2,1);
+          floaty(w.x,`⬆ Mur niveau ${w.level}`,"#9bd05a");
+        }
         Audio.build();
       },
     });
@@ -98,28 +140,53 @@ function buildStations() {
 
 // ---------- New game ----------
 function newGame() {
-  state.player   = makePlayer();
-  state.base     = { x:CFG.baseX, level:1, hp:CFG.baseMaxHp[1], maxHp:CFG.baseMaxHp[1], paid:0, flash:0 };
-  state.units    = []; state.vagrants = []; state.enemies = []; state.coins  = [];
-  state.arrows   = []; state.animals  = []; state.particles=[]; state.floatTexts=[];
-  state.portals  = PORTALS.map(p=>({...p}));
-  state.walls    = WALL_SLOTS.map(makeWall);
-  state.pendingHammers = 0; state.pendingFarmers = 0; state.farmBuilt = false;
-  state.groundBows     = []; state.lootItems      = [];
-  state.payCooldown    = 0;  state.lastPaidStation = null;
-  state.vagrantTimer   = 1;  state.animalTimer     = 2;
+  // Entity arrays
+  state.player     = makePlayer();
+  state.base       = { x: CFG.baseX, level: 1, hp: CFG.baseMaxHp[1], maxHp: CFG.baseMaxHp[1], paid: 0, flash: 0 };
+  state.units      = [];
+  state.vagrants   = [];
+  state.enemies    = [];
+  state.coins      = [];
+  state.arrows     = [];
+  state.animals    = [];
+  state.particles  = [];
+  state.floatTexts = [];
+  state.portals    = PORTALS.map(p => ({ ...p }));
+  state.walls      = WALL_SLOTS.map(makeWall);
 
+  // Timers and flags
+  state.pendingHammers  = 0;
+  state.pendingFarmers  = 0;
+  state.farmBuilt       = false;
+  state.groundBows      = [];
+  state.lootItems       = [];
+  state.weaponPickup    = null;
+  state.payCooldown     = 0;
+  state.lastPaidStation = null;
+  state.vagrantTimer    = 1;
+  state.animalTimer     = 2;
+
+  // World generation
   Game.treeSeed = randInt(1, 99999);
-  buildStations(); buildLocations();
+  buildStations();
+  buildLocations();
 
-  Game.time=0.06; Game.day=1; Game.isNight=false; Game.wasNight=false;
-  Game.goalReached=false; Game.surviveNightForWin=false;
-  Game.winNightActive=false; Game.pendingWin=false; Game.autosaveTimer=0;
+  // Game clock
+  Game.time              = 0.06;
+  Game.day               = 1;
+  Game.isNight           = false;
+  Game.wasNight          = false;
+  Game.goalReached       = false;
+  Game.surviveNightForWin = false;
+  Game.winNightActive    = false;
+  Game.pendingWin        = false;
+  Game.autosaveTimer     = 0;
 
-  // seed starting coins + vagrants
-  for (let i=0;i<6;i++) state.coins.push({ x:CFG.baseX+rand(-200,200), y:groundY, vy:0, value:1, settled:true, life:9999, magnet:false, vx:0 });
-  for (let i=0;i<3;i++) spawnVagrant();
-  for (let i=0;i<4;i++) spawnAnimal();
+  // Seed starting coins and population
+  for (let i = 0; i < 6; i++)
+    state.coins.push({ x: CFG.baseX + rand(-200, 200), y: groundY, vy: 0, value: 1, settled: true, life: 9999, magnet: false, vx: 0 });
+  for (let i = 0; i < 3; i++) spawnVagrant();
+  for (let i = 0; i < 4; i++) spawnAnimal();
   planNight();
 }
 
@@ -149,6 +216,12 @@ function updatePlayer(dt) {
   if (move!==0) { player.dir=move; player.gallop+=dt*(sprint?16:10); player.bob=Math.abs(Math.sin(player.gallop))*3; }
   else player.bob*=0.9;
   if (player.knock) { player.x=clamp(player.x+player.knock*dt,120,CFG.worldWidth-120); player.knock*=0.86; if (Math.abs(player.knock)<6) player.knock=0; }
+  if ((keys[" "] || keys["space"]) && player.jumpH <= 0 && player.jumpVy <= 0) {
+    player.jumpVy = 560;
+  }
+  player.jumpH += player.jumpVy * dt;
+  player.jumpVy -= 1400 * dt;
+  if (player.jumpH <= 0) { player.jumpH = 0; if (player.jumpVy < 0) player.jumpVy = 0; }
   if (player.invuln>0) player.invuln-=dt;
   if (player.hurt>0) player.hurt-=dt;
   if (player.hp<player.maxHp) {
@@ -180,10 +253,15 @@ function triggerLocation(loc, idx) {
 
 function updateLootItems() {
   const { lootItems, player } = state;
+  if (!keys["f"]) return;
   for (let i=lootItems.length-1;i>=0;i--) {
     const it=lootItems[i];
-    if (dist(it.x,player.x)<34) { pickupWeapon(it.weaponId); lootItems.splice(i,1); }
+    if (dist(it.x,player.x)<50) { pickupWeapon(it.weaponId); lootItems.splice(i,1); break; }
   }
+}
+
+function updateWeaponPickup(dt) {
+  if (state.weaponPickup) { state.weaponPickup.timer -= dt; if (state.weaponPickup.timer <= 0) state.weaponPickup = null; }
 }
 
 function updateParticles(dt) {
@@ -195,8 +273,6 @@ function updateParticles(dt) {
     if (p.life<=0) particles.splice(i,1);
   }
 }
-
-function lerp(a,b,t) { return a+(b-a)*t; }
 
 function updateFloats(dt) {
   const { floatTexts } = state;
@@ -237,6 +313,7 @@ function update(dt) {
   updateArrows(dt);
   updateCoins(dt);
   updateLootItems();
+  updateWeaponPickup(dt);
   updateParticles(dt);
   updateFloats(dt);
   updateSpawning(dt);
@@ -310,12 +387,39 @@ document.getElementById("btn-restart").addEventListener("click", ()=>Game.start(
 
 if (hasSave()) document.getElementById("btn-continue").classList.remove("hidden");
 
-// Keyboard shortcuts for M (mute), P (pause), ` (dev)
+// ---------- Keyboard input ----------
+function tryOpenShop() {
+  const shopSt = state.stations.find(s => s.id === "shop");
+  if (shopSt && state.base.level >= 2 && dist(state.player.x, shopSt.x()) < 100) {
+    Game.shopOpen = !Game.shopOpen;
+    Game.shopIdx  = 0;
+  }
+}
+
+function handleShopKeys(k, e) {
+  if (k === "arrowleft")  { Game.shopIdx = Math.max(0, Game.shopIdx - 1); e.preventDefault(); }
+  if (k === "arrowright") { Game.shopIdx = Math.min(SHOP_ITEMS.length - 1, Game.shopIdx + 1); e.preventDefault(); }
+  if (k === "e" || k === "enter") {
+    const item = SHOP_ITEMS[Game.shopIdx];
+    if (item && state.player.coins >= item.price) {
+      state.player.coins -= item.price;
+      pickupWeapon(item.weaponId);
+      floaty(state.player.x, "🛒 " + WEAPONS[item.weaponId].name, "#9bd05a");
+    }
+  }
+}
+
 window.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
-  if (k==="m") UI.toggleMute();
-  if (k==="p") { if (Game.state==="play"||Game.state==="pause") Game.togglePause(); }
-  if (e.key==="`") DEV.toggle();
+  if (k === "m") UI.toggleMute();
+  if (k === "p" && (Game.state === "play" || Game.state === "pause")) Game.togglePause();
+  if (k === "escape") { Game.inventoryOpen = false; Game.shopOpen = false; }
+  if (e.key === "`") DEV.toggle();
+
+  if (Game.state !== "play") return;
+  if (k === "i") { Game.inventoryOpen = !Game.inventoryOpen; Game.shopOpen = false; }
+  if (k === "b" && !Game.inventoryOpen) tryOpenShop();
+  if (Game.shopOpen) handleShopKeys(k, e);
 });
 
 // ---------- Boot ----------

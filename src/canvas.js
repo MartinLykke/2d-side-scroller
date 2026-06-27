@@ -6,15 +6,17 @@ export let W = 0, H = 0, groundY = 0, DPR = 1;
 
 // Called on boot and on every window resize.  Effects.js registers its own
 // 'resize' listener to reinitialise FX after these values are updated.
+const ZOOM = 1.3;
+
 export function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, 2);
-  W   = window.innerWidth;
-  H   = window.innerHeight;
-  canvas.width  = Math.floor(W * DPR);
-  canvas.height = Math.floor(H * DPR);
-  canvas.style.width  = W + "px";
-  canvas.style.height = H + "px";
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  W   = Math.floor(window.innerWidth  / ZOOM);
+  H   = Math.floor(window.innerHeight / ZOOM);
+  canvas.width  = Math.floor(window.innerWidth  * DPR);
+  canvas.height = Math.floor(window.innerHeight * DPR);
+  canvas.style.width  = window.innerWidth  + "px";
+  canvas.style.height = window.innerHeight + "px";
+  ctx.setTransform(DPR * ZOOM, 0, 0, DPR * ZOOM, 0, 0);
   groundY = Math.floor(H * CFG.groundFrac);
 }
 window.addEventListener("resize", resize);
