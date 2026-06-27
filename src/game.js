@@ -436,7 +436,7 @@ function loop(now) {
   const gdt = dt * DEV.speedMult;
   updateFX(gdt);
 
-  if (Game.state === "play") { update(gdt); UI.refresh(); }
+  if (Game.state === "play") { if (!Game.upgradeMenuOpen) update(gdt); UI.refresh(); }
   if (Game.state !== "menu") render();
   else renderMenuBackground();
 

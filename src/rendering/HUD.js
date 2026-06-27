@@ -41,7 +41,8 @@ export const UI = {
 
     const arch  = units.filter(u=>u.role==="archer").length;
     const build = units.filter(u=>u.role==="builder").length;
-    document.getElementById("hud-pop-text").textContent   = units.length + vagrants.length;
+    const popCap = CFG.popCapByLevel[base.level];
+    document.getElementById("hud-pop-text").textContent   = (units.length + vagrants.length) + "/" + popCap;
     document.getElementById("hud-arch-text").textContent  = arch;
     document.getElementById("hud-build-text").textContent = build;
 

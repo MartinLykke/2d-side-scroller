@@ -352,6 +352,7 @@ export function updatePlayerAttack(dt) {
   if (wBase.type === "melee") {
     tgt.hp -= w.dmg; tgt.flash = 0.14; Audio.hit();
     spawnParticles(tgt.x, groundY - 28, 4, wBase.col);
+    floaty(tgt.x, "-" + w.dmg, wBase.col);
     if (tgt.hp <= 0) killEnemy(tgt);
   } else if (wBase.type === "ranged") {
     shootArrow(player.x, groundY - 72, tgt);

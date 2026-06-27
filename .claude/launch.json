@@ -5,7 +5,8 @@
       "name": "kingdom",
       "runtimeExecutable": "C:\\Users\\marti\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
       "runtimeArgs": ["serve.py"],
-      "port": 8000
+      "port": 8000,
+      "autoPort": true
     }
   ]
 }

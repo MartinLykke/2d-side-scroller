@@ -3,7 +3,7 @@ Serves the game with no-cache headers so the browser always gets the latest
 files (no stale game.js after edits). Serves from this file's own folder."""
 import http.server, socketserver, os
 
-PORT = 8000
+PORT = int(os.environ.get("PORT", 8000))
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 
