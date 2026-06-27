@@ -70,13 +70,14 @@ function nightEnemyType() {
   if (d >= 3 && r < 0.18) return "ogre";
   if (d >= 4 && Game.nightSpawned === 0 && Game.nightQuota >= 20 && d % 4 === 0) return "boss";
   if (d >= 3 && r < 0.22) return "brute";
+  if (d <= 2 && r < 0.28) return "wraith";
+  if (d <= 2 && r < 0.52) return "crawler";
+  if (d <= 3 && r < 0.22) return "raider";
   if (r < 0.40 + d * 0.02) return "runner";
   return "imp";
 }
 
 export function updateSpawning(dt) {
-  state.vagrantTimer -= dt;
-  if (state.vagrantTimer <= 0) { state.vagrantTimer = rand(10, 18); if (!Game.isNight) spawnVagrant(); }
   state.animalTimer -= dt;
   if (state.animalTimer <= 0) { state.animalTimer = rand(8, 14); if (!Game.isNight) spawnAnimal(); }
 

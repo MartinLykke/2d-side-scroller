@@ -88,7 +88,7 @@ function buildStations() {
     id:"hammer", x:()=>STATIONS_X.hammer, paid:0,
     cost:()=>CFG.hammerCost,
     label:()=>"Køb hammer (skab en bygger)",
-    onPaid:()=>{ state.pendingHammers++; floaty(STATIONS_X.hammer,"🔨 Hammer klar"); Audio.recruit(); },
+    onPaid:()=>{ state.groundHammers.push({ x:STATIONS_X.hammer+rand(-12,12), claimed:false }); floaty(STATIONS_X.hammer,"🔨 Hammer klar!"); Audio.recruit(); },
   });
   state.stations.push({
     id:"farm", x:()=>STATIONS_X.farm, paid:0,
@@ -106,19 +106,15 @@ function buildStations() {
     state.stations.push({
       id:"wall", wall:w, x:()=>w.x, paid:0,
       cost:()=>{
-        if (!w.commissioned) {
-          if (!state.units.some(u=>u.role==="builder")) return 0;
-          return CFG.wallCost;
-        }
+        if (!w.commissioned) return CFG.wallCost;
+        {
         if (w.buildProgress < 1) return 0;
         if (w.level < 5) return CFG.wallUpgradeCosts[w.level - 1];
         return 0;
       },
       label:()=>{
-        if (!w.commissioned) {
-          if (!state.units.some(u=>u.role==="builder")) return "🔨 Kræver en bygger";
-          return "Byg mur";
-        }
+        if (!w.commissioned) return "Byg mur";
+        {
         if (w.buildProgress < 1) return "Bygges...";
         if (w.level < 5) return `Opgradér mur (lvl ${w.level}→${w.level+1})`;
         return "Mur (maks niveau 5)";
@@ -159,6 +155,7 @@ function newGame() {
   state.pendingFarmers  = 0;
   state.farmBuilt       = false;
   state.groundBows      = [];
+  state.groundHammers   = [];
   state.lootItems       = [];
   state.weaponPickup    = null;
   state.payCooldown     = 0;
@@ -185,7 +182,8 @@ function newGame() {
   // Seed starting coins and population
   for (let i = 0; i < 6; i++)
     state.coins.push({ x: CFG.baseX + rand(-200, 200), y: groundY, vy: 0, value: 1, settled: true, life: 9999, magnet: false, vx: 0 });
-  for (let i = 0; i < 3; i++) spawnVagrant();
+  for (let i = 0; i < 2; i++)
+    state.vagrants.push({ x: CFG.baseX + rand(-320, 320), vx: 0, targetX: CFG.baseX + rand(-260, 260), state: "wander", anim: rand(0, 6) });
   for (let i = 0; i < 4; i++) spawnAnimal();
   planNight();
 }
@@ -242,6 +240,16 @@ function updateLocations() {
 function triggerLocation(loc, idx) {
   loc.triggered=true;
   const def=LOC_DEFS[loc.type];
+
+  const vcount = def.vagrants || 0;
+  let spawned = 0;
+  for (let i=0; i<vcount; i++) {
+    if (state.vagrants.length + state.units.length >= CFG.popCapByLevel[state.base.level]) break;
+    state.vagrants.push({ x: loc.x + rand(-60,60), vx:0, targetX: CFG.baseX + rand(-260,260), state:"wander", anim:rand(0,6), speed:190 });
+    spawned++;
+  }
+  if (spawned > 0) floaty(loc.x, `🙋 ${spawned} overlevende!`, "#cdbfa3");
+
   if (loc.enemyCount===0) { spawnLocLoot(loc); return; }
   loc.remainingEnemies=loc.enemyCount;
   for (let i=0;i<loc.enemyCount;i++) {

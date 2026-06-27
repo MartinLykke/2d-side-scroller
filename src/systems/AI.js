@@ -52,8 +52,8 @@ function archerAI(u, dt) {
       u.onWall = false;
       post = CFG.baseX + side * 110;
     }
-    moveToward(u, post, 84, dt);
     const tgt = nearestEnemy(u.x, 520);
+    if (!tgt || dist(u.x, tgt.x) > 150) moveToward(u, post, 84, dt);
     if (tgt && u.cooldown <= 0) {
       const shootH = u.onWall && u.wall ? wallHeight(u.wall) + 16 : 40;
       shootArrow(u.x, groundY - shootH, tgt);
@@ -169,11 +169,11 @@ export function updateAssignments() {
 }
 
 export function updateVagrants(dt) {
-  const { vagrants, units, groundBows } = state;
+  const { vagrants, units, groundBows, groundHammers } = state;
   for (let i = vagrants.length - 1; i >= 0; i--) {
     const v = vagrants[i];
 
-    if (!v.bowTarget) {
+    if (!v.bowTarget && !v.hammerTarget) {
       let bestBow = null, bestD = 9999;
       for (const b of groundBows) {
         if (b.claimed) continue;
@@ -203,8 +203,39 @@ export function updateVagrants(dt) {
       continue;
     }
 
+    if (!v.hammerTarget) {
+      let bestHammer = null, bestD = 9999;
+      for (const h of groundHammers) {
+        if (h.claimed) continue;
+        const d = dist(v.x, h.x);
+        if (d < bestD) { bestD = d; bestHammer = h; }
+      }
+      if (bestHammer) { bestHammer.claimed = true; v.hammerTarget = bestHammer; }
+    }
+
+    if (v.hammerTarget) {
+      const hx = v.hammerTarget.x;
+      if (dist(v.x, hx) > 6) {
+        v.vx = Math.sign(hx - v.x) * 58; v.x += v.vx * dt; v.anim += dt * 4;
+      } else {
+        const idx = groundHammers.indexOf(v.hammerTarget);
+        if (idx !== -1) groundHammers.splice(idx, 1);
+        const u = makeUnit("builder", v.x);
+        u.hp = u.maxHp = 5;
+        u.transform = 0.55;
+        u.dir = v.vx >= 0 ? 1 : -1;
+        units.push(u);
+        vagrants.splice(i, 1);
+        floaty(v.x, "🔨 Bygger!");
+        spawnParticles(v.x, groundY - 30, 14, "#9bd05a");
+        Audio.upgrade();
+      }
+      continue;
+    }
+
     const target = v.targetX;
-    if (dist(v.x, target) > 6) { v.vx = Math.sign(target - v.x) * 38; v.x += v.vx * dt; v.anim += dt * 4; }
+    const spd = v.speed || 38;
+    if (dist(v.x, target) > 6) { v.vx = Math.sign(target - v.x) * spd; v.x += v.vx * dt; v.anim += dt * (spd > 80 ? 12 : 4); }
     else v.vx = 0;
   }
 
@@ -214,7 +245,7 @@ export function updateVagrants(dt) {
   if (player.coins > 0 && keys && (keys["arrowdown"] || keys["s"])) {
     for (let i = 0; i < vagrants.length; i++) {
       const v = vagrants[i];
-      if (v.bowTarget) continue;
+      if (v.bowTarget || v.hammerTarget) continue;
       if (dist(player.x, v.x) < 46 && Math.abs(v.vx) < 1) {
         if (state.payCooldown <= 0) {
           player.coins--; state.payCooldown = CFG.payInterval;

@@ -41,6 +41,7 @@ export const state = {
   weaponPickup: null,
   locations: [],
   groundBows: [],
+  groundHammers: [],
   vagrantTimer: 1,
   animalTimer: 2,
   pendingHammers: 0,

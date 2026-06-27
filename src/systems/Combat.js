@@ -220,7 +220,7 @@ export function updateEnemies(dt) {
       continue;
     }
 
-    if (dist(e.x, player.x) < 30 && player.jumpH <= 20 && e.attackCd <= 0) {
+    if (dist(e.x, player.x) < 30 && player.jumpH <= 0 && e.attackCd <= 0) {
       const hadCoins = player.coins > 0;
       if (meleeHitPlayer(e, t, 230) && hadCoins) e.carry++;
       e.fleeing = true;
@@ -243,7 +243,7 @@ function updateLocEnemy(e, t, dt) {
     const dir = Math.sign(player.x - e.x);
     e.dir = dir || e.dir;
     e.x += dir * t.speed * dt;
-    if (dp < 32 && e.attackCd <= 0) {
+    if (dp < 32 && e.attackCd <= 0 && player.jumpH <= 0) {
       e.attackCd = 1.0;
       meleeHitPlayer(e, t, 220);
     }
