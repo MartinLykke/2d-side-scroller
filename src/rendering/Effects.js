@@ -88,20 +88,25 @@ window.addEventListener("resize", () => { if (FX) initFX(); });
 
 export function updateFX(dt) {
   if (!FX) initFX();
+
+  // Camera delta so screen-space ambient elements track the world and don't appear to follow the player
+  const camDelta = Game.cam - (FX._prevCam ?? Game.cam);
+  FX._prevCam = Game.cam;
+
   Game.windT += dt;
   const wind = windGust();
   FX.flicker = 0.74 + 0.24*Math.sin(Game.windT*9) + 0.12*Math.sin(Game.windT*23.3) + (Math.random()-0.5)*0.07;
 
-  for (const c of FX.clouds) { c.x += (c.sp*0.18 + wind*0.35)*dt; if (c.x > W+180) c.x=-180; if (c.x < -180) c.x=W+180; }
-  for (const b of FX.birds)  { b.x += b.sp*b.dir*dt; b.ph += dt*6; if (b.x > W+50) b.x=-50; if (b.x < -50) b.x=W+50; }
-  for (const bf of FX.butter){ bf.ph += dt; bf.x += Math.sin(bf.ph*1.3)*22*dt + wind*0.25*dt; bf.y += Math.cos(bf.ph*1.7)*16*dt; bf.y=clamp(bf.y,groundY-150,groundY-10); if (bf.x<-20) bf.x=W+20; if (bf.x>W+20) bf.x=-20; }
-  for (const f of FX.flies)  { f.ph += dt; f.x += Math.sin(f.ph)*11*dt; f.y += Math.cos(f.ph*1.3)*9*dt; f.y=clamp(f.y,groundY-165,groundY-6); if (f.x<0) f.x=W; if (f.x>W) f.x=0; }
-  for (const d of FX.dust)   { d.ph += dt; d.x += (wind*d.z*0.7+Math.sin(d.ph)*4)*dt; d.y += Math.cos(d.ph*0.7)*3*dt - 2*d.z*dt; if (d.y<0) d.y=H; if (d.y>H) d.y=0; if (d.x<0) d.x=W; if (d.x>W) d.x=0; }
+  for (const c of FX.clouds) { c.x += (c.sp*0.18 + wind*0.35)*dt - camDelta*0.12; if (c.x > W+180) c.x=-180; if (c.x < -180) c.x=W+180; }
+  for (const b of FX.birds)  { b.x += b.sp*b.dir*dt - camDelta; b.ph += dt*6; if (b.x > W+50) b.x=-50; if (b.x < -50) b.x=W+50; }
+  for (const bf of FX.butter){ bf.ph += dt; bf.x += Math.sin(bf.ph*1.3)*22*dt + wind*0.25*dt - camDelta; bf.y += Math.cos(bf.ph*1.7)*16*dt; bf.y=clamp(bf.y,groundY-150,groundY-10); if (bf.x<-20) bf.x=W+20; if (bf.x>W+20) bf.x=-20; }
+  for (const f of FX.flies)  { f.ph += dt; f.x += Math.sin(f.ph)*11*dt - camDelta; f.y += Math.cos(f.ph*1.3)*9*dt; f.y=clamp(f.y,groundY-165,groundY-6); if (f.x<0) f.x=W; if (f.x>W) f.x=0; }
+  for (const d of FX.dust)   { d.ph += dt; d.x += (wind*d.z*0.7+Math.sin(d.ph)*4)*dt - camDelta; d.y += Math.cos(d.ph*0.7)*3*dt - 2*d.z*dt; if (d.y<0) d.y=H; if (d.y>H) d.y=0; if (d.x<0) d.x=W; if (d.x>W) d.x=0; }
 
   const cb = biomeAt(Game.cam + W/2), falling = cb.deco==="autumn" || cb.snow;
   for (const p of FX.fall) {
     if (!p.active) { if (falling && Math.random()<0.025) { p.active=true; p.x=Math.random()*W; p.y=-12; p.snow=!!cb.snow; p.color=cb.snow?"#eef4fb":cb.leaf; } continue; }
-    p.ph+=dt; p.rot+=dt*2.4; p.y+=p.sp*dt*(p.snow?0.5:1); p.x+=(Math.sin(p.ph*2)*p.sway+wind*1.3)*dt;
+    p.ph+=dt; p.rot+=dt*2.4; p.y+=p.sp*dt*(p.snow?0.5:1); p.x+=(Math.sin(p.ph*2)*p.sway+wind*1.3)*dt - camDelta;
     if (p.y > H+12) p.active=false;
   }
 
