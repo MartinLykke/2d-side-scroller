@@ -43,7 +43,8 @@ function initTouchControls() {
   bindBtn("tc-pickup",     "f");
 }
 
-if ("ontouchstart" in window || navigator.maxTouchPoints > 0) {
+const isTouchDevice = ("ontouchstart" in window || navigator.maxTouchPoints > 0) && window.matchMedia("(pointer: coarse)").matches;
+if (isTouchDevice) {
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initTouchControls);
   } else {
