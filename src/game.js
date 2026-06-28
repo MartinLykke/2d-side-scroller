@@ -15,7 +15,7 @@ import { saveGame, hasSave, loadGame, deleteSave } from './systems/SaveSystem.js
 import { updateSpawning, planNight, spawnCoin, floaty, spawnParticles, spawnVagrant, spawnAnimal, spawnEnemy, buildLocations, spawnLocLoot } from './systems/SpawnSystem.js';
 import { updatePayment, updateCoins } from './systems/Economy.js';
 import { updateUnits, updateAssignments, updateVagrants, updateAnimals, nearestEnemy } from './systems/AI.js';
-import { updateEnemies, updateArrows, updatePlayerAttack, updateSpells, killEnemy } from './systems/Combat.js';
+import { updateEnemies, updateArrows, updatePlayerAttack, updateSpells, killEnemy, updateLegendaryEffects } from './systems/Combat.js';
 
 import { FX, initFX, updateFX, biomeAt } from './rendering/Effects.js';
 import { render, drawEntityShadows } from './rendering/Renderer.js';
@@ -249,6 +249,8 @@ function newGame() {
   state.groundHammers   = [];
   state.lootItems       = [];
   state.chests          = [];
+  state.legendaryBoss   = null;
+  state.legendaryEffects= [];
   state.spells          = [];
   state.weaponPickup    = null;
   state.payCooldown     = 0;
@@ -453,6 +455,7 @@ function update(dt) {
   updateEnemies(dt);
   updateArrows(dt);
   updateSpells(dt);
+  updateLegendaryEffects(dt);
   updateCoins(dt);
   updateLootItems();
   updateChests(dt);

@@ -54,4 +54,6 @@ export const state = {
   payCooldown: 0,
   payHoldTime: 0,
   lastPaidStation: null,
+  legendaryBoss: null,
+  legendaryEffects: [],
 };

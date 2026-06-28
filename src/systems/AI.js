@@ -83,6 +83,19 @@ function peasantAI(u, dt) {
 }
 
 function archerAI(u, dt) {
+  // Rally to legendary boss
+  const lb = state.legendaryBoss;
+  if (lb && !lb.fleeing && u.rallied) {
+    const d = dist(u.x, lb.x);
+    u.dir = Math.sign(lb.x - u.x) || u.dir;
+    if (d > 320) moveToward(u, lb.x, 95, dt);
+    if (d < 580 && u.cooldown <= 0) {
+      shootArrow(u.x, groundY - 42, lb);
+      u.cooldown = 0.65;
+      u.dir = Math.sign(lb.x - u.x) || u.dir;
+    }
+    return;
+  }
   const closeFoe = nearestEnemy(u.x, Game.isNight ? 620 : 500);
 
   if (Game.isNight) {
@@ -181,6 +194,21 @@ function farmerAI(u, dt) {
 }
 
 function guardAI(u, dt) {
+  // Rally to legendary boss
+  const lb = state.legendaryBoss;
+  if (lb && !lb.fleeing && u.rallied) {
+    const d = dist(u.x, lb.x);
+    u.dir = Math.sign(lb.x - u.x) || u.dir;
+    if (d > 45) { u.x += u.dir * 175 * dt; return; }
+    if (u.cooldown <= 0) {
+      lb.hp -= 4; lb.flash = 0.12;
+      u.cooldown = 0.55;
+      Audio.hit();
+      spawnParticles(lb.x, groundY - 30, 5, "#8a2a4a", 50, 70);
+      if (lb.hp <= 0) killEnemy(lb);
+    }
+    return;
+  }
   const foe = nearestEnemy(u.x, 300);
   if (foe) {
     const d = dist(u.x, foe.x);

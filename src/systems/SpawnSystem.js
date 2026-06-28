@@ -66,10 +66,18 @@ export function planNight() {
 function nightEnemyType() {
   const d = Game.day, r = Math.random();
   const late = Math.max(0, d - 6);
+  // Legendary bosses on specific days (checked first)
+  if (Game.nightSpawned === 0) {
+    if (d === 10) return "legend1";
+    if (d === 15) return "legend2";
+    if (d >= 20 && d % 5 === 0) return "legend3";
+  }
+  // Tiered bosses on even nights (days 2-8, and continuing after legendary days)
   if (Game.nightSpawned === 0 && Game.nightQuota >= 10 && d >= 2 && d % 2 === 0) {
-    if (d >= 8) return "boss4";
-    if (d >= 6) return "boss3";
-    if (d >= 4) return "boss2";
+    if (d >= 12) return "boss4";
+    if (d >= 8)  return "boss4";
+    if (d >= 6)  return "boss3";
+    if (d >= 4)  return "boss2";
     return "boss1";
   }
   if (d >= 6 && r < Math.min(0.30, 0.07 + late * 0.012)) return "necro";
@@ -93,8 +101,21 @@ export function updateSpawning(dt) {
     if (Game.spawnTimer <= 0) {
       const pressure = Math.min(0.55, Math.max(0, Game.day - 4) * 0.018);
       Game.spawnTimer = rand(0.6, 1.6) * (1 - pressure);
-      spawnEnemy(nightEnemyType(), pick(state.portals));
+      const type = nightEnemyType();
+      spawnEnemy(type, pick(state.portals));
       Game.nightSpawned++;
+      if (ENEMY_TYPES[type] && ENEMY_TYPES[type].legendary) {
+        const lb = state.enemies[state.enemies.length - 1];
+        lb.specialCd  = 3;
+        lb.specialPhase = 0;
+        lb.specialTimer = 0;
+        state.legendaryBoss = lb;
+        // Rally all fighters
+        for (const u of state.units) u.rallied = true;
+        floaty(CFG.baseX, `☠ ${ENEMY_TYPES[type].name} nærmer sig!`, "#ff2020");
+        for (let k = 0; k < 30; k++)
+          state.particles.push({ x: CFG.baseX + rand(-120,120), y: groundY - rand(40,160), vx: rand(-60,60), vy: rand(-80,-20), life: rand(0.6,1.2), color:"#ff2020", size: rand(2,5) });
+      }
     }
   }
 }

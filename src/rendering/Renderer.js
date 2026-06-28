@@ -462,18 +462,129 @@ export function drawUnits() {
   }
 }
 
+function drawLegendaryBody(e, t, dark, T) {
+  const w=t.w, bob=Math.abs(Math.sin(e.anim*1.4))*4;
+  const windupFrac = e.specialPhase===1 ? Math.max(0,1-(e.specialTimer/(t.windupTime||1))) : 0;
+  const flashCol = e.flash>0?"#ffffff":t.color;
+  const isLegend2 = e.type==="legend2", isLegend3 = e.type==="legend3";
+
+  // Ground shadow
+  ctx.save(); ctx.globalAlpha=0.25; ctx.fillStyle="#000";
+  ctx.beginPath(); ctx.ellipse(0,groundY-2,w*0.7,10,0,0,Math.PI*2); ctx.fill(); ctx.restore();
+
+  // Pulsing outer aura
+  ctx.save(); ctx.globalCompositeOperation="lighter";
+  const aR=w*(1.35+0.14*Math.sin(T*1.7)+windupFrac*0.5);
+  const ag=ctx.createRadialGradient(0,groundY-w*0.4,10,0,groundY-w*0.4,aR);
+  ag.addColorStop(0,t.eye); ag.addColorStop(0.55,withA(t.eye,0.22)); ag.addColorStop(1,"rgba(0,0,0,0)");
+  ctx.globalAlpha=0.2+0.1*Math.sin(T*1.5)+windupFrac*0.35;
+  ctx.fillStyle=ag; ctx.beginPath(); ctx.ellipse(0,groundY-w*0.4,aR,aR*0.6,0,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  // Legs (large)
+  const s=Math.sin(e.anim*3), lw=Math.max(4,w*0.095);
+  ctx.strokeStyle=flashCol; ctx.lineWidth=lw; ctx.lineCap="round";
+  ctx.beginPath(); ctx.moveTo(-w*0.22,groundY-14-bob); ctx.lineTo(-w*0.22+s*8,groundY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(w*0.22,groundY-14-bob);  ctx.lineTo(w*0.22-s*8,groundY); ctx.stroke();
+  ctx.lineCap="butt";
+
+  // Arms (raised during windup)
+  const armLift = windupFrac * 50;
+  ctx.fillStyle=flashCol;
+  ctx.beginPath(); ctx.moveTo(-w*0.5,groundY-w*0.6-bob); ctx.lineTo(-w*0.95,groundY-w*0.82-bob-armLift); ctx.lineTo(-w*0.72,groundY-w*0.38-bob); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(w*0.5,groundY-w*0.6-bob);  ctx.lineTo(w*0.95,groundY-w*0.82-bob-armLift);  ctx.lineTo(w*0.72,groundY-w*0.38-bob);  ctx.closePath(); ctx.fill();
+
+  // Body
+  ctx.fillStyle=flashCol;
+  roundedRect(-w/2,groundY-w-10-bob,w,w+10,w*0.28); ctx.fill();
+  ctx.fillStyle="rgba(255,255,255,0.05)"; roundedRect(-w/2,groundY-w-10-bob,w*0.28,w+10,w*0.28); ctx.fill();
+
+  // Legend3: spinning void rings on body
+  if (isLegend3) {
+    ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.strokeStyle=t.eye; ctx.lineWidth=3;
+    ctx.globalAlpha=0.38; ctx.beginPath(); ctx.ellipse(0,groundY-w*0.45-bob,w*0.68,w*0.27,T*0.65,0,Math.PI*2); ctx.stroke();
+    ctx.globalAlpha=0.22; ctx.beginPath(); ctx.ellipse(0,groundY-w*0.45-bob,w*0.88,w*0.34,-T*0.42,0,Math.PI*2); ctx.stroke();
+    ctx.restore();
+  }
+  // Legend2: ice shards at base
+  if (isLegend2) {
+    ctx.save(); ctx.fillStyle=t.eye; ctx.globalAlpha=0.55;
+    for (let ci=0;ci<5;ci++) { const cx=(ci/4-0.5)*w*0.9, ch=18+Math.sin(T*2+ci)*7; ctx.beginPath(); ctx.moveTo(cx-5,groundY); ctx.lineTo(cx,groundY-ch); ctx.lineTo(cx+5,groundY); ctx.fill(); }
+    ctx.restore();
+  }
+
+  // Horns
+  const hornCt = isLegend3?9:isLegend2?5:7;
+  ctx.fillStyle=flashCol;
+  for (let hi=0;hi<hornCt;hi++) {
+    const hfrac=hi/(hornCt-1), hx=(hfrac-0.5)*w*0.94;
+    const mid=Math.abs(hi-Math.floor(hornCt/2))<1.5;
+    const hh=hi%2===0?40:24+(mid?16:0);
+    ctx.beginPath(); ctx.moveTo(hx-5,groundY-w-8-bob); ctx.lineTo(hx,groundY-w-8-hh-bob); ctx.lineTo(hx+5,groundY-w-8-bob); ctx.fill();
+  }
+
+  // Eyes
+  const eyeRows = isLegend3?3:isLegend2?2:1;
+  for (let ei=0;ei<eyeRows;ei++) {
+    const ey=groundY-w*(0.62-ei*0.2)-bob;
+    ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.6+0.28*Math.sin(T*3+ei*2); ctx.fillStyle=t.eye;
+    ctx.beginPath(); ctx.ellipse(-w*0.14,ey,w*0.13,w*0.08,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(w*0.14,ey,w*0.13,w*0.08,0,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle=t.eye;
+    ctx.beginPath(); ctx.arc(-w*0.14,ey,w*0.045,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(w*0.14,ey,w*0.045,0,Math.PI*2); ctx.fill();
+  }
+
+  // Rune lines
+  ctx.save(); ctx.globalAlpha=0.28+0.12*Math.sin(T*2.2); ctx.strokeStyle=t.eye; ctx.lineWidth=2;
+  for (let ri=0;ri<4;ri++) {
+    const ry=groundY-w*(0.18+ri*0.18)-bob;
+    ctx.beginPath(); ctx.moveTo(-w*0.35,ry); ctx.lineTo(w*0.35,ry); ctx.stroke();
+    if (ri%2===0) { ctx.beginPath(); ctx.moveTo(-w*0.25,ry-5); ctx.lineTo(-w*0.12,ry+5); ctx.moveTo(w*0.25,ry-5); ctx.lineTo(w*0.12,ry+5); ctx.stroke(); }
+  }
+  ctx.restore();
+}
+
+export function drawLegendaryEffects() {
+  for (const ef of state.legendaryEffects) {
+    if (ef.type !== "ring") continue;
+    const alpha = Math.max(0, ef.life / ef.totalLife);
+    ctx.save();
+    ctx.globalAlpha = alpha * 0.75;
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = ef.col;
+    ctx.lineWidth = (ef.width || 8) * alpha;
+    ctx.beginPath();
+    ctx.ellipse(ef.x, groundY - 6, ef.radius, ef.radius * 0.25, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = alpha * 0.2;
+    ctx.fillStyle = ef.col;
+    ctx.beginPath();
+    ctx.ellipse(ef.x, groundY - 6, ef.radius, ef.radius * 0.25, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
 export function drawEnemies(dark) {
   for (const e of state.enemies) {
     const t=ENEMY_TYPES[e.type];
     const drawYOff = e.fy || 0;
+    const isLegend = t.legendary === true;
+    const bossT = performance.now()/1000;
+
+    const w=t.w, bob=Math.abs(Math.sin(e.anim*2))*2;
+    const isBoss = e.type==="boss1"||e.type==="boss2"||e.type==="boss3"||e.type==="boss4";
     ctx.save(); ctx.translate(e.x, drawYOff); if (e.dir<0) ctx.scale(-1,1);
-    const w=t.w, bob=Math.abs(Math.sin(e.anim*2))*2, s=Math.sin(e.anim*3);
+    if (isLegend) {
+      drawLegendaryBody(e, t, dark, bossT);
+    } else {
+    const s=Math.sin(e.anim*3);
     ctx.strokeStyle=e.flash>0?"#fff":t.color; ctx.lineWidth=Math.max(2,w*0.12); ctx.lineCap="round";
     ctx.beginPath(); ctx.moveTo(-w*0.25,groundY-8-bob); ctx.lineTo(-w*0.25+s*5,groundY); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(w*0.25,groundY-8-bob); ctx.lineTo(w*0.25-s*5,groundY); ctx.stroke();
     ctx.lineCap="butt";
-    const isBoss = e.type==="boss1"||e.type==="boss2"||e.type==="boss3"||e.type==="boss4";
-    const bossT = performance.now()/1000;
     // Boss pulsing aura
     if (isBoss) {
       ctx.save(); ctx.globalCompositeOperation="lighter";
@@ -504,9 +615,25 @@ export function drawEnemies(dark) {
       ctx.beginPath(); ctx.moveTo(-w*0.5,groundY-w*0.5-bob); ctx.lineTo(-w*1.8,groundY-w*0.5-bob-wingFlap); ctx.lineTo(-w*0.5,groundY-w*0.1-bob); ctx.fill();
       ctx.beginPath(); ctx.moveTo(w*0.5,groundY-w*0.5-bob); ctx.lineTo(w*1.8,groundY-w*0.5-bob+wingFlap); ctx.lineTo(w*0.5,groundY-w*0.1-bob); ctx.fill();
     }
+    } // end else (non-legendary)
     ctx.restore();
+
+    if (isLegend) {
+      // Legend HP bar spans full width
+      drawHpBar(e.x, groundY+drawYOff-t.w-28, t.w*0.85, e.hp/e.maxHp, "#ff2040");
+      const T2=bossT;
+      ctx.save(); ctx.textAlign="center";
+      ctx.font="bold 15px Trebuchet MS";
+      ctx.fillStyle="rgba(0,0,0,0.85)"; ctx.fillText(t.name, e.x+1, groundY+drawYOff-t.w-42);
+      ctx.fillStyle=t.eye; ctx.fillText(t.name, e.x, groundY+drawYOff-t.w-43);
+      ctx.font="11px Trebuchet MS";
+      ctx.globalAlpha=0.65+0.25*Math.sin(T2*3);
+      ctx.fillStyle="#f2c14e"; ctx.fillText("⚔ LEGENDARISK BOSS ⚔", e.x, groundY+drawYOff-t.w-58);
+      ctx.restore();
+      continue;
+    }
+
     if (e.hp<e.maxHp) drawHpBar(e.x,groundY+drawYOff-t.w-16,t.w+(isBoss?12:4),e.hp/e.maxHp,isBoss?"#ff4080":"#d05a5a");
-    // Boss name tag
     if (isBoss) {
       ctx.save(); ctx.font="bold 12px Trebuchet MS"; ctx.textAlign="center";
       ctx.fillStyle="rgba(0,0,0,0.7)"; ctx.fillText(t.name||e.type, e.x+1, groundY+drawYOff-t.w-28);
@@ -1322,7 +1449,7 @@ export function render() {
   drawGroundTexture(dark); drawGroundDeco(dark); drawLocations(dark);
   drawEntityShadows(); drawPortals(dark); drawWalls(dark); drawBase(dark);
   drawStations(); drawCoins(); drawGroundBows(); drawGroundHammers(); drawLootItems(); drawChests();
-  drawAnimals(); drawVagrants(); drawUnits(); drawEnemies(dark);
+  drawAnimals(); drawVagrants(); drawUnits(); drawEnemies(dark); drawLegendaryEffects();
   drawPlayer(dark); drawArrows(); drawSpells(); drawParticles(); drawCampLight(dark); drawFloats();
   ctx.restore();
 
