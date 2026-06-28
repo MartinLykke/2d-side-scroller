@@ -681,6 +681,6 @@ canvas.addEventListener("mousedown", e => {
 // ---------- Boot ----------
 resize();
 initFX();
-loadSprites();
+// loadSprites(); // sprites disabled — enable when better art is ready
 Game.cam = clamp(CFG.baseX - W/2, 0, Math.max(0, CFG.worldWidth - W));
 requestAnimationFrame(loop);
