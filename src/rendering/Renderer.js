@@ -348,6 +348,17 @@ export function drawStations() {
     ctx.fillStyle="#9a3a2a"; ctx.fillRect(STATIONS_X.shop-24,groundY-38,48,10);
     ctx.fillStyle="rgba(255,255,255,0.08)"; ctx.fillRect(STATIONS_X.shop-22,groundY-32,14,32);
   }
+  if (state.base && state.base.level >= 3) {
+    drawStationIcon(STATIONS_X.guard,"⚔");
+    // Guard recruitment rack
+    ctx.strokeStyle="#6a4a28"; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(STATIONS_X.guard-18,groundY-8); ctx.lineTo(STATIONS_X.guard+18,groundY-8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(STATIONS_X.guard-14,groundY-8); ctx.lineTo(STATIONS_X.guard-14,groundY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(STATIONS_X.guard+14,groundY-8); ctx.lineTo(STATIONS_X.guard+14,groundY); ctx.stroke();
+    ctx.strokeStyle="#9a9aaa"; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(STATIONS_X.guard-10,groundY-14); ctx.lineTo(STATIONS_X.guard-2,groundY-8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(STATIONS_X.guard+10,groundY-14); ctx.lineTo(STATIONS_X.guard+2,groundY-8); ctx.stroke();
+  }
 }
 
 export function drawCoins() {
@@ -364,15 +375,6 @@ export function drawCoins() {
 function drawHumanoid(x, anim, bodyCol, headCol, tool, dir, moving) {
   ctx.save(); ctx.translate(x,0); if (dir<0) ctx.scale(-1,1);
   const bob=moving?Math.abs(Math.sin(anim))*1.2:0;
-  ctx.save();
-  ctx.globalAlpha=0.35;
-  ctx.strokeStyle="rgba(8,7,12,0.85)";
-  ctx.lineWidth=5;
-  ctx.lineCap="round";
-  ctx.beginPath(); ctx.moveTo(-3,groundY-15); ctx.lineTo(-3,groundY); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(3,groundY-15); ctx.lineTo(3,groundY); ctx.stroke();
-  roundedRect(-7,groundY-36-bob,14,23,5); ctx.stroke();
-  ctx.restore();
   legs(0,groundY-15,anim,moving?5:0,bodyCol);
   ctx.fillStyle=bodyCol; roundedRect(-5,groundY-34-bob,10,20,4); ctx.fill();
   ctx.fillStyle="rgba(0,0,0,0.18)"; roundedRect(2,groundY-34-bob,3,20,2); ctx.fill();
@@ -424,6 +426,7 @@ export function drawUnits() {
     if (u.role==="archer")  { body="#2f5040"; tool="bow"; }
     else if (u.role==="builder") { body="#6a4a28"; tool="hammer"; }
     else if (u.role==="farmer")  { body="#5a6a2a"; tool="scythe"; }
+    else if (u.role==="guard")   { body="#3a4a5a"; head="#b09a7a"; }
     const wallLift = u.onWall && u.wall ? Math.max(0, wallHeight(u.wall) - 14) : 0;
     ctx.save();
     if (wallLift > 0) {
@@ -431,6 +434,22 @@ export function drawUnits() {
       ctx.globalAlpha = 0.98;
     }
     drawHumanoid(u.x,u.anim,body,head,tool,u.dir,u.moving);
+    if (u.role==="guard") {
+      const bob=u.moving?Math.abs(Math.sin(u.anim))*1.2:0;
+      ctx.save(); ctx.translate(u.x,0); if (u.dir<0) ctx.scale(-1,1);
+      // Shield
+      ctx.fillStyle="#4a5060"; roundedRect(8,groundY-34-bob,10,16,3); ctx.fill();
+      ctx.fillStyle="#f2c14e"; ctx.beginPath(); ctx.arc(13,groundY-28-bob,2.5,0,Math.PI*2); ctx.fill();
+      // Sword
+      ctx.strokeStyle="#b0b8c8"; ctx.lineWidth=2; ctx.lineCap="round";
+      ctx.beginPath(); ctx.moveTo(-8,groundY-14-bob); ctx.lineTo(-8,groundY-30-bob); ctx.stroke();
+      ctx.strokeStyle="#8a6a30"; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.moveTo(-5,groundY-22-bob); ctx.lineTo(-11,groundY-22-bob); ctx.stroke();
+      // Helmet
+      ctx.fillStyle="#4a5060"; ctx.beginPath(); ctx.arc(0,groundY-38-bob,6,Math.PI,0); ctx.fill();
+      ctx.fillRect(-6,groundY-40-bob,12,3);
+      ctx.restore();
+    }
     ctx.restore();
     if (u.transform>0) {
       const p=u.transform/0.55;
@@ -449,26 +468,34 @@ export function drawEnemies(dark) {
     const drawYOff = e.fy || 0;
     ctx.save(); ctx.translate(e.x, drawYOff); if (e.dir<0) ctx.scale(-1,1);
     const w=t.w, bob=Math.abs(Math.sin(e.anim*2))*2, s=Math.sin(e.anim*3);
-    ctx.save();
-    ctx.globalAlpha=0.5;
-    ctx.strokeStyle="rgba(8,6,12,0.9)";
-    ctx.lineWidth=Math.max(4,w*0.18);
-    roundedRect(-w/2-1,groundY-w-7-bob,w+2,w+8,w*0.42); ctx.stroke();
-    ctx.restore();
     ctx.strokeStyle=e.flash>0?"#fff":t.color; ctx.lineWidth=Math.max(2,w*0.12); ctx.lineCap="round";
     ctx.beginPath(); ctx.moveTo(-w*0.25,groundY-8-bob); ctx.lineTo(-w*0.25+s*5,groundY); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(w*0.25,groundY-8-bob); ctx.lineTo(w*0.25-s*5,groundY); ctx.stroke();
     ctx.lineCap="butt";
+    const isBoss = e.type==="boss1"||e.type==="boss2"||e.type==="boss3"||e.type==="boss4";
+    const bossT = performance.now()/1000;
+    // Boss pulsing aura
+    if (isBoss) {
+      ctx.save(); ctx.globalCompositeOperation="lighter";
+      const aura=0.18+0.08*Math.sin(bossT*2+e.x); ctx.globalAlpha=aura;
+      const ag=ctx.createRadialGradient(0,groundY-w*0.5,4,0,groundY-w*0.5,w*1.4);
+      ag.addColorStop(0,t.eye); ag.addColorStop(1,"rgba(0,0,0,0)");
+      ctx.fillStyle=ag; ctx.beginPath(); ctx.ellipse(0,groundY-w*0.5,w*1.4,w,0,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
     ctx.fillStyle=e.flash>0?"#ffffff":t.color;
     roundedRect(-w/2,groundY-w-6-bob,w,w+6,w*0.4); ctx.fill();
-    if (e.type==="brute"||e.type==="boss") {
+    if (e.type==="brute"||isBoss) {
       ctx.fillStyle=e.flash>0?"#fff":t.color;
-      for (let i=-1;i<=1;i++) { const sx=i*w*0.28; ctx.beginPath(); ctx.moveTo(sx-3,groundY-w-2-bob); ctx.lineTo(sx,groundY-w-13-bob); ctx.lineTo(sx+3,groundY-w-2-bob); ctx.fill(); }
+      for (let i=-1;i<=1;i++) { const sx=i*w*0.28; ctx.beginPath(); ctx.moveTo(sx-3,groundY-w-2-bob); ctx.lineTo(sx,groundY-w-(isBoss?18:13)-bob); ctx.lineTo(sx+3,groundY-w-2-bob); ctx.fill(); }
+      if (isBoss && (e.type==="boss3"||e.type==="boss4")) {
+        for (let i=-2;i<=2;i+=2) if (i!==0) { const sx=i*w*0.18; ctx.beginPath(); ctx.moveTo(sx-2,groundY-w-1-bob); ctx.lineTo(sx,groundY-w-9-bob); ctx.lineTo(sx+2,groundY-w-1-bob); ctx.fill(); }
+      }
     }
     ctx.fillStyle="rgba(255,255,255,0.06)"; roundedRect(-w/2,groundY-w-6-bob,w*0.34,w+6,w*0.4); ctx.fill();
     const ex=w*0.12, ex2=w*0.32, ey=groundY-w*0.6-bob;
-    ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.4+0.35*dark; ctx.fillStyle=t.eye;
-    ctx.beginPath(); ctx.arc(ex,ey,w*0.22,0,Math.PI*2); ctx.arc(ex2,ey,w*0.22,0,Math.PI*2); ctx.fill(); ctx.restore();
+    ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.4+0.35*dark+(isBoss?0.3:0); ctx.fillStyle=t.eye;
+    ctx.beginPath(); ctx.arc(ex,ey,w*(isBoss?0.28:0.22),0,Math.PI*2); ctx.arc(ex2,ey,w*(isBoss?0.28:0.22),0,Math.PI*2); ctx.fill(); ctx.restore();
     ctx.fillStyle=t.eye; ctx.beginPath(); ctx.arc(ex,ey,w*0.09,0,Math.PI*2); ctx.arc(ex2,ey,w*0.09,0,Math.PI*2); ctx.fill();
     if (e.carry>0) { ctx.fillStyle="#f2c14e"; ctx.beginPath(); ctx.arc(0,groundY-w-12-bob,4,0,Math.PI*2); ctx.fill(); }
     if (t.flying) {
@@ -478,7 +505,13 @@ export function drawEnemies(dark) {
       ctx.beginPath(); ctx.moveTo(w*0.5,groundY-w*0.5-bob); ctx.lineTo(w*1.8,groundY-w*0.5-bob+wingFlap); ctx.lineTo(w*0.5,groundY-w*0.1-bob); ctx.fill();
     }
     ctx.restore();
-    if (e.hp<e.maxHp) drawHpBar(e.x,groundY+drawYOff-t.w-16,t.w+4,e.hp/e.maxHp,"#d05a5a");
+    if (e.hp<e.maxHp) drawHpBar(e.x,groundY+drawYOff-t.w-16,t.w+(isBoss?12:4),e.hp/e.maxHp,isBoss?"#ff4080":"#d05a5a");
+    // Boss name tag
+    if (isBoss) {
+      ctx.save(); ctx.font="bold 12px Trebuchet MS"; ctx.textAlign="center";
+      ctx.fillStyle="rgba(0,0,0,0.7)"; ctx.fillText(t.name||e.type, e.x+1, groundY+drawYOff-t.w-28);
+      ctx.fillStyle=t.eye; ctx.fillText(t.name||e.type, e.x, groundY+drawYOff-t.w-29); ctx.restore();
+    }
   }
 }
 
@@ -490,14 +523,6 @@ export function drawPlayer(dark) {
   if (player.invuln>0&&Math.floor(player.invuln*12)%2===0) ctx.globalAlpha=0.45;
   ctx.translate(x,-bob - player.jumpH); if (player.dir<0) ctx.scale(-1,1);
   const px=0, moving=Math.abs(player.vx)>1, s=moving?Math.sin(gallop*2):0;
-  ctx.save();
-  ctx.globalAlpha=0.5;
-  ctx.strokeStyle="rgba(6,5,10,0.92)";
-  ctx.lineWidth=5;
-  ctx.lineJoin="round";
-  roundedRect(px-22,groundY-49,48,27,12); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(px+18,groundY-44); ctx.lineTo(px+30,groundY-64); ctx.lineTo(px+40,groundY-62); ctx.lineTo(px+38,groundY-52); ctx.lineTo(px+26,groundY-40); ctx.closePath(); ctx.stroke();
-  ctx.restore();
   ctx.fillStyle="#2a2230"; ctx.strokeStyle="#2a2230"; ctx.lineWidth=3;
   ctx.beginPath(); ctx.moveTo(px-14,groundY-26+bob); ctx.lineTo(px-14+s*8,groundY+bob); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(px+12,groundY-26+bob); ctx.lineTo(px+12-s*8,groundY+bob); ctx.stroke();
@@ -743,22 +768,56 @@ export function drawLocations(dark) {
   if (!state.locations) return;
   const { player, locations } = state;
   const camL=Game.cam-400, camR=Game.cam+W+400;
+  const t=performance.now()/1000;
   const LOC_SCALE=1.55;
   for (const loc of locations) {
     if (loc.x<camL||loc.x>camR) continue;
+
+    // Epic glow aura around location
+    if (!loc.cleared) {
+      const pulse=0.55+0.18*Math.sin(t*2.2+loc.x*0.001);
+      ctx.save(); ctx.globalCompositeOperation="lighter";
+      const hasEnemies = loc.preActivated && loc.remainingEnemies > 0;
+      const glowCol = hasEnemies ? `rgba(220,60,60,${0.09*pulse})` : `rgba(80,140,255,${0.07*pulse})`;
+      const gr=ctx.createRadialGradient(loc.x,groundY-20,20,loc.x,groundY-20,110);
+      gr.addColorStop(0,glowCol); gr.addColorStop(1,"rgba(0,0,0,0)");
+      ctx.fillStyle=gr; ctx.beginPath(); ctx.ellipse(loc.x,groundY-20,110,60,0,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
+
     ctx.save();
     ctx.translate(loc.x, groundY);
     ctx.scale(LOC_SCALE, LOC_SCALE);
     ctx.translate(-loc.x, -groundY);
     LOC_DRAWERS[loc.type]?.(loc.x, dark);
     ctx.restore();
+
+    // Enemy count skulls above location
+    if (loc.preActivated && !loc.cleared && loc.remainingEnemies > 0) {
+      const skullY=groundY-170;
+      ctx.save(); ctx.font="14px serif"; ctx.textAlign="center";
+      const skullStr="💀".repeat(Math.min(loc.remainingEnemies,6))+(loc.remainingEnemies>6?"…":"");
+      ctx.globalAlpha=0.85; ctx.fillText(skullStr,loc.x,skullY); ctx.restore();
+    }
+    if (loc.cleared) {
+      ctx.save(); ctx.font="14px serif"; ctx.textAlign="center"; ctx.globalAlpha=0.7;
+      ctx.fillText("✅",loc.x,groundY-160); ctx.restore();
+    }
+
     const d=dist(player.x,loc.x);
-    if (d<280) {
-      const def=LOC_DEFS[loc.type], a=clamp((280-d)/150,0,1);
+    const showDist = 320;
+    if (d<showDist) {
+      const def=LOC_DEFS[loc.type], a=clamp((showDist-d)/160,0,1);
       ctx.save(); ctx.globalAlpha=a; ctx.font="bold 14px Trebuchet MS"; ctx.textAlign="center";
       ctx.fillStyle="rgba(0,0,0,0.6)"; ctx.fillText(def.emoji+" "+def.name,loc.x+1,groundY-130+1);
-      ctx.fillStyle=(loc.triggered&&!loc.cleared)?"#ff8a6a":"#f0e6cf";
+      const nameCol = (loc.preActivated&&!loc.cleared&&loc.remainingEnemies>0)?"#ff8a6a":loc.cleared?"#9bd05a":"#f0e6cf";
+      ctx.fillStyle=nameCol;
       ctx.fillText(def.emoji+" "+def.name,loc.x,groundY-130);
+      if (loc.weaponId) {
+        const wRar = WEAPONS[loc.weaponId]?.rarity ?? 0;
+        ctx.font="11px Trebuchet MS"; ctx.fillStyle=RARITY_COL[wRar]||"rgba(200,180,255,0.8)";
+        ctx.fillText("⚔ "+(RARITY_NAME[wRar]||"")+" våben herinde",loc.x,groundY-112);
+      }
       ctx.restore();
     }
   }
@@ -805,11 +864,15 @@ export function drawLootItems() {
   if (!state.lootItems) return;
   const t=performance.now()/1000;
   for (const it of state.lootItems) {
-    const w=WEAPONS[it.weaponId], bob=Math.sin(t*2.5+it.x*0.01)*3, yy=groundY-16+bob, rc=RARITY_COL[w.rarity];
-    ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.2+0.12*Math.sin(t*3+it.x*0.004);
+    const w=WEAPONS[it.weaponId], bob=Math.sin(t*2.5+it.x*0.01)*3;
+    const yy = (it.dropY !== undefined) ? it.dropY : groundY-16+bob;
+    const rc=RARITY_COL[w.rarity];
+    const stillFalling = it.dropVy !== undefined && it.dropVy !== 0;
+    ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=(stillFalling?0.08:0.2)+0.12*Math.sin(t*3+it.x*0.004);
     ctx.fillStyle=rc; ctx.beginPath(); ctx.arc(it.x,yy,14,0,Math.PI*2); ctx.fill(); ctx.restore();
-    groundShadow(it.x,9,0.22);
-    ctx.save(); ctx.translate(it.x,yy); ctx.rotate(-0.35+Math.sin(t*1.2+it.x*0.005)*0.07);
+    if (!stillFalling) groundShadow(it.x,9,0.22);
+    const spinAng = stillFalling ? (t*8 % (Math.PI*2)) : (-0.35+Math.sin(t*1.2+it.x*0.005)*0.07);
+    ctx.save(); ctx.translate(it.x,yy); ctx.rotate(spinAng);
     ctx.strokeStyle=w.col; ctx.lineWidth=3; ctx.lineCap="round";
     if (w.type==="melee") {
       const len=clamp(w.range*0.28,12,26);
@@ -826,6 +889,49 @@ export function drawLootItems() {
     ctx.save(); ctx.font="10px Trebuchet MS"; ctx.textAlign="center";
     ctx.fillStyle="rgba(0,0,0,0.55)"; ctx.fillText(w.name,it.x+1,groundY-33+1);
     ctx.fillStyle=rc; ctx.fillText(w.name,it.x,groundY-33); ctx.restore();
+  }
+}
+
+export function drawChests() {
+  if (!state.chests || !state.chests.length) return;
+  const t=performance.now()/1000;
+  const { player } = state;
+  for (const ch of state.chests) {
+    const x=ch.x, bob=Math.sin(t*2+x*0.01)*2.5, yy=groundY-18+bob;
+    const near=dist(x,player.x)<64, oa=ch.openAnim||0;
+    groundShadow(x,14,0.22);
+    ctx.save(); ctx.translate(x,yy);
+    // Chest glow when nearby
+    if (near && !ch.open) {
+      ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.25+0.12*Math.sin(t*4);
+      ctx.fillStyle="#f2c14e"; ctx.beginPath(); ctx.arc(0,0,20,0,Math.PI*2); ctx.fill(); ctx.restore();
+    }
+    // Chest body
+    const openY = ch.open ? -10*oa : 0;
+    ctx.fillStyle=ch.open?"#6a4a22":"#7a5a28"; ctx.fillRect(-14,openY-10,28,20); // body
+    ctx.fillStyle="rgba(255,255,255,0.09)"; ctx.fillRect(-14,openY-10,9,20);
+    ctx.fillStyle="rgba(0,0,0,0.22)"; ctx.fillRect(8,openY-10,6,20);
+    // Metal bands
+    ctx.fillStyle="#9a8060"; ctx.fillRect(-14,openY-2,28,3); ctx.fillRect(-14,openY+5,28,2);
+    // Lock
+    ctx.fillStyle="#c0a060"; ctx.beginPath(); ctx.arc(0,openY,3.5,0,Math.PI*2); ctx.fill();
+    // Lid
+    const lidAngle = ch.open ? -Math.PI*0.55*oa : 0;
+    ctx.save(); ctx.translate(0,openY-10); ctx.rotate(lidAngle);
+    ctx.fillStyle=ch.open?"#8a6a30":"#9a7a34"; ctx.fillRect(-14,-10,28,10);
+    ctx.fillStyle="rgba(255,255,255,0.09)"; ctx.fillRect(-14,-10,9,10);
+    ctx.fillStyle="#9a8060"; ctx.fillRect(-14,-2,28,2);
+    ctx.restore();
+    ctx.restore();
+    // "F" prompt
+    if (near && !ch.open) {
+      ctx.save(); ctx.font="bold 12px Trebuchet MS"; ctx.textAlign="center";
+      const py=yy-bob-36, pa=0.7+0.28*Math.sin(t*3);
+      ctx.globalAlpha=pa;
+      ctx.fillStyle="rgba(0,0,0,0.55)"; ctx.fillText("[F] Åbn kiste",x+1,py+1);
+      ctx.fillStyle="#f2c14e"; ctx.fillText("[F] Åbn kiste",x,py);
+      ctx.restore();
+    }
   }
 }
 
@@ -1215,7 +1321,7 @@ export function render() {
   ctx.save(); ctx.translate(-Game.cam,0);
   drawGroundTexture(dark); drawGroundDeco(dark); drawLocations(dark);
   drawEntityShadows(); drawPortals(dark); drawWalls(dark); drawBase(dark);
-  drawStations(); drawCoins(); drawGroundBows(); drawGroundHammers(); drawLootItems();
+  drawStations(); drawCoins(); drawGroundBows(); drawGroundHammers(); drawLootItems(); drawChests();
   drawAnimals(); drawVagrants(); drawUnits(); drawEnemies(dark);
   drawPlayer(dark); drawArrows(); drawSpells(); drawParticles(); drawCampLight(dark); drawFloats();
   ctx.restore();

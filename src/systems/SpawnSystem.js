@@ -6,8 +6,8 @@ import { clamp, rand, pick, pickR, mulberry32 } from '../util/math.js';
 import { groundY } from '../canvas.js';
 import { Game, state } from '../state.js';
 
-export function spawnCoin(x, value = 1, fromY = -40, vx = 0) {
-  state.coins.push({ x, y: fromY, vy: -120, value, settled: false, life: 60, magnet: false, vx });
+export function spawnCoin(x, value = 1, fromY = -40, vx = 0, vy = -180) {
+  state.coins.push({ x, y: fromY, vy, value, settled: false, life: 60, magnet: false, vx });
 }
 
 export function floaty(x, text, color = "#f2c14e") {
@@ -66,7 +66,12 @@ export function planNight() {
 function nightEnemyType() {
   const d = Game.day, r = Math.random();
   const late = Math.max(0, d - 6);
-  if (d >= 4 && Game.nightSpawned === 0 && Game.nightQuota >= 20 && d % Math.max(2, 4 - Math.floor(late / 8)) === 0) return "boss";
+  if (Game.nightSpawned === 0 && Game.nightQuota >= 10 && d >= 2 && d % 2 === 0) {
+    if (d >= 8) return "boss4";
+    if (d >= 6) return "boss3";
+    if (d >= 4) return "boss2";
+    return "boss1";
+  }
   if (d >= 6 && r < Math.min(0.30, 0.07 + late * 0.012)) return "necro";
   if (d >= 5 && r < Math.min(0.28, 0.10 + late * 0.010)) return "demon";
   if (d >= 4 && r < Math.min(0.24, 0.13 + late * 0.006)) return "flier";
@@ -106,7 +111,7 @@ export function makeLocation(x, type, r) {
     if (wList.length) weaponId = wList[Math.floor(r() * wList.length)];
   }
   const enemyCount = Math.floor(r() * (def.maxE + 1));
-  return { x, type, triggered: false, cleared: enemyCount === 0, lootGold: goldAmt, weaponId, enemyCount, remainingEnemies: 0, lootSpawned: false, ph: r() * 6 };
+  return { x, type, triggered: false, preActivated: false, cleared: enemyCount === 0, lootGold: goldAmt, weaponId, enemyCount, remainingEnemies: 0, lootSpawned: false, ph: r() * 6 };
 }
 
 export function buildLocations() {
@@ -116,6 +121,7 @@ export function buildLocations() {
   while (x < CFG.worldWidth - 120) {
     x += 380 + r() * 450;
     if (Math.abs(x - CFG.baseX) < 520) continue;
+    if (WALL_SLOTS.some(w => Math.abs(x - w.x) < 200)) continue;
     if (x >= CFG.worldWidth - 120) break;
     const roll = r();
     if      (roll < 0.50) { /* nothing */ }
@@ -128,6 +134,6 @@ export function buildLocations() {
 
 export function spawnLocLoot(loc) {
   loc.lootSpawned = true;
-  for (let i = 0; i < loc.lootGold; i++) spawnCoin(loc.x + rand(-50, 50), 1, -30, rand(-40, 40));
-  if (loc.weaponId) state.lootItems.push({ x: loc.x + rand(-24, 24), weaponId: loc.weaponId });
+  for (let i = 0; i < loc.lootGold; i++) spawnCoin(loc.x + rand(-50, 50), 1, groundY - 20, rand(-70, 70));
+  if (loc.weaponId) state.lootItems.push({ x: loc.x + rand(-24, 24), weaponId: loc.weaponId, dropVy: -340, dropY: groundY - 160 });
 }

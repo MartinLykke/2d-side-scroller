@@ -4,7 +4,7 @@ import { groundY } from '../canvas.js';
 import { Game, state } from '../state.js';
 import { Audio } from './Audio.js';
 import { spawnParticles, spawnCoin, floaty } from './SpawnSystem.js';
-import { shootArrow } from './Combat.js';
+import { shootArrow, killEnemy } from './Combat.js';
 import { wallHeight } from '../entities/Wall.js';
 import { makeUnit } from '../entities/Unit.js';
 
@@ -174,10 +174,33 @@ function farmerAI(u, dt) {
     u.workTimer += dt;
     if (u.workTimer > (Game.isNight ? 99 : 5)) {
       u.workTimer = 0;
-      spawnCoin(CFG.baseX + rand(-40, 40), 1, -20);
+      spawnCoin(fx + rand(-20, 20), 1, groundY - 20, rand(-40, 40));
       spawnParticles(fx, groundY - 20, 4, "#9bd05a", 20, 30);
     }
   }
+}
+
+function guardAI(u, dt) {
+  const foe = nearestEnemy(u.x, 300);
+  if (foe) {
+    const d = dist(u.x, foe.x);
+    u.dir = Math.sign(foe.x - u.x) || u.dir;
+    if (d > 34) {
+      u.x += u.dir * 100 * dt;
+    } else if (u.cooldown <= 0) {
+      foe.hp -= 2; foe.flash = 0.14;
+      u.cooldown = 0.85;
+      Audio.hit();
+      spawnParticles(foe.x, groundY - 24, 4, "#8a2a4a", 40, 60);
+      if (foe.hp <= 0) killEnemy(foe);
+    }
+    return;
+  }
+  // Patrol between walls
+  const patrolL = CFG.baseX - 550, patrolR = CFG.baseX + 550;
+  if (!u.patrolTarget || dist(u.x, u.patrolTarget) < 20)
+    u.patrolTarget = clamp(CFG.baseX + (Math.random() < 0.5 ? -1 : 1) * rand(60, 450), patrolL, patrolR);
+  moveToward(u, u.patrolTarget, 62, dt);
 }
 
 // Dispatch table replaces the if/else chain in updateUnits.
@@ -186,6 +209,7 @@ const AI_HANDLERS = {
   builder: builderAI,
   farmer:  farmerAI,
   peasant: peasantAI,
+  guard:   guardAI,
 };
 
 export function updateUnits(dt) {

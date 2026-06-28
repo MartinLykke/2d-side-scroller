@@ -40,6 +40,7 @@ export const state = {
   portals: [],
   stations: [],
   lootItems: [],
+  chests: [],
   weaponPickup: null,
   locations: [],
   groundBows: [],

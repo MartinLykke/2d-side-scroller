@@ -6,5 +6,5 @@ export const LOC_DEFS = {
   cave:        { name:"Grotte",          emoji:"🕳", trig:130, maxE:4, goldR:[4,10], wRar:[1,2], etype:["runner","brute","crawler"],                vagrants:1 },
   battlefield: { name:"Gammel slagmark", emoji:"⚔", trig:180, maxE:5, goldR:[3,8],  wRar:[1,2], etype:["imp","runner","brute","raider","crawler"],  vagrants:3 },
   watchtower:  { name:"Vagttårn",        emoji:"🏰", trig:140, maxE:4, goldR:[2,6],  wRar:[2,3], etype:["imp","runner","brute","raider"],            vagrants:1 },
-  altar:       { name:"Mystisk alter",   emoji:"🧙", trig:120, maxE:6, goldR:[0,5],  wRar:[2,3], etype:["brute","boss"],                            vagrants:0 },
+  altar:       { name:"Mystisk alter",   emoji:"🧙", trig:120, maxE:6, goldR:[0,5],  wRar:[2,3], etype:["brute","boss1","boss2"],                    vagrants:0 },
 };

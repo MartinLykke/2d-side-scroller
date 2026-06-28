@@ -29,6 +29,7 @@ export const STATIONS_X = {
   hammer: CFG.baseX + 130,
   farm:   CFG.baseX - 300,
   shop:   CFG.baseX + 300,
+  guard:  CFG.baseX + 220,
 };
 
 export const WALL_SLOTS = [

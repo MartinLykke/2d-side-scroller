@@ -53,7 +53,7 @@ export function updateArrows(dt) {
           a.alive = false;
           spawnParticles(a.x, groundY - 20, 8, "#7a4a2a");
           const reward = a.type === "deer" ? 3 : 1;
-          for (let k = 0; k < reward; k++) spawnCoin(a.x + rand(-15, 15), 1, -30, rand(-40, 40));
+          for (let k = 0; k < reward; k++) spawnCoin(a.x + rand(-15, 15), 1, groundY - 20, rand(-50, 50), rand(-220, -120));
           floaty(a.x, "+" + reward + "🪙", "#f2c14e");
           hit = true; break;
         }
@@ -78,7 +78,7 @@ export function updateArrows(dt) {
 
 export function killEnemy(e) {
   const t = ENEMY_TYPES[e.type];
-  for (let k = 0; k < t.reward; k++) spawnCoin(e.x + rand(-18, 18), 1, -40, rand(-60, 60));
+  for (let k = 0; k < t.reward; k++) spawnCoin(e.x + rand(-22, 22), 1, groundY - 28, rand(-80, 80), rand(-260, -140));
   spawnParticles(e.x, groundY - 24, 12, t.color === "#1f1830" ? "#ff2a6a" : "#6a2a4a", 80, 100);
   Audio.enemyDie();
   if (window._addXP) window._addXP(t.reward * 8);
@@ -88,7 +88,9 @@ export function killEnemy(e) {
     loc.remainingEnemies--;
     if (loc.remainingEnemies <= 0 && !loc.lootSpawned) {
       loc.cleared = true;
-      spawnLocLoot(loc);
+      loc.lootSpawned = true;
+      state.chests.push({ x: loc.x, lootGold: loc.lootGold, weaponId: loc.weaponId, open: false, openAnim: 0, life: 1 });
+      if (window._floaty) window._floaty(loc.x, "📦 Kiste!", "#f2c14e");
     }
   }
   const idx = state.enemies.indexOf(e);
@@ -168,6 +170,7 @@ export function updateEnemies(dt) {
     e.anim += dt * 5;
     if (e.flash > 0) e.flash -= dt;
     e.attackCd -= dt;
+    if (e.knock) { e.x += e.knock * dt; e.knock *= Math.max(0, 1 - 9 * dt); if (Math.abs(e.knock) < 8) e.knock = 0; }
 
     if (e.fleeing) {
       const tx = e.portal ? e.portal.x : (e.x < CFG.baseX ? 0 : CFG.worldWidth);
@@ -239,6 +242,7 @@ function updateLocEnemy(e, t, dt) {
   e.anim += dt * 5;
   if (e.flash > 0) e.flash -= dt;
   e.attackCd -= dt;
+  if (e.knock) { e.x += e.knock * dt; e.knock *= Math.max(0, 1 - 9 * dt); if (Math.abs(e.knock) < 8) e.knock = 0; }
   const dp = dist(e.x, player.x);
   if (dp < 300) {
     const dir = Math.sign(player.x - e.x);
@@ -285,6 +289,7 @@ function castSpell(player, wBase, tgt) {
   const ang = Math.atan2((groundY - 28) - sy, tgt.x - player.x);
   const spd = wBase.spellType === "waterjet" ? 480 : wBase.spellType === "meteor" ? 180 : 330;
   const ew = effectiveWeapon(player.weapon, player.weaponUpgrades || []);
+  const aoeR = (wBase.aoeRadius || 0) + (ew.range - wBase.range) * 0.2;
   state.spells.push({
     x: player.x, y: sy,
     vx: Math.cos(ang) * spd,
@@ -293,8 +298,10 @@ function castSpell(player, wBase, tgt) {
     dmg: ew.dmg,
     life: 2.2,
     col: wBase.col,
-    aoe: wBase.spellType === "meteor" || wBase.spellType === "void",
+    aoeRadius: aoeR,
   });
+  // Cast glow at player position
+  spawnParticles(player.x, sy, 10, wBase.col, 50, 70);
   Audio.bow();
 }
 
@@ -310,7 +317,7 @@ export function updateSpells(dt) {
     sp.life -= dt;
     const hitGround = sp.y > groundY - 8;
     if (sp.life <= 0 || hitGround) {
-      if (sp.aoe && hitGround) dealAoE(sp.x, sp.dmg, 90, sp.col);
+      if (sp.aoeRadius > 0 && hitGround) dealAoE(sp.x, sp.dmg, sp.aoeRadius, sp.col);
       spells.splice(i, 1);
       continue;
     }
@@ -320,9 +327,10 @@ export function updateSpells(dt) {
       const et = ENEMY_TYPES[e.type];
       if (dist(sp.x, e.x) < et.w * 0.75 && Math.abs(sp.y - (groundY + (e.fy || 0) - 24)) < 44) {
         e.hp -= sp.dmg; e.flash = 0.14; Audio.hit();
-        spawnParticles(e.x, groundY + (e.fy || 0) - 24, 6, sp.col, 60, 80);
+        spawnParticles(e.x, groundY + (e.fy || 0) - 24, 8, sp.col, 70, 90);
+        if (!et.noKnockback) e.knock = (e.knock || 0) + Math.sign(e.x - sp.vx) * 140;
         if (e.hp <= 0) killEnemy(e);
-        if (sp.aoe) dealAoE(sp.x, Math.max(1, Math.floor(sp.dmg * 0.5)), 85, sp.col);
+        else if (sp.aoeRadius > 0) dealAoE(sp.x, Math.max(1, Math.floor(sp.dmg * 0.65)), sp.aoeRadius, sp.col);
         if (sp.spellType === "lightning") chainLightning(sp.x, sp.dmg, 1);
         hit = true; break;
       }
@@ -351,8 +359,10 @@ export function updatePlayerAttack(dt) {
   player.swing = 0.32;
   if (wBase.type === "melee") {
     tgt.hp -= w.dmg; tgt.flash = 0.14; Audio.hit();
-    spawnParticles(tgt.x, groundY - 28, 4, wBase.col);
+    spawnParticles(tgt.x, groundY - 28, 6, wBase.col, 50, 60);
     floaty(tgt.x, "-" + w.dmg, wBase.col);
+    const et = ENEMY_TYPES[tgt.type];
+    if (!et.noKnockback) tgt.knock = (tgt.knock || 0) + Math.sign(tgt.x - player.x) * 220;
     if (tgt.hp <= 0) killEnemy(tgt);
   } else if (wBase.type === "ranged") {
     shootArrow(player.x, groundY - 72, tgt);

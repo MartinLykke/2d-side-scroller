@@ -28,6 +28,7 @@ import { makeUnit } from './entities/Unit.js';
 // Make keys available to AI system via window (avoids a circular dep)
 window._KEYS = keys;
 window._DEV_GOD_MODE = false;
+window._floaty = floaty;
 
 const SHOP_ITEMS = [
   { weaponId: 'rusty_sword',   price: 6,  tier: 1 },
@@ -65,6 +66,22 @@ function upgradeBase() {
   base.flash = 1;
   floaty(base.x, "🏰 " + baseName(base.level) + "!");
   Audio.upgrade();
+
+  if (base.level === 2) {
+    setTimeout(() => floaty(base.x, "🏪 Marked og butik åbnet!", "#9bd05a"), 900);
+    setTimeout(() => floaty(base.x, "🌾 Gårdsstation tilgængelig!", "#9bd05a"), 1800);
+  } else if (base.level === 3) {
+    setTimeout(() => floaty(base.x, "⚔ Rekrutteringshal åbnet!", "#f2c14e"), 900);
+    setTimeout(() => floaty(base.x, "Ansæt garder til forsvar!", "#cdbfa3"), 1800);
+  } else if (base.level === 4) {
+    setTimeout(() => floaty(base.x, "👑 Kongelig Garde aktiveret!", "#f2c14e"), 900);
+    setTimeout(() => floaty(base.x, "✨ Legendariske våben tilgængelige!", "#c69fff"), 1800);
+    state.player.maxHp++;
+    state.player.hp = Math.min(state.player.hp + 1, state.player.maxHp);
+    state.player.hasCrown = true;
+    spawnParticles(base.x, groundY - 80, 24, "#f2c14e", 120, 160);
+  }
+  buildStations();
 }
 window._upgradeBase = upgradeBase;
 
@@ -161,6 +178,23 @@ function buildStations() {
     label:()=>"🏪 Butik",
     onPaid:()=>{},
   });
+  if (state.base.level >= 3) {
+    state.stations.push({
+      id:"guard", x:()=>STATIONS_X.guard, paid:0,
+      cost:()=> state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level] ? 0 : 8,
+      label:()=> state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level]
+        ? "Befolkningsgrænse nået"
+        : "Rekruttér garde (8🪙) – nærkampenhed",
+      onPaid:()=>{
+        if (state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level]) { floaty(STATIONS_X.guard, "Befolkningsgrænse nået!", "#ff8a6a"); return; }
+        const u = makeUnit("guard", STATIONS_X.guard + rand(-20, 20));
+        u.hp = u.maxHp = 8; u.transform = 0.55;
+        state.units.push(u);
+        floaty(STATIONS_X.guard, "⚔ Garde rekrutteret!", "#f2c14e");
+        Audio.recruit();
+      },
+    });
+  }
   walls.forEach(w=>{
     state.stations.push({
       id:"wall", wall:w, x:()=>w.x, paid:0,
@@ -214,6 +248,7 @@ function newGame() {
   state.groundBows      = [];
   state.groundHammers   = [];
   state.lootItems       = [];
+  state.chests          = [];
   state.spells          = [];
   state.weaponPickup    = null;
   state.payCooldown     = 0;
@@ -284,16 +319,22 @@ function updatePlayer(dt) {
 
 function updateLocations() {
   const { locations, player } = state;
+  const screenL = Game.cam - 500, screenR = Game.cam + W + 500;
   for (let i=0;i<locations.length;i++) {
     const loc=locations[i];
-    if (loc.triggered) continue;
-    if (dist(player.x,loc.x)<LOC_DEFS[loc.type].trig) triggerLocation(loc,i);
+    if (!loc.preActivated && loc.x >= screenL && loc.x <= screenR) preActivateLocation(loc, i);
+    if (!loc.triggered && dist(player.x, loc.x) < LOC_DEFS[loc.type].trig) {
+      loc.triggered = true;
+      const def = LOC_DEFS[loc.type];
+      floaty(loc.x, def.emoji + " " + def.name + "!", "#ff8a6a");
+      addXP(25 + loc.enemyCount * 5);
+    }
   }
 }
 
-function triggerLocation(loc, idx) {
-  loc.triggered=true;
-  const def=LOC_DEFS[loc.type];
+function preActivateLocation(loc, idx) {
+  loc.preActivated = true;
+  const def = LOC_DEFS[loc.type];
 
   const vcount = def.vagrants || 0;
   let spawned = 0;
@@ -304,14 +345,16 @@ function triggerLocation(loc, idx) {
   }
   if (spawned > 0) floaty(loc.x, `🙋 ${spawned} overlevende!`, "#cdbfa3");
 
-  if (loc.enemyCount===0) { spawnLocLoot(loc); return; }
-  loc.remainingEnemies=loc.enemyCount;
-  for (let i=0;i<loc.enemyCount;i++) {
+  if (loc.enemyCount === 0) {
+    loc.cleared = true; loc.lootSpawned = true;
+    state.chests.push({ x: loc.x, lootGold: loc.lootGold, weaponId: loc.weaponId, open: false, openAnim: 0 });
+    return;
+  }
+  loc.remainingEnemies = loc.enemyCount;
+  for (let i=0; i<loc.enemyCount; i++) {
     const type=pick(def.etype), ex=loc.x+(i%2===0?-1:1)*(28+i*18);
     state.enemies.push({ x:ex, vx:0, type, hp:ENEMY_TYPES[type].hp, maxHp:ENEMY_TYPES[type].hp, dir:state.player.x<ex?-1:1, attackCd:0, carry:0, anim:rand(0,6), flash:0, fleeing:false, portal:null, locIdx:idx, home:loc.x });
   }
-  floaty(loc.x, LOC_DEFS[loc.type].emoji+" "+LOC_DEFS[loc.type].name+"!", "#ff8a6a");
-  addXP(25 + loc.enemyCount * 5);
 }
 
 function updateLootItems() {
@@ -326,6 +369,38 @@ function updateLootItems() {
 
 function updateWeaponPickup(dt) {
   if (state.weaponPickup) { state.weaponPickup.timer -= dt; if (state.weaponPickup.timer <= 0) state.weaponPickup = null; }
+}
+
+function updateChests(dt) {
+  const { chests, player, lootItems } = state;
+  for (let i = chests.length - 1; i >= 0; i--) {
+    const ch = chests[i];
+    if (ch.open) {
+      ch.openAnim += dt * 2.5;
+      if (ch.openAnim >= 1) {
+        for (let k = 0; k < ch.lootGold; k++)
+          spawnCoin(ch.x + rand(-40, 40), 1, groundY - 20, rand(-100, 100), rand(-300, -160));
+        if (ch.weaponId)
+          lootItems.push({ x: ch.x + rand(-20, 20), weaponId: ch.weaponId, dropVy: -380, dropY: groundY - 180 });
+        spawnParticles(ch.x, groundY - 24, 20, "#f2c14e", 120, 150);
+        chests.splice(i, 1);
+      }
+    } else if (dist(ch.x, player.x) < 64 && keys['f']) {
+      ch.open = true;
+      Audio.upgrade();
+      floaty(ch.x, "📦 Kiste åbnet!", "#f2c14e");
+    }
+  }
+}
+
+function updateLootPhysics(dt) {
+  for (const it of state.lootItems) {
+    if (it.dropVy !== undefined) {
+      it.dropVy += 900 * dt;
+      it.dropY += it.dropVy * dt;
+      if (it.dropY >= groundY - 16) { it.dropY = groundY - 16; it.dropVy = 0; }
+    }
+  }
 }
 
 function updateParticles(dt) {
@@ -377,6 +452,8 @@ function update(dt) {
   updateSpells(dt);
   updateCoins(dt);
   updateLootItems();
+  updateChests(dt);
+  updateLootPhysics(dt);
   updateWeaponPickup(dt);
   updateParticles(dt);
   updateFloats(dt);

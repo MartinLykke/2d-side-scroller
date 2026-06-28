@@ -37,7 +37,7 @@ export function updatePayment(dt) {
 
   if (state.lastPaidStation && state.lastPaidStation !== near && state.lastPaidStation.paid > 0) {
     for (let i = 0; i < state.lastPaidStation.paid; i++)
-      spawnCoin(state.lastPaidStation.x() + rand(-20, 20), 1, -10);
+      spawnCoin(state.lastPaidStation.x() + rand(-20, 20), 1, groundY - 20, rand(-30, 30), rand(-160, -80));
     state.lastPaidStation.paid = 0;
   }
 

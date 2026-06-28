@@ -297,8 +297,9 @@ let lastSun={ cx:0, cy:120, isMoon:false };
 export function drawCelestial(skyTop) {
   const t=Game.time;
   const isMoon=t>0.6&&t<0.95;
-  let frac=isMoon?(t-0.6)/0.35:(t<0.6?t/0.6:(t-0.95)/0.05);
-  frac=clamp(frac,0,1);
+  const isSun=t<=0.6;
+  if (!isMoon && !isSun) return;
+  const frac=clamp(isMoon?(t-0.6)/0.35:t/0.6, 0, 1);
   const cx=lerp(W*0.12,W*0.88,frac), cy=groundY-70-Math.sin(frac*Math.PI)*(groundY*0.58);
   lastSun={cx,cy,isMoon};
   ctx.save();
