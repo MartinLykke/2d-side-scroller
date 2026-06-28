@@ -57,19 +57,21 @@ export function spawnEnemy(type, portal) {
 
 export function planNight() {
   const d = Game.day;
-  Game.nightQuota   = Math.round((3 + d * 3.5 + Math.pow(d * 0.7, 1.6)) * (Game.diffMult || 1));
+  Game.threatLevel  = Math.max(1, d);
+  Game.nightQuota   = Math.round((3 + d * 3.5 + Math.pow(d * 0.7, 1.6) + Math.max(0, d - 8) * 2.25) * (Game.diffMult || 1));
   Game.nightSpawned = 0;
   Game.spawnTimer   = 0;
 }
 
 function nightEnemyType() {
   const d = Game.day, r = Math.random();
-  if (d >= 6 && r < 0.07) return "necro";
-  if (d >= 4 && r < 0.13) return "flier";
-  if (d >= 5 && r < 0.10) return "demon";
-  if (d >= 3 && r < 0.18) return "ogre";
-  if (d >= 4 && Game.nightSpawned === 0 && Game.nightQuota >= 20 && d % 4 === 0) return "boss";
-  if (d >= 3 && r < 0.22) return "brute";
+  const late = Math.max(0, d - 6);
+  if (d >= 4 && Game.nightSpawned === 0 && Game.nightQuota >= 20 && d % Math.max(2, 4 - Math.floor(late / 8)) === 0) return "boss";
+  if (d >= 6 && r < Math.min(0.30, 0.07 + late * 0.012)) return "necro";
+  if (d >= 5 && r < Math.min(0.28, 0.10 + late * 0.010)) return "demon";
+  if (d >= 4 && r < Math.min(0.24, 0.13 + late * 0.006)) return "flier";
+  if (d >= 3 && r < Math.min(0.30, 0.18 + late * 0.006)) return "ogre";
+  if (d >= 3 && r < Math.min(0.34, 0.22 + late * 0.006)) return "brute";
   if (d <= 2 && r < 0.28) return "wraith";
   if (d <= 2 && r < 0.52) return "crawler";
   if (d <= 3 && r < 0.22) return "raider";
@@ -84,7 +86,8 @@ export function updateSpawning(dt) {
   if (Game.isNight && Game.nightSpawned < Game.nightQuota) {
     Game.spawnTimer -= dt;
     if (Game.spawnTimer <= 0) {
-      Game.spawnTimer = rand(0.6, 1.6);
+      const pressure = Math.min(0.55, Math.max(0, Game.day - 4) * 0.018);
+      Game.spawnTimer = rand(0.6, 1.6) * (1 - pressure);
       spawnEnemy(nightEnemyType(), pick(state.portals));
       Game.nightSpawned++;
     }

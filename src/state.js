@@ -9,10 +9,7 @@ export const Game = {
   nightQuota: 0,
   nightSpawned: 0,
   wasNight: false,
-  goalReached: false,
-  surviveNightForWin: false,
-  winNightActive: false,
-  pendingWin: false,
+  threatLevel: 1,
   autosaveTimer: 0,
   windT: 0,
   inventoryOpen: false,
@@ -54,5 +51,6 @@ export const state = {
   pendingFarmers: 0,
   farmBuilt: false,
   payCooldown: 0,
+  payHoldTime: 0,
   lastPaidStation: null,
 };

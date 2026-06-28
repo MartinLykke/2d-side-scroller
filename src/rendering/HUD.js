@@ -46,10 +46,9 @@ export const UI = {
     document.getElementById("hud-arch-text").textContent  = arch;
     document.getElementById("hud-build-text").textContent = build;
 
-    let obj;
-    if (Game.surviveNightForWin) obj="🎯 Slottet står! Overlev natten for at vinde.";
-    else if (base.level<4) obj="🎯 Opgradér basen til Slot (niveau "+base.level+"/4)";
-    else obj="🎯 Forsvar riget!";
+    let obj = "🎯 Overlev så længe du kan. Trusselsniveau " + (Game.threatLevel || Game.day);
+    if (base.level<4) obj += " · opgradér basen ("+base.level+"/4)";
+    else obj += " · slottet står";
     if (Game.isNight) obj="🌙 NAT — "+(Game.nightQuota-state.enemies.filter(e=>!e.fleeing).length>0?"horden angriber!":"hold linjen!");
     document.getElementById("hud-objective").textContent = obj;
 

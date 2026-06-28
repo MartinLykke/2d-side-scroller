@@ -424,15 +424,22 @@ export function drawUnits() {
     if (u.role==="archer")  { body="#2f5040"; tool="bow"; }
     else if (u.role==="builder") { body="#6a4a28"; tool="hammer"; }
     else if (u.role==="farmer")  { body="#5a6a2a"; tool="scythe"; }
+    const wallLift = u.onWall && u.wall ? Math.max(0, wallHeight(u.wall) - 14) : 0;
+    ctx.save();
+    if (wallLift > 0) {
+      ctx.translate(0, -wallLift);
+      ctx.globalAlpha = 0.98;
+    }
     drawHumanoid(u.x,u.anim,body,head,tool,u.dir,u.moving);
+    ctx.restore();
     if (u.transform>0) {
       const p=u.transform/0.55;
       ctx.save(); ctx.globalAlpha=p*0.7; ctx.globalCompositeOperation="lighter";
-      const grd=ctx.createRadialGradient(u.x,groundY-28,2,u.x,groundY-28,28*p);
+      const grd=ctx.createRadialGradient(u.x,groundY-28-wallLift,2,u.x,groundY-28-wallLift,28*p);
       grd.addColorStop(0,"#ffffff"); grd.addColorStop(0.4,"#9bd05a"); grd.addColorStop(1,"transparent");
-      ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(u.x,groundY-28,28*p,0,Math.PI*2); ctx.fill(); ctx.restore();
+      ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(u.x,groundY-28-wallLift,28*p,0,Math.PI*2); ctx.fill(); ctx.restore();
     }
-    if (u.hp<u.maxHp) drawHpBar(u.x,groundY-46,16,u.hp/u.maxHp,"#9bd05a");
+    if (u.hp<u.maxHp) drawHpBar(u.x,groundY-46-wallLift,16,u.hp/u.maxHp,"#9bd05a");
   }
 }
 

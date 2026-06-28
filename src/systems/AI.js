@@ -23,6 +23,59 @@ function moveToward(u, tx, speed, dt) {
   return true;
 }
 
+function archerWallCapacity(w) {
+  return Math.max(2, w.level + 1);
+}
+
+function wallStandOffset(w, slot) {
+  const cap = archerWallCapacity(w);
+  const spacing = Math.min(16, Math.max(10, 56 / cap));
+  return (slot - (cap - 1) / 2) * spacing;
+}
+
+function wallOccupancy(w) {
+  return Game.wallSlots[w.x] || 0;
+}
+
+function reserveWallSlot(w) {
+  if (!Game.wallSlots[w.x]) Game.wallSlots[w.x] = 0;
+  const slot = Game.wallSlots[w.x]++;
+  const cap = archerWallCapacity(w);
+  return { slot, onWall: slot < cap };
+}
+
+function bestArcherWall(side) {
+  let best = null, bestScore = 1e9;
+  for (const w of state.walls) {
+    if (!w.commissioned || w.hp <= 0 || w.buildProgress < 1 || w.side !== side) continue;
+    const occ = wallOccupancy(w);
+    const cap = archerWallCapacity(w);
+    const overflow = Math.max(0, occ - cap + 1) * 1000;
+    const score = overflow + occ * 40 - dist(w.x, CFG.baseX) * 0.01;
+    if (score < bestScore) { best = w; bestScore = score; }
+  }
+  return best;
+}
+
+function assignArcherPost(u, preferredSide) {
+  let wall = bestArcherWall(preferredSide);
+  if (!wall) wall = bestArcherWall(-preferredSide);
+  u.wall = wall;
+
+  if (!wall) {
+    u.onWall = false;
+    return CFG.baseX + preferredSide * 110;
+  }
+
+  const { slot, onWall } = reserveWallSlot(wall);
+  u.onWall = onWall;
+  if (onWall) return wall.x + wallStandOffset(wall, slot);
+
+  const innerDir = Math.sign(CFG.baseX - wall.x);
+  const behind = slot - archerWallCapacity(wall);
+  return wall.x + innerDir * (behind + 1) * 26;
+}
+
 function peasantAI(u, dt) {
   if (dist(u.x, u.targetX) < 6 || Math.random() < 0.005)
     u.targetX = CFG.baseX + rand(-260, 260);
@@ -30,28 +83,12 @@ function peasantAI(u, dt) {
 }
 
 function archerAI(u, dt) {
+  const closeFoe = nearestEnemy(u.x, Game.isNight ? 620 : 500);
+
   if (Game.isNight) {
-    const threat = nearestEnemy(u.x, 99999);
+    const threat = closeFoe || nearestEnemy(CFG.baseX, 99999);
     const side = threat ? (threat.x < CFG.baseX ? -1 : 1) : (u.patrolDir > 0 ? 1 : -1);
-    let wall = null;
-    for (const w of state.walls) {
-      if (!w.commissioned || w.hp <= 0 || w.side !== side) continue;
-      if (!wall || dist(w.x, CFG.baseX) > dist(wall.x, CFG.baseX)) wall = w;
-    }
-    u.wall = wall;
-    let post;
-    if (wall) {
-      const wid = wall.x;
-      if (!Game.wallSlots[wid]) Game.wallSlots[wid] = 0;
-      const slot = Game.wallSlots[wid]++;
-      u.onWall = slot < wall.level;
-      const innerDir = Math.sign(CFG.baseX - wall.x);
-      const behind = slot - wall.level;
-      post = u.onWall ? wall.x : wall.x + innerDir * (behind + 1) * 26;
-    } else {
-      u.onWall = false;
-      post = CFG.baseX + side * 110;
-    }
+    const post = assignArcherPost(u, side);
     const tgt = nearestEnemy(u.x, 520);
     if (!tgt || dist(u.x, tgt.x) > 150) moveToward(u, post, 84, dt);
     if (tgt && u.cooldown <= 0) {
@@ -62,8 +99,20 @@ function archerAI(u, dt) {
     }
   } else {
     // Attack any enemy within range; chase those slightly beyond attack range
-    const closeFoe = nearestEnemy(u.x, 500);
-    if (closeFoe) {
+    if (bestArcherWall(u.patrolDir) || bestArcherWall(-u.patrolDir)) {
+      const side = closeFoe ? (closeFoe.x < CFG.baseX ? -1 : 1) : u.patrolDir;
+      const post = assignArcherPost(u, side);
+      moveToward(u, post, 58, dt);
+      if (closeFoe && u.cooldown <= 0 && dist(u.x, closeFoe.x) < 540) {
+        const shootH = u.onWall && u.wall ? wallHeight(u.wall) + 16 : 40;
+        shootArrow(u.x, groundY - shootH, closeFoe);
+        u.cooldown = 1.1;
+        u.dir = Math.sign(closeFoe.x - u.x) || u.dir;
+      }
+      if (!closeFoe && Math.random() < 0.004) u.patrolDir *= -1;
+    } else if (closeFoe) {
+      u.onWall = false;
+      u.wall = null;
       const d = dist(u.x, closeFoe.x);
       if (d > 240) moveToward(u, closeFoe.x, 64, dt);
       else {
@@ -75,6 +124,8 @@ function archerAI(u, dt) {
         }
       }
     } else {
+      u.onWall = false;
+      u.wall = null;
       // March outward in patrol direction until hitting world edge, then flip
       const margin = 500;
       const outerEdge = u.patrolDir > 0 ? CFG.worldWidth - margin : margin;

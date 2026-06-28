@@ -65,7 +65,6 @@ function upgradeBase() {
   base.flash = 1;
   floaty(base.x, "🏰 " + baseName(base.level) + "!");
   Audio.upgrade();
-  if (base.level === 4) { Game.goalReached = true; Game.surviveNightForWin = true; }
 }
 window._upgradeBase = upgradeBase;
 
@@ -218,6 +217,7 @@ function newGame() {
   state.spells          = [];
   state.weaponPickup    = null;
   state.payCooldown     = 0;
+  state.payHoldTime     = 0;
   state.lastPaidStation = null;
   state.vagrantTimer    = 1;
   state.animalTimer     = 2;
@@ -232,10 +232,7 @@ function newGame() {
   Game.day               = 1;
   Game.isNight           = false;
   Game.wasNight          = false;
-  Game.goalReached       = false;
-  Game.surviveNightForWin = false;
-  Game.winNightActive    = false;
-  Game.pendingWin        = false;
+  Game.threatLevel       = 1;
   Game.autosaveTimer     = 0;
 
   // Seed starting coins and population
@@ -255,11 +252,9 @@ function updateTime(dt) {
   const nowNight = t > CFG.phases.dusk && t <= CFG.phases.night;
   if (nowNight && !Game.isNight) {
     Game.isNight=true; Audio.horn(); Audio.setNight(true);
-    if (Game.surviveNightForWin) Game.winNightActive=true;
   }
   if (!nowNight && Game.isNight) {
     Game.isNight=false; Audio.setNight(false); state.enemies.forEach(e=>e.fleeing=true);
-    if (Game.winNightActive) { Game.winNightActive=false; Game.pendingWin=true; }
   }
 }
 
@@ -358,9 +353,8 @@ function updateCamera() {
 
 function checkEndConditions() {
   const { base, player } = state;
-  if (base.hp<=0) { endGame(false,"Dit slot blev jævnet med jorden. Mørket sluger riget."); return; }
-  if (player.hp<=0) { endGame(false,"Monarken faldt i kamp, og kronen rullede i mulden. Riget er fortabt."); return; }
-  if (Game.pendingWin) { endGame(true,"Dit slot står, og horderne er drevet tilbage. Riget er sikret — længe leve monarken!"); }
+  if (base.hp<=0) { endGame("Dit slot blev jævnet med jorden. Mørket sluger riget."); return; }
+  if (player.hp<=0) { endGame("Monarken faldt i kamp, og kronen rullede i mulden. Riget er fortabt."); return; }
 }
 
 function updateAutosave(dt) {
@@ -415,14 +409,13 @@ Game.togglePause = function() {
   else if (Game.state==="pause") { Game.state="play"; UI.pauseScreen.classList.add("hidden"); }
 };
 
-function endGame(win, text) {
+function endGame(text) {
   Game.state="end"; deleteSave();
   UI.hud.classList.add("hidden"); UI.prompt.classList.add("hidden");
   UI.endScreen.classList.remove("hidden");
-  document.getElementById("end-title").textContent = win?"Sejr! 👑":"Riget faldt";
-  document.getElementById("end-title").style.color  = win?"#9bd05a":"#c1453b";
+  document.getElementById("end-title").textContent = "Riget faldt";
+  document.getElementById("end-title").style.color  = "#c1453b";
   document.getElementById("end-text").textContent   = text+` (Du nåede dag ${Game.day}.)`;
-  if (win) Audio.upgrade();
 }
 
 // ---------- Main loop ----------

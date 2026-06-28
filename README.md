@@ -38,9 +38,10 @@ bygge-mærke, en butik (🏹 bue / 🔨 hammer / 🌱 gård), basen, eller en va
 3. **Byg mure** ved de blå mærker; byggere rejser og reparerer dem; opgradér træ → sten.
 4. **Opgradér basen**: Lejr → Lille landsby → Stor landsby → **Slot**.
 5. **Overlev natten** – grådighedens horder spawner fra portalerne og angriber mure, undersåtter og dit guld. Bueskytter forsvarer murene automatisk.
+6. **Bliv ved** – der er ingen sejrsslutning; trusselsniveauet stiger med dagene.
 
 ### Mål
-- **Sejr:** Byg dit **Slot** færdigt og overlev natten derefter.
+- **Overlevelse:** Se hvor mange dage du kan holde riget i live.
 - **Nederlag:** Slottet ødelægges, eller kronen stjæles (sker hvis en fjende når dig uden du har guld).
 
 Spillet **gemmer automatisk** (localStorage) — vælg "Fortsæt" på startskærmen.

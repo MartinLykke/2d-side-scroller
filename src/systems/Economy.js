@@ -13,6 +13,15 @@ function flyingCoin(fromX, toX) {
   });
 }
 
+function paymentBatchSize(station) {
+  const remaining = Math.max(0, station.cost() - station.paid);
+  if (state.payHoldTime < 0.35 || remaining < 8) return 1;
+  if (state.payHoldTime < 0.85) return Math.min(2, remaining);
+  if (remaining >= 35) return Math.min(6, remaining);
+  if (remaining >= 20) return Math.min(4, remaining);
+  return Math.min(3, remaining);
+}
+
 export function updatePayment(dt) {
   const { player, stations } = state;
   const keys = window._KEYS || {};
@@ -32,18 +41,26 @@ export function updatePayment(dt) {
     state.lastPaidStation.paid = 0;
   }
 
-  if (!near) { state.lastPaidStation = null; return; }
+  if (!near) { state.lastPaidStation = null; state.payHoldTime = 0; return; }
+  if (state.lastPaidStation !== near) state.payHoldTime = 0;
   state.lastPaidStation = near;
 
   const payHeld = keys["arrowdown"] || keys["s"];
+  if (!payHeld) state.payHoldTime = 0;
+  else state.payHoldTime += dt;
+
   if (player.coins > 0 && payHeld && state.payCooldown <= 0) {
-    player.coins--;
-    near.paid++;
-    state.payCooldown = CFG.payInterval;
-    flyingCoin(player.x, near.x());
+    const batch = Math.min(player.coins, paymentBatchSize(near));
+    for (let i = 0; i < batch; i++) {
+      player.coins--;
+      near.paid++;
+      flyingCoin(player.x + rand(-6, 6), near.x());
+    }
+    state.payCooldown = CFG.payInterval * (batch > 1 ? 0.75 : 1);
     Audio.pay();
     if (near.paid >= near.cost()) {
       near.paid = 0;
+      state.payHoldTime = 0;
       near.onPaid();
     }
   }
