@@ -389,10 +389,46 @@ function drawStationIcon(x, emoji) {
 export function drawStations() {
   drawStationIcon(STATIONS_X.bow,"🏹");
   drawStationIcon(STATIONS_X.hammer,"🔨");
-  drawStationIcon(STATIONS_X.farm, state.farmBuilt?"🌾":"🌱");
-  if (state.farmBuilt) {
-    ctx.fillStyle="#6a4a28"; ctx.fillRect(STATIONS_X.farm-30,groundY-6,60,6);
-    ctx.fillStyle="#9bd05a"; for (let i=0;i<5;i++) ctx.fillRect(STATIONS_X.farm-26+i*12,groundY-14,3,10);
+  const farmLvl = state.farmLevel || 0;
+  drawStationIcon(STATIONS_X.farm, farmLvl>0?"🌾":"🌱");
+  if (farmLvl >= 1) {
+    const fx = STATIONS_X.farm;
+    // Crops / field (always shown)
+    ctx.fillStyle="#6a4a28"; ctx.fillRect(fx-34,groundY-6,68,6);
+    ctx.fillStyle="#9bd05a"; for (let i=0;i<6;i++) ctx.fillRect(fx-30+i*11,groundY-16,4,11);
+    // Level 2+: small barn
+    if (farmLvl >= 2) {
+      ctx.fillStyle="#7a5030"; ctx.fillRect(fx+14,groundY-28,22,22);
+      ctx.fillStyle="#8a3a18"; ctx.beginPath(); ctx.moveTo(fx+12,groundY-28); ctx.lineTo(fx+25,groundY-42); ctx.lineTo(fx+38,groundY-28); ctx.closePath(); ctx.fill();
+      ctx.fillStyle="#5a3820"; ctx.fillRect(fx+20,groundY-21,8,15);
+    }
+    // Level 3+: haystack / silo
+    if (farmLvl >= 3) {
+      ctx.fillStyle="#c8a030"; ctx.beginPath(); ctx.ellipse(fx-22,groundY-10,12,10,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle="#e0b840"; ctx.beginPath(); ctx.ellipse(fx-22,groundY-14,12,6,0,0,Math.PI); ctx.fill();
+    }
+    // Level 4+: windmill tower (static)
+    if (farmLvl >= 4) {
+      ctx.fillStyle="#9a8060";
+      ctx.beginPath(); ctx.moveTo(fx-14,groundY); ctx.lineTo(fx-8,groundY-52); ctx.lineTo(fx+8,groundY-52); ctx.lineTo(fx+14,groundY); ctx.closePath(); ctx.fill();
+      ctx.fillStyle="#7a6050"; ctx.fillRect(fx-4,groundY-55,8,8);
+      // Static blades (level 4)
+      ctx.save(); ctx.translate(fx, groundY-58); ctx.strokeStyle="#6a5040"; ctx.lineWidth=3;
+      for (let b=0;b<4;b++) { ctx.save(); ctx.rotate(b*Math.PI/2); ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-20); ctx.stroke(); ctx.fillStyle="#9a8060"; ctx.fillRect(-3,-20,6,8); ctx.restore(); }
+      ctx.restore();
+    }
+    // Level 5: windmill with spinning blades
+    if (farmLvl >= 5) {
+      const spin = performance.now() / 800;
+      ctx.save(); ctx.translate(fx, groundY-58);
+      for (let b=0;b<4;b++) {
+        ctx.save(); ctx.rotate(spin + b*Math.PI/2); ctx.strokeStyle="#7a6040"; ctx.lineWidth=3;
+        ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-22); ctx.stroke();
+        ctx.fillStyle="#c09060"; ctx.beginPath(); ctx.moveTo(-4,-22); ctx.lineTo(4,-22); ctx.lineTo(2,-32); ctx.lineTo(-2,-32); ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+      ctx.restore();
+    }
   }
   if (state.base && state.base.level >= 2) {
     drawStationIcon(STATIONS_X.shop,"🏪");
@@ -513,7 +549,7 @@ export function drawUnits() {
     else if (u.role==="builder") { body="#6a4a28"; tool="hammer"; tile=T.BUILDER; }
     else if (u.role==="farmer")  { body="#5a6a2a"; tool="scythe"; tile=T.FARMER; }
     else if (u.role==="guard")   { body="#3a4a5a"; head="#b09a7a"; tile=T.GUARD; }
-    const wallLift = u.onWall && u.wall ? Math.max(0, wallHeight(u.wall) - 14) : 0;
+    const wallLift = u.onWall && u.wall && Math.abs(u.x - u.wall.x) < 40 ? Math.max(0, wallHeight(u.wall) - 14) : 0;
 
     if (spritesReady) {
       const bob = u.moving ? Math.abs(Math.sin(u.anim)) * 2 : 0;
@@ -638,6 +674,31 @@ function drawLegendaryBody(e, t, dark, T) {
   ctx.restore();
 }
 
+export function drawPoisonShots() {
+  if (!state.poisonShots || !state.poisonShots.length) return;
+  for (const s of state.poisonShots) {
+    // Warning circle on ground at landing position
+    const age = Math.max(0, 1 - s.life / 1.8);
+    ctx.save(); ctx.globalAlpha = 0.25 + 0.2 * age;
+    ctx.strokeStyle = "#88cc44"; ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath(); ctx.ellipse(s.landX, groundY - 4, 24, 7, 0, 0, Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+    // Poison blob
+    ctx.save(); ctx.translate(s.x, s.y);
+    ctx.fillStyle = "#7744cc";
+    ctx.beginPath(); ctx.arc(0, 0, 7, 0, Math.PI*2); ctx.fill();
+    ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.55;
+    ctx.fillStyle="#aa66ff";
+    ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle="#88cc44"; ctx.globalAlpha=0.7;
+    ctx.beginPath(); ctx.arc(-2, -2, 3, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
+
 export function drawLegendaryEffects() {
   for (const ef of state.legendaryEffects) {
     if (ef.type !== "ring") continue;
@@ -668,7 +729,10 @@ export function drawEnemies(dark) {
 
     const w=t.w, bob=Math.abs(Math.sin(e.anim*2))*2;
     const isBoss = e.type==="boss1"||e.type==="boss2"||e.type==="boss3"||e.type==="boss4";
-    ctx.save(); ctx.translate(e.x, drawYOff); if (e.dir<0) ctx.scale(-1,1);
+    const atkF = Math.max(0, e.attackAnim || 0) / 0.25;
+    ctx.save(); ctx.translate(e.x, drawYOff);
+    if (atkF > 0) ctx.scale(1 + atkF * 0.18, 1 - atkF * 0.12);
+    if (e.dir<0) ctx.scale(-1,1);
     if (isLegend) {
       drawLegendaryBody(e, t, dark, bossT);
     } else if (spritesReady) {
@@ -1845,7 +1909,7 @@ export function render() {
   drawEntityShadows(); drawPortals(dark); drawWalls(dark); drawBase(dark);
   drawStations(); drawCoins(); drawGroundBows(); drawGroundHammers(); drawLootItems(); drawChests();
   drawAnimals(); drawVagrants(); drawUnits(); drawEnemies(dark); drawLegendaryEffects();
-  drawPlayer(dark); drawArrows(); drawSpells(); drawParticles(); drawCampLight(dark); drawFloats();
+  drawPlayer(dark); drawArrows(); drawPoisonShots(); drawSpells(); drawParticles(); drawCampLight(dark); drawFloats();
   ctx.restore();
 
   drawTreeLayer(trees.fore,1.06,0.04,20,0.45);

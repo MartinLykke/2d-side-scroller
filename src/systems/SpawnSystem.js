@@ -49,9 +49,10 @@ export function spawnEnemy(type, portal) {
     hp: t.hp, maxHp: t.hp,
     dir: portal.side > 0 ? -1 : 1,
     state: "advance", target: null, attackCd: 0,
-    carry: 0, anim: rand(0, 6), flash: 0, fleeing: false, portal,
+    carry: 0, anim: rand(0, 6), flash: 0, attackAnim: 0, fleeing: false, portal,
     fy: t.flying ? -(80 + rand(0, 30)) : 0,
     shootCd: t.flying ? rand(0.5, 2) : 0,
+    poisonCd: t.rangedShoot ? rand(1, t.shootInterval || 5) : undefined,
   });
 }
 
@@ -100,7 +101,8 @@ export function updateSpawning(dt) {
     Game.spawnTimer -= dt;
     if (Game.spawnTimer <= 0) {
       const pressure = Math.min(0.55, Math.max(0, Game.day - 4) * 0.018);
-      Game.spawnTimer = rand(0.6, 1.6) * (1 - pressure);
+      const diffSpeedUp = Game.diffMult > 1 ? 1 / Math.sqrt(Game.diffMult) : 1;
+      Game.spawnTimer = rand(0.6, 1.6) * (1 - pressure) * diffSpeedUp;
       const type = nightEnemyType();
       spawnEnemy(type, pick(state.portals));
       Game.nightSpawned++;

@@ -8,10 +8,10 @@ import { shootArrow, killEnemy } from './Combat.js';
 import { wallHeight } from '../entities/Wall.js';
 import { makeUnit } from '../entities/Unit.js';
 
-export function nearestEnemy(x, range) {
+export function nearestEnemy(x, range, includeFleeing = false) {
   let best = null, bd = range;
   for (const e of state.enemies) {
-    if (e.fleeing) continue;
+    if (!includeFleeing && e.fleeing) continue;
     const d = dist(x, e.x);
     if (d < bd) { bd = d; best = e; }
   }
@@ -211,10 +211,13 @@ function farmerAI(u, dt) {
   const fx = STATIONS_X.farm;
   if (moveToward(u, fx, 36, dt)) {
     u.workTimer += dt;
-    if (u.workTimer > (Game.isNight ? 99 : 5)) {
+    const lvl = state.farmLevel || 1;
+    const interval = Math.max(1.2, 5 - (lvl - 1) * 0.85);
+    if (u.workTimer > (Game.isNight ? 99 : interval)) {
       u.workTimer = 0;
-      spawnCoin(fx + rand(-20, 20), 1, groundY - 20, rand(-40, 40));
-      spawnParticles(fx, groundY - 20, 4, "#9bd05a", 20, 30);
+      const coins = lvl >= 5 ? 3 : lvl >= 3 ? 2 : 1;
+      for (let c = 0; c < coins; c++) spawnCoin(fx + rand(-24, 24), 1, groundY - 20, rand(-40, 40));
+      spawnParticles(fx, groundY - 20, 4 + lvl, "#9bd05a", 20, 30);
     }
   }
 }

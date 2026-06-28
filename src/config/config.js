@@ -22,6 +22,7 @@ export const CFG = {
   bowCost: 4,
   hammerCost: 3,
   farmCost: 10,
+  farmUpgradeCosts: [10, 16, 24, 38, 58],
 };
 
 export const STATIONS_X = {

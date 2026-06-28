@@ -55,6 +55,8 @@ export const state = {
   pendingHammers: 0,
   pendingFarmers: 0,
   farmBuilt: false,
+  farmLevel: 0,
+  poisonShots: [],
   payCooldown: 0,
   payHoldTime: 0,
   lastPaidStation: null,

@@ -16,7 +16,7 @@ import { saveGame, hasSave, loadGame, deleteSave } from './systems/SaveSystem.js
 import { updateSpawning, planNight, spawnCoin, floaty, spawnParticles, spawnVagrant, spawnAnimal, spawnEnemy, buildLocations, spawnLocLoot, makeLocation } from './systems/SpawnSystem.js';
 import { updatePayment, updateCoins } from './systems/Economy.js';
 import { updateUnits, updateAssignments, updateVagrants, updateAnimals, nearestEnemy } from './systems/AI.js';
-import { updateEnemies, updateArrows, updatePlayerAttack, updateSpells, killEnemy, updateLegendaryEffects } from './systems/Combat.js';
+import { updateEnemies, updateArrows, updatePlayerAttack, updateSpells, killEnemy, updateLegendaryEffects, updatePoisonShots } from './systems/Combat.js';
 
 import { FX, initFX, updateFX, biomeAt } from './rendering/Effects.js';
 import { render, drawEntityShadows } from './rendering/Renderer.js';
@@ -184,9 +184,19 @@ function buildStations() {
   });
   state.stations.push({
     id:"farm", x:()=>STATIONS_X.farm, paid:0,
-    cost:()=>state.farmBuilt?0:CFG.farmCost,
-    label:()=>state.farmBuilt?"Gården producerer guld":"Byg gård (passiv guldindkomst)",
-    onPaid:()=>{ state.farmBuilt=true; state.pendingFarmers++; floaty(STATIONS_X.farm,"🌾 Gård bygget"); Audio.build(); },
+    cost:()=>state.farmLevel>=5?0:CFG.farmUpgradeCosts[state.farmLevel],
+    label:()=>{
+      if (state.farmLevel===0) return "Byg gård (passiv guldindkomst)";
+      if (state.farmLevel>=5) return "Gård er fuldt opgraderet (niveau 5)";
+      return `Opgradér gård niveau ${state.farmLevel}→${state.farmLevel+1}`;
+    },
+    onPaid:()=>{
+      state.farmLevel++;
+      state.farmBuilt = true;
+      if (state.farmLevel===1) { state.pendingFarmers++; floaty(STATIONS_X.farm,"🌾 Gård bygget!"); }
+      else floaty(STATIONS_X.farm,`🌾 Gård niveau ${state.farmLevel}!`,"#9bd05a");
+      Audio.build();
+    },
   });
   state.stations.push({
     id:"shop", x:()=>STATIONS_X.shop, paid:0,
@@ -261,6 +271,8 @@ function newGame() {
   state.pendingHammers  = 0;
   state.pendingFarmers  = 0;
   state.farmBuilt       = false;
+  state.farmLevel       = 0;
+  state.poisonShots     = [];
   state.groundBows      = [];
   state.groundHammers   = [];
   state.lootItems       = [];
@@ -542,6 +554,7 @@ function update(dt) {
   updateEnemies(dt);
   updateArrows(dt);
   updateSpells(dt);
+  updatePoisonShots(dt);
   updateLegendaryEffects(dt);
   updateCoins(dt);
   updateLootItems(dt);

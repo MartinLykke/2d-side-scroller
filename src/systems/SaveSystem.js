@@ -19,6 +19,7 @@ export function saveGame() {
       units: units.map(u => ({ role: u.role, x: u.x })),
       vagrants: vagrants.length,
       farm: state.farmBuilt,
+      farmLevel: state.farmLevel,
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(snap));
   } catch (e) {}
@@ -49,6 +50,7 @@ export function loadGame() {
     state.vagrants = [];
     for (let i = 0; i < (snap.vagrants || 0); i++) spawnVagrant();
     state.farmBuilt = snap.farm;
+    state.farmLevel = snap.farmLevel || (snap.farm ? 1 : 0);
     Game.threatLevel = Math.max(1, snap.day || 1);
     planNight();
     return true;

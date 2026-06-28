@@ -286,7 +286,9 @@ export function updateEnemies(dt) {
 
     e.anim += dt * 5;
     if (e.flash > 0) e.flash -= dt;
+    if (e.attackAnim > 0) e.attackAnim -= dt;
     e.attackCd -= dt;
+    if (e.poisonCd !== undefined) e.poisonCd -= dt;
     if (e.knock) { e.x += e.knock * dt; e.knock *= Math.max(0, 1 - 9 * dt); if (Math.abs(e.knock) < 8) e.knock = 0; }
 
     if (e.fleeing) {
@@ -302,7 +304,7 @@ export function updateEnemies(dt) {
     if (wall && dist(e.x, wall.x) < 30) {
       e.dir = Math.sign(wall.x - e.x) || e.dir;
       if (e.attackCd <= 0) {
-        e.attackCd = 0.7;
+        e.attackCd = 0.7; e.attackAnim = 0.22;
         wall.hp -= t.dmg; wall.flash = 0.15;
         spawnParticles(wall.x, groundY - 30, 3, "#caa46a", 30, 30);
         Audio.hit();
@@ -329,7 +331,7 @@ export function updateEnemies(dt) {
       e.dir = Math.sign(e.aggroUnit.x - e.x) || e.dir;
       if (d > 32) e.x += e.dir * t.speed * dt;
       if (d < 40 && e.attackCd <= 0) {
-        e.attackCd = 0.8;
+        e.attackCd = 0.8; e.attackAnim = 0.22;
         e.aggroUnit.hp -= 2; e.aggroUnit.panic = 1;
         spawnParticles(e.aggroUnit.x, groundY - 30, 3, "#7a1f1f");
         Audio.hit();
@@ -340,7 +342,7 @@ export function updateEnemies(dt) {
     if (dist(e.x, base.x) < 70) {
       e.dir = Math.sign(base.x - e.x) || e.dir;
       if (e.attackCd <= 0) {
-        e.attackCd = 0.9;
+        e.attackCd = 0.9; e.attackAnim = 0.22;
         base.hp -= t.dmg; base.flash = 0.2;
         spawnParticles(base.x + rand(-30, 30), groundY - 30, 4, "#ff6a4a");
         Audio.hit();
@@ -354,8 +356,22 @@ export function updateEnemies(dt) {
       const hadCoins = player.coins > 0;
       if (meleeHitPlayer(e, t, 230) && hadCoins) e.carry++;
       e.fleeing = true;
-      e.attackCd = 1;
+      e.attackCd = 1; e.attackAnim = 0.25;
       continue;
+    }
+
+    // Ranged poison shot for large enemies
+    if (t.rangedShoot && e.poisonCd <= 0 && dist(e.x, player.x) < t.shootRange) {
+      const launchY = groundY - t.w * 0.7;
+      const dx = player.x - e.x;
+      const flightT = 1.4;
+      const vx = dx / flightT;
+      const vy = ((groundY - 40) - launchY - 0.5 * 500 * flightT * flightT) / flightT;
+      state.poisonShots.push({ x: e.x, y: launchY, vx, vy, life: flightT + 0.4, landX: player.x, dmg: t.meleeDmg, sourceEnemy: e });
+      e.poisonCd = t.shootInterval;
+      e.attackAnim = 0.18;
+      spawnParticles(e.x, launchY, 6, "#9944cc", 40, 30);
+      Audio.bow();
     }
 
     e.dir = Math.sign(base.x - e.x) || e.dir;
@@ -601,7 +617,6 @@ export function updatePlayerAttack(dt) {
   const w = effectiveWeapon(player.weapon, player.weaponUpgrades || []);
   let tgt = null, bd = w.range;
   for (const e of enemies) {
-    if (e.fleeing) continue;
     const d = dist(player.x, e.x);
     if (d < bd) { bd = d; tgt = e; }
   }
@@ -738,6 +753,33 @@ function updateLegendaryBoss(e, t, dt) {
         spawnParticles(u.x, groundY - 30, 6, "#c1453b", 60, 80);
         Audio.hit(); e.attackCd = 1.8; break;
       }
+    }
+  }
+}
+
+export function updatePoisonShots(dt) {
+  const shots = state.poisonShots;
+  if (!shots || !shots.length) return;
+  const { player } = state;
+  for (let i = shots.length - 1; i >= 0; i--) {
+    const s = shots[i];
+    s.x += s.vx * dt;
+    s.y += s.vy * dt;
+    s.vy += 500 * dt;
+    s.life -= dt;
+    if (s.y >= groundY - 10 || s.life <= 0) {
+      spawnParticles(s.x, groundY - 8, 10, "#88cc44", 60, 50);
+      spawnParticles(s.x, groundY - 8, 6, "#aa44ff", 40, 30);
+      if (dist(s.x, player.x) < 44 && player.jumpH <= 0 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
+        const dmg = s.dmg || 1;
+        player.hp -= dmg;
+        player.invuln = CFG.playerInvuln; player.hurt = 0.35; player.hpShowTimer = 3;
+        player.knock = Math.sign(player.x - s.x) * 160;
+        spawnParticles(player.x, groundY - 50, 6, "#88cc44");
+        floaty(player.x, `−${dmg}☠`, "#88cc44");
+        Audio.hit();
+      }
+      shots.splice(i, 1);
     }
   }
 }
