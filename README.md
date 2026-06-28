@@ -1,53 +1,55 @@
 # Kingdom — Crown of Embers
 
-Et Kingdom-inspireret 2D base-defense spil. Ren HTML5 + Canvas 2D + vanilla
-JavaScript — ingen build, ingen dependencies, ingen eksterne assets. Al grafik
-tegnes proceduralt i silhuet-stil, og al lyd genereres med Web Audio API.
+Et Kingdom-inspireret 2D base-defense spil. Ren HTML5 + Canvas 2D + vanilla JavaScript — ingen build, ingen dependencies, ingen eksterne assets. Al grafik tegnes proceduralt, og al lyd genereres med Web Audio API.
 
-## Spil nu
-Serveren kører allerede lokalt:
+## Start spillet
 
-👉 **http://localhost:8000/**
+Kør en lokal HTTP-server fra projektmappen:
 
-Åbn linket i Chrome.
+```
+python -m http.server 8000
+```
 
-## Start igen senere
-Hvis serveren er stoppet (fx efter genstart), så enten:
+Åbn derefter `http://localhost:8000/` i Chrome.
 
-- **Dobbeltklik `start-game.bat`** (starter server + åbner browseren), eller
-- kør manuelt i en terminal i denne mappe:
-  ```
-  python -m http.server 8000
-  ```
-  og åbn `http://localhost:8000/`.
+## Styring
 
-## Sådan spilles
 | Tast | Handling |
 |------|----------|
 | `A` / `D` eller `←` `→` | Rid til siderne |
 | `Shift` | Galop |
+| `↓` / `S` (hold) | Betal ved station / rekruttér vagabond |
+| `Space` | Hop |
+| `F` | Saml våben / åbn kiste |
+| `I` | Inventar |
+| `B` | Butik (kræver base niveau 2+) |
+| `+` / `-` / `0` | Zoom ind/ud/reset |
 | `M` | Lyd til/fra |
-| `P` | Pause |
+| `Esc` | Pause / luk menu |
+| `P` | Dev-panel |
 
-Du betaler **automatisk** med dit guld, når du står stille ved et blåt
-bygge-mærke, en butik (🏹 bue / 🔨 hammer / 🌱 gård), basen, eller en vagabond.
+## Spilmekanikker
 
 ### Loopet
-1. **Saml guld** – ligger på jorden; bueskytter jager dyr om dagen for mønter; en gård giver passiv indkomst.
-2. **Rekruttér vagabonder** → undersåtter. Køb 🏹 buer (→ bueskytter) og 🔨 hamre (→ byggere).
-3. **Byg mure** ved de blå mærker; byggere rejser og reparerer dem; opgradér træ → sten.
-4. **Opgradér basen**: Lejr → Lille landsby → Stor landsby → **Slot**.
-5. **Overlev natten** – grådighedens horder spawner fra portalerne og angriber mure, undersåtter og dit guld. Bueskytter forsvarer murene automatisk.
-6. **Bliv ved** – der er ingen sejrsslutning; trusselsniveauet stiger med dagene.
+1. **Saml guld** – mønter ligger på verden; bueskytter jager dyr om dagen for mønter; en gård giver passiv indkomst.
+2. **Rekruttér vagabonder** → undersåtter. Køb 🏹 buer (→ bueskytter) og 🔨 hamre (→ byggere) ved stationerne ved basen.
+3. **Byg og opgradér mure** ved de blå mærker (op til niveau 5); byggere rejser til og reparerer dem automatisk.
+4. **Opgradér basen**: Lejr → Lille landsby → Stor landsby → Slot (niveau 1–4).
+5. **Overlev natten** – horder spawner fra portaler i øst og vest og angriber mure, undersåtter og dig.
+6. **Udforsk verden** – lejre, ruiner, vogne og andre lokationer gemmer fjender, overlevende og loot.
 
-### Mål
-- **Overlevelse:** Se hvor mange dage du kan holde riget i live.
-- **Nederlag:** Slottet ødelægges, eller kronen stjæles (sker hvis en fjende når dig uden du har guld).
+### Progression
+- **XP og niveauer**: Dræb fjender og byg strukturer for XP. Ved level-up vælger du en opgradering til dit aktuelle våben.
+- **Våben og rustning**: Findes som loot i verden eller købes i butikken. Tryk `F` for at samle op; du kan kun bære ét våben ad gangen.
+- **Trusselsniveau**: Stiger med dagene — der er ingen sejrsslutning.
 
-Spillet **gemmer automatisk** (localStorage) — vælg "Fortsæt" på startskærmen.
+### Sejr og nederlag
+- **Nederlag**: Slottet ødelægges, eller spilleren dør.
+- Spillet **gemmer automatisk** (localStorage) — vælg "Fortsæt" på startskærmen.
 
-## Filer
-- `index.html` – markup + HUD/overlays
-- `style.css` – styling
-- `game.js` – hele spillet (verden, døgncyklus, økonomi, NPC-AI, byggeri, kamp, gem/indlæs, rendering, lyd)
-- `start-game.bat` – lokal launcher
+## Dev-panel (`P`)
+
+- Injicer guld, spring til nat/dag eller dag 10/15/20
+- Opgradér base, spawn specifikke fjender, slå god mode til
+- Giv ethvert våben eller rustning direkte
+- Juster spilhastighed (×1 / ×2 / ×4)
