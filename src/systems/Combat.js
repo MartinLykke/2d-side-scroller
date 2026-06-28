@@ -231,14 +231,23 @@ export function updateEnemies(dt) {
       continue;
     }
 
-    let unitTgt = null, ud = 55;
-    for (const u of units) { const d = dist(e.x, u.x); if (d < ud) { ud = d; unitTgt = u; } }
-    if (unitTgt) {
-      e.dir = Math.sign(unitTgt.x - e.x) || e.dir;
-      if (e.attackCd <= 0) {
+    // Persistent aggro: clear stale target, then try to acquire within 200px
+    if (e.aggroUnit && (!units.includes(e.aggroUnit) || dist(e.x, e.aggroUnit.x) > 340)) {
+      e.aggroUnit = null;
+    }
+    if (!e.aggroUnit) {
+      let best = null, bd = 200;
+      for (const u of units) { const d = dist(e.x, u.x); if (d < bd) { bd = d; best = u; } }
+      if (best) e.aggroUnit = best;
+    }
+    if (e.aggroUnit) {
+      const d = dist(e.x, e.aggroUnit.x);
+      e.dir = Math.sign(e.aggroUnit.x - e.x) || e.dir;
+      if (d > 32) e.x += e.dir * t.speed * dt;
+      if (d < 40 && e.attackCd <= 0) {
         e.attackCd = 0.8;
-        unitTgt.hp -= 2; unitTgt.panic = 1;
-        spawnParticles(unitTgt.x, groundY - 30, 3, "#7a1f1f");
+        e.aggroUnit.hp -= 2; e.aggroUnit.panic = 1;
+        spawnParticles(e.aggroUnit.x, groundY - 30, 3, "#7a1f1f");
         Audio.hit();
       }
       continue;
