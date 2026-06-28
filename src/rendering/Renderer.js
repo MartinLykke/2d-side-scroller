@@ -374,9 +374,16 @@ export function drawCoins() {
   }
 }
 
+function drawArm(x1,y1,x2,y2,col) {
+  ctx.strokeStyle=col; ctx.lineWidth=2.5; ctx.lineCap="round";
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  ctx.lineCap="butt";
+}
+
 function drawHumanoid(x, anim, bodyCol, headCol, tool, dir, moving) {
   ctx.save(); ctx.translate(x,0); if (dir<0) ctx.scale(-1,1);
   const bob=moving?Math.abs(Math.sin(anim))*1.2:0;
+  const swing=moving?Math.sin(anim)*2.5:0;
   legs(0,groundY-15,anim,moving?5:0,bodyCol);
   ctx.fillStyle=bodyCol; roundedRect(-5,groundY-34-bob,10,20,4); ctx.fill();
   ctx.fillStyle="rgba(0,0,0,0.18)"; roundedRect(2,groundY-34-bob,3,20,2); ctx.fill();
@@ -388,11 +395,14 @@ function drawHumanoid(x, anim, bodyCol, headCol, tool, dir, moving) {
     ctx.fillRect(-5.5,groundY-39-bob,11,3); ctx.fillStyle="#6a6a7a"; ctx.fillRect(-1,groundY-38-bob,2,5);
     ctx.fillStyle="#5a6a50"; roundedRect(-5,groundY-34-bob,10,20,4); ctx.fill();
     ctx.fillStyle="#6a7a5e"; ctx.fillRect(-4,groundY-34-bob,8,3);
-    ctx.fillStyle="#6a4a2a"; ctx.fillRect(-7,groundY-34-bob,3,12);
-    ctx.strokeStyle="#e8d8a8"; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(-6,groundY-35-bob); ctx.lineTo(-5,groundY-42-bob); ctx.stroke();
+    // Bow on right side
     ctx.strokeStyle="#8a5a2a"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(8,groundY-28-bob,9,-1.2,1.2); ctx.stroke();
     ctx.strokeStyle="rgba(230,216,168,0.8)"; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(8+Math.cos(-1.2)*9,groundY-28-bob+Math.sin(-1.2)*9); ctx.lineTo(8+Math.cos(1.2)*9,groundY-28-bob+Math.sin(1.2)*9); ctx.stroke();
+    // Left arm: reaches forward to grip the bow
+    drawArm(-4,groundY-31-bob, 8,groundY-28-bob, headCol);
+    // Right arm: draws the bowstring back toward chest
+    drawArm(4,groundY-31-bob, 1,groundY-29-bob, headCol);
   } else if (tool==="hammer") {
     // Leather apron
     ctx.fillStyle="#3a200a"; ctx.fillRect(-4,groundY-30-bob,8,4);
@@ -402,17 +412,29 @@ function drawHumanoid(x, anim, bodyCol, headCol, tool, dir, moving) {
     // Work cap over head
     ctx.fillStyle="#5a3a18"; ctx.beginPath(); ctx.arc(0,groundY-39-bob,6,Math.PI,0); ctx.fill();
     ctx.fillStyle="#3e2610"; ctx.fillRect(-8,groundY-39-bob,16,3);
+    // Left arm: resting at side
+    drawArm(-5,groundY-31-bob, -7,groundY-20-bob, headCol);
+    // Right arm: holds hammer handle
+    drawArm(5,groundY-31-bob, 9,groundY-34-bob, headCol);
     // Hammer
     ctx.strokeStyle="#7a5a2a"; ctx.lineWidth=2.5; ctx.lineCap="round";
-    ctx.beginPath(); ctx.moveTo(6,groundY-33-bob); ctx.lineTo(12,groundY-21-bob); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(9,groundY-34-bob); ctx.lineTo(12,groundY-21-bob); ctx.stroke();
     ctx.lineCap="butt";
     ctx.fillStyle="#9a9aaa"; ctx.fillRect(6,groundY-36-bob,9,5);
     ctx.fillStyle="#aaaabc"; ctx.fillRect(6,groundY-36-bob,9,2);
   } else if (tool==="scythe") {
+    // Left arm: upper grip on shaft
+    drawArm(-5,groundY-32-bob, 5,groundY-30-bob, headCol);
+    // Right arm: lower grip on shaft
+    drawArm(5,groundY-28-bob, 8,groundY-22-bob, headCol);
     ctx.fillStyle="#c9a24a"; ctx.beginPath(); ctx.ellipse(0,groundY-42-bob,8,2.6,0,0,Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.arc(0,groundY-43-bob,4,Math.PI,0); ctx.fill();
     ctx.strokeStyle="#6a4a2a"; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(7,groundY-34-bob); ctx.lineTo(9,groundY-16-bob); ctx.stroke();
     ctx.strokeStyle="#bdbdc6"; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(9,groundY-34-bob,6,Math.PI*1.1,Math.PI*1.9); ctx.stroke();
+  } else {
+    // Default: arms hanging with gentle walk swing
+    drawArm(-5,groundY-31-bob, -7+swing,groundY-19-bob, headCol);
+    drawArm(5,groundY-31-bob,   7-swing,groundY-19-bob, headCol);
   }
   ctx.restore();
 }
@@ -1053,6 +1075,11 @@ export function drawLocations(dark) {
   const LOC_SCALE=1.55;
   for (const loc of locations) {
     if (loc.x<camL||loc.x>camR) continue;
+    const locAlpha = loc.fadeAlpha !== undefined ? loc.fadeAlpha : 1;
+    if (locAlpha <= 0) continue;
+
+    ctx.save();
+    ctx.globalAlpha = locAlpha;
 
     // Epic glow aura around location
     if (!loc.cleared) {
@@ -1101,6 +1128,8 @@ export function drawLocations(dark) {
       }
       ctx.restore();
     }
+
+    ctx.restore(); // locAlpha save
   }
 }
 
@@ -1149,6 +1178,10 @@ export function drawLootItems() {
     const yy = (it.dropY !== undefined) ? it.dropY : groundY-16+bob;
     const rc=RARITY_COL[w.rarity];
     const stillFalling = it.dropVy !== undefined && it.dropVy !== 0;
+    const timeLeft = 10 - (it.despawnTimer || 0);
+    const blinking = !stillFalling && timeLeft < 3;
+    const blinkAlpha = blinking ? (0.4 + 0.6 * Math.abs(Math.sin(t * 8))) : 1;
+    ctx.save(); ctx.globalAlpha = blinkAlpha;
     ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=(stillFalling?0.08:0.2)+0.12*Math.sin(t*3+it.x*0.004);
     ctx.fillStyle=rc; ctx.beginPath(); ctx.arc(it.x,yy,14,0,Math.PI*2); ctx.fill(); ctx.restore();
     if (!stillFalling) groundShadow(it.x,9,0.22);
@@ -1170,6 +1203,7 @@ export function drawLootItems() {
     ctx.save(); ctx.font="10px Trebuchet MS"; ctx.textAlign="center";
     ctx.fillStyle="rgba(0,0,0,0.55)"; ctx.fillText(w.name,it.x+1,groundY-33+1);
     ctx.fillStyle=rc; ctx.fillText(w.name,it.x,groundY-33); ctx.restore();
+    ctx.restore(); // blinkAlpha save
   }
 }
 
