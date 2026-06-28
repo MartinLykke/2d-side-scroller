@@ -8,6 +8,104 @@ import { Audio } from '../systems/Audio.js';
 import { spawnEnemy, planNight, floaty, spawnParticles } from '../systems/SpawnSystem.js';
 import { pick } from '../util/math.js';
 import { groundY } from '../canvas.js';
+import { ARCHER_SKILLS } from '../config/archerSkills.js';
+
+// ── Skill Tree ────────────────────────────────────────────────
+const BRANCH_NAMES = { 1: "🎯 Pilen", 2: "🏹 Buen", 3: "🌲 Taktik" };
+
+function skillUnlocked(id) { return state.archerSkills.includes(id); }
+function skillAvailable(sk) {
+  if (skillUnlocked(sk.id)) return false;
+  if ((state.archerSkillPoints || 0) < sk.cost) return false;
+  return sk.requires.every(r => skillUnlocked(r));
+}
+
+function renderSkillTree() {
+  const branchesEl = document.getElementById("st-branches");
+  const ultimatesEl = document.getElementById("st-ultimates");
+  const ptEl = document.getElementById("st-points");
+  if (!branchesEl) return;
+
+  ptEl.textContent = `Evnepoint: ${state.archerSkillPoints || 0}`;
+
+  // Build 3 branch columns
+  const branches = { 1: [], 2: [], 3: [] };
+  const ultimates = [];
+  for (const sk of Object.values(ARCHER_SKILLS)) {
+    if (sk.ultimate) ultimates.push(sk);
+    else branches[sk.branch].push(sk);
+  }
+  for (const b of [1, 2, 3]) branches[b].sort((a, b2) => a.row - b2.row);
+
+  branchesEl.innerHTML = "";
+  for (const b of [1, 2, 3]) {
+    const col = document.createElement("div");
+    col.style.cssText = "display:flex;flex-direction:column;gap:8px;";
+    const hdr = document.createElement("div");
+    hdr.textContent = BRANCH_NAMES[b];
+    hdr.style.cssText = "font-size:12px;font-weight:bold;color:#f2c14e;text-align:center;margin-bottom:4px;letter-spacing:1px;";
+    col.appendChild(hdr);
+    for (const sk of branches[b]) {
+      col.appendChild(makeSkillNode(sk));
+    }
+    branchesEl.appendChild(col);
+  }
+
+  ultimatesEl.innerHTML = "";
+  const ultHdr = document.createElement("div");
+  ultHdr.style.cssText = "grid-column:1/-1;font-size:11px;color:#c069ff;text-align:center;font-weight:bold;letter-spacing:1px;margin-bottom:4px;";
+  ultHdr.textContent = "👑 ULTIMATIVE EVNER";
+  ultimatesEl.appendChild(ultHdr);
+  for (const sk of ultimates) ultimatesEl.appendChild(makeSkillNode(sk));
+}
+
+function makeSkillNode(sk) {
+  const unlocked = skillUnlocked(sk.id);
+  const available = skillAvailable(sk);
+  const div = document.createElement("div");
+  const bg = unlocked ? "rgba(155,208,90,0.15)" : available ? "rgba(242,193,78,0.12)" : "rgba(255,255,255,0.04)";
+  const border = unlocked ? "rgba(155,208,90,0.6)" : available ? "rgba(242,193,78,0.5)" : "rgba(255,255,255,0.1)";
+  div.style.cssText = `background:${bg};border:1px solid ${border};border-radius:8px;padding:10px 12px;cursor:${available?"pointer":"default"};transition:background 0.15s;position:relative;`;
+  div.innerHTML = `
+    <div style="font-size:12px;font-weight:bold;color:${unlocked?"#9bd05a":available?"#f2c14e":"#7a6a50"};">${sk.name} ${unlocked?"✓":""}</div>
+    <div style="font-size:10px;color:#9a8a70;margin-top:3px;line-height:1.4;">${sk.desc}</div>
+    <div style="font-size:10px;margin-top:5px;color:${available?"#f2c14e":"#5a4a38"};">Kost: ${sk.cost} point${sk.requires.length?" · Kræver: "+sk.requires.map(r=>ARCHER_SKILLS[r]?.name||r).join(", "):""}</div>
+  `;
+  if (available) {
+    div.onmouseenter = () => div.style.background = "rgba(242,193,78,0.22)";
+    div.onmouseleave = () => div.style.background = bg;
+    div.onclick = () => {
+      state.archerSkillPoints -= sk.cost;
+      state.archerSkills.push(sk.id);
+      floaty(state.base.x, `🏹 ${sk.name} låst op!`, "#f2c14e");
+      Audio.upgrade();
+      renderSkillTree();
+    };
+  }
+  return div;
+}
+
+export function openSkillTree() {
+  const el = document.getElementById("skill-tree-screen");
+  if (!el) return;
+  el.classList.remove("hidden");
+  el.style.display = "flex";
+  Game.skillTreeOpen = true;
+  if (Game.state === "play") Game.state = "pause";
+  renderSkillTree();
+}
+
+export function closeSkillTree() {
+  const el = document.getElementById("skill-tree-screen");
+  if (!el) return;
+  el.classList.add("hidden");
+  el.style.display = "";
+  Game.skillTreeOpen = false;
+  if (Game.state === "pause") Game.state = "play";
+}
+
+window._closeSkillTree = closeSkillTree;
+window._openSkillTree  = openSkillTree;
 
 function phaseName() {
   const t=Game.time;
@@ -70,6 +168,17 @@ export const UI = {
         aPill.style.borderColor=ARMOR_RARITY_COL[a.rarity]+"99";
         aPill.style.color=ARMOR_RARITY_COL[a.rarity];
       } else { aEl.textContent="Ingen rustning"; aPill.style.borderColor=""; aPill.style.color=""; }
+    }
+
+    // Skill points pill
+    const spEl = document.getElementById("hud-skillpts");
+    const spTxt = document.getElementById("hud-skillpts-text");
+    if (spEl && spTxt) {
+      const sp = state.archerSkillPoints || 0;
+      spEl.style.display = sp > 0 ? "" : "none";
+      spTxt.textContent = sp + " ep 🏹";
+      spEl.style.borderColor = sp > 0 ? "#f2c14e88" : "";
+      spEl.style.color = "#f2c14e";
     }
 
     let near=null, nd=CFG.payRange;

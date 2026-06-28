@@ -39,6 +39,7 @@
         <div id="hud-weapon" class="hud-pill">⚔ <span id="hud-weapon-text">Intet våben</span></div>
         <div id="hud-armor" class="hud-pill">🛡 <span id="hud-armor-text">Ingen rustning</span></div>
         <div id="hud-pop" class="hud-pill">👥 <span id="hud-pop-text">0</span> · 🏹 <span id="hud-arch-text">0</span> · 🔨 <span id="hud-build-text">0</span></div>
+        <div id="hud-skillpts" class="hud-pill" style="display:none;cursor:pointer;" onclick="window._openSkillTree&&window._openSkillTree()">🏹 <span id="hud-skillpts-text">0 ep</span></div>
       </div>
     </div>
 
@@ -87,6 +88,22 @@
       <div class="overlay-card small">
         <h1>Pause</h1>
         <p class="tag">Tryk <kbd>Esc</kbd> for at fortsætte</p>
+      </div>
+    </div>
+
+    <!-- Archer Skill Tree (toggle with K) -->
+    <div id="skill-tree-screen" class="hidden" style="position:absolute;inset:0;background:rgba(8,5,18,0.88);display:flex;align-items:center;justify-content:center;z-index:120;font-family:inherit;">
+      <div id="skill-tree-card" style="background:rgba(20,14,30,0.97);border:1.5px solid rgba(200,170,100,0.35);border-radius:14px;padding:28px 32px;max-width:720px;width:95%;color:#d4c8a8;position:relative;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+          <h2 style="margin:0;font-size:20px;color:#f2c14e;letter-spacing:2px;">🏹 BUESKYTTERNES EVNETRÆ</h2>
+          <div style="display:flex;align-items:center;gap:16px;">
+            <span id="st-points" style="color:#9bd05a;font-size:15px;font-weight:bold;"></span>
+            <button onclick="window._closeSkillTree()" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:#c8b890;padding:4px 14px;border-radius:6px;cursor:pointer;font-size:14px;font-family:inherit;">Luk ✕</button>
+          </div>
+        </div>
+        <div id="st-branches" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:18px;"></div>
+        <div id="st-ultimates" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;padding-top:14px;border-top:1px solid rgba(200,170,100,0.2);"></div>
+        <p style="margin:12px 0 0;font-size:11px;color:#7a6a50;text-align:center;">Tryk <kbd style="background:rgba(255,255,255,0.1);padding:1px 6px;border-radius:3px;">K</kbd> for at åbne/lukke evnetræet</p>
       </div>
     </div>
 

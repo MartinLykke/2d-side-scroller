@@ -551,17 +551,20 @@ export function drawUnits() {
     else if (u.role==="guard")   { body="#3a4a5a"; head="#b09a7a"; tile=T.GUARD; }
     const wallLift = u.onWall && u.wall && Math.abs(u.x - u.wall.x) < 40 ? Math.max(0, wallHeight(u.wall) - 14) : 0;
 
+    const shadowAlpha = u.role === "archer" && state.archerSkills.includes("master_shadows") && Game.isNight && (u.smokeReveal || 0) <= 0 ? 0.32 : 1;
     if (spritesReady) {
       const bob = u.moving ? Math.abs(Math.sin(u.anim)) * 2 : 0;
       ctx.save();
-      if (wallLift > 0) { ctx.translate(0, -wallLift); ctx.globalAlpha = 0.98; }
+      if (wallLift > 0) { ctx.translate(0, -wallLift); }
+      ctx.globalAlpha = shadowAlpha;
       ctx.translate(u.x, 0);
       if (u.dir < 0) ctx.scale(-1, 1);
       spr(ctx, tile, 0, groundY - bob, 28, 32);
       ctx.restore();
     } else {
       ctx.save();
-      if (wallLift > 0) { ctx.translate(0, -wallLift); ctx.globalAlpha = 0.98; }
+      if (wallLift > 0) { ctx.translate(0, -wallLift); }
+      ctx.globalAlpha = shadowAlpha;
       drawHumanoid(u.x, u.anim, body, head, tool, u.dir, u.moving);
       if (u.role==="guard") {
         const bob=u.moving?Math.abs(Math.sin(u.anim))*1.2:0;
@@ -577,6 +580,36 @@ export function drawUnits() {
         ctx.restore();
       }
       ctx.restore();
+    }
+
+    // Archer name + level above head
+    if (u.role === "archer" && u.archerName) {
+      const shadowAlpha = state.archerSkills.includes("master_shadows") && Game.isNight && (u.smokeReveal || 0) <= 0 ? 0.35 : 0.9;
+      ctx.save();
+      ctx.globalAlpha = shadowAlpha;
+      ctx.textAlign = "center";
+      const nameY = groundY - 68 - wallLift;
+      ctx.font = "bold 10px sans-serif";
+      ctx.fillStyle = u.charged ? "#ffcc44" : "#f0e8cc";
+      ctx.strokeStyle = "rgba(0,0,0,0.7)"; ctx.lineWidth = 3;
+      ctx.strokeText(u.archerName, u.x, nameY);
+      ctx.fillText(u.archerName, u.x, nameY);
+      ctx.font = "9px sans-serif";
+      ctx.fillStyle = "#9bd05a";
+      ctx.strokeText("Niv. " + (u.level || 1), u.x, nameY + 11);
+      ctx.fillText("Niv. " + (u.level || 1), u.x, nameY + 11);
+      // Charged indicator
+      if (u.charged) {
+        ctx.globalAlpha = shadowAlpha * 0.8;
+        ctx.fillStyle = "#ffcc44";
+        ctx.font = "9px sans-serif";
+        ctx.fillText("⚡ LADET", u.x, nameY + 22);
+      }
+      ctx.restore();
+    }
+    // Master of shadows: dim archer at night
+    if (u.role === "archer" && state.archerSkills.includes("master_shadows") && Game.isNight && (u.smokeReveal || 0) <= 0) {
+      ctx.save(); ctx.globalAlpha = 0.0; ctx.restore(); // name handled above, body alpha via pre-draw logic would need refactor
     }
 
     if (u.transform>0) {
@@ -670,6 +703,21 @@ function drawLegendaryBody(e, t, dark, T) {
     const ry=groundY-w*(0.18+ri*0.18)-bob;
     ctx.beginPath(); ctx.moveTo(-w*0.35,ry); ctx.lineTo(w*0.35,ry); ctx.stroke();
     if (ri%2===0) { ctx.beginPath(); ctx.moveTo(-w*0.25,ry-5); ctx.lineTo(-w*0.12,ry+5); ctx.moveTo(w*0.25,ry-5); ctx.lineTo(w*0.12,ry+5); ctx.stroke(); }
+  }
+  ctx.restore();
+}
+
+export function drawCaltrops() {
+  if (!state.caltrops || !state.caltrops.length) return;
+  ctx.save();
+  for (const c of state.caltrops) {
+    const alpha = Math.min(1, c.life / 3);
+    ctx.globalAlpha = alpha * 0.75;
+    ctx.strokeStyle = "#888888"; ctx.lineWidth = 1.5;
+    for (let s = 0; s < 4; s++) {
+      const a = s * Math.PI / 2;
+      ctx.beginPath(); ctx.moveTo(c.x, groundY - 2); ctx.lineTo(c.x + Math.cos(a)*5, groundY - 2 + Math.sin(a)*5); ctx.stroke();
+    }
   }
   ctx.restore();
 }
@@ -1908,7 +1956,7 @@ export function render() {
   drawGroundTexture(dark); drawGroundDeco(dark); drawLocations(dark);
   drawEntityShadows(); drawPortals(dark); drawWalls(dark); drawBase(dark);
   drawStations(); drawCoins(); drawGroundBows(); drawGroundHammers(); drawLootItems(); drawChests();
-  drawAnimals(); drawVagrants(); drawUnits(); drawEnemies(dark); drawLegendaryEffects();
+  drawAnimals(); drawVagrants(); drawCaltrops(); drawUnits(); drawEnemies(dark); drawLegendaryEffects();
   drawPlayer(dark); drawArrows(); drawPoisonShots(); drawSpells(); drawParticles(); drawCampLight(dark); drawFloats();
   ctx.restore();
 

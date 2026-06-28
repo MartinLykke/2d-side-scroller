@@ -16,10 +16,12 @@ export function saveGame() {
       locations: locations.map(l => ({ triggered: l.triggered, cleared: l.cleared, lootSpawned: l.lootSpawned })),
       base: { level: base.level, hp: base.hp, maxHp: base.maxHp },
       walls: walls.map(w => ({ commissioned: w.commissioned, level: w.level, hp: w.hp, maxHp: w.maxHp, buildProgress: w.buildProgress })),
-      units: units.map(u => ({ role: u.role, x: u.x })),
+      units: units.map(u => ({ role: u.role, x: u.x, archerName: u.archerName, level: u.level, xp: u.xp })),
       vagrants: vagrants.length,
       farm: state.farmBuilt,
       farmLevel: state.farmLevel,
+      archerSkillPoints: state.archerSkillPoints || 0,
+      archerSkills: state.archerSkills || [],
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(snap));
   } catch (e) {}
@@ -46,11 +48,19 @@ export function loadGame() {
     if (snap.locations) snap.locations.forEach((s, i) => { if (locations[i]) Object.assign(locations[i], s); });
     base.level = snap.base.level; base.hp = snap.base.hp; base.maxHp = snap.base.maxHp;
     walls.forEach((w, i) => { const s = snap.walls[i]; if (s) Object.assign(w, s); });
-    state.units = snap.units.map(s => makeUnit(s.role, s.x));
+    state.units = snap.units.map(s => {
+      const u = makeUnit(s.role, s.x);
+      if (s.archerName) u.archerName = s.archerName;
+      if (s.level) u.level = s.level;
+      if (s.xp) u.xp = s.xp;
+      return u;
+    });
     state.vagrants = [];
     for (let i = 0; i < (snap.vagrants || 0); i++) spawnVagrant();
     state.farmBuilt = snap.farm;
     state.farmLevel = snap.farmLevel || (snap.farm ? 1 : 0);
+    state.archerSkillPoints = snap.archerSkillPoints || 0;
+    state.archerSkills = snap.archerSkills || [];
     Game.threatLevel = Math.max(1, snap.day || 1);
     planNight();
     return true;

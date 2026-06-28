@@ -105,10 +105,14 @@ export function updateArrows(dt) {
     if (ar.hitKind !== "player") {
       for (const e of enemies) {
         if (e.fleeing) continue;
+        if (ar._hitEnemies && ar._hitEnemies.includes(e)) continue;
         const et = ENEMY_TYPES[e.type];
         const enemyDrawY = et.flying ? groundY + (e.fy || -80) : groundY - 24;
         if (dist(ar.x, e.x) < et.w * 0.7 && Math.abs(ar.y - enemyDrawY) < 40) {
-          e.hp--; e.flash = 0.12; Audio.hit();
+          const dmg = ar.dmgMult ? Math.round(ar.dmgMult) : 1;
+          e.hp -= dmg; e.flash = 0.12; Audio.hit();
+          if (ar.fireArrow) { e.burn = 3; e.burnTick = 0.5; spawnParticles(e.x, enemyDrawY, 5, "#ff6a20", 30, 40); }
+          if (ar.powered) { if (!et.noKnockback) e.knock = (e.knock||0) + Math.sign(e.x - ar.vx) * 400; spawnParticles(e.x, enemyDrawY, 10, "#ffcc60", 60, 80); }
           // Weapon-specific arrow impact
           if (ar.weaponId === "dark_bow") {
             spawnParticles(e.x, enemyDrawY, 12, "#aa44cc", 70, 90);
@@ -126,11 +130,42 @@ export function updateArrows(dt) {
           } else {
             spawnParticles(e.x, enemyDrawY, 4, "#8a2a4a");
           }
-          hit = true;
+          // Ballista heavy visual
+          if (ar.ballista) { spawnParticles(e.x, enemyDrawY, 14, "#cc8840", 90, 100); Game.screenShake = Math.max(Game.screenShake, 0.3); if (!et.noKnockback) e.knock = (e.knock||0) + Math.sign(e.x - ar.vx) * 500; }
+          // Pierce / bounce logic
+          if (ar.pierce > 0) {
+            if (!ar._hitEnemies) ar._hitEnemies = [];
+            ar._hitEnemies.push(e);
+            ar.pierce--;
+            hit = false; // keep arrow alive
+          } else {
+            hit = true;
+          }
+          // Bouncing: fire child arrow toward next nearest enemy
+          if (ar.bouncing && ar.sourceUnit) {
+            let nextTgt = null, nd = 400;
+            for (const ne of enemies) {
+              if (ne === e || ne.fleeing) continue;
+              const d = dist(ar.x, ne.x); if (d < nd) { nd = d; nextTgt = ne; }
+            }
+            if (nextTgt) {
+              const ang = Math.atan2(groundY - 24 - ar.y, nextTgt.x - ar.x);
+              state.arrows.push({ x: ar.x, y: ar.y, vx: Math.cos(ang)*480, vy: Math.sin(ang)*480, target: nextTgt, life: 1.0, hitKind: "enemy", sourceUnit: ar.sourceUnit, fireArrow: ar.fireArrow, bouncing: false, pierce: 0 });
+            }
+          }
           if (e.hp <= 0) {
             if (ar.sourceUnit) {
-              // Archer kill: collect gold into unit, no coin drop
+              // Archer kill: XP + gold
               ar.sourceUnit.gold = (ar.sourceUnit.gold || 0) + et.reward;
+              ar.sourceUnit.xp = (ar.sourceUnit.xp || 0) + 1;
+              const xpNeeded = (ar.sourceUnit.level || 1) * 3;
+              if (ar.sourceUnit.xp >= xpNeeded) {
+                ar.sourceUnit.xp -= xpNeeded;
+                ar.sourceUnit.level = (ar.sourceUnit.level || 1) + 1;
+                state.archerSkillPoints = (state.archerSkillPoints || 0) + 1;
+                const fname = (ar.sourceUnit.archerName || "Bueskytte").split(" ")[0];
+                floaty(ar.sourceUnit.x, `⬆ ${fname} Niv.${ar.sourceUnit.level}! (+1ep 🏹)`, "#f2c14e");
+              }
               spawnParticles(e.x, enemyDrawY, 12, et.color, 80, 100);
               Audio.enemyDie();
               if (window._addXP) window._addXP(et.reward * 8);
@@ -149,7 +184,7 @@ export function updateArrows(dt) {
               killEnemy(e);
             }
           }
-          break;
+          if (hit) break;
         }
       }
     }
@@ -290,6 +325,14 @@ export function updateEnemies(dt) {
     e.attackCd -= dt;
     if (e.poisonCd !== undefined) e.poisonCd -= dt;
     if (e.knock) { e.x += e.knock * dt; e.knock *= Math.max(0, 1 - 9 * dt); if (Math.abs(e.knock) < 8) e.knock = 0; }
+    // Burn (fire arrows)
+    if (e.burn > 0) {
+      e.burn -= dt;
+      e.burnTick = (e.burnTick || 0) - dt;
+      if (e.burnTick <= 0) { e.hp--; e.flash = 0.08; e.burnTick = 0.5; spawnParticles(e.x, groundY-28, 1, "#ff6a20", 12, 8); if (e.hp<=0) { killEnemy(e); continue; } }
+    }
+    // Slow (caltrops)
+    if (e.slow > 0) e.slow -= dt;
 
     if (e.fleeing) {
       const tx = e.portal ? e.portal.x : (e.x < CFG.baseX ? 0 : CFG.worldWidth);
@@ -331,6 +374,17 @@ export function updateEnemies(dt) {
       e.dir = Math.sign(e.aggroUnit.x - e.x) || e.dir;
       if (d > 32) e.x += e.dir * t.speed * dt;
       if (d < 40 && e.attackCd <= 0) {
+        const target = e.aggroUnit;
+        // Smoke bomb: intercept melee hit on archers
+        if (target.role === "archer" && target.smoked > 0) { e.attackCd = 0.8; continue; }
+        if (target.role === "archer" && target.smoked <= 0 && state.archerSkills.includes("smoke_bomb")) {
+          target.smoked = 2.0;
+          spawnParticles(target.x, groundY - 30, 20, "#aaaaaa", 70, 60);
+          floaty(target.x, "💨 Røg!", "#cccccc");
+          e.attackCd = 1.2; e.aggroUnit = null;
+          Audio.hit();
+          continue;
+        }
         e.attackCd = 0.8; e.attackAnim = 0.22;
         e.aggroUnit.hp -= 2; e.aggroUnit.panic = 1;
         spawnParticles(e.aggroUnit.x, groundY - 30, 3, "#7a1f1f");
@@ -375,7 +429,8 @@ export function updateEnemies(dt) {
     }
 
     e.dir = Math.sign(base.x - e.x) || e.dir;
-    e.x += e.dir * t.speed * dt;
+    const slowMult = e.slow > 0 ? 0.45 : 1;
+    e.x += e.dir * t.speed * slowMult * dt;
   }
 }
 

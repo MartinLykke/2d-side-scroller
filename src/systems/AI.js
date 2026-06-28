@@ -8,6 +8,58 @@ import { shootArrow, killEnemy } from './Combat.js';
 import { wallHeight } from '../entities/Wall.js';
 import { makeUnit } from '../entities/Unit.js';
 
+function hasSkill(id) { return state.archerSkills.includes(id); }
+
+function archerShoot(u, x, h, tgt) {
+  const skills = state.archerSkills;
+  // Powershot: charge if standing still
+  if (skills.includes("powershot")) {
+    if (!u.moving) { u.powerTimer += 0.016; } else { u.powerTimer = 0; u.charged = false; }
+    if (u.powerTimer >= 3) u.charged = true;
+  }
+
+  // Heavy Ballista overrides everything
+  if (skills.includes("heavy_ballista")) {
+    shootArrow(x, h, tgt, u);
+    const arr = state.arrows[state.arrows.length - 1];
+    if (arr) { arr.ballista = true; arr.vx *= 0.45; arr.vy *= 0.45; arr.pierce = 3; arr.dmgMult = 5; }
+    u.shotCount = 0; u.charged = false; u.powerTimer = 0;
+    return;
+  }
+
+  const isPowered = u.charged && skills.includes("powershot");
+  u.shotCount = (u.shotCount || 0) + 1;
+  const isFireArrow = skills.includes("fire_arrows") && u.shotCount % 4 === 0;
+
+  shootArrow(x, h, tgt, u);
+  const arr = state.arrows[state.arrows.length - 1];
+  if (arr) {
+    if (isFireArrow) arr.fireArrow = true;
+    if (skills.includes("piercing_shot")) arr.pierce = 2;
+    if (skills.includes("bouncing_volley")) arr.bouncing = true;
+    if (isPowered) { arr.powered = true; arr.vx *= 1.5; arr.vy *= 1.5; arr.dmgMult = 3; arr.pierce = (arr.pierce||0) + 1; }
+  }
+  if (isPowered) { u.charged = false; u.powerTimer = 0; }
+
+  // Double shot: second arrow with slight spread
+  if (skills.includes("double_shot")) {
+    const ang = Math.atan2(arr ? arr.vy : 0, arr ? arr.vx : 1);
+    const sp = arr ? Math.hypot(arr.vx, arr.vy) : 560;
+    const spread = 0.1;
+    state.arrows.push({ ...arr,
+      vx: Math.cos(ang + spread) * sp, vy: Math.sin(ang + spread) * sp,
+      life: 1.2, fireArrow: isFireArrow,
+      pierce: skills.includes("piercing_shot") ? 2 : 0,
+      bouncing: skills.includes("bouncing_volley"),
+    });
+  }
+
+  // Caltrops: drop when retreating
+  if (skills.includes("caltrops") && Math.random() < 0.06) {
+    state.caltrops.push({ x: u.x, life: 14 });
+  }
+}
+
 export function nearestEnemy(x, range, includeFleeing = false) {
   let best = null, bd = range;
   for (const e of state.enemies) {
@@ -97,7 +149,7 @@ function archerAI(u, dt) {
     u.dir = Math.sign(lb.x - u.x) || u.dir;
     if (d > 320) moveToward(u, lb.x, 95, dt);
     if (d < 580 && u.cooldown <= 0) {
-      shootArrow(u.x, groundY - 42, lb, u);
+      archerShoot(u, u.x, groundY - 42, lb);
       u.cooldown = 0.65;
       u.dir = Math.sign(lb.x - u.x) || u.dir;
     }
@@ -117,17 +169,41 @@ function archerAI(u, dt) {
 
   const closeFoe = nearestEnemy(u.x, Game.isNight ? 620 : 500);
 
+  // Smoke bomb: update smoked timer
+  if (u.smoked > 0) u.smoked -= dt;
+  if (u.smokeReveal > 0) u.smokeReveal -= dt;
+
+  // Barrage: rapid-fire queue
+  if (u.barrageCount > 0 && u.cooldown <= 0) {
+    const tgt = nearestEnemy(u.x, 800, true);
+    if (tgt) {
+      const shootH = u.onWall && u.wall && Math.abs(u.x - u.wall.x) < 40 ? wallHeight(u.wall) + 16 : 40;
+      archerShoot(u, u.x, groundY - shootH, tgt);
+      u.dir = Math.sign(tgt.x - u.x) || u.dir;
+    }
+    u.barrageCount--;
+    u.cooldown = 0.15;
+    return;
+  }
+
   if (Game.isNight) {
     const threat = closeFoe || nearestEnemy(CFG.baseX, 99999);
     const side = threat ? (threat.x < CFG.baseX ? -1 : 1) : (u.patrolDir > 0 ? 1 : -1);
     const post = assignArcherPost(u, side);
-    const tgt = nearestEnemy(u.x, 520);
-    if (!tgt || dist(u.x, tgt.x) > 150) moveToward(u, post, 84, dt);
+    const tgt = nearestEnemy(u.x, 520, true);
+    if (!tgt || dist(u.x, tgt.x) > 150) {
+      if (u.onWall && u.wall && hasSkill("grappling_hook") && dist(u.x, post) > 60) {
+        u.x = post; // instant grapple to wall post
+      } else {
+        moveToward(u, post, 84, dt);
+      }
+    }
     if (tgt && u.cooldown <= 0) {
-      const shootH = u.onWall && u.wall ? wallHeight(u.wall) + 16 : 40;
-      shootArrow(u.x, groundY - shootH, tgt, u);
-      u.cooldown = 0.8;
+      const shootH = u.onWall && u.wall && Math.abs(u.x - u.wall.x) < 40 ? wallHeight(u.wall) + 16 : 40;
+      archerShoot(u, u.x, groundY - shootH, tgt);
+      u.cooldown = hasSkill("heavy_ballista") ? 2.2 : 0.8;
       u.dir = Math.sign(tgt.x - u.x) || u.dir;
+      u.smokeReveal = 0.5;
     }
   } else {
     // If enemy is dangerously close, back away while shooting
@@ -136,18 +212,27 @@ function archerAI(u, dt) {
       u.onWall = false; u.wall = null;
       u.dir = Math.sign(u.x - tooClose.x) || u.dir;
       u.x += u.dir * 100 * dt;
-      if (u.cooldown <= 0) { shootArrow(u.x, groundY-36, tooClose, u); u.cooldown = 1.0; }
+      if (u.cooldown <= 0) {
+        archerShoot(u, u.x, groundY-36, tooClose);
+        u.cooldown = hasSkill("heavy_ballista") ? 2.2 : 1.0;
+        u.smokeReveal = 0.5;
+      }
       return;
     }
     if (bestArcherWall(u.patrolDir) || bestArcherWall(-u.patrolDir)) {
       const side = closeFoe ? (closeFoe.x < CFG.baseX ? -1 : 1) : u.patrolDir;
       const post = assignArcherPost(u, side);
-      moveToward(u, post, 58, dt);
+      if (u.onWall && u.wall && hasSkill("grappling_hook") && dist(u.x, post) > 60) {
+        u.x = post;
+      } else {
+        moveToward(u, post, 58, dt);
+      }
       if (closeFoe && u.cooldown <= 0 && dist(u.x, closeFoe.x) < 540) {
-        const shootH = u.onWall && u.wall ? wallHeight(u.wall) + 16 : 40;
-        shootArrow(u.x, groundY - shootH, closeFoe, u);
-        u.cooldown = 1.1;
+        const shootH = u.onWall && u.wall && Math.abs(u.x - u.wall.x) < 40 ? wallHeight(u.wall) + 16 : 40;
+        archerShoot(u, u.x, groundY - shootH, closeFoe);
+        u.cooldown = hasSkill("heavy_ballista") ? 2.2 : 1.1;
         u.dir = Math.sign(closeFoe.x - u.x) || u.dir;
+        u.smokeReveal = 0.5;
       }
       if (!closeFoe && Math.random() < 0.004) u.patrolDir *= -1;
     } else if (closeFoe) {
@@ -156,7 +241,11 @@ function archerAI(u, dt) {
       if (d > 240) moveToward(u, closeFoe.x, 64, dt);
       else {
         u.dir = Math.sign(closeFoe.x - u.x) || u.dir;
-        if (u.cooldown <= 0) { shootArrow(u.x, groundY-36, closeFoe, u); u.cooldown = 1.1; }
+        if (u.cooldown <= 0) {
+          archerShoot(u, u.x, groundY-36, closeFoe);
+          u.cooldown = hasSkill("heavy_ballista") ? 2.2 : 1.1;
+          u.smokeReveal = 0.5;
+        }
       }
     } else {
       u.onWall = false; u.wall = null;
@@ -165,6 +254,8 @@ function archerAI(u, dt) {
       if (dist(u.x, outerEdge) < 60) u.patrolDir *= -1;
       u.dir = u.patrolDir;
       u.x += u.patrolDir * 58 * dt;
+      // Powershot: charge when patrolling peacefully
+      if (hasSkill("powershot") && !u.moving) u.powerTimer = (u.powerTimer||0) + dt;
     }
   }
 }
@@ -289,6 +380,31 @@ export function updateUnits(dt) {
 }
 
 function freePeasant() { return state.units.find(u => u.role === "peasant"); }
+
+export function triggerBarrage() {
+  if (!state.archerSkills.includes("barrage")) return;
+  for (const u of state.units) {
+    if (u.role === "archer") { u.barrageCount = 5; u.cooldown = 0; }
+  }
+  floaty(CFG.baseX, "🏹 Pilsregn!", "#f2c14e");
+  Audio.bow();
+}
+
+export function updateCaltrops(dt) {
+  const { caltrops, enemies } = state;
+  for (let i = caltrops.length - 1; i >= 0; i--) {
+    caltrops[i].life -= dt;
+    if (caltrops[i].life <= 0) { caltrops.splice(i, 1); continue; }
+    for (const e of enemies) {
+      if (!e.fleeing && Math.abs(e.x - caltrops[i].x) < 16) {
+        if (!e.slow || e.slow <= 0) {
+          e.slow = 2;
+          spawnParticles(e.x, groundY - 4, 3, "#888888", 20, 10);
+        }
+      }
+    }
+  }
+}
 
 export function updateAssignments() {
   if (state.pendingHammers > 0) {

@@ -15,13 +15,13 @@ import { keys } from './systems/Input.js';
 import { saveGame, hasSave, loadGame, deleteSave } from './systems/SaveSystem.js';
 import { updateSpawning, planNight, spawnCoin, floaty, spawnParticles, spawnVagrant, spawnAnimal, spawnEnemy, buildLocations, spawnLocLoot, makeLocation } from './systems/SpawnSystem.js';
 import { updatePayment, updateCoins } from './systems/Economy.js';
-import { updateUnits, updateAssignments, updateVagrants, updateAnimals, nearestEnemy } from './systems/AI.js';
+import { updateUnits, updateAssignments, updateVagrants, updateAnimals, nearestEnemy, triggerBarrage, updateCaltrops } from './systems/AI.js';
 import { updateEnemies, updateArrows, updatePlayerAttack, updateSpells, killEnemy, updateLegendaryEffects, updatePoisonShots } from './systems/Combat.js';
 
 import { FX, initFX, updateFX, biomeAt } from './rendering/Effects.js';
 import { render, drawEntityShadows } from './rendering/Renderer.js';
 import { loadSprites } from './rendering/Sprites.js';
-import { UI, DEV, baseName } from './rendering/HUD.js';
+import { UI, DEV, baseName, openSkillTree, closeSkillTree } from './rendering/HUD.js';
 
 import { makePlayer } from './entities/Player.js';
 import { makeWall, wallHeight } from './entities/Wall.js';
@@ -273,6 +273,9 @@ function newGame() {
   state.farmBuilt       = false;
   state.farmLevel       = 0;
   state.poisonShots     = [];
+  state.caltrops        = [];
+  state.archerSkillPoints = 0;
+  state.archerSkills    = [];
   state.groundBows      = [];
   state.groundHammers   = [];
   state.lootItems       = [];
@@ -551,6 +554,7 @@ function update(dt) {
   updateAnimals(dt);
   updateLocations(dt);
   updatePortals();
+  updateCaltrops(dt);
   updateEnemies(dt);
   updateArrows(dt);
   updateSpells(dt);
@@ -696,6 +700,7 @@ window.addEventListener("keydown", (e) => {
   if (k === "m") UI.toggleMute();
   if (k === "p") DEV.toggle();
   if (k === "escape") {
+    if (Game.skillTreeOpen) { closeSkillTree(); return; }
     Game.inventoryOpen = false; Game.shopOpen = false; Game.upgradeMenuOpen = false;
     if (Game.state === "play" || Game.state === "pause") Game.togglePause();
   }
@@ -712,6 +717,12 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault(); return;
   }
 
+  if (k === "k") {
+    if (Game.skillTreeOpen) closeSkillTree();
+    else openSkillTree();
+    e.preventDefault(); return;
+  }
+  if (k === "q") { triggerBarrage(); e.preventDefault(); return; }
   if (k === "i") { Game.inventoryOpen = !Game.inventoryOpen; Game.shopOpen = false; }
   if (k === "b" && !Game.inventoryOpen) tryOpenShop();
   if (Game.shopOpen) handleShopKeys(k, e);
