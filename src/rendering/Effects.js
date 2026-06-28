@@ -211,10 +211,10 @@ export function getTrees() {
   const r=mulberry32(Game.treeSeed||1);
   const far=[],mid=[],near=[],fore=[],hills=[],mountains=[];
   const campX = CFG.baseX;
-  for (let x=-100;x<CFG.worldWidth+100;x+=110) { const tx=x+r()*80; if(Math.abs(tx-campX)>520) far.push(makeTree(tx, 72, r)); }
-  for (let x=-100;x<CFG.worldWidth+100;x+=86)  { const tx=x+r()*64; if(Math.abs(tx-campX)>480) mid.push(makeTree(tx, 120, r)); }
-  for (let x=-100;x<CFG.worldWidth+100;x+=70)  { const tx=x+r()*48; if(Math.abs(tx-campX)>440) near.push(makeTree(tx, 178, r)); }
-  for (let x=-100;x<CFG.worldWidth+100;x+=520) { const tx=x+r()*220; if(Math.abs(tx-campX)>400) fore.push(makeTree(tx, 150, r)); }
+  for (let x=-100;x<CFG.worldWidth+100;x+=110) { const tx=x+r()*80; if(Math.abs(tx-campX)>900) far.push(makeTree(tx, 72, r)); }
+  for (let x=-100;x<CFG.worldWidth+100;x+=86)  { const tx=x+r()*64; if(Math.abs(tx-campX)>820) mid.push(makeTree(tx, 120, r)); }
+  for (let x=-100;x<CFG.worldWidth+100;x+=70)  { const tx=x+r()*48; if(Math.abs(tx-campX)>750) near.push(makeTree(tx, 178, r)); }
+  for (let x=-100;x<CFG.worldWidth+100;x+=520) { const tx=x+r()*220; if(Math.abs(tx-campX)>700) fore.push(makeTree(tx, 150, r)); }
   for (let x=-300;x<CFG.worldWidth+300;x+=170) hills.push({ x:x+r()*120, h:50+r()*130, w:200+r()*230 });
   for (let x=-600;x<CFG.worldWidth+600;x+=320) {
     const w=200+r()*160, h=110+r()*140;
@@ -241,6 +241,7 @@ export function getDeco() {
   const r=mulberry32((Game.treeSeed||1)*7+13);
   const items=[];
   for (let x=60;x<CFG.worldWidth-60;x+=22+r()*40) {
+    if (Math.abs(x - CFG.baseX) < 650) { r(); continue; } // clear deco near camp
     const b=biomeAt(x), t=r();
     let kind;
     if      (b.snow)              kind=t<0.68?"snowtuft":(t<0.86?"stone":"stump");

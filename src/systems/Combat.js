@@ -10,7 +10,7 @@ import { spawnCoin, spawnParticles, floaty, spawnLocLoot } from './SpawnSystem.j
 // ---------- Arrow shooting ----------
 // All callers shoot at enemies; hitKind defaults to "enemy".
 // Flying enemies push "player"-targeted arrows directly into state.arrows.
-export function shootArrow(x, y, target) {
+export function shootArrow(x, y, target, sourceUnit = null) {
   const tx = target.x, ty = groundY - 24;
   const ang = Math.atan2(ty - y, tx - x);
   const sp  = 560;
@@ -21,6 +21,7 @@ export function shootArrow(x, y, target) {
     target,
     life: 1.2,
     hitKind: "enemy",
+    sourceUnit,
   });
   Audio.bow();
 }
@@ -41,7 +42,28 @@ export function updateArrows(dt) {
           e.hp--; e.flash = 0.12; Audio.hit();
           spawnParticles(e.x, enemyDrawY, 4, "#8a2a4a");
           hit = true;
-          if (e.hp <= 0) killEnemy(e);
+          if (e.hp <= 0) {
+            if (ar.sourceUnit) {
+              // Archer kill: collect gold into unit, no coin drop
+              ar.sourceUnit.gold = (ar.sourceUnit.gold || 0) + et.reward;
+              spawnParticles(e.x, enemyDrawY, 12, et.color, 80, 100);
+              Audio.enemyDie();
+              if (window._addXP) window._addXP(et.reward * 8);
+              if (e.locIdx !== undefined && state.locations[e.locIdx]) {
+                const loc = state.locations[e.locIdx];
+                loc.remainingEnemies--;
+                if (loc.remainingEnemies <= 0 && !loc.lootSpawned) {
+                  loc.cleared = true; loc.lootSpawned = true;
+                  state.chests.push({ x: loc.x, lootGold: loc.lootGold, weaponId: loc.weaponId, open: false, openAnim: 0, life: 1 });
+                  if (window._floaty) window._floaty(loc.x, "📦 Kiste!", "#f2c14e");
+                }
+              }
+              if (state.legendaryBoss === e) { state.legendaryBoss = null; state.legendaryEffects = []; for (const u of state.units) u.rallied = false; }
+              const idx = state.enemies.indexOf(e); if (idx >= 0) state.enemies.splice(idx, 1);
+            } else {
+              killEnemy(e);
+            }
+          }
           break;
         }
       }
@@ -206,7 +228,7 @@ export function updateEnemies(dt) {
       continue;
     }
 
-    let unitTgt = null, ud = 28;
+    let unitTgt = null, ud = 55;
     for (const u of units) { const d = dist(e.x, u.x); if (d < ud) { ud = d; unitTgt = u; } }
     if (unitTgt) {
       e.dir = Math.sign(unitTgt.x - e.x) || e.dir;
@@ -247,10 +269,10 @@ export function updateEnemies(dt) {
 
 function updateLocEnemy(e, t, dt) {
   const { player } = state;
-  e.anim += dt * 5;
   if (e.flash > 0) e.flash -= dt;
   e.attackCd -= dt;
   if (e.knock) { e.x += e.knock * dt; e.knock *= Math.max(0, 1 - 9 * dt); if (Math.abs(e.knock) < 8) e.knock = 0; }
+  const prevX = e.x;
   const dp = dist(e.x, player.x);
   if (dp < 300) {
     const dir = Math.sign(player.x - e.x);
@@ -265,6 +287,7 @@ function updateLocEnemy(e, t, dt) {
     e.dir = dir || e.dir;
     e.x += dir * t.speed * 0.45 * dt;
   }
+  if (Math.abs(e.x - prevX) > 0.02) e.anim += dt * 5;
 }
 
 // ---------- Magic spells ----------

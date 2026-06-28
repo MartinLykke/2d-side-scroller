@@ -1445,7 +1445,9 @@ export function render() {
   ctx.fillStyle=withA(lerpColor(shade(bi.gT,1.25),[44,48,64],dark),0.55);
   ctx.fillRect(0,groundY,W,2);
 
-  ctx.save(); ctx.translate(-Game.cam,0);
+  const zoom=Game.zoom||1;
+  ctx.save();
+  ctx.translate(W/2, groundY); ctx.scale(zoom,zoom); ctx.translate(-W/2-Game.cam,-groundY);
   drawGroundTexture(dark); drawGroundDeco(dark); drawLocations(dark);
   drawEntityShadows(); drawPortals(dark); drawWalls(dark); drawBase(dark);
   drawStations(); drawCoins(); drawGroundBows(); drawGroundHammers(); drawLootItems(); drawChests();
@@ -1466,4 +1468,85 @@ export function render() {
   drawShopOverlay();
   drawUpgradeMenu();
   if (Game.state === "play") drawXpBar();
+  drawLegendaryIntro();
+}
+
+function drawLegendaryBossHead(intro, cx, cy, size) {
+  const t = ENEMY_TYPES[intro.bossType];
+  if (!t) return;
+  const T = performance.now()/1000;
+  const w = size, col = t.color, eye = t.eye;
+  // Aura
+  ctx.save(); ctx.globalCompositeOperation="lighter";
+  const ag=ctx.createRadialGradient(cx,cy,4,cx,cy,w*1.1);
+  ag.addColorStop(0,eye); ag.addColorStop(1,"rgba(0,0,0,0)");
+  ctx.globalAlpha=0.35+0.12*Math.sin(T*2); ctx.fillStyle=ag;
+  ctx.beginPath(); ctx.arc(cx,cy,w*1.1,0,Math.PI*2); ctx.fill(); ctx.restore();
+  // Body blob
+  ctx.fillStyle=col;
+  ctx.beginPath(); ctx.ellipse(cx,cy,w*0.55,w*0.65,0,0,Math.PI*2); ctx.fill();
+  // Horns
+  ctx.fillStyle=col;
+  const hc=intro.bossType==="legend3"?7:intro.bossType==="legend2"?5:5;
+  for(let i=0;i<hc;i++){const hx=cx+(i/(hc-1)-0.5)*w*0.9,hh=i%2===0?w*0.45:w*0.3;ctx.beginPath();ctx.moveTo(hx-4,cy-w*0.6);ctx.lineTo(hx,cy-w*0.6-hh);ctx.lineTo(hx+4,cy-w*0.6);ctx.fill();}
+  // Eyes
+  ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.fillStyle=eye;
+  ctx.globalAlpha=0.7+0.25*Math.sin(T*4); ctx.beginPath();
+  ctx.ellipse(cx-w*0.14,cy-w*0.05,w*0.13,w*0.09,0,0,Math.PI*2); ctx.fill();
+  ctx.ellipse(cx+w*0.14,cy-w*0.05,w*0.13,w*0.09,0,0,Math.PI*2); ctx.fill();
+  ctx.restore(); ctx.fillStyle=eye;
+  ctx.beginPath(); ctx.arc(cx-w*0.14,cy-w*0.05,w*0.05,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx+w*0.14,cy-w*0.05,w*0.05,0,Math.PI*2); ctx.fill();
+}
+
+function drawLegendaryIntro() {
+  const intro = Game.legendaryIntro;
+  if (!intro) return;
+  const T = performance.now()/1000;
+  intro.timer -= 1/60;
+  if (intro.timer <= 0) { Game.legendaryIntro = null; return; }
+  const max = intro.maxTimer;
+  // Slide in from top, hold, fade out
+  const slideIn = Math.min(1, (max - intro.timer) / 0.6);
+  const fadeOut = intro.timer < 1.2 ? intro.timer / 1.2 : 1;
+  const alpha = Math.min(slideIn, fadeOut);
+  const yOff = (1 - slideIn) * -220;
+  const cx = W/2, panW = Math.min(620, W-40), panH = 200;
+  const py = H*0.12 + yOff;
+
+  ctx.save(); ctx.globalAlpha = alpha;
+  // Dark panel
+  ctx.fillStyle="rgba(6,4,14,0.92)";
+  roundedRect(cx-panW/2, py, panW, panH, 16); ctx.fill();
+  // Border glow
+  const ET = ENEMY_TYPES[intro.bossType];
+  ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.5*alpha;
+  ctx.strokeStyle=ET.eye; ctx.lineWidth=2;
+  roundedRect(cx-panW/2, py, panW, panH, 16); ctx.stroke();
+  ctx.restore();
+  // Boss head on the left
+  drawLegendaryBossHead(intro, cx-panW/2+110, py+panH/2, 72);
+  // Text on the right
+  const tx = cx-panW/2+210;
+  ctx.fillStyle="rgba(255,255,255,0.35)"; ctx.font="11px Trebuchet MS"; ctx.textAlign="left";
+  ctx.fillText("⚔ LEGENDARISK BOSS ANKOMMER", tx, py+38);
+  ctx.fillStyle="#f2c14e"; ctx.font="bold 28px Trebuchet MS";
+  ctx.fillText(ET.name, tx, py+74);
+  ctx.fillStyle=ET.eye; ctx.font="13px Trebuchet MS";
+  ctx.fillText("Dag " + Game.day + "  ·  Specielt angreb: " + (ET.attackName||""), tx, py+98);
+  ctx.fillStyle="rgba(240,230,210,0.7)"; ctx.font="12px Trebuchet MS";
+  const descs = {
+    legend1:"Stamper jorden og sender en shockwave der ødelægger alt inden for 200px.",
+    legend2:"Lader op og charger med lynhurtig fart og knuser alt i vejen.",
+    legend3:"Udsender en kæmpemæssig tomhedspuls der rammer alt inden for 310px.",
+  };
+  ctx.fillText(descs[intro.bossType]||"", tx, py+120);
+  // HP/size bar
+  ctx.fillStyle="rgba(255,255,255,0.1)"; roundedRect(tx, py+140, panW-230, 12, 6); ctx.fill();
+  ctx.fillStyle=ET.eye;
+  const barW=(panW-230)*(intro.bossType==="legend3"?1:intro.bossType==="legend2"?0.7:0.45);
+  roundedRect(tx, py+140, barW, 12, 6); ctx.fill();
+  ctx.fillStyle="rgba(255,255,255,0.5)"; ctx.font="10px Trebuchet MS"; ctx.textAlign="left";
+  ctx.fillText("Liv: " + ET.hp, tx, py+168);
+  ctx.restore();
 }

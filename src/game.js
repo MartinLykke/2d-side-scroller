@@ -271,6 +271,8 @@ function newGame() {
   Game.wasNight          = false;
   Game.threatLevel       = 1;
   Game.autosaveTimer     = 0;
+  Game.zoom              = 1;
+  Game.legendaryIntro    = null;
 
   // Seed starting coins and population
   for (let i = 0; i < 6; i++)
@@ -427,8 +429,23 @@ function updateFloats(dt) {
 }
 
 function updateCamera() {
-  const target=clamp(state.player.x-W/2, 0, Math.max(0,CFG.worldWidth-W));
+  const zoom = Game.zoom;
+  const target=clamp(state.player.x-W/2, 0, Math.max(0, CFG.worldWidth - W/zoom));
   Game.cam+=(target-Game.cam)*0.12;
+}
+
+function updatePortals() {
+  if (Game.isNight) return;
+  const { portals, player } = state;
+  for (const p of portals) {
+    if ((p.lastDayActivated||0) >= Game.day) continue;
+    if (dist(player.x, p.x) < 300) {
+      p.lastDayActivated = Game.day;
+      const count = 2 + (Game.day > 5 ? 1 : 0);
+      for (let i=0; i<count; i++) spawnEnemy(pick(["imp","runner","crawler","raider"]), p);
+      floaty(p.x, "⚠ Portalvagter!", "#ff8a6a");
+    }
+  }
 }
 
 function checkEndConditions() {
@@ -452,6 +469,7 @@ function update(dt) {
   updateUnits(dt);
   updateAnimals(dt);
   updateLocations();
+  updatePortals();
   updateEnemies(dt);
   updateArrows(dt);
   updateSpells(dt);
@@ -592,7 +610,15 @@ window.addEventListener("keydown", (e) => {
   if (k === "i") { Game.inventoryOpen = !Game.inventoryOpen; Game.shopOpen = false; }
   if (k === "b" && !Game.inventoryOpen) tryOpenShop();
   if (Game.shopOpen) handleShopKeys(k, e);
+  if (k === "+" || k === "=") { Game.zoom = Math.min(2.5, Game.zoom + 0.15); e.preventDefault(); }
+  if (k === "-" || k === "_") { Game.zoom = Math.max(0.35, Game.zoom - 0.15); e.preventDefault(); }
+  if (k === "0") { Game.zoom = 1; e.preventDefault(); }
 });
+
+canvas.addEventListener("wheel", e => {
+  e.preventDefault();
+  Game.zoom = Math.max(0.35, Math.min(2.5, Game.zoom - e.deltaY * 0.0012));
+}, { passive: false });
 
 // ---------- Boot ----------
 resize();

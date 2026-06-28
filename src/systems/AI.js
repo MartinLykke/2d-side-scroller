@@ -96,6 +96,18 @@ function archerAI(u, dt) {
     }
     return;
   }
+  // Drop gold when near player
+  if ((u.gold||0) > 0 && dist(u.x, state.player.x) < 90) {
+    for (let g=0; g<u.gold; g++) spawnCoin(u.x+rand(-20,20), 1, groundY-20, rand(-50,50), rand(-200,-100));
+    floaty(u.x, "+"+u.gold+"🪙", "#f2c14e");
+    u.gold = 0;
+  }
+  // Drop gold when returning to base area
+  if ((u.gold||0) > 0 && dist(u.x, CFG.baseX) < 80 && !nearestEnemy(u.x, 600)) {
+    for (let g=0; g<u.gold; g++) spawnCoin(u.x+rand(-20,20), 1, groundY-20, rand(-40,40), rand(-180,-80));
+    u.gold = 0;
+  }
+
   const closeFoe = nearestEnemy(u.x, Game.isNight ? 620 : 500);
 
   if (Game.isNight) {
@@ -106,40 +118,41 @@ function archerAI(u, dt) {
     if (!tgt || dist(u.x, tgt.x) > 150) moveToward(u, post, 84, dt);
     if (tgt && u.cooldown <= 0) {
       const shootH = u.onWall && u.wall ? wallHeight(u.wall) + 16 : 40;
-      shootArrow(u.x, groundY - shootH, tgt);
+      shootArrow(u.x, groundY - shootH, tgt, u);
       u.cooldown = 0.8;
       u.dir = Math.sign(tgt.x - u.x) || u.dir;
     }
   } else {
-    // Attack any enemy within range; chase those slightly beyond attack range
+    // If enemy is dangerously close, back away while shooting
+    const tooClose = nearestEnemy(u.x, 90);
+    if (tooClose) {
+      u.onWall = false; u.wall = null;
+      u.dir = Math.sign(u.x - tooClose.x) || u.dir;
+      u.x += u.dir * 100 * dt;
+      if (u.cooldown <= 0) { shootArrow(u.x, groundY-36, tooClose, u); u.cooldown = 1.0; }
+      return;
+    }
     if (bestArcherWall(u.patrolDir) || bestArcherWall(-u.patrolDir)) {
       const side = closeFoe ? (closeFoe.x < CFG.baseX ? -1 : 1) : u.patrolDir;
       const post = assignArcherPost(u, side);
       moveToward(u, post, 58, dt);
       if (closeFoe && u.cooldown <= 0 && dist(u.x, closeFoe.x) < 540) {
         const shootH = u.onWall && u.wall ? wallHeight(u.wall) + 16 : 40;
-        shootArrow(u.x, groundY - shootH, closeFoe);
+        shootArrow(u.x, groundY - shootH, closeFoe, u);
         u.cooldown = 1.1;
         u.dir = Math.sign(closeFoe.x - u.x) || u.dir;
       }
       if (!closeFoe && Math.random() < 0.004) u.patrolDir *= -1;
     } else if (closeFoe) {
-      u.onWall = false;
-      u.wall = null;
+      u.onWall = false; u.wall = null;
       const d = dist(u.x, closeFoe.x);
       if (d > 240) moveToward(u, closeFoe.x, 64, dt);
       else {
-        // hold position and shoot
         u.dir = Math.sign(closeFoe.x - u.x) || u.dir;
-        if (u.cooldown <= 0) {
-          shootArrow(u.x, groundY - 36, closeFoe);
-          u.cooldown = 1.1;
-        }
+        if (u.cooldown <= 0) { shootArrow(u.x, groundY-36, closeFoe, u); u.cooldown = 1.1; }
       }
     } else {
-      u.onWall = false;
-      u.wall = null;
-      // March outward in patrol direction until hitting world edge, then flip
+      u.onWall = false; u.wall = null;
       const margin = 500;
       const outerEdge = u.patrolDir > 0 ? CFG.worldWidth - margin : margin;
       if (dist(u.x, outerEdge) < 60) u.patrolDir *= -1;

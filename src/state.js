@@ -21,6 +21,8 @@ export const Game = {
   upgradeMenuOpen: false,
   upgradeOptions: null,
   upgradeIdx: 0,
+  zoom: 1,
+  legendaryIntro: null,
 };
 
 // All mutable entity arrays and per-play variables live here so every

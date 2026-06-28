@@ -110,6 +110,8 @@ export function updateSpawning(dt) {
         lb.specialPhase = 0;
         lb.specialTimer = 0;
         state.legendaryBoss = lb;
+        // Intro popup
+        Game.legendaryIntro = { timer: 5.5, maxTimer: 5.5, bossType: type };
         // Rally all fighters
         for (const u of state.units) u.rallied = true;
         floaty(CFG.baseX, `☠ ${ENEMY_TYPES[type].name} nærmer sig!`, "#ff2020");
