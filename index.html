@@ -34,6 +34,7 @@
         <div id="hud-coins" class="hud-pill big">🪙 <span id="hud-coins-text">0</span></div>
         <div id="hud-hp" class="hud-pill">❤ <span id="hud-hp-text">5/5</span></div>
         <div id="hud-weapon" class="hud-pill">⚔ <span id="hud-weapon-text">Intet våben</span></div>
+        <div id="hud-armor" class="hud-pill">🛡 <span id="hud-armor-text">Ingen rustning</span></div>
         <div id="hud-pop" class="hud-pill">👥 <span id="hud-pop-text">0</span> · 🏹 <span id="hud-arch-text">0</span> · 🔨 <span id="hud-build-text">0</span></div>
       </div>
     </div>
@@ -105,6 +106,11 @@
         <div class="dev-row">
           <button class="dev-btn" onclick="DEV.skipToNight()">→ Nat 🌙</button>
           <button class="dev-btn" onclick="DEV.skipToDay()">→ Dag ☀</button>
+        </div>
+        <div class="dev-row" style="margin-top:4px">
+          <button class="dev-btn dev-danger" onclick="DEV.skipToDay10()">→ Dag 10 ☠</button>
+          <button class="dev-btn dev-danger" onclick="DEV.skipToDay15()">→ Dag 15 ☠</button>
+          <button class="dev-btn dev-danger" onclick="DEV.skipToDay20()">→ Dag 20 ☠</button>
         </div>
       </div>
 

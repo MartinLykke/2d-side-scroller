@@ -85,12 +85,12 @@ function peasantAI(u, dt) {
 function archerAI(u, dt) {
   // Rally to legendary boss
   const lb = state.legendaryBoss;
-  if (lb && !lb.fleeing && u.rallied) {
+  if (lb && !lb.fleeing) {
     const d = dist(u.x, lb.x);
     u.dir = Math.sign(lb.x - u.x) || u.dir;
     if (d > 320) moveToward(u, lb.x, 95, dt);
     if (d < 580 && u.cooldown <= 0) {
-      shootArrow(u.x, groundY - 42, lb);
+      shootArrow(u.x, groundY - 42, lb, u);
       u.cooldown = 0.65;
       u.dir = Math.sign(lb.x - u.x) || u.dir;
     }
@@ -209,7 +209,7 @@ function farmerAI(u, dt) {
 function guardAI(u, dt) {
   // Rally to legendary boss
   const lb = state.legendaryBoss;
-  if (lb && !lb.fleeing && u.rallied) {
+  if (lb && !lb.fleeing) {
     const d = dist(u.x, lb.x);
     u.dir = Math.sign(lb.x - u.x) || u.dir;
     if (d > 45) { u.x += u.dir * 175 * dt; return; }

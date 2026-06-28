@@ -2,6 +2,7 @@ import { clamp, lerp, lerpColor, rgb, withA, shade, hazeColor, atmo, dist } from
 import { CFG, STATIONS_X } from '../config/config.js';
 import { ENEMY_TYPES } from '../config/enemies.js';
 import { WEAPONS, RARITY_COL, RARITY_NAME, WEAPON_UPGRADES, effectiveWeapon } from '../config/weapons.js';
+import { ARMORS, ARMOR_RARITY_COL, ARMOR_RARITY_NAME } from '../config/armor.js';
 import { LOC_DEFS } from '../config/locations.js';
 import { ctx, W, H, groundY } from '../canvas.js';
 import { Game, state } from '../state.js';
@@ -1220,15 +1221,31 @@ function drawInventoryOverlay() {
 }
 
 // ---------- Shop overlay ----------
+function drawArmorIcon(col, scale=1, canAfford=true) {
+  const c = canAfford ? col : "rgba(100,100,100,0.6)";
+  ctx.save(); ctx.scale(scale, scale);
+  ctx.strokeStyle=c; ctx.lineWidth=2.5; ctx.lineJoin="round";
+  ctx.beginPath();
+  ctx.moveTo(-9,10); ctx.lineTo(-12,2); ctx.lineTo(-12,-6); ctx.lineTo(0,-10); ctx.lineTo(12,-6);
+  ctx.lineTo(12,2); ctx.lineTo(9,10); ctx.lineTo(0,12); ctx.closePath();
+  ctx.stroke();
+  ctx.fillStyle=canAfford?col+"44":"rgba(80,80,80,0.2)"; ctx.fill();
+  ctx.restore();
+}
+
 function drawShopOverlay() {
   if (!Game.shopOpen) return;
-  const items = window._SHOP_ITEMS;
-  if (!items) return;
+  const weaponList = window._WEAPON_SHOP;
+  const armorList  = window._ARMOR_SHOP;
+  if (!weaponList || !armorList) return;
+  const tab = Game.shopTab || 0;
+  const items = tab === 1 ? armorList : weaponList;
   const { player } = state;
   const cx=W/2, cy=H/2;
   const cols=5, cellW=120, cellH=90, padX=20, padY=20;
   const rows=Math.ceil(items.length/cols);
-  const panelW=cols*cellW+padX*2, panelH=rows*cellH+padY*2+48+58;
+  const tabH=36;
+  const panelW=cols*cellW+padX*2, panelH=rows*cellH+padY*2+48+tabH+58;
   ctx.save();
   // Dim background
   ctx.fillStyle="rgba(6,4,14,0.82)"; ctx.fillRect(0,0,W,H);
@@ -1238,60 +1255,97 @@ function drawShopOverlay() {
   ctx.strokeStyle="rgba(200,180,120,0.4)"; ctx.lineWidth=2; ctx.stroke();
   // Title
   ctx.textAlign="center"; ctx.font="bold 18px Trebuchet MS";
-  ctx.fillStyle="#f0e6cf"; ctx.fillText("🏪 Butik  [B – luk | ◀▶ naviger | E – køb]", cx, cy-panelH/2+30);
+  ctx.fillStyle="#f0e6cf"; ctx.fillText("🏪 Butik  [B – luk | ◀▶ naviger | T – skift fane | E – køb]", cx, cy-panelH/2+30);
   ctx.strokeStyle="rgba(200,180,120,0.2)"; ctx.lineWidth=1;
   ctx.beginPath(); ctx.moveTo(cx-panelW/2+16,cy-panelH/2+40); ctx.lineTo(cx+panelW/2-16,cy-panelH/2+40); ctx.stroke();
+  // Tab headers
+  const tabW = (panelW-padX*2)/2;
+  const tabY = cy-panelH/2+44;
+  const tabLabels = ["⚔ Våben","🛡 Rustning"];
+  window._shopTabRects = [];
+  for (let ti=0;ti<2;ti++) {
+    const tx = cx-panelW/2+padX+ti*tabW;
+    window._shopTabRects.push({ x:tx, y:tabY, w:tabW-4, h:tabH-6, tab:ti });
+    roundedRect(tx, tabY, tabW-4, tabH-6, 6);
+    ctx.fillStyle = ti===tab ? "rgba(242,193,78,0.22)" : "rgba(255,255,255,0.05)";
+    ctx.fill();
+    ctx.strokeStyle = ti===tab ? "#f2c14e" : "rgba(180,160,100,0.25)";
+    ctx.lineWidth = ti===tab ? 2 : 1; ctx.stroke();
+    ctx.textAlign="center"; ctx.font = (ti===tab?"bold ":"")+"14px Trebuchet MS";
+    ctx.fillStyle = ti===tab ? "#f2c14e" : "#a09070";
+    ctx.fillText(tabLabels[ti], tx+tabW*0.5-2, tabY+tabH*0.5-1);
+  }
   // Items grid
+  const gridTop = tabY + tabH;
+  window._shopCells = [];
   for (let i=0;i<items.length;i++) {
     const it=items[i];
     const col=i%cols, row=Math.floor(i/cols);
-    const ix=cx-panelW/2+padX+col*cellW, iy=cy-panelH/2+padY+48+row*cellH;
+    const ix=cx-panelW/2+padX+col*cellW, iy=gridTop+padY*0.5+row*cellH;
+    window._shopCells.push({ x:ix, y:iy, w:cellW-6, h:cellH-6, idx:i });
     const selected=i===Game.shopIdx;
     const canAfford=player.coins>=it.price;
-    const w=WEAPONS[it.weaponId], rc=RARITY_COL[w.rarity];
     // Cell background
     roundedRect(ix,iy,cellW-6,cellH-6,8);
     ctx.fillStyle=selected?"rgba(255,220,100,0.18)":"rgba(255,255,255,0.04)"; ctx.fill();
     if (selected) { ctx.strokeStyle="#f2c14e"; ctx.lineWidth=2; ctx.stroke(); }
-    // Weapon icon
+    // Icon
     ctx.save(); ctx.translate(ix+cellW*0.35,iy+cellH*0.38);
-    if (w.type==="melee") {
-      const len=clamp(w.range*0.28,14,24);
-      ctx.strokeStyle=canAfford?w.col:"rgba(100,100,100,0.6)"; ctx.lineWidth=3; ctx.lineCap="round";
-      ctx.beginPath(); ctx.moveTo(-len/2,0); ctx.lineTo(len/2,0); ctx.stroke();
-      ctx.lineWidth=5; ctx.beginPath(); ctx.moveTo(-len*0.3,-6); ctx.lineTo(-len*0.3,6); ctx.stroke();
-    } else if (w.type==="ranged") {
-      ctx.strokeStyle=canAfford?w.col:"rgba(100,100,100,0.6)"; ctx.lineWidth=2.5;
-      ctx.beginPath(); ctx.arc(0,0,10,-1.3,1.3); ctx.stroke();
-      ctx.strokeStyle="#e8d8a8"; ctx.lineWidth=1;
-      ctx.beginPath(); ctx.moveTo(10*Math.cos(-1.3),10*Math.sin(-1.3)); ctx.lineTo(10*Math.cos(1.3),10*Math.sin(1.3)); ctx.stroke();
+    if (it.armorId) {
+      const a = ARMORS[it.armorId];
+      drawArmorIcon(a.col, 1.05, canAfford);
     } else {
-      ctx.globalAlpha = canAfford ? 1 : 0.4;
-      drawTomeIcon(w.col, 0.95);
-      ctx.globalAlpha = 1;
+      const w=WEAPONS[it.weaponId];
+      if (w.type==="melee") {
+        const len=clamp(w.range*0.28,14,24);
+        ctx.strokeStyle=canAfford?w.col:"rgba(100,100,100,0.6)"; ctx.lineWidth=3; ctx.lineCap="round";
+        ctx.beginPath(); ctx.moveTo(-len/2,0); ctx.lineTo(len/2,0); ctx.stroke();
+        ctx.lineWidth=5; ctx.beginPath(); ctx.moveTo(-len*0.3,-6); ctx.lineTo(-len*0.3,6); ctx.stroke();
+      } else if (w.type==="ranged") {
+        ctx.strokeStyle=canAfford?w.col:"rgba(100,100,100,0.6)"; ctx.lineWidth=2.5;
+        ctx.beginPath(); ctx.arc(0,0,10,-1.3,1.3); ctx.stroke();
+        ctx.strokeStyle="#e8d8a8"; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(10*Math.cos(-1.3),10*Math.sin(-1.3)); ctx.lineTo(10*Math.cos(1.3),10*Math.sin(1.3)); ctx.stroke();
+      } else {
+        ctx.globalAlpha = canAfford ? 1 : 0.4;
+        drawTomeIcon(w.col, 0.95);
+        ctx.globalAlpha = 1;
+      }
     }
     ctx.lineCap="butt"; ctx.restore();
-    // Name
-    ctx.textAlign="center"; ctx.font="bold 11px Trebuchet MS";
+    // Name + price
+    ctx.textAlign="center";
+    const itemName = it.armorId ? ARMORS[it.armorId].name : WEAPONS[it.weaponId].name;
+    const itemRar  = it.armorId ? ARMORS[it.armorId].rarity : WEAPONS[it.weaponId].rarity;
+    const rc = it.armorId ? ARMOR_RARITY_COL[itemRar] : RARITY_COL[itemRar];
+    ctx.font="bold 11px Trebuchet MS";
     ctx.fillStyle=canAfford?rc:"rgba(120,110,100,0.8)";
-    ctx.fillText(w.name, ix+cellW*0.5-3, iy+cellH*0.72);
-    // Price
+    ctx.fillText(itemName, ix+cellW*0.5-3, iy+cellH*0.72);
     ctx.font="12px Trebuchet MS";
     ctx.fillStyle=canAfford?"#f2c14e":"rgba(160,120,80,0.7)";
     ctx.fillText(it.price+"🪙", ix+cellW*0.5-3, iy+cellH*0.88);
   }
   // Selected item stats bar
   const selItem = items[Game.shopIdx];
+  const statsY = cy + panelH/2 - 52;
   if (selItem) {
-    const sw = WEAPONS[selItem.weaponId], src = RARITY_COL[sw.rarity];
-    const statsY = cy + panelH/2 - 52;
     ctx.strokeStyle = "rgba(200,180,120,0.18)"; ctx.lineWidth=1;
     ctx.beginPath(); ctx.moveTo(cx-panelW/2+16, statsY-6); ctx.lineTo(cx+panelW/2-16, statsY-6); ctx.stroke();
-    ctx.textAlign="left"; ctx.font="bold 13px Trebuchet MS"; ctx.fillStyle=src;
-    ctx.fillText(sw.name, cx-panelW/2+20, statsY+12);
-    ctx.font="12px Trebuchet MS"; ctx.fillStyle="rgba(200,200,200,0.75)";
-    const typeLabel = sw.type==="melee"?"Nærkamp":sw.type==="ranged"?"Bue":"Magi";
-    ctx.fillText(typeLabel+"  ·  Skade: "+sw.dmg+"  ·  Rækkevidde: "+sw.range+" px  ·  Hastighed: "+sw.speed+"x", cx-panelW/2+20, statsY+32);
+    if (selItem.armorId) {
+      const sa = ARMORS[selItem.armorId];
+      ctx.textAlign="left"; ctx.font="bold 13px Trebuchet MS";
+      ctx.fillStyle=ARMOR_RARITY_COL[sa.rarity];
+      ctx.fillText(sa.name, cx-panelW/2+20, statsY+12);
+      ctx.font="12px Trebuchet MS"; ctx.fillStyle="rgba(200,200,200,0.75)";
+      ctx.fillText(ARMOR_RARITY_NAME[sa.rarity]+"  ·  Forsvar: +"+sa.defense+"  ·  "+sa.desc, cx-panelW/2+20, statsY+32);
+    } else {
+      const sw = WEAPONS[selItem.weaponId];
+      ctx.textAlign="left"; ctx.font="bold 13px Trebuchet MS"; ctx.fillStyle=RARITY_COL[sw.rarity];
+      ctx.fillText(sw.name, cx-panelW/2+20, statsY+12);
+      ctx.font="12px Trebuchet MS"; ctx.fillStyle="rgba(200,200,200,0.75)";
+      const typeLabel = sw.type==="melee"?"Nærkamp":sw.type==="ranged"?"Bue":"Magi";
+      ctx.fillText(typeLabel+"  ·  Skade: "+sw.dmg+"  ·  Rækkevidde: "+sw.range+" px  ·  Hastighed: "+sw.speed+"x", cx-panelW/2+20, statsY+32);
+    }
   }
   // Coin count
   ctx.textAlign="center"; ctx.font="13px Trebuchet MS";

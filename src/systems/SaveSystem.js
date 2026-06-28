@@ -12,7 +12,7 @@ export function saveGame() {
     const snap = {
       day: Game.day, time: Game.time, treeSeed: Game.treeSeed,
       coins: player.coins, px: player.x, hasCrown: player.hasCrown,
-      hp: player.hp, weapon: player.weapon,
+      hp: player.hp, weapon: player.weapon, armor: player.armor,
       locations: locations.map(l => ({ triggered: l.triggered, cleared: l.cleared, lootSpawned: l.lootSpawned })),
       base: { level: base.level, hp: base.hp, maxHp: base.maxHp },
       walls: walls.map(w => ({ commissioned: w.commissioned, level: w.level, hp: w.hp, maxHp: w.maxHp, buildProgress: w.buildProgress })),
@@ -40,6 +40,7 @@ export function loadGame() {
     player.coins = snap.coins; player.x = snap.px; player.hasCrown = snap.hasCrown;
     player.hp = snap.hp || CFG.playerMaxHp;
     player.weapon = snap.weapon || null;
+    player.armor  = snap.armor  || null;
 
     if (snap.locations) snap.locations.forEach((s, i) => { if (locations[i]) Object.assign(locations[i], s); });
     base.level = snap.base.level; base.hp = snap.base.hp; base.maxHp = snap.base.maxHp;

@@ -1,5 +1,6 @@
 import { CFG } from '../config/config.js';
 import { WEAPONS, RARITY_COL, RARITY_NAME } from '../config/weapons.js';
+import { ARMORS, ARMOR_RARITY_COL, ARMOR_RARITY_NAME } from '../config/armor.js';
 import { LOC_DEFS } from '../config/locations.js';
 import { dist, clamp } from '../util/math.js';
 import { Game, state } from '../state.js';
@@ -61,6 +62,16 @@ export const UI = {
       wPill.style.color=RARITY_COL[w.rarity];
     } else { wEl.textContent="Intet våben"; wPill.style.borderColor=""; wPill.style.color=""; }
 
+    const aEl=document.getElementById("hud-armor-text"), aPill=document.getElementById("hud-armor");
+    if (aEl && aPill) {
+      if (player.armor && ARMORS[player.armor]) {
+        const a=ARMORS[player.armor];
+        aEl.textContent=a.name+" ("+ARMOR_RARITY_NAME[a.rarity]+") +" +a.defense+"🛡";
+        aPill.style.borderColor=ARMOR_RARITY_COL[a.rarity]+"99";
+        aPill.style.color=ARMOR_RARITY_COL[a.rarity];
+      } else { aEl.textContent="Ingen rustning"; aPill.style.borderColor=""; aPill.style.color=""; }
+    }
+
     let near=null, nd=CFG.payRange;
     for (const s of stations) { const c=s.cost(); if (c<=0) continue; const d=dist(player.x,s.x()); if (d<nd) { nd=d; near=s; } }
     const vagNear=state.vagrants.find(v=>dist(player.x,v.x)<46&&Math.abs(v.vx)<1);
@@ -113,6 +124,21 @@ export const DEV = {
     if (state.enemies) state.enemies.forEach(e=>e.fleeing=true);
     floaty(state.base.x,"→ Dag ☀","#f2c14e");
   },
+
+  _jumpToDay(n) {
+    if (Game.state!=="play") return;
+    if (Game.day >= n) { floaty(state.base.x,"Allerede dag "+Game.day,"#ff8a6a"); return; }
+    Game.day = n - 1;
+    Game.time = 0.02;
+    planNight();
+    if (state.enemies) state.enemies.forEach(e=>e.fleeing=true);
+    // Queue night immediately
+    Game.time = CFG.phases.dusk + 0.005;
+    floaty(state.base.x,"→ Dag "+n+" 📅","#f2c14e");
+  },
+  skipToDay10() { this._jumpToDay(10); },
+  skipToDay15() { this._jumpToDay(15); },
+  skipToDay20() { this._jumpToDay(20); },
 
   upgradeBase() {
     if (Game.state!=="play"||state.base.level>=4) return;

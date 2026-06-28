@@ -16,6 +16,7 @@ export const Game = {
   wallSlots: {},
   shopOpen: false,
   shopIdx: 0,
+  shopTab: 0,
   diffMult: 1.0,
   rarityBonus: 0,
   upgradeMenuOpen: false,

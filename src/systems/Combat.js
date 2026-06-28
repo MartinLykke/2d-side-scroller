@@ -1,6 +1,7 @@
 import { CFG } from '../config/config.js';
 import { ENEMY_TYPES } from '../config/enemies.js';
 import { WEAPONS, effectiveWeapon } from '../config/weapons.js';
+import { ARMORS } from '../config/armor.js';
 import { clamp, dist, rand } from '../util/math.js';
 import { groundY } from '../canvas.js';
 import { Game, state } from '../state.js';
@@ -132,7 +133,9 @@ export function killEnemy(e) {
 function meleeHitPlayer(e, t, knockForce) {
   const { player } = state;
   if (player.invuln > 0 || window._DEV_GOD_MODE) return false;
-  player.hp    -= t.meleeDmg;
+  const armorDef = player.armor ? (ARMORS[player.armor]?.defense || 0) : 0;
+  const dmg = Math.max(1, t.meleeDmg - armorDef);
+  player.hp    -= dmg;
   player.invuln = CFG.playerInvuln;
   player.hurt   = 0.35;
   player.knock  = Math.sign(player.x - e.x) * knockForce;
@@ -141,7 +144,7 @@ function meleeHitPlayer(e, t, knockForce) {
     player.coins--;
     floaty(player.x, "−1🪙", "#ff6a4a");
   } else {
-    floaty(player.x, `−${t.meleeDmg}❤`, "#ff6a4a");
+    floaty(player.x, `−${dmg}❤`, "#ff6a4a");
   }
   Audio.hit();
   return true;
@@ -408,13 +411,13 @@ function executeLegendaryAttack(e, t) {
   const { player, units, walls, legendaryEffects } = state;
   if (e.type === "legend1") {
     // Ground stomp: shockwave AoE, damages player+units+walls
-    const r = 200;
+    const r = 170;
     legendaryEffects.push({ type:"ring", x:e.x, radius:0, maxR:r, totalLife:0.7, life:0.7, col:"#ff6a00", width:12 });
     legendaryEffects.push({ type:"ring", x:e.x, radius:0, maxR:r*0.55, totalLife:0.5, life:0.5, col:"#ffaa00", width:7 });
     spawnParticles(e.x, groundY-8, 40, "#ff6a00", 240, 50);
     if (dist(e.x, player.x) < r && player.jumpH <= 0) meleeHitPlayer(e, t, 500);
-    for (const u of units) { if (dist(e.x, u.x) < r) { u.hp -= 4; u.panic = 2.5; spawnParticles(u.x, groundY-20, 5, "#ff6a00", 60, 80); } }
-    for (const w of walls) { if (w.commissioned && w.hp > 0 && dist(e.x, w.x) < r) { w.hp -= 35; w.flash = 0.4; } }
+    for (const u of units) { if (dist(e.x, u.x) < r) { u.hp -= 2; u.panic = 2.5; spawnParticles(u.x, groundY-20, 5, "#ff6a00", 60, 80); } }
+    for (const w of walls) { if (w.commissioned && w.hp > 0 && dist(e.x, w.x) < r) { w.hp -= 22; w.flash = 0.4; } }
     Audio.hit();
   } else if (e.type === "legend2") {
     // Charge: set high velocity toward base
@@ -430,8 +433,8 @@ function executeLegendaryAttack(e, t) {
     legendaryEffects.push({ type:"ring", x:e.x, radius:0, maxR:r*0.25, totalLife:0.5, life:0.5, col:"#ffffff", width:5  });
     spawnParticles(e.x, groundY-40, 60, "#cc00ff", 350, 120);
     if (dist(e.x, player.x) < r && player.jumpH <= 0) meleeHitPlayer(e, t, 600);
-    for (const u of units) { if (dist(e.x, u.x) < r) { u.hp -= 5; u.panic = 3; spawnParticles(u.x, groundY-20, 6, "#cc00ff", 80, 100); } }
-    for (const w of walls) { if (w.commissioned && w.hp > 0 && dist(e.x, w.x) < r) { w.hp -= 55; w.flash = 0.5; } }
+    for (const u of units) { if (dist(e.x, u.x) < r) { u.hp -= 3; u.panic = 3; spawnParticles(u.x, groundY-20, 6, "#cc00ff", 80, 100); } }
+    for (const w of walls) { if (w.commissioned && w.hp > 0 && dist(e.x, w.x) < r) { w.hp -= 38; w.flash = 0.5; } }
     Audio.hit();
   }
 }
@@ -469,10 +472,38 @@ function updateLegendaryBoss(e, t, dt) {
     if (e.specialTimer <= 0) { e.specialPhase = 0; e.specialCd = t.specialCooldown; e.chargeVx = 0; }
   }
 
-  // Movement (stop during windup; charge handles own movement)
+  // Movement + wall/base targeting (only in idle phase)
   if (e.specialPhase === 0) {
-    e.dir = Math.sign(base.x - e.x) || e.dir;
-    e.x += e.dir * t.speed * dt;
+    const side = e.x < CFG.baseX ? -1 : 1;
+    const wall = wallAt(side, e.x);
+    if (wall && dist(e.x, wall.x) < t.w * 0.58) {
+      // Attack wall — don't advance
+      e.dir = Math.sign(wall.x - e.x) || e.dir;
+      if (e.attackCd <= 0) {
+        e.attackCd = 1.1;
+        wall.hp -= t.dmg; wall.flash = 0.2;
+        spawnParticles(wall.x, groundY - 30, 8, "#caa46a", 70, 60);
+        Audio.hit();
+        if (wall.hp <= 0) {
+          wall.hp = 0; wall.level = 0; wall.commissioned = false; wall.buildProgress = 0;
+          floaty(wall.x, "💥 Mur faldet!", "#ff6a4a");
+          spawnParticles(wall.x, groundY - 30, 24, "#caa46a", 110, 100);
+        }
+      }
+    } else {
+      // Advance toward base
+      e.dir = Math.sign(base.x - e.x) || e.dir;
+      e.x += e.dir * t.speed * dt;
+      // Attack base when adjacent
+      if (dist(e.x, base.x) < t.w * 0.58 && e.attackCd <= 0) {
+        e.attackCd = 1.8;
+        base.hp -= t.dmg; base.flash = 0.3;
+        spawnParticles(base.x + rand(-30, 30), groundY - 30, 8, "#ff6a4a", 70, 70);
+        floaty(base.x, `-${t.dmg}`, "#ff6a4a");
+        Audio.hit();
+        if (base.hp < 0) base.hp = 0;
+      }
+    }
   } else if (e.specialPhase === 2 && e.type !== "legend2") {
     // Hold position during non-charge executions
   }

@@ -19,7 +19,7 @@ export const ENEMY_TYPES = {
   boss3:   { name:"Dødskæmper",     hp: 140, speed: 22,  w: 96,  color: "#060620", eye: "#5020ff", reward: 26, dmg: 32, meleeDmg: 4, noKnockback: true },
   boss4:   { name:"Den Udødelige",  hp: 240, speed: 18,  w: 116, color: "#140a14", eye: "#ff20ee", reward: 40, dmg: 40, meleeDmg: 5, noKnockback: true },
   // --- Legendary bosses (days 10 / 15 / 20) ---
-  legend1: { name:"Skæbnebæreren",       hp:1400, speed:24, w:160, color:"#1a0a08", eye:"#ff6a00", reward:120, dmg:45, meleeDmg:5, noKnockback:true, legendary:true, specialCooldown:6,  windupTime:1.0, execTime:0.5, attackName:"JORDSTAMP" },
-  legend2: { name:"Gravvolden",          hp:2800, speed:18, w:190, color:"#04041e", eye:"#00c8ff", reward:200, dmg:55, meleeDmg:6, noKnockback:true, legendary:true, specialCooldown:7,  windupTime:0.6, execTime:1.8, attackName:"LADNING"   },
-  legend3: { name:"Den Evige Fordømmelse",hp:5000,speed:13, w:220, color:"#0a0010", eye:"#cc00ff", reward:320, dmg:70, meleeDmg:8, noKnockback:true, legendary:true, specialCooldown:9,  windupTime:1.4, execTime:0.4, attackName:"TOMHEDSPULS"},
+  legend1: { name:"Skæbnebæreren",       hp:1400, speed:24, w:160, color:"#1a0a08", eye:"#ff6a00", reward:120, dmg:45, meleeDmg:2, noKnockback:true, legendary:true, specialCooldown:6,  windupTime:1.0, execTime:0.5, attackName:"JORDSTAMP" },
+  legend2: { name:"Gravvolden",          hp:2800, speed:18, w:190, color:"#04041e", eye:"#00c8ff", reward:200, dmg:55, meleeDmg:3, noKnockback:true, legendary:true, specialCooldown:7,  windupTime:0.6, execTime:1.8, attackName:"LADNING"   },
+  legend3: { name:"Den Evige Fordømmelse",hp:5000,speed:13, w:220, color:"#0a0010", eye:"#cc00ff", reward:320, dmg:70, meleeDmg:4, noKnockback:true, legendary:true, specialCooldown:9,  windupTime:1.4, execTime:0.4, attackName:"TOMHEDSPULS"},
 };

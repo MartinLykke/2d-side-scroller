@@ -3,6 +3,7 @@
 // ---------- Bootstrap ----------
 import { CFG, WALL_SLOTS, PORTALS, STATIONS_X } from './config/config.js';
 import { WEAPONS, RARITY_COL, WEAPON_UPGRADES } from './config/weapons.js';
+import { ARMORS, ARMOR_RARITY_COL } from './config/armor.js';
 import { ENEMY_TYPES } from './config/enemies.js';
 import { LOC_DEFS } from './config/locations.js';
 import { clamp, dist, lerp, rand, randInt, pick } from './util/math.js';
@@ -30,7 +31,7 @@ window._KEYS = keys;
 window._DEV_GOD_MODE = false;
 window._floaty = floaty;
 
-const SHOP_ITEMS = [
+const WEAPON_SHOP = [
   { weaponId: 'rusty_sword',   price: 6,  tier: 1 },
   { weaponId: 'short_bow',     price: 9,  tier: 1 },
   { weaponId: 'sword',         price: 16, tier: 2 },
@@ -54,7 +55,21 @@ const SHOP_ITEMS = [
   { weaponId: 'arcane_tome',   price: 65, tier: 5 },
   { weaponId: 'shadow_tome',   price: 62, tier: 5 },
 ];
-window._SHOP_ITEMS = SHOP_ITEMS;
+const ARMOR_SHOP = [
+  { armorId: 'leather_cap',      price: 6,  tier: 1 },
+  { armorId: 'studded_vest',     price: 12, tier: 2 },
+  { armorId: 'chainmail',        price: 18, tier: 2 },
+  { armorId: 'scale_armor',      price: 28, tier: 3 },
+  { armorId: 'plate_chestplate', price: 38, tier: 3 },
+  { armorId: 'shadow_cloak',     price: 52, tier: 4 },
+  { armorId: 'dragon_scale',     price: 65, tier: 4 },
+  { armorId: 'void_armor',       price: 82, tier: 5 },
+  { armorId: 'sun_plate',        price: 98, tier: 6 },
+];
+window._WEAPON_SHOP = WEAPON_SHOP;
+window._ARMOR_SHOP  = ARMOR_SHOP;
+// Legacy alias used by old renderer path
+window._SHOP_ITEMS = WEAPON_SHOP;
 
 // ---------- Game state helpers (exposed for DEV) ----------
 function upgradeBase() {
@@ -566,18 +581,33 @@ function tryOpenShop() {
   }
 }
 
-function handleShopKeys(k, e) {
-  if (k === "arrowleft")  { Game.shopIdx = Math.max(0, Game.shopIdx - 1); e.preventDefault(); }
-  if (k === "arrowright") { Game.shopIdx = Math.min(SHOP_ITEMS.length - 1, Game.shopIdx + 1); e.preventDefault(); }
-  if (k === "e" || k === "enter") {
-    const item = SHOP_ITEMS[Game.shopIdx];
-    if (item && state.player.coins >= item.price) {
-      state.player.coins -= item.price;
-      pickupWeapon(item.weaponId);
-      floaty(state.player.x, "🛒 " + WEAPONS[item.weaponId].name, "#9bd05a");
-    }
+function currentShopList() {
+  return Game.shopTab === 1 ? ARMOR_SHOP : WEAPON_SHOP;
+}
+
+function tryBuyShopItem(item) {
+  if (!item || state.player.coins < item.price) return;
+  state.player.coins -= item.price;
+  if (item.armorId) {
+    state.player.armor = item.armorId;
+    floaty(state.player.x, "🛡 " + ARMORS[item.armorId].name, "#9bd05a");
+  } else if (item.weaponId) {
+    pickupWeapon(item.weaponId);
+    floaty(state.player.x, "🛒 " + WEAPONS[item.weaponId].name, "#9bd05a");
   }
 }
+
+function handleShopKeys(k, e) {
+  const list = currentShopList();
+  if (k === "arrowleft")  { Game.shopIdx = Math.max(0, Game.shopIdx - 1); e.preventDefault(); }
+  if (k === "arrowright") { Game.shopIdx = Math.min(list.length - 1, Game.shopIdx + 1); e.preventDefault(); }
+  if (k === "t") { Game.shopTab = Game.shopTab === 0 ? 1 : 0; Game.shopIdx = 0; }
+  if (k === "e" || k === "enter") tryBuyShopItem(list[Game.shopIdx]);
+}
+
+// Expose for renderer click detection
+window._tryBuyShopItem = tryBuyShopItem;
+window._currentShopList = currentShopList;
 
 document.querySelectorAll('.diff-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -619,6 +649,33 @@ canvas.addEventListener("wheel", e => {
   e.preventDefault();
   Game.zoom = Math.max(0.35, Math.min(2.5, Game.zoom - e.deltaY * 0.0012));
 }, { passive: false });
+
+canvas.addEventListener("mousedown", e => {
+  if (!Game.shopOpen) return;
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = W / rect.width;
+  const scaleY = H / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top)  * scaleY;
+  // Check tab header clicks (written to window by renderer each frame)
+  if (window._shopTabRects) {
+    for (const tr of window._shopTabRects) {
+      if (mx >= tr.x && mx <= tr.x+tr.w && my >= tr.y && my <= tr.y+tr.h) {
+        Game.shopTab = tr.tab; Game.shopIdx = 0; return;
+      }
+    }
+  }
+  // Check item cell clicks
+  if (window._shopCells) {
+    for (const cell of window._shopCells) {
+      if (mx >= cell.x && mx <= cell.x+cell.w && my >= cell.y && my <= cell.y+cell.h) {
+        Game.shopIdx = cell.idx;
+        tryBuyShopItem(currentShopList()[cell.idx]);
+        return;
+      }
+    }
+  }
+});
 
 // ---------- Boot ----------
 resize();
