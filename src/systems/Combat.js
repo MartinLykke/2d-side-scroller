@@ -170,7 +170,7 @@ export function updateArrows(dt) {
     if (!hit && ar.hitKind === "player") {
       if (dist(ar.x, player.x) < 18 && Math.abs(ar.y - (groundY - 50)) < 50) {
         if (player.invuln <= 0 && !window._DEV_GOD_MODE) {
-          player.hp -= 1; player.invuln = CFG.playerInvuln; player.hurt = 0.35;
+          player.hp -= 1; player.invuln = CFG.playerInvuln; player.hurt = 0.35; player.hpShowTimer = 3;
           player.knock = (player.x < ar.x ? -1 : 1) * -120;
           spawnParticles(player.x, groundY - 50, 4, "#c1453b");
           Audio.hit();
@@ -221,7 +221,7 @@ function meleeHitPlayer(e, t, knockForce) {
   const dmg = Math.max(1, t.meleeDmg - armorDef);
   player.hp    -= dmg;
   player.invuln = CFG.playerInvuln;
-  player.hurt   = 0.35;
+  player.hurt   = 0.35; player.hpShowTimer = 3;
   player.knock  = Math.sign(player.x - e.x) * knockForce;
   spawnParticles(player.x, groundY - 50, 6, "#c1453b");
   if (player.coins > 0) {
@@ -276,7 +276,7 @@ export function updateEnemies(dt) {
       }
       // Damage player if directly overhead
       if (dist(e.x, player.x) < 28 && e.attackCd <= 0 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
-        player.hp -= 1; player.invuln = CFG.playerInvuln; player.hurt = 0.35;
+        player.hp -= 1; player.invuln = CFG.playerInvuln; player.hurt = 0.35; player.hpShowTimer = 3;
         spawnParticles(player.x, groundY - 50, 5, "#c1453b");
         Audio.hit();
         e.attackCd = 1.5; e.fleeing = true;

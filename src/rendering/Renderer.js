@@ -246,7 +246,7 @@ export function drawWalls(dark) {
     const x=w.x;
     if (!w.commissioned) { drawFlag(x,"#6fb3d6"); continue; }
     const h=wallHeight(w)*(0.3+0.7*clamp(w.buildProgress,0,1));
-    const WW=[0,26,34,44,56,72][w.level]||26;
+    const WW=[0,26,34,44,56,72,96][w.level]||26;
     if (w.flash>0) w.flash-=0.016;
     const flash=w.flash>0;
     const stoneColors=["","#7a5a36","#6b6b78","#555568","#484458","#3a3448"];
@@ -277,25 +277,76 @@ export function drawWalls(dark) {
       }
       if (night&&w.buildProgress>0.6) drawTorch(x,groundY-h-4);
     } else {
-      // Level 5: Archer tower
-      const tw=WW, th=h;
-      ctx.fillStyle=col; ctx.fillRect(x-tw/2,groundY-th,tw,th);
-      ctx.fillStyle="rgba(255,255,255,0.06)"; ctx.fillRect(x-tw/2,groundY-th,tw*0.28,th);
-      ctx.fillStyle="rgba(0,0,0,0.18)"; ctx.fillRect(x+tw*0.3,groundY-th,tw*0.22,th);
-      // Stone lines
-      ctx.strokeStyle="rgba(0,0,0,0.22)"; ctx.lineWidth=1;
-      for (let yy=groundY-th+10;yy<groundY-4;yy+=10) { ctx.beginPath(); ctx.moveTo(x-tw/2+2,yy); ctx.lineTo(x+tw/2-2,yy); ctx.stroke(); }
-      // Tower battlements
+      // Level 5: Wide archer rampart with two platforms and a ladder
+      const tw = 96, th = h;
+      const platY1 = groundY - th * 0.52;  // lower platform
+      const platY2 = groundY - th;          // upper platform (top)
+      const platW  = tw + 18;               // platforms overhang slightly
+      const platH  = 9;
+
+      // Main body
+      ctx.fillStyle=col; ctx.fillRect(x-tw/2, groundY-th, tw, th);
+      ctx.fillStyle="rgba(255,255,255,0.07)"; ctx.fillRect(x-tw/2, groundY-th, tw*0.22, th);
+      ctx.fillStyle="rgba(0,0,0,0.16)"; ctx.fillRect(x+tw*0.3, groundY-th, tw*0.22, th);
+
+      // Stone mortar lines
+      ctx.strokeStyle="rgba(0,0,0,0.20)"; ctx.lineWidth=1;
+      for (let yy=groundY-th+10; yy<groundY-4; yy+=11) {
+        ctx.beginPath(); ctx.moveTo(x-tw/2+2,yy); ctx.lineTo(x+tw/2-2,yy); ctx.stroke();
+      }
+
+      // Arrow slits on lower section
+      ctx.fillStyle="rgba(0,0,0,0.55)";
+      ctx.fillRect(x-tw*0.28-2, groundY-th*0.28, 5, 13);
+      ctx.fillRect(x+tw*0.18,   groundY-th*0.28, 5, 13);
+
+      // Lower platform slab
+      ctx.fillStyle=col; ctx.fillRect(x-platW/2, platY1, platW, platH);
+      ctx.fillStyle="rgba(255,255,255,0.09)"; ctx.fillRect(x-platW/2, platY1, platW, 3);
+      ctx.fillStyle="rgba(0,0,0,0.22)"; ctx.fillRect(x-platW/2, platY1+platH-2, platW, 2);
+      // Lower platform battlements
+      const mW1=platW/8;
+      for (let i=0;i<4;i++) ctx.fillStyle=(i%2===0)?col:"rgba(0,0,0,0)";
       ctx.fillStyle=col;
-      for (let i=0;i<4;i++) ctx.fillRect(x-tw/2+i*(tw/4),groundY-th-10,tw/5,11);
-      // Windows
-      ctx.fillStyle=`rgba(255,186,86,${litWindow(dark)})`;
-      ctx.fillRect(x-7,groundY-th*0.55,14,16); ctx.fillRect(x-7,groundY-th*0.3,14,16);
-      // Arrow slits
-      ctx.fillStyle="rgba(0,0,0,0.6)";
-      ctx.fillRect(x-3,groundY-th*0.75,6,14);
-      ctx.fillRect(x-3,groundY-th*0.48,6,14);
-      if (night) { drawTorch(x-tw/2-4,groundY-th*0.4); drawTorch(x+tw/2+4,groundY-th*0.4); }
+      for (let i=0;i<4;i++) ctx.fillRect(x-platW/2+i*(mW1*2), platY1-8, mW1, 9);
+
+      // Upper platform slab (battlements)
+      ctx.fillStyle=col; ctx.fillRect(x-platW/2, platY2, platW, platH);
+      ctx.fillStyle="rgba(255,255,255,0.09)"; ctx.fillRect(x-platW/2, platY2, platW, 3);
+      ctx.fillStyle="rgba(0,0,0,0.22)"; ctx.fillRect(x-platW/2, platY2+platH-2, platW, 2);
+      // Upper battlements
+      const mW2=platW/10;
+      ctx.fillStyle=col;
+      for (let i=0;i<5;i++) ctx.fillRect(x-platW/2+i*(mW2*2), platY2-11, mW2, 12);
+
+      // Ladder on right side: vertical rails + rungs
+      const ladX = x + tw/2 - 6;
+      const ladTop = platY2 + platH;
+      const ladBot = groundY;
+      ctx.strokeStyle="#5a3a1a"; ctx.lineWidth=3; ctx.lineCap="round";
+      ctx.beginPath(); ctx.moveTo(ladX-5, ladBot); ctx.lineTo(ladX-5, ladTop); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ladX+5, ladBot); ctx.lineTo(ladX+5, ladTop); ctx.stroke();
+      ctx.lineWidth=2;
+      for (let ry=ladBot-6; ry>ladTop+4; ry-=11) {
+        ctx.beginPath(); ctx.moveTo(ladX-5,ry); ctx.lineTo(ladX+5,ry); ctx.stroke();
+      }
+      // Second ladder: lower platform to upper
+      const lad2Top = platY1;
+      const lad2Bot = platY2 + platH;
+      const lad2X   = x + tw/2 - 6;
+      ctx.lineWidth=3;
+      ctx.beginPath(); ctx.moveTo(lad2X-5,lad2Bot); ctx.lineTo(lad2X-5,lad2Top); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(lad2X+5,lad2Bot); ctx.lineTo(lad2X+5,lad2Top); ctx.stroke();
+      ctx.lineWidth=2;
+      for (let ry=lad2Bot-6; ry>lad2Top+4; ry-=11) {
+        ctx.beginPath(); ctx.moveTo(lad2X-5,ry); ctx.lineTo(lad2X+5,ry); ctx.stroke();
+      }
+
+      if (night) {
+        drawTorch(x-platW/2+6, platY1-2);
+        drawTorch(x+platW/2-6, platY1-2);
+        drawTorch(x, platY2-2);
+      }
     }
     drawHpBar(x,groundY-h-18,WW+6,w.hp/w.maxHp,"#9bd05a");
   }
@@ -848,8 +899,10 @@ export function drawPlayer(dark) {
     ctx.restore();
   }
   ctx.restore();
-  const n=player.maxHp, gap=9, hy=groundY-86-bob-player.jumpH;
-  for (let i=0;i<n;i++) drawHeart(player.x-(n-1)*gap/2+i*gap, hy, 4, i<player.hp?"#e0556a":"rgba(255,255,255,0.18)");
+  if (player.hp <= 2 || player.hpShowTimer > 0) {
+    const n=player.maxHp, gap=9, hy=groundY-86-bob-player.jumpH;
+    for (let i=0;i<n;i++) drawHeart(player.x-(n-1)*gap/2+i*gap, hy, 4, i<player.hp?"#e0556a":"rgba(255,255,255,0.18)");
+  }
 }
 
 export function drawAnimals() {
@@ -1112,22 +1165,6 @@ export function drawLocations(dark) {
       ctx.fillText("✅",loc.x,groundY-160); ctx.restore();
     }
 
-    const d=dist(player.x,loc.x);
-    const showDist = 320;
-    if (d<showDist) {
-      const def=LOC_DEFS[loc.type], a=clamp((showDist-d)/160,0,1);
-      ctx.save(); ctx.globalAlpha=a; ctx.font="bold 14px Trebuchet MS"; ctx.textAlign="center";
-      ctx.fillStyle="rgba(0,0,0,0.6)"; ctx.fillText(def.emoji+" "+def.name,loc.x+1,groundY-130+1);
-      const nameCol = (loc.preActivated&&!loc.cleared&&loc.remainingEnemies>0)?"#ff8a6a":loc.cleared?"#9bd05a":"#f0e6cf";
-      ctx.fillStyle=nameCol;
-      ctx.fillText(def.emoji+" "+def.name,loc.x,groundY-130);
-      if (loc.weaponId) {
-        const wRar = WEAPONS[loc.weaponId]?.rarity ?? 0;
-        ctx.font="11px Trebuchet MS"; ctx.fillStyle=RARITY_COL[wRar]||"rgba(200,180,255,0.8)";
-        ctx.fillText("⚔ "+(RARITY_NAME[wRar]||"")+" våben herinde",loc.x,groundY-112);
-      }
-      ctx.restore();
-    }
 
     ctx.restore(); // locAlpha save
   }
@@ -1200,9 +1237,6 @@ export function drawLootItems() {
       drawTomeIcon(w.col, 1);
     }
     ctx.restore();
-    ctx.save(); ctx.font="10px Trebuchet MS"; ctx.textAlign="center";
-    ctx.fillStyle="rgba(0,0,0,0.55)"; ctx.fillText(w.name,it.x+1,groundY-33+1);
-    ctx.fillStyle=rc; ctx.fillText(w.name,it.x,groundY-33); ctx.restore();
     ctx.restore(); // blinkAlpha save
   }
 }

@@ -331,6 +331,7 @@ function updatePlayer(dt) {
   if (player.jumpH <= 0) { player.jumpH = 0; if (player.jumpVy < 0) player.jumpVy = 0; }
   if (player.invuln>0) player.invuln-=dt;
   if (player.hurt>0) player.hurt-=dt;
+  if (player.hpShowTimer>0) player.hpShowTimer-=dt;
   if (player.hp<player.maxHp) {
     if (!nearestEnemy(player.x,220)) { player.regen+=dt; if (player.regen>=CFG.playerRegenTime) { player.regen=0; player.hp++; floaty(player.x,"+❤","#e0556a"); } }
     else player.regen=0;

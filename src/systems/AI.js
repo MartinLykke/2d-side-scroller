@@ -76,7 +76,14 @@ function assignArcherPost(u, preferredSide) {
   return wall.x + innerDir * (behind + 1) * 26;
 }
 
+function sunsetApproaching() {
+  return Game.time > 0.56 && Game.time < 0.65 && !Game.isNight;
+}
+
 function peasantAI(u, dt) {
+  if (sunsetApproaching() && dist(u.x, CFG.baseX) > 180) {
+    moveToward(u, CFG.baseX, 120, dt); return;
+  }
   if (dist(u.x, u.targetX) < 6 || Math.random() < 0.005)
     u.targetX = CFG.baseX + rand(-260, 260);
   moveToward(u, u.targetX, 30, dt);
@@ -172,12 +179,15 @@ function builderAI(u, dt) {
   if (Game.isNight && target) {
     if (nearestEnemy(target.x, 220)) u.panic = 0.6;
   }
-  if (u.panic > 0) { moveToward(u, CFG.baseX, 70, dt); return; }
+  if (u.panic > 0) { moveToward(u, CFG.baseX, 120, dt); return; }
+  if (sunsetApproaching() && !target) {
+    if (dist(u.x, CFG.baseX) > 180) { moveToward(u, CFG.baseX, 120, dt); return; }
+  }
   if (!target) {
     if (dist(u.x, u.targetX) < 8 || Math.random() < 0.004) u.targetX = CFG.baseX + rand(-160, 160);
     moveToward(u, u.targetX, 30, dt); return;
   }
-  if (moveToward(u, target.x, 48, dt)) {
+  if (moveToward(u, target.x, 90, dt)) {
     u.workTimer += dt;
     if (u.workTimer > 0.25) {
       u.workTimer = 0;
@@ -195,6 +205,9 @@ function builderAI(u, dt) {
 }
 
 function farmerAI(u, dt) {
+  if (sunsetApproaching() && dist(u.x, CFG.baseX) > 180) {
+    moveToward(u, CFG.baseX, 120, dt); return;
+  }
   const fx = STATIONS_X.farm;
   if (moveToward(u, fx, 36, dt)) {
     u.workTimer += dt;
