@@ -2,7 +2,10 @@
 <html lang="da">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="mobile-web-app-capable" content="yes" />
 <title>Kingdom — Crown of Embers</title>
 <link rel="stylesheet" href="style.css" />
 <style>
@@ -194,6 +197,19 @@
           <button class="dev-btn dev-speed-btn" id="dev-spd-4" onclick="DEV.setSpeed(4)">×4</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Mobile touch controls -->
+  <div id="touch-controls" class="hidden">
+    <div id="tc-left">
+      <button class="tc-btn" id="tc-move-left">◀</button>
+      <button class="tc-btn" id="tc-move-right">▶</button>
+    </div>
+    <div id="tc-right">
+      <button class="tc-btn tc-small" id="tc-interact">⬇ Betal</button>
+      <button class="tc-btn tc-small" id="tc-pickup">⚔ Tag op</button>
+      <button class="tc-btn tc-jump" id="tc-jump">↑</button>
     </div>
   </div>
 
