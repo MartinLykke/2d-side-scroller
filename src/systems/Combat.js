@@ -633,7 +633,7 @@ function executeLegendaryAttack(e, t) {
     legendaryEffects.push({ type:"ring", x:e.x, radius:0, maxR:r*0.55, totalLife:0.5, life:0.5, col:"#ffaa00", width:7 });
     spawnParticles(e.x, groundY-8, 40, "#ff6a00", 240, 50);
     if (dist(e.x, player.x) < r && player.jumpH <= 0) meleeHitPlayer(e, t, 500);
-    for (const u of units) { if (dist(e.x, u.x) < r) { u.hp -= 2; u.panic = 2.5; spawnParticles(u.x, groundY-20, 5, "#ff6a00", 60, 80); } }
+    for (const u of units) { if (dist(e.x, u.x) < r) { u.hp -= 2; u.panic = 2.5; u.knock = Math.sign(u.x - e.x) * 380; spawnParticles(u.x, groundY-20, 5, "#ff6a00", 60, 80); } }
     for (const w of walls) { if (w.commissioned && w.hp > 0 && dist(e.x, w.x) < r) { w.hp -= 22; w.flash = 0.4; } }
     Audio.hit();
   } else if (e.type === "legend2") {
@@ -650,7 +650,7 @@ function executeLegendaryAttack(e, t) {
     legendaryEffects.push({ type:"ring", x:e.x, radius:0, maxR:r*0.25, totalLife:0.5, life:0.5, col:"#ffffff", width:5  });
     spawnParticles(e.x, groundY-40, 60, "#cc00ff", 350, 120);
     if (dist(e.x, player.x) < r && player.jumpH <= 0) meleeHitPlayer(e, t, 600);
-    for (const u of units) { if (dist(e.x, u.x) < r) { u.hp -= 3; u.panic = 3; spawnParticles(u.x, groundY-20, 6, "#cc00ff", 80, 100); } }
+    for (const u of units) { if (dist(e.x, u.x) < r) { u.hp -= 3; u.panic = 3; u.knock = Math.sign(u.x - e.x) * 450; spawnParticles(u.x, groundY-20, 6, "#cc00ff", 80, 100); } }
     for (const w of walls) { if (w.commissioned && w.hp > 0 && dist(e.x, w.x) < r) { w.hp -= 38; w.flash = 0.5; } }
     Audio.hit();
   }
@@ -684,7 +684,7 @@ function updateLegendaryBoss(e, t, dt) {
       if (dist(e.x, player.x) < t.w*0.55 && player.jumpH <= 0 && player.invuln <= 0 && e.attackCd <= 0) {
         meleeHitPlayer(e, t, 700); e.attackCd = 0.4;
       }
-      for (const u of units) { if (dist(e.x, u.x) < t.w*0.45) { u.hp -= 3; u.panic = 2.5; } }
+      for (const u of units) { if (dist(e.x, u.x) < t.w*0.45) { u.hp -= 3; u.panic = 2.5; u.knock = Math.sign(u.x - e.x) * 350; } }
     }
     if (e.specialTimer <= 0) { e.specialPhase = 0; e.specialCd = t.specialCooldown; e.chargeVx = 0; }
   }
@@ -734,6 +734,7 @@ function updateLegendaryBoss(e, t, dt) {
     for (const u of units) {
       if (dist(e.x, u.x) < t.w * 0.5) {
         u.hp -= t.meleeDmg * 2; u.panic = 1.5;
+        u.knock = Math.sign(u.x - e.x) * 220;
         spawnParticles(u.x, groundY - 30, 6, "#c1453b", 60, 80);
         Audio.hit(); e.attackCd = 1.8; break;
       }

@@ -277,6 +277,7 @@ export function updateUnits(dt) {
     if (u.panic > 0) u.panic -= dt;
     if (u.hp <= 0) { spawnParticles(u.x, groundY - 30, 8, "#7a1f1f"); units.splice(i, 1); continue; }
     if (u.transform > 0) { u.transform -= dt; if (u.transform < 0) u.transform = 0; }
+    if (u.knock) { u.x = clamp(u.x + u.knock * dt, 120, CFG.worldWidth - 120); u.knock *= 0.82; if (Math.abs(u.knock) < 6) u.knock = 0; }
     const handler = AI_HANDLERS[u.role];
     if (handler) handler(u, dt);
     u.moving = Math.abs(u.x - px0) > 0.04;
