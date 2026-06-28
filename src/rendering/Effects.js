@@ -210,10 +210,11 @@ export function getTrees() {
   if (treeCache && treeCache.seed===Game.treeSeed) return treeCache;
   const r=mulberry32(Game.treeSeed||1);
   const far=[],mid=[],near=[],fore=[],hills=[],mountains=[];
-  for (let x=-100;x<CFG.worldWidth+100;x+=110) far.push(makeTree(x+r()*80, 72, r));
-  for (let x=-100;x<CFG.worldWidth+100;x+=86)  mid.push(makeTree(x+r()*64, 120, r));
-  for (let x=-100;x<CFG.worldWidth+100;x+=70)  near.push(makeTree(x+r()*48, 178, r));
-  for (let x=-100;x<CFG.worldWidth+100;x+=520) fore.push(makeTree(x+r()*220, 150, r));
+  const campX = CFG.baseX;
+  for (let x=-100;x<CFG.worldWidth+100;x+=110) { const tx=x+r()*80; if(Math.abs(tx-campX)>520) far.push(makeTree(tx, 72, r)); }
+  for (let x=-100;x<CFG.worldWidth+100;x+=86)  { const tx=x+r()*64; if(Math.abs(tx-campX)>480) mid.push(makeTree(tx, 120, r)); }
+  for (let x=-100;x<CFG.worldWidth+100;x+=70)  { const tx=x+r()*48; if(Math.abs(tx-campX)>440) near.push(makeTree(tx, 178, r)); }
+  for (let x=-100;x<CFG.worldWidth+100;x+=520) { const tx=x+r()*220; if(Math.abs(tx-campX)>400) fore.push(makeTree(tx, 150, r)); }
   for (let x=-300;x<CFG.worldWidth+300;x+=170) hills.push({ x:x+r()*120, h:50+r()*130, w:200+r()*230 });
   for (let x=-600;x<CFG.worldWidth+600;x+=320) {
     const w=200+r()*160, h=110+r()*140;

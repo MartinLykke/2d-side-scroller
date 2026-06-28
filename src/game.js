@@ -328,6 +328,20 @@ function updateLocations() {
       const def = LOC_DEFS[loc.type];
       floaty(loc.x, def.emoji + " " + def.name + "!", "#ff8a6a");
       addXP(25 + loc.enemyCount * 5);
+      // Release survivors when player arrives
+      const vcount = def.vagrants || 0;
+      let spawned = 0;
+      for (let j=0; j<vcount; j++) {
+        if (state.vagrants.length + state.units.length >= CFG.popCapByLevel[state.base.level]) break;
+        state.vagrants.push({ x: loc.x + rand(-60,60), vx:0, targetX: CFG.baseX + rand(-260,260), state:"wander", anim:rand(0,6), speed:190 });
+        spawned++;
+      }
+      if (spawned > 0) setTimeout(()=>floaty(loc.x, `🙋 ${spawned} overlevende!`, "#cdbfa3"), 400);
+      // Empty locations: spawn loot directly (no chest to open)
+      if (loc.enemyCount === 0 && !loc.lootSpawned) {
+        loc.cleared = true;
+        spawnLocLoot(loc);
+      }
     }
   }
 }
@@ -335,19 +349,8 @@ function updateLocations() {
 function preActivateLocation(loc, idx) {
   loc.preActivated = true;
   const def = LOC_DEFS[loc.type];
-
-  const vcount = def.vagrants || 0;
-  let spawned = 0;
-  for (let i=0; i<vcount; i++) {
-    if (state.vagrants.length + state.units.length >= CFG.popCapByLevel[state.base.level]) break;
-    state.vagrants.push({ x: loc.x + rand(-60,60), vx:0, targetX: CFG.baseX + rand(-260,260), state:"wander", anim:rand(0,6), speed:190 });
-    spawned++;
-  }
-  if (spawned > 0) floaty(loc.x, `🙋 ${spawned} overlevende!`, "#cdbfa3");
-
   if (loc.enemyCount === 0) {
-    loc.cleared = true; loc.lootSpawned = true;
-    state.chests.push({ x: loc.x, lootGold: loc.lootGold, weaponId: loc.weaponId, open: false, openAnim: 0 });
+    // No enemies — loot spawns when player walks by (triggered), not here
     return;
   }
   loc.remainingEnemies = loc.enemyCount;
