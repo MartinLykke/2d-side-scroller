@@ -142,15 +142,15 @@ export function buildLocations() {
   const r = mulberry32((Game.treeSeed || 1) * 31 + 17);
   let x = 120;
   while (x < CFG.worldWidth - 120) {
-    x += 380 + r() * 450;
+    x += 280 + r() * 320;
     if (Math.abs(x - CFG.baseX) < 520) continue;
     if (WALL_SLOTS.some(w => Math.abs(x - w.x) < 200)) continue;
     if (x >= CFG.worldWidth - 120) break;
     const roll = r();
-    if      (roll < 0.50) { /* nothing */ }
-    else if (roll < 0.75) { state.locations.push(makeLocation(x, pickR(r,["camp","wagon","grave"]), r)); }
-    else if (roll < 0.90) { state.locations.push(makeLocation(x, pickR(r,["ruins","cave","battlefield"]), r)); }
-    else if (roll < 0.98) { state.locations.push(makeLocation(x, "watchtower", r)); }
+    if      (roll < 0.20) { /* nothing */ }
+    else if (roll < 0.60) { state.locations.push(makeLocation(x, pickR(r,["camp","wagon","grave"]), r)); }
+    else if (roll < 0.85) { state.locations.push(makeLocation(x, pickR(r,["ruins","cave","battlefield"]), r)); }
+    else if (roll < 0.96) { state.locations.push(makeLocation(x, "watchtower", r)); }
     else                  { state.locations.push(makeLocation(x, "altar", r)); }
   }
 }

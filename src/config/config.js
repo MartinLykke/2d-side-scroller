@@ -1,6 +1,6 @@
 export const CFG = {
-  worldWidth: 7600,
-  baseX: 3800,
+  worldWidth: 14000,
+  baseX: 7000,
   groundFrac: 0.80,
   dayLength: 160,
   phases: { day: 0.55, dusk: 0.65, night: 0.93 },
