@@ -24,6 +24,7 @@ export const Game = {
   upgradeIdx: 0,
   zoom: 1,
   legendaryIntro: null,
+  screenShake: 0,
 };
 
 // All mutable entity arrays and per-play variables live here so every

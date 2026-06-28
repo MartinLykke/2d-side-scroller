@@ -496,6 +496,7 @@ function update(dt) {
   updateLootPhysics(dt);
   updateWeaponPickup(dt);
   updateParticles(dt);
+  if (Game.screenShake > 0) Game.screenShake = Math.max(0, Game.screenShake - dt * 9);
   updateFloats(dt);
   updateSpawning(dt);
   checkUpgrade();

@@ -701,9 +701,44 @@ export function drawEnemies(dark) {
   }
 }
 
+function drawWeaponSwingArc(x, player) {
+  if (!player.swing || player.swing <= 0 || !player.weapon) return;
+  const w = player.weapon, prog = clamp(player.swing / 0.32, 0, 1);
+  const dir = player.dir || 1;
+  const baseY = groundY - 40 - (player.bob||0) - (player.jumpH||0);
+  const WEAPON_ARC = {
+    flame_sword:  { col:"#ff7730", glow:"#ffcc40", r:52, sw:6, a:0.8 },
+    gilded_spear: { col:"#f2c14e", glow:"#ffffff", r:66, sw:4, a:0.85 },
+    shadow_axe:   { col:"#aa44cc", glow:"#ff88ff", r:48, sw:7, a:0.75 },
+    kings_sword:  { col:"#f2c14e", glow:"#ffffff", r:60, sw:8, a:0.9 },
+    thunder_blade:{ col:"#cc66ff", glow:"#aaaaff", r:56, sw:7, a:0.9 },
+    sunblade:     { col:"#ffee60", glow:"#ffffff", r:68, sw:9, a:1.0 },
+    ice_axe:      { col:"#6abaff", glow:"#ffffff", r:46, sw:5, a:0.7 },
+  };
+  const arc = WEAPON_ARC[w];
+  if (!arc) return;
+  ctx.save();
+  ctx.translate(x, 0);
+  const startA = dir > 0 ? -Math.PI*0.7 : Math.PI*0.3;
+  const endA   = dir > 0 ? Math.PI*0.1  : Math.PI*1.1;
+  const sweepEnd = startA + (endA - startA) * (1 - prog);
+  // Glow bloom
+  ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=prog*arc.a*0.5;
+  ctx.strokeStyle=arc.glow; ctx.lineWidth=arc.sw*3;
+  ctx.beginPath(); ctx.arc(0,baseY,arc.r,startA,sweepEnd); ctx.stroke();
+  ctx.restore();
+  // Core arc
+  ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=prog*arc.a;
+  ctx.strokeStyle=arc.col; ctx.lineWidth=arc.sw; ctx.lineCap="round";
+  ctx.beginPath(); ctx.arc(0,baseY,arc.r,startA,sweepEnd); ctx.stroke();
+  ctx.restore();
+  ctx.restore();
+}
+
 export function drawPlayer(dark) {
   const { player } = state;
   const x=player.x, bob=player.bob, gallop=player.gallop;
+  drawWeaponSwingArc(x, player);
   drawFocusHalo(x, groundY-36-bob-player.jumpH, 92, 52, [255,210,110], 0.11+0.12*dark);
   ctx.save();
   if (player.invuln>0&&Math.floor(player.invuln*12)%2===0) ctx.globalAlpha=0.45;
@@ -811,14 +846,59 @@ export function drawAnimals() {
 }
 
 export function drawArrows() {
+  const t = performance.now() / 1000;
   for (const ar of state.arrows) {
     const ang=Math.atan2(ar.vy,ar.vx);
     ctx.save(); ctx.translate(ar.x,ar.y); ctx.rotate(ang);
-    ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.28;
-    ctx.strokeStyle="#f2c14e"; ctx.lineWidth=5; ctx.beginPath(); ctx.moveTo(-18,0); ctx.lineTo(3,0); ctx.stroke(); ctx.restore();
-    ctx.strokeStyle="#e8d8a8"; ctx.lineWidth=2;
-    ctx.beginPath(); ctx.moveTo(-7,0); ctx.lineTo(5,0); ctx.stroke();
-    ctx.fillStyle="#e8d8a8"; ctx.beginPath(); ctx.moveTo(5,0); ctx.lineTo(1,-2); ctx.lineTo(1,2); ctx.fill();
+    const wid = ar.weaponId;
+    if (wid === "dark_bow") {
+      // Mørk pil med lilla glød og skygge-fjer
+      ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.55;
+      const dg=ctx.createRadialGradient(0,0,1,0,0,12);
+      dg.addColorStop(0,"rgba(180,80,255,0.8)"); dg.addColorStop(1,"rgba(40,0,80,0)");
+      ctx.fillStyle=dg; ctx.beginPath(); ctx.arc(0,0,12,0,Math.PI*2); ctx.fill(); ctx.restore();
+      ctx.strokeStyle="#220033"; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.moveTo(-22,0); ctx.lineTo(6,0); ctx.stroke();
+      ctx.fillStyle="#9933cc"; ctx.beginPath(); ctx.moveTo(6,0); ctx.lineTo(1,-3); ctx.lineTo(1,3); ctx.fill();
+      // Skygge-fjer
+      ctx.save(); ctx.globalAlpha=0.7; ctx.strokeStyle="#aa44ff"; ctx.lineWidth=1.5;
+      for (let k=0;k<3;k++) { const bx=-8-k*4; ctx.beginPath(); ctx.moveTo(bx,0); ctx.lineTo(bx-4,-4); ctx.moveTo(bx,0); ctx.lineTo(bx-4,4); ctx.stroke(); } ctx.restore();
+    } else if (wid === "void_bow") {
+      // Lilla neon void-pil med distortion
+      ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.7;
+      const vg=ctx.createRadialGradient(0,0,2,0,0,14);
+      vg.addColorStop(0,"rgba(160,60,255,0.9)"); vg.addColorStop(1,"rgba(60,0,140,0)");
+      ctx.fillStyle=vg; ctx.beginPath(); ctx.arc(0,0,14,0,Math.PI*2); ctx.fill();
+      ctx.globalAlpha=0.4*(0.7+0.3*Math.sin(t*18));
+      const vg2=ctx.createRadialGradient(0,0,4,0,0,22);
+      vg2.addColorStop(0,"rgba(255,180,255,0.5)"); vg2.addColorStop(1,"rgba(80,0,160,0)");
+      ctx.fillStyle=vg2; ctx.beginPath(); ctx.arc(0,0,22,0,Math.PI*2); ctx.fill(); ctx.restore();
+      ctx.strokeStyle="#dd99ff"; ctx.lineWidth=2.5;
+      ctx.beginPath(); ctx.moveTo(-20,0); ctx.lineTo(7,0); ctx.stroke();
+      ctx.fillStyle="#ffffff"; ctx.beginPath(); ctx.arc(7,0,2.5,0,Math.PI*2); ctx.fill();
+    } else if (wid === "dragons_bow") {
+      // Drage-ildpil — stor, orange/rød ildkugle
+      ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.8;
+      const frg=ctx.createRadialGradient(2,0,2,2,0,18);
+      frg.addColorStop(0,"rgba(255,220,100,1)"); frg.addColorStop(0.4,"rgba(255,100,20,0.8)"); frg.addColorStop(1,"rgba(200,40,0,0)");
+      ctx.fillStyle=frg; ctx.beginPath(); ctx.arc(2,0,18,0,Math.PI*2); ctx.fill();
+      const flk=0.8+0.2*Math.sin(t*25); ctx.globalAlpha=0.5*flk;
+      ctx.fillStyle="rgba(255,240,160,0.6)"; ctx.beginPath(); ctx.arc(2,0,10,0,Math.PI*2); ctx.fill(); ctx.restore();
+      ctx.strokeStyle="#cc4400"; ctx.lineWidth=3.5;
+      ctx.beginPath(); ctx.moveTo(-18,0); ctx.lineTo(5,0); ctx.stroke();
+      ctx.fillStyle="#ffaa40"; ctx.beginPath(); ctx.moveTo(8,0); ctx.lineTo(2,-4); ctx.lineTo(2,4); ctx.fill();
+      // Ild-tænder langs skaftet
+      ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.45;
+      ctx.strokeStyle="#ff8820"; ctx.lineWidth=1;
+      for (let k=0;k<4;k++) { const bx=-5-k*4; const fl=Math.sin(t*20+k)*3; ctx.beginPath(); ctx.moveTo(bx,0); ctx.lineTo(bx-2,-4+fl); ctx.stroke(); } ctx.restore();
+    } else {
+      // Standard pil
+      ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.28;
+      ctx.strokeStyle="#f2c14e"; ctx.lineWidth=5; ctx.beginPath(); ctx.moveTo(-18,0); ctx.lineTo(3,0); ctx.stroke(); ctx.restore();
+      ctx.strokeStyle="#e8d8a8"; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(-7,0); ctx.lineTo(5,0); ctx.stroke();
+      ctx.fillStyle="#e8d8a8"; ctx.beginPath(); ctx.moveTo(5,0); ctx.lineTo(1,-2); ctx.lineTo(1,2); ctx.fill();
+    }
     ctx.restore();
   }
 }
@@ -1430,49 +1510,165 @@ function drawShopOverlay() {
 // ---------- Magic spells ----------
 export function drawSpells() {
   if (!state.spells || !state.spells.length) return;
+  const t = performance.now() / 1000;
   for (const sp of state.spells) {
     ctx.save(); ctx.translate(sp.x, sp.y);
+    const age = sp.age || 0;
     switch (sp.spellType) {
       case "fireball": {
-        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.7;
+        // Ydre bloom-glød
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.55*(0.85+0.15*Math.sin(t*14));
+        const fg2=ctx.createRadialGradient(0,0,2,0,0,24);
+        fg2.addColorStop(0,"rgba(255,200,80,0.9)"); fg2.addColorStop(0.5,"rgba(255,80,10,0.5)"); fg2.addColorStop(1,"rgba(200,30,0,0)");
+        ctx.fillStyle=fg2; ctx.beginPath(); ctx.arc(0,0,24,0,Math.PI*2); ctx.fill(); ctx.restore();
+        // Indre kerne
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.9;
         const fg=ctx.createRadialGradient(0,0,1,0,0,13);
-        fg.addColorStop(0,"rgba(255,220,120,0.95)"); fg.addColorStop(0.5,"rgba(255,100,30,0.7)"); fg.addColorStop(1,"rgba(255,50,0,0)");
+        fg.addColorStop(0,"rgba(255,240,180,1)"); fg.addColorStop(0.4,"rgba(255,120,40,0.85)"); fg.addColorStop(1,"rgba(220,40,0,0)");
         ctx.fillStyle=fg; ctx.beginPath(); ctx.arc(0,0,13,0,Math.PI*2); ctx.fill(); ctx.restore();
-        ctx.fillStyle="#ffcc80"; ctx.beginPath(); ctx.arc(0,0,5,0,Math.PI*2); ctx.fill(); break;
+        // Drivende gnistrende kerne
+        const flk=0.9+0.1*Math.sin(t*22); ctx.fillStyle="#ffe8a0";
+        ctx.beginPath(); ctx.arc(0,0,5*flk,0,Math.PI*2); ctx.fill();
+        // Ild-spids i flyveretning
+        ctx.save(); ctx.globalAlpha=0.6; ctx.fillStyle="#ff6010";
+        const ang2=Math.atan2(sp.vy,sp.vx);
+        ctx.rotate(ang2); ctx.beginPath(); ctx.moveTo(14,0); ctx.lineTo(26,-5); ctx.lineTo(26,5); ctx.closePath(); ctx.fill(); ctx.restore();
+        break;
       }
       case "meteor": {
-        ctx.fillStyle="#4a3020"; ctx.beginPath(); ctx.arc(0,0,9,0,Math.PI*2); ctx.fill();
-        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.65;
-        ctx.fillStyle="#ff8840"; ctx.beginPath(); ctx.arc(-2,-4,15,0,Math.PI*2); ctx.fill(); ctx.restore(); break;
+        // Sten-krop med vinkelret ildspor
+        const ang3=Math.atan2(sp.vy,sp.vx);
+        ctx.save(); ctx.rotate(ang3);
+        // Ildspor bag
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.7;
+        const mtg=ctx.createLinearGradient(-38,0,8,0);
+        mtg.addColorStop(0,"rgba(255,120,30,0)"); mtg.addColorStop(0.5,"rgba(255,160,60,0.6)"); mtg.addColorStop(1,"rgba(255,200,80,0.9)");
+        ctx.fillStyle=mtg; ctx.beginPath(); ctx.ellipse(-15,0,28,9,0,0,Math.PI*2); ctx.fill(); ctx.restore();
+        // Røgspor
+        ctx.save(); ctx.globalAlpha=0.35;
+        const smg=ctx.createLinearGradient(-50,0,0,0);
+        smg.addColorStop(0,"rgba(80,60,50,0)"); smg.addColorStop(1,"rgba(110,80,60,0.7)");
+        ctx.fillStyle=smg; ctx.beginPath(); ctx.ellipse(-20,0,32,14,0,0,Math.PI*2); ctx.fill(); ctx.restore();
+        // Selve meteoren
+        ctx.fillStyle="#5a3820"; ctx.beginPath(); ctx.ellipse(0,0,10,8,0,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle="#7a4a28"; ctx.beginPath(); ctx.ellipse(-3,-3,5,4,0,0,Math.PI*2); ctx.fill();
+        // Ild-glød forrest
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.8;
+        ctx.fillStyle="#ff9940"; ctx.beginPath(); ctx.arc(4,0,12,0,Math.PI*2); ctx.fill(); ctx.restore();
+        ctx.restore();
+        break;
       }
       case "waterjet": {
+        // Stor vandboble med refleksion
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.45;
+        const wg=ctx.createRadialGradient(0,0,2,0,0,18);
+        wg.addColorStop(0,"rgba(180,230,255,0.8)"); wg.addColorStop(1,"rgba(30,100,200,0)");
+        ctx.fillStyle=wg; ctx.beginPath(); ctx.arc(0,0,18,0,Math.PI*2); ctx.fill(); ctx.restore();
         ctx.save(); ctx.globalAlpha=0.85;
-        ctx.fillStyle="#4ab8e8"; ctx.beginPath(); ctx.arc(0,0,8,0,Math.PI*2); ctx.fill();
-        ctx.fillStyle="#a0e8ff"; ctx.beginPath(); ctx.arc(0,0,3,0,Math.PI*2); ctx.fill(); ctx.restore(); break;
+        ctx.fillStyle="#3ab0e8"; ctx.beginPath(); ctx.arc(0,0,9,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle="#b0eeff"; ctx.beginPath(); ctx.arc(-3,-3,4,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle="rgba(255,255,255,0.7)"; ctx.beginPath(); ctx.arc(-2,-2,2,0,Math.PI*2); ctx.fill();
+        ctx.restore();
+        // Bølge-ringe
+        ctx.save(); ctx.globalCompositeOperation="lighter";
+        for (let ri=0;ri<2;ri++) {
+          const rp=(age*3+ri*0.5)%1, rr=12+rp*16, ra=0.4*(1-rp);
+          ctx.globalAlpha=ra; ctx.strokeStyle="#a0e8ff"; ctx.lineWidth=1.5;
+          ctx.beginPath(); ctx.arc(0,0,rr,0,Math.PI*2); ctx.stroke();
+        }
+        ctx.restore();
+        break;
       }
       case "lightning": {
-        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.9;
-        ctx.fillStyle="#ffffaa"; ctx.beginPath(); ctx.arc(0,0,12,0,Math.PI*2); ctx.fill(); ctx.restore();
-        ctx.fillStyle="#fff"; ctx.beginPath(); ctx.arc(0,0,4,0,Math.PI*2); ctx.fill(); break;
+        // Plasma-bold med lyn-arme
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.85;
+        const lg=ctx.createRadialGradient(0,0,2,0,0,16);
+        lg.addColorStop(0,"rgba(255,255,220,1)"); lg.addColorStop(0.3,"rgba(200,160,255,0.7)"); lg.addColorStop(1,"rgba(100,60,255,0)");
+        ctx.fillStyle=lg; ctx.beginPath(); ctx.arc(0,0,16,0,Math.PI*2); ctx.fill();
+        // Ydre pulserende ring
+        ctx.globalAlpha=0.4*(0.6+0.4*Math.sin(t*28));
+        ctx.strokeStyle="#ffffff"; ctx.lineWidth=2;
+        ctx.beginPath(); ctx.arc(0,0,20,0,Math.PI*2); ctx.stroke(); ctx.restore();
+        // Lynflager ud til siderne
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.8;
+        ctx.strokeStyle="#eeeeff"; ctx.lineWidth=1.5;
+        const numR=4;
+        for (let ri=0;ri<numR;ri++) {
+          const ra=(ri/numR)*Math.PI*2 + t*8;
+          const lx1=Math.cos(ra)*8, ly1=Math.sin(ra)*8;
+          const lx2=Math.cos(ra+0.3)*14+Math.sin(t*30+ri)*3, ly2=Math.sin(ra+0.3)*14+Math.cos(t*25+ri)*3;
+          const lx3=Math.cos(ra)*20, ly3=Math.sin(ra)*20;
+          ctx.beginPath(); ctx.moveTo(lx1,ly1); ctx.lineTo(lx2,ly2); ctx.lineTo(lx3,ly3); ctx.stroke();
+        }
+        ctx.restore();
+        ctx.fillStyle="#ffffff"; ctx.beginPath(); ctx.arc(0,0,4,0,Math.PI*2); ctx.fill();
+        break;
       }
       case "arcane": {
-        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.72;
-        const ag=ctx.createRadialGradient(0,0,1,0,0,11);
-        ag.addColorStop(0,"rgba(200,180,255,0.9)"); ag.addColorStop(1,"rgba(120,60,255,0)");
-        ctx.fillStyle=ag; ctx.beginPath(); ctx.arc(0,0,11,0,Math.PI*2); ctx.fill(); ctx.restore();
-        ctx.fillStyle="#e0d0ff"; ctx.beginPath(); ctx.arc(0,0,4,0,Math.PI*2); ctx.fill(); break;
+        // Koncentreret stråle/bold af pink/magenta mystisk energi
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.85;
+        const arcg=ctx.createRadialGradient(0,0,1,0,0,18);
+        arcg.addColorStop(0,"rgba(255,180,255,1)"); arcg.addColorStop(0.35,"rgba(200,80,255,0.8)"); arcg.addColorStop(1,"rgba(80,0,160,0)");
+        ctx.fillStyle=arcg; ctx.beginPath(); ctx.arc(0,0,18,0,Math.PI*2); ctx.fill();
+        // Pulserende ydre ring
+        ctx.globalAlpha=0.5*(0.6+0.4*Math.sin(t*16));
+        const arcg2=ctx.createRadialGradient(0,0,12,0,0,28);
+        arcg2.addColorStop(0,"rgba(255,100,255,0.5)"); arcg2.addColorStop(1,"rgba(120,0,200,0)");
+        ctx.fillStyle=arcg2; ctx.beginPath(); ctx.arc(0,0,28,0,Math.PI*2); ctx.fill(); ctx.restore();
+        // Roterende magiske rune-linjer
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.7; ctx.strokeStyle="#ff80ff"; ctx.lineWidth=1.5;
+        for (let ri=0;ri<3;ri++) {
+          const ra=t*6+ri*(Math.PI*2/3);
+          ctx.beginPath(); ctx.arc(0,0,12,ra,ra+1.2); ctx.stroke();
+        }
+        ctx.restore();
+        ctx.fillStyle="#ffe0ff"; ctx.beginPath(); ctx.arc(0,0,5,0,Math.PI*2); ctx.fill();
+        break;
       }
       case "shadow": {
-        ctx.save(); ctx.globalAlpha=0.55;
-        ctx.fillStyle="#200030"; ctx.beginPath(); ctx.arc(0,0,14,0,Math.PI*2); ctx.fill(); ctx.restore();
-        ctx.fillStyle="#cc44ff"; ctx.beginPath(); ctx.arc(0,0,5,0,Math.PI*2); ctx.fill(); break;
+        // Mørk tåge-bold med pulserende lilla kerne
+        ctx.save(); ctx.globalAlpha=0.7;
+        const shg=ctx.createRadialGradient(0,0,2,0,0,20);
+        shg.addColorStop(0,"rgba(30,0,50,0.95)"); shg.addColorStop(0.6,"rgba(60,0,90,0.7)"); shg.addColorStop(1,"rgba(20,0,40,0)");
+        ctx.fillStyle=shg; ctx.beginPath(); ctx.arc(0,0,20,0,Math.PI*2); ctx.fill(); ctx.restore();
+        // Skygge-kløer/arme
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.6;
+        ctx.strokeStyle="#cc44ff"; ctx.lineWidth=2;
+        for (let ci=0;ci<3;ci++) {
+          const ca=t*5+ci*(Math.PI*2/3);
+          const cx2=Math.cos(ca)*15, cy2=Math.sin(ca)*15;
+          const mx=Math.cos(ca+0.4)*9, my=Math.sin(ca+0.4)*9;
+          ctx.beginPath(); ctx.moveTo(mx,my); ctx.quadraticCurveTo(cx2*0.6,cy2*0.6,cx2,cy2); ctx.stroke();
+        }
+        ctx.restore();
+        // Glødende kerne
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.85*(0.7+0.3*Math.sin(t*12));
+        ctx.fillStyle="#cc44ff"; ctx.beginPath(); ctx.arc(0,0,6,0,Math.PI*2); ctx.fill(); ctx.restore();
+        ctx.fillStyle="#ff80ff"; ctx.beginPath(); ctx.arc(0,0,2.5,0,Math.PI*2); ctx.fill();
+        break;
       }
       case "void": {
-        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.82;
-        const vg=ctx.createRadialGradient(0,0,2,0,0,19);
-        vg.addColorStop(0,"rgba(255,240,160,0.9)"); vg.addColorStop(0.4,"rgba(180,100,255,0.6)"); vg.addColorStop(1,"rgba(80,20,160,0)");
-        ctx.fillStyle=vg; ctx.beginPath(); ctx.arc(0,0,19,0,Math.PI*2); ctx.fill(); ctx.restore();
-        ctx.fillStyle="#ffe060"; ctx.beginPath(); ctx.arc(0,0,7,0,Math.PI*2); ctx.fill(); break;
+        // Sort hul — indadtrækkende ringe og lys-distortion
+        ctx.save(); ctx.globalAlpha=0.9;
+        const vbg=ctx.createRadialGradient(0,0,1,0,0,24);
+        vbg.addColorStop(0,"rgba(0,0,0,1)"); vbg.addColorStop(0.55,"rgba(20,0,40,0.9)"); vbg.addColorStop(1,"rgba(60,0,100,0)");
+        ctx.fillStyle=vbg; ctx.beginPath(); ctx.arc(0,0,24,0,Math.PI*2); ctx.fill(); ctx.restore();
+        // Gravitationsringe der trækker indad
+        ctx.save(); ctx.globalCompositeOperation="lighter";
+        for (let ri=0;ri<3;ri++) {
+          const rp=((age*1.8 + ri*0.33)%1);
+          const rr=22*(1-rp), ra=0.7*(1-rp);
+          ctx.globalAlpha=ra; ctx.strokeStyle=ri===0?"#e060ff":ri===1?"#9933ff":"#cc88ff";
+          ctx.lineWidth=1.5+ri*0.5;
+          ctx.beginPath(); ctx.arc(0,0,rr,0,Math.PI*2); ctx.stroke();
+        }
+        ctx.restore();
+        // Stjerneglimmer-kerne
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.95*(0.8+0.2*Math.sin(t*20));
+        const vcg=ctx.createRadialGradient(0,0,0,0,0,8);
+        vcg.addColorStop(0,"rgba(255,220,255,1)"); vcg.addColorStop(1,"rgba(120,0,200,0)");
+        ctx.fillStyle=vcg; ctx.beginPath(); ctx.arc(0,0,8,0,Math.PI*2); ctx.fill(); ctx.restore();
+        break;
       }
       default: {
         ctx.fillStyle=sp.col||"#ffffff"; ctx.beginPath(); ctx.arc(0,0,6,0,Math.PI*2); ctx.fill(); break;
@@ -1573,8 +1769,10 @@ export function render() {
   ctx.fillRect(0,groundY,W,2);
 
   const zoom=Game.zoom||1;
+  const _sk=Game.screenShake||0;
+  const _skx=_sk>0?(Math.random()-0.5)*_sk*12:0, _sky=_sk>0?(Math.random()-0.5)*_sk*7:0;
   ctx.save();
-  ctx.translate(W/2, groundY); ctx.scale(zoom,zoom); ctx.translate(-W/2-Game.cam,-groundY);
+  ctx.translate(W/2+_skx, groundY+_sky); ctx.scale(zoom,zoom); ctx.translate(-W/2-Game.cam,-groundY);
   drawGroundTexture(dark); drawGroundDeco(dark); drawLocations(dark);
   drawEntityShadows(); drawPortals(dark); drawWalls(dark); drawBase(dark);
   drawStations(); drawCoins(); drawGroundBows(); drawGroundHammers(); drawLootItems(); drawChests();

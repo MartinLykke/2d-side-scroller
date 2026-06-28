@@ -5,13 +5,75 @@ import { ARMORS } from '../config/armor.js';
 import { clamp, dist, rand } from '../util/math.js';
 import { groundY } from '../canvas.js';
 import { Game, state } from '../state.js';
+
+// Weapon-specific melee impact visual burst + screen shake
+function meleeWeaponImpact(weaponId, x, y) {
+  switch (weaponId) {
+    case "flame_sword":
+      spawnParticles(x, y, 10, "#ff7730", 70, 90);
+      spawnParticles(x, y, 6, "#ffcc40", 40, 70);
+      spawnParticles(x, y, 4, "#ff2200", 50, 50);
+      Game.screenShake = Math.max(Game.screenShake, 0.22);
+      break;
+    case "gilded_spear":
+      spawnParticles(x, y, 12, "#f2c14e", 60, 130);
+      spawnParticles(x, y, 6, "#ffffff", 30, 90);
+      spawnParticles(x, y, 4, "#ffe080", 80, 60);
+      Game.screenShake = Math.max(Game.screenShake, 0.18);
+      break;
+    case "shadow_axe":
+      spawnParticles(x, y, 12, "#aa44cc", 80, 80);
+      spawnParticles(x, y, 8, "#440066", 50, 50);
+      spawnParticles(x, y, 4, "#ff88ff", 30, 100);
+      Game.screenShake = Math.max(Game.screenShake, 0.3);
+      break;
+    case "thunder_blade":
+      spawnParticles(x, y, 14, "#cc66ff", 90, 110);
+      spawnParticles(x, y, 8, "#ffffff", 50, 140);
+      spawnParticles(x, y, 6, "#aaaaff", 70, 80);
+      Game.screenShake = Math.max(Game.screenShake, 0.42);
+      break;
+    case "kings_sword":
+      spawnParticles(x, y, 20, "#f2c14e", 110, 130);
+      spawnParticles(x, y, 10, "#ffffff", 70, 110);
+      spawnParticles(x, y, 8, "#ff9940", 60, 90);
+      Game.screenShake = Math.max(Game.screenShake, 0.48);
+      break;
+    case "sunblade":
+      spawnParticles(x, y, 22, "#ffee80", 130, 150);
+      spawnParticles(x, y, 14, "#ffffff", 80, 130);
+      spawnParticles(x, y, 10, "#ff9940", 90, 100);
+      spawnParticles(x, y, 6, "#ffcc00", 50, 170);
+      Game.screenShake = Math.max(Game.screenShake, 0.6);
+      break;
+    case "ice_axe":
+      spawnParticles(x, y, 10, "#6abaff", 70, 80);
+      spawnParticles(x, y, 5, "#ffffff", 40, 60);
+      break;
+    default:
+      spawnParticles(x, y, 6, "#8a4a8a", 50, 60);
+      break;
+  }
+}
+
+// Spawn trailing particles for special projectile weapons
+function arrowTrail(ar) {
+  if (ar.weaponId === "dark_bow") {
+    if (Math.random() < 0.5) spawnParticles(ar.x, ar.y, 1, "#880099", 8, 5);
+  } else if (ar.weaponId === "void_bow") {
+    if (Math.random() < 0.6) spawnParticles(ar.x, ar.y, 1, "#6622cc", 10, 8);
+  } else if (ar.weaponId === "dragons_bow") {
+    spawnParticles(ar.x, ar.y, 2, "#ff6820", 15, 12);
+    if (Math.random() < 0.4) spawnParticles(ar.x, ar.y, 1, "#ffcc40", 8, 8);
+  }
+}
 import { Audio } from './Audio.js';
 import { spawnCoin, spawnParticles, floaty, spawnLocLoot } from './SpawnSystem.js';
 
 // ---------- Arrow shooting ----------
 // All callers shoot at enemies; hitKind defaults to "enemy".
 // Flying enemies push "player"-targeted arrows directly into state.arrows.
-export function shootArrow(x, y, target, sourceUnit = null) {
+export function shootArrow(x, y, target, sourceUnit = null, weaponId = null) {
   const tx = target.x, ty = groundY - 24;
   const ang = Math.atan2(ty - y, tx - x);
   const sp  = 560;
@@ -23,8 +85,13 @@ export function shootArrow(x, y, target, sourceUnit = null) {
     life: 1.2,
     hitKind: "enemy",
     sourceUnit,
+    weaponId,
   });
   Audio.bow();
+  // Afskydnings-effekt for specielle buer
+  if (weaponId === "dark_bow") spawnParticles(x, y, 8, "#880099", 40, 60);
+  else if (weaponId === "void_bow") spawnParticles(x, y, 6, "#9933ff", 30, 50);
+  else if (weaponId === "dragons_bow") { spawnParticles(x, y, 10, "#ff6620", 50, 80); spawnParticles(x, y, 5, "#ffcc40", 30, 60); }
 }
 
 export function updateArrows(dt) {
@@ -32,6 +99,7 @@ export function updateArrows(dt) {
   for (let i = arrows.length - 1; i >= 0; i--) {
     const ar = arrows[i];
     ar.x += ar.vx * dt; ar.y += ar.vy * dt; ar.vy += 420 * dt; ar.life -= dt;
+    arrowTrail(ar);
     let hit = false;
 
     if (ar.hitKind !== "player") {
@@ -41,7 +109,23 @@ export function updateArrows(dt) {
         const enemyDrawY = et.flying ? groundY + (e.fy || -80) : groundY - 24;
         if (dist(ar.x, e.x) < et.w * 0.7 && Math.abs(ar.y - enemyDrawY) < 40) {
           e.hp--; e.flash = 0.12; Audio.hit();
-          spawnParticles(e.x, enemyDrawY, 4, "#8a2a4a");
+          // Weapon-specific arrow impact
+          if (ar.weaponId === "dark_bow") {
+            spawnParticles(e.x, enemyDrawY, 12, "#aa44cc", 70, 90);
+            spawnParticles(e.x, enemyDrawY, 6, "#440066", 40, 50);
+            Game.screenShake = Math.max(Game.screenShake, 0.3);
+          } else if (ar.weaponId === "void_bow") {
+            spawnParticles(e.x, enemyDrawY, 10, "#9933ff", 60, 80);
+            spawnParticles(e.x, enemyDrawY, 6, "#ddaaff", 30, 110);
+            Game.screenShake = Math.max(Game.screenShake, 0.35);
+          } else if (ar.weaponId === "dragons_bow") {
+            spawnParticles(e.x, enemyDrawY, 18, "#ff6820", 100, 120);
+            spawnParticles(e.x, enemyDrawY, 10, "#ff2200", 70, 90);
+            spawnParticles(e.x, enemyDrawY, 8, "#ffdd60", 50, 100);
+            Game.screenShake = Math.max(Game.screenShake, 0.55);
+          } else {
+            spawnParticles(e.x, enemyDrawY, 4, "#8a2a4a");
+          }
           hit = true;
           if (e.hp <= 0) {
             if (ar.sourceUnit) {
@@ -342,6 +426,7 @@ function castSpell(player, wBase, tgt) {
     life: 2.2,
     col: wBase.col,
     aoeRadius: aoeR,
+    age: 0,
   });
   // Cast glow at player position
   spawnParticles(player.x, sy, 10, wBase.col, 50, 70);
@@ -355,12 +440,20 @@ export function updateSpells(dt) {
     const sp = spells[i];
     sp.x += sp.vx * dt;
     sp.y += sp.vy * dt;
+    sp.age = (sp.age || 0) + dt;
     const grav = sp.spellType === "meteor" ? 650 : sp.spellType === "waterjet" ? 80 : 280;
     sp.vy += grav * dt;
     sp.life -= dt;
+
+    // Trailing particles per frame
+    spellTrail(sp);
+
     const hitGround = sp.y > groundY - 8;
     if (sp.life <= 0 || hitGround) {
-      if (sp.aoeRadius > 0 && hitGround) dealAoE(sp.x, sp.dmg, sp.aoeRadius, sp.col);
+      if (sp.aoeRadius > 0 && hitGround) {
+        spellGroundImpact(sp);
+        dealAoE(sp.x, sp.dmg, sp.aoeRadius, sp.col);
+      }
       spells.splice(i, 1);
       continue;
     }
@@ -368,9 +461,10 @@ export function updateSpells(dt) {
     for (const e of enemies) {
       if (e.fleeing) continue;
       const et = ENEMY_TYPES[e.type];
-      if (dist(sp.x, e.x) < et.w * 0.75 && Math.abs(sp.y - (groundY + (e.fy || 0) - 24)) < 44) {
+      const ey = groundY + (e.fy || 0) - 24;
+      if (dist(sp.x, e.x) < et.w * 0.75 && Math.abs(sp.y - ey) < 44) {
         e.hp -= sp.dmg; e.flash = 0.14; Audio.hit();
-        spawnParticles(e.x, groundY + (e.fy || 0) - 24, 8, sp.col, 70, 90);
+        spellEnemyImpact(sp, e.x, ey);
         if (!et.noKnockback) e.knock = (e.knock || 0) + Math.sign(e.x - sp.vx) * 140;
         if (e.hp <= 0) killEnemy(e);
         else if (sp.aoeRadius > 0) dealAoE(sp.x, Math.max(1, Math.floor(sp.dmg * 0.65)), sp.aoeRadius, sp.col);
@@ -379,6 +473,120 @@ export function updateSpells(dt) {
       }
     }
     if (hit) spells.splice(i, 1);
+  }
+}
+
+function spellTrail(sp) {
+  switch (sp.spellType) {
+    case "fireball":
+      if (Math.random() < 0.7) spawnParticles(sp.x, sp.y, 1, "#ff6a20", 12, 10);
+      if (Math.random() < 0.3) spawnParticles(sp.x, sp.y, 1, "#ffcc60", 6, 14);
+      break;
+    case "meteor":
+      spawnParticles(sp.x, sp.y, 2, "#ff7730", 18, 14);
+      if (Math.random() < 0.5) spawnParticles(sp.x, sp.y, 1, "#554432", 22, 10);
+      break;
+    case "waterjet":
+      if (Math.random() < 0.5) spawnParticles(sp.x, sp.y, 1, "#4ab8e8", 14, 8);
+      break;
+    case "lightning":
+      if (Math.random() < 0.6) spawnParticles(sp.x, sp.y, 1, "#ccccff", 18, 16);
+      if (Math.random() < 0.3) spawnParticles(sp.x, sp.y, 1, "#ffffff", 8, 20);
+      break;
+    case "arcane":
+      if (Math.random() < 0.6) spawnParticles(sp.x, sp.y, 1, "#cc44ff", 16, 14);
+      if (Math.random() < 0.3) spawnParticles(sp.x, sp.y, 1, "#ff88ff", 8, 18);
+      break;
+    case "shadow":
+      if (Math.random() < 0.6) spawnParticles(sp.x, sp.y, 1, "#660099", 12, 8);
+      if (Math.random() < 0.3) spawnParticles(sp.x, sp.y, 1, "#aa44cc", 8, 12);
+      break;
+    case "void":
+      if (Math.random() < 0.7) spawnParticles(sp.x, sp.y, 1, "#9922ff", 14, 12);
+      if (Math.random() < 0.4) spawnParticles(sp.x, sp.y, 1, "#550088", 20, 8);
+      break;
+  }
+}
+
+function spellEnemyImpact(sp, x, y) {
+  switch (sp.spellType) {
+    case "fireball":
+      spawnParticles(x, y, 14, "#ff6a20", 80, 100);
+      spawnParticles(x, y, 8, "#ffcc60", 50, 80);
+      spawnParticles(x, y, 4, "#ff2200", 60, 60);
+      Game.screenShake = Math.max(Game.screenShake, 0.18);
+      break;
+    case "meteor":
+      spawnParticles(x, y, 18, "#ff8840", 100, 120);
+      spawnParticles(x, y, 10, "#554432", 70, 80);
+      spawnParticles(x, y, 6, "#ffcc60", 60, 100);
+      Game.screenShake = Math.max(Game.screenShake, 0.4);
+      break;
+    case "waterjet":
+      spawnParticles(x, y, 12, "#4ab8e8", 80, 90);
+      spawnParticles(x, y, 6, "#a0e8ff", 50, 60);
+      break;
+    case "lightning":
+      spawnParticles(x, y, 14, "#ccccff", 80, 110);
+      spawnParticles(x, y, 8, "#ffffff", 40, 130);
+      Game.screenShake = Math.max(Game.screenShake, 0.28);
+      break;
+    case "arcane":
+      spawnParticles(x, y, 16, "#cc44ff", 90, 120);
+      spawnParticles(x, y, 8, "#ff88ff", 50, 100);
+      spawnParticles(x, y, 5, "#ffffff", 30, 80);
+      Game.screenShake = Math.max(Game.screenShake, 0.32);
+      break;
+    case "shadow":
+      spawnParticles(x, y, 14, "#aa44cc", 70, 90);
+      spawnParticles(x, y, 8, "#440066", 50, 60);
+      spawnParticles(x, y, 5, "#ff88ff", 30, 80);
+      Game.screenShake = Math.max(Game.screenShake, 0.3);
+      break;
+    case "void":
+      spawnParticles(x, y, 20, "#9922ff", 100, 140);
+      spawnParticles(x, y, 12, "#ddaaff", 60, 120);
+      spawnParticles(x, y, 8, "#550088", 80, 80);
+      Game.screenShake = Math.max(Game.screenShake, 0.5);
+      break;
+    default:
+      spawnParticles(x, y, 8, sp.col, 70, 90);
+      break;
+  }
+}
+
+function spellGroundImpact(sp) {
+  switch (sp.spellType) {
+    case "fireball":
+      spawnParticles(sp.x, groundY - 8, 16, "#ff6a20", 90, 100);
+      spawnParticles(sp.x, groundY - 8, 8, "#ffcc40", 60, 80);
+      break;
+    case "meteor":
+      spawnParticles(sp.x, groundY - 8, 28, "#ff8840", 130, 140);
+      spawnParticles(sp.x, groundY - 8, 16, "#554432", 100, 100);
+      spawnParticles(sp.x, groundY - 8, 10, "#ffcc60", 80, 120);
+      Game.screenShake = Math.max(Game.screenShake, 0.65);
+      break;
+    case "waterjet":
+      spawnParticles(sp.x, groundY - 8, 18, "#4ab8e8", 110, 100);
+      spawnParticles(sp.x, groundY - 8, 10, "#a0e8ff", 70, 70);
+      break;
+    case "arcane":
+      spawnParticles(sp.x, groundY - 8, 20, "#cc44ff", 100, 130);
+      spawnParticles(sp.x, groundY - 8, 10, "#ff88ff", 60, 100);
+      Game.screenShake = Math.max(Game.screenShake, 0.35);
+      break;
+    case "shadow":
+      spawnParticles(sp.x, groundY - 8, 18, "#aa44cc", 90, 100);
+      spawnParticles(sp.x, groundY - 8, 10, "#220033", 60, 70);
+      Game.screenShake = Math.max(Game.screenShake, 0.3);
+      break;
+    case "void":
+      spawnParticles(sp.x, groundY - 8, 30, "#9922ff", 120, 160);
+      spawnParticles(sp.x, groundY - 8, 18, "#ddaaff", 80, 140);
+      spawnParticles(sp.x, groundY - 8, 12, "#ffffff", 50, 120);
+      Game.screenShake = Math.max(Game.screenShake, 0.7);
+      break;
   }
 }
 
@@ -402,13 +610,13 @@ export function updatePlayerAttack(dt) {
   player.swing = 0.32;
   if (wBase.type === "melee") {
     tgt.hp -= w.dmg; tgt.flash = 0.14; Audio.hit();
-    spawnParticles(tgt.x, groundY - 28, 6, wBase.col, 50, 60);
+    meleeWeaponImpact(player.weapon, tgt.x, groundY - 28);
     floaty(tgt.x, "-" + w.dmg, wBase.col);
     const et = ENEMY_TYPES[tgt.type];
     if (!et.noKnockback) tgt.knock = (tgt.knock || 0) + Math.sign(tgt.x - player.x) * 220;
     if (tgt.hp <= 0) killEnemy(tgt);
   } else if (wBase.type === "ranged") {
-    shootArrow(player.x, groundY - 72, tgt);
+    shootArrow(player.x, groundY - 72, tgt, null, player.weapon);
   } else {
     castSpell(player, wBase, tgt);
   }
