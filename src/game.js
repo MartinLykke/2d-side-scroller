@@ -513,7 +513,12 @@ function updatePortals() {
 
 function checkEndConditions() {
   const { base, player } = state;
-  if (base.hp<=0) { endGame("Dit slot blev jævnet med jorden. Mørket sluger riget."); return; }
+  if (base.hp<=0 && Game.state==="play") {
+    Game.state="defeat-pan";
+    Game.defeatText="Dit slot blev jævnet med jorden. Mørket sluger riget.";
+    Game.defeatPanTimer=0;
+    return;
+  }
   if (player.hp<=0) { endGame("Monarken faldt i kamp, og kronen rullede i mulden. Riget er fortabt."); return; }
 }
 
@@ -595,6 +600,13 @@ function loop(now) {
   updateFX(gdt);
 
   if (Game.state === "play") { if (!Game.upgradeMenuOpen) update(gdt); UI.refresh(); }
+  if (Game.state === "defeat-pan") {
+    Game.defeatPanTimer += dt;
+    const zoom = Game.zoom;
+    const target = clamp(state.base.x - W / (2 * zoom), 0, Math.max(0, CFG.worldWidth - W / zoom));
+    Game.cam += (target - Game.cam) * Math.min(1, dt * 2.5);
+    if (Game.defeatPanTimer > 2.2) endGame(Game.defeatText);
+  }
   if (Game.state !== "menu") render();
   else renderMenuBackground();
 
