@@ -13,6 +13,7 @@ import {
   drawHills, drawMountains, drawFogBand, drawGodrays, drawLowFog, drawAmbientFront,
 } from './Effects.js';
 import { wallHeight } from '../entities/Wall.js';
+import { spr, ready as spritesReady, T } from './Sprites.js';
 
 // ---------- Shared helpers ----------
 export function groundShadow(x, w, a) {
@@ -417,41 +418,58 @@ function drawHumanoid(x, anim, bodyCol, headCol, tool, dir, moving) {
 }
 
 export function drawVagrants() {
-  for (const v of state.vagrants)
-    drawHumanoid(v.x,v.anim,"#4a4438","#9a8a6a",null,v.vx>=0?1:-1,Math.abs(v.vx)>1);
+  for (const v of state.vagrants) {
+    if (spritesReady) {
+      const tile = (Math.floor(v.x * 0.01) % 2 === 0) ? T.VAGRANT : T.VAGRANT2;
+      const bob = Math.abs(v.vx) > 1 ? Math.abs(Math.sin(v.anim)) * 2 : 0;
+      ctx.save();
+      ctx.translate(v.x, 0);
+      if (v.vx < 0) ctx.scale(-1, 1);
+      spr(ctx, tile, 0, groundY - bob, 24, 28);
+      ctx.restore();
+    } else {
+      drawHumanoid(v.x, v.anim, "#4a4438", "#9a8a6a", null, v.vx>=0?1:-1, Math.abs(v.vx)>1);
+    }
+  }
 }
 
 export function drawUnits() {
   for (const u of state.units) {
-    let body="#3a3550", head="#caa483", tool=null;
-    if (u.role==="archer")  { body="#2f5040"; tool="bow"; }
-    else if (u.role==="builder") { body="#6a4a28"; tool="hammer"; }
-    else if (u.role==="farmer")  { body="#5a6a2a"; tool="scythe"; }
-    else if (u.role==="guard")   { body="#3a4a5a"; head="#b09a7a"; }
+    let body="#3a3550", head="#caa483", tool=null, tile=T.PLAYER;
+    if (u.role==="archer")  { body="#2f5040"; tool="bow";    tile=T.ARCHER; }
+    else if (u.role==="builder") { body="#6a4a28"; tool="hammer"; tile=T.BUILDER; }
+    else if (u.role==="farmer")  { body="#5a6a2a"; tool="scythe"; tile=T.FARMER; }
+    else if (u.role==="guard")   { body="#3a4a5a"; head="#b09a7a"; tile=T.GUARD; }
     const wallLift = u.onWall && u.wall ? Math.max(0, wallHeight(u.wall) - 14) : 0;
-    ctx.save();
-    if (wallLift > 0) {
-      ctx.translate(0, -wallLift);
-      ctx.globalAlpha = 0.98;
-    }
-    drawHumanoid(u.x,u.anim,body,head,tool,u.dir,u.moving);
-    if (u.role==="guard") {
-      const bob=u.moving?Math.abs(Math.sin(u.anim))*1.2:0;
-      ctx.save(); ctx.translate(u.x,0); if (u.dir<0) ctx.scale(-1,1);
-      // Shield
-      ctx.fillStyle="#4a5060"; roundedRect(8,groundY-34-bob,10,16,3); ctx.fill();
-      ctx.fillStyle="#f2c14e"; ctx.beginPath(); ctx.arc(13,groundY-28-bob,2.5,0,Math.PI*2); ctx.fill();
-      // Sword
-      ctx.strokeStyle="#b0b8c8"; ctx.lineWidth=2; ctx.lineCap="round";
-      ctx.beginPath(); ctx.moveTo(-8,groundY-14-bob); ctx.lineTo(-8,groundY-30-bob); ctx.stroke();
-      ctx.strokeStyle="#8a6a30"; ctx.lineWidth=3;
-      ctx.beginPath(); ctx.moveTo(-5,groundY-22-bob); ctx.lineTo(-11,groundY-22-bob); ctx.stroke();
-      // Helmet
-      ctx.fillStyle="#4a5060"; ctx.beginPath(); ctx.arc(0,groundY-38-bob,6,Math.PI,0); ctx.fill();
-      ctx.fillRect(-6,groundY-40-bob,12,3);
+
+    if (spritesReady) {
+      const bob = u.moving ? Math.abs(Math.sin(u.anim)) * 2 : 0;
+      ctx.save();
+      if (wallLift > 0) { ctx.translate(0, -wallLift); ctx.globalAlpha = 0.98; }
+      ctx.translate(u.x, 0);
+      if (u.dir < 0) ctx.scale(-1, 1);
+      spr(ctx, tile, 0, groundY - bob, 28, 32);
+      ctx.restore();
+    } else {
+      ctx.save();
+      if (wallLift > 0) { ctx.translate(0, -wallLift); ctx.globalAlpha = 0.98; }
+      drawHumanoid(u.x, u.anim, body, head, tool, u.dir, u.moving);
+      if (u.role==="guard") {
+        const bob=u.moving?Math.abs(Math.sin(u.anim))*1.2:0;
+        ctx.save(); ctx.translate(u.x,0); if (u.dir<0) ctx.scale(-1,1);
+        ctx.fillStyle="#4a5060"; roundedRect(8,groundY-34-bob,10,16,3); ctx.fill();
+        ctx.fillStyle="#f2c14e"; ctx.beginPath(); ctx.arc(13,groundY-28-bob,2.5,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle="#b0b8c8"; ctx.lineWidth=2; ctx.lineCap="round";
+        ctx.beginPath(); ctx.moveTo(-8,groundY-14-bob); ctx.lineTo(-8,groundY-30-bob); ctx.stroke();
+        ctx.strokeStyle="#8a6a30"; ctx.lineWidth=3;
+        ctx.beginPath(); ctx.moveTo(-5,groundY-22-bob); ctx.lineTo(-11,groundY-22-bob); ctx.stroke();
+        ctx.fillStyle="#4a5060"; ctx.beginPath(); ctx.arc(0,groundY-38-bob,6,Math.PI,0); ctx.fill();
+        ctx.fillRect(-6,groundY-40-bob,12,3);
+        ctx.restore();
+      }
       ctx.restore();
     }
-    ctx.restore();
+
     if (u.transform>0) {
       const p=u.transform/0.55;
       ctx.save(); ctx.globalAlpha=p*0.7; ctx.globalCompositeOperation="lighter";
@@ -580,43 +598,82 @@ export function drawEnemies(dark) {
     ctx.save(); ctx.translate(e.x, drawYOff); if (e.dir<0) ctx.scale(-1,1);
     if (isLegend) {
       drawLegendaryBody(e, t, dark, bossT);
-    } else {
-    const s=Math.sin(e.anim*3);
-    ctx.strokeStyle=e.flash>0?"#fff":t.color; ctx.lineWidth=Math.max(2,w*0.12); ctx.lineCap="round";
-    ctx.beginPath(); ctx.moveTo(-w*0.25,groundY-8-bob); ctx.lineTo(-w*0.25+s*5,groundY); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(w*0.25,groundY-8-bob); ctx.lineTo(w*0.25-s*5,groundY); ctx.stroke();
-    ctx.lineCap="butt";
-    // Boss pulsing aura
-    if (isBoss) {
-      ctx.save(); ctx.globalCompositeOperation="lighter";
-      const aura=0.18+0.08*Math.sin(bossT*2+e.x); ctx.globalAlpha=aura;
-      const ag=ctx.createRadialGradient(0,groundY-w*0.5,4,0,groundY-w*0.5,w*1.4);
-      ag.addColorStop(0,t.eye); ag.addColorStop(1,"rgba(0,0,0,0)");
-      ctx.fillStyle=ag; ctx.beginPath(); ctx.ellipse(0,groundY-w*0.5,w*1.4,w,0,0,Math.PI*2); ctx.fill();
-      ctx.restore();
-    }
-    ctx.fillStyle=e.flash>0?"#ffffff":t.color;
-    roundedRect(-w/2,groundY-w-6-bob,w,w+6,w*0.4); ctx.fill();
-    if (e.type==="brute"||isBoss) {
-      ctx.fillStyle=e.flash>0?"#fff":t.color;
-      for (let i=-1;i<=1;i++) { const sx=i*w*0.28; ctx.beginPath(); ctx.moveTo(sx-3,groundY-w-2-bob); ctx.lineTo(sx,groundY-w-(isBoss?18:13)-bob); ctx.lineTo(sx+3,groundY-w-2-bob); ctx.fill(); }
-      if (isBoss && (e.type==="boss3"||e.type==="boss4")) {
-        for (let i=-2;i<=2;i+=2) if (i!==0) { const sx=i*w*0.18; ctx.beginPath(); ctx.moveTo(sx-2,groundY-w-1-bob); ctx.lineTo(sx,groundY-w-9-bob); ctx.lineTo(sx+2,groundY-w-1-bob); ctx.fill(); }
+    } else if (spritesReady) {
+      const ETILE = {
+        imp:T.IMP, runner:T.RUNNER, wraith:T.WRAITH, crawler:T.CRAWLER,
+        raider:T.RAIDER, brute:T.BRUTE, ogre:T.OGRE, demon:T.DEMON,
+        flier:T.FLIER, necro:T.NECRO,
+        boss1:T.BOSS1, boss2:T.BOSS2, boss3:T.BOSS3, boss4:T.BOSS4,
+      };
+      const tile = ETILE[e.type] || T.IMP;
+      const sh = Math.round(w * 1.35);
+
+      // Boss pulsing aura
+      if (isBoss) {
+        ctx.save(); ctx.globalCompositeOperation="lighter";
+        const aura=0.22+0.1*Math.sin(bossT*2+e.x); ctx.globalAlpha=aura;
+        const ag=ctx.createRadialGradient(0,groundY-w*0.5,4,0,groundY-w*0.5,w*1.5);
+        ag.addColorStop(0,t.eye); ag.addColorStop(1,"rgba(0,0,0,0)");
+        ctx.fillStyle=ag; ctx.beginPath(); ctx.ellipse(0,groundY-w*0.5,w*1.5,w*0.9,0,0,Math.PI*2); ctx.fill();
+        ctx.restore();
       }
-    }
-    ctx.fillStyle="rgba(255,255,255,0.06)"; roundedRect(-w/2,groundY-w-6-bob,w*0.34,w+6,w*0.4); ctx.fill();
-    const ex=w*0.12, ex2=w*0.32, ey=groundY-w*0.6-bob;
-    ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.4+0.35*dark+(isBoss?0.3:0); ctx.fillStyle=t.eye;
-    ctx.beginPath(); ctx.arc(ex,ey,w*(isBoss?0.28:0.22),0,Math.PI*2); ctx.arc(ex2,ey,w*(isBoss?0.28:0.22),0,Math.PI*2); ctx.fill(); ctx.restore();
-    ctx.fillStyle=t.eye; ctx.beginPath(); ctx.arc(ex,ey,w*0.09,0,Math.PI*2); ctx.arc(ex2,ey,w*0.09,0,Math.PI*2); ctx.fill();
-    if (e.carry>0) { ctx.fillStyle="#f2c14e"; ctx.beginPath(); ctx.arc(0,groundY-w-12-bob,4,0,Math.PI*2); ctx.fill(); }
-    if (t.flying) {
-      ctx.fillStyle=withA(t.color, 0.7);
-      const wingFlap=Math.sin(e.anim*4)*8;
-      ctx.beginPath(); ctx.moveTo(-w*0.5,groundY-w*0.5-bob); ctx.lineTo(-w*1.8,groundY-w*0.5-bob-wingFlap); ctx.lineTo(-w*0.5,groundY-w*0.1-bob); ctx.fill();
-      ctx.beginPath(); ctx.moveTo(w*0.5,groundY-w*0.5-bob); ctx.lineTo(w*1.8,groundY-w*0.5-bob+wingFlap); ctx.lineTo(w*0.5,groundY-w*0.1-bob); ctx.fill();
-    }
-    } // end else (non-legendary)
+
+      // Sprite body
+      spr(ctx, tile, 0, groundY - bob, w, sh);
+
+      // White hit-flash overlay
+      if (e.flash > 0) {
+        ctx.save(); ctx.globalCompositeOperation="lighter";
+        ctx.globalAlpha = Math.min(e.flash * 4, 0.85);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(-w/2, groundY - bob - sh, w, sh);
+        ctx.restore();
+      }
+
+      // Flying wings (keep visual for flier)
+      if (t.flying) {
+        ctx.fillStyle = withA(t.color, 0.55);
+        const wingFlap = Math.sin(e.anim*4)*10;
+        ctx.beginPath(); ctx.moveTo(-w*0.5,groundY-sh*0.6-bob); ctx.lineTo(-w*1.9,groundY-sh*0.6-bob-wingFlap); ctx.lineTo(-w*0.5,groundY-sh*0.3-bob); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(w*0.5,groundY-sh*0.6-bob); ctx.lineTo(w*1.9,groundY-sh*0.6-bob+wingFlap); ctx.lineTo(w*0.5,groundY-sh*0.3-bob); ctx.fill();
+      }
+
+      // Gold carry indicator
+      if (e.carry>0) { ctx.fillStyle="#f2c14e"; ctx.beginPath(); ctx.arc(0,groundY-sh-4-bob,4,0,Math.PI*2); ctx.fill(); }
+    } else {
+      // ── Fallback programmatic drawing ──────────────────────────
+      const s=Math.sin(e.anim*3);
+      ctx.strokeStyle=e.flash>0?"#fff":t.color; ctx.lineWidth=Math.max(2,w*0.12); ctx.lineCap="round";
+      ctx.beginPath(); ctx.moveTo(-w*0.25,groundY-8-bob); ctx.lineTo(-w*0.25+s*5,groundY); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(w*0.25,groundY-8-bob); ctx.lineTo(w*0.25-s*5,groundY); ctx.stroke();
+      ctx.lineCap="butt";
+      if (isBoss) {
+        ctx.save(); ctx.globalCompositeOperation="lighter";
+        const aura=0.18+0.08*Math.sin(bossT*2+e.x); ctx.globalAlpha=aura;
+        const ag=ctx.createRadialGradient(0,groundY-w*0.5,4,0,groundY-w*0.5,w*1.4);
+        ag.addColorStop(0,t.eye); ag.addColorStop(1,"rgba(0,0,0,0)");
+        ctx.fillStyle=ag; ctx.beginPath(); ctx.ellipse(0,groundY-w*0.5,w*1.4,w,0,0,Math.PI*2); ctx.fill();
+        ctx.restore();
+      }
+      ctx.fillStyle=e.flash>0?"#ffffff":t.color;
+      roundedRect(-w/2,groundY-w-6-bob,w,w+6,w*0.4); ctx.fill();
+      if (e.type==="brute"||isBoss) {
+        ctx.fillStyle=e.flash>0?"#fff":t.color;
+        for (let i=-1;i<=1;i++) { const sx=i*w*0.28; ctx.beginPath(); ctx.moveTo(sx-3,groundY-w-2-bob); ctx.lineTo(sx,groundY-w-(isBoss?18:13)-bob); ctx.lineTo(sx+3,groundY-w-2-bob); ctx.fill(); }
+      }
+      ctx.fillStyle="rgba(255,255,255,0.06)"; roundedRect(-w/2,groundY-w-6-bob,w*0.34,w+6,w*0.4); ctx.fill();
+      const ex=w*0.12, ex2=w*0.32, ey=groundY-w*0.6-bob;
+      ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.4+0.35*dark+(isBoss?0.3:0); ctx.fillStyle=t.eye;
+      ctx.beginPath(); ctx.arc(ex,ey,w*(isBoss?0.28:0.22),0,Math.PI*2); ctx.arc(ex2,ey,w*(isBoss?0.28:0.22),0,Math.PI*2); ctx.fill(); ctx.restore();
+      ctx.fillStyle=t.eye; ctx.beginPath(); ctx.arc(ex,ey,w*0.09,0,Math.PI*2); ctx.arc(ex2,ey,w*0.09,0,Math.PI*2); ctx.fill();
+      if (e.carry>0) { ctx.fillStyle="#f2c14e"; ctx.beginPath(); ctx.arc(0,groundY-w-12-bob,4,0,Math.PI*2); ctx.fill(); }
+      if (t.flying) {
+        ctx.fillStyle=withA(t.color, 0.7);
+        const wingFlap=Math.sin(e.anim*4)*8;
+        ctx.beginPath(); ctx.moveTo(-w*0.5,groundY-w*0.5-bob); ctx.lineTo(-w*1.8,groundY-w*0.5-bob-wingFlap); ctx.lineTo(-w*0.5,groundY-w*0.1-bob); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(w*0.5,groundY-w*0.5-bob); ctx.lineTo(w*1.8,groundY-w*0.5-bob+wingFlap); ctx.lineTo(w*0.5,groundY-w*0.1-bob); ctx.fill();
+      }
+    } // end else (programmatic fallback)
     ctx.restore();
 
     if (isLegend) {
@@ -634,11 +691,12 @@ export function drawEnemies(dark) {
       continue;
     }
 
-    if (e.hp<e.maxHp) drawHpBar(e.x,groundY+drawYOff-t.w-16,t.w+(isBoss?12:4),e.hp/e.maxHp,isBoss?"#ff4080":"#d05a5a");
+    const sprH = spritesReady ? Math.round(t.w*1.35) : t.w;
+    if (e.hp<e.maxHp) drawHpBar(e.x,groundY+drawYOff-sprH-4,t.w+(isBoss?12:4),e.hp/e.maxHp,isBoss?"#ff4080":"#d05a5a");
     if (isBoss) {
       ctx.save(); ctx.font="bold 12px Trebuchet MS"; ctx.textAlign="center";
-      ctx.fillStyle="rgba(0,0,0,0.7)"; ctx.fillText(t.name||e.type, e.x+1, groundY+drawYOff-t.w-28);
-      ctx.fillStyle=t.eye; ctx.fillText(t.name||e.type, e.x, groundY+drawYOff-t.w-29); ctx.restore();
+      ctx.fillStyle="rgba(0,0,0,0.7)"; ctx.fillText(t.name||e.type, e.x+1, groundY+drawYOff-sprH-18);
+      ctx.fillStyle=t.eye; ctx.fillText(t.name||e.type, e.x, groundY+drawYOff-sprH-19); ctx.restore();
     }
   }
 }
@@ -649,50 +707,65 @@ export function drawPlayer(dark) {
   drawFocusHalo(x, groundY-36-bob-player.jumpH, 92, 52, [255,210,110], 0.11+0.12*dark);
   ctx.save();
   if (player.invuln>0&&Math.floor(player.invuln*12)%2===0) ctx.globalAlpha=0.45;
-  ctx.translate(x,-bob - player.jumpH); if (player.dir<0) ctx.scale(-1,1);
-  const px=0, moving=Math.abs(player.vx)>1, s=moving?Math.sin(gallop*2):0;
-  ctx.fillStyle="#2a2230"; ctx.strokeStyle="#2a2230"; ctx.lineWidth=3;
-  ctx.beginPath(); ctx.moveTo(px-14,groundY-26+bob); ctx.lineTo(px-14+s*8,groundY+bob); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(px+12,groundY-26+bob); ctx.lineTo(px+12-s*8,groundY+bob); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(px-8,groundY-26+bob); ctx.lineTo(px-8-s*8,groundY+bob); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(px+18,groundY-26+bob); ctx.lineTo(px+18+s*8,groundY+bob); ctx.stroke();
-  roundedRect(px-20,groundY-46,44,22,10); ctx.fill();
-  ctx.fillStyle="rgba(255,255,255,0.08)"; roundedRect(px-17,groundY-44,18,7,5); ctx.fill();
-  ctx.fillStyle="#5f3b28"; roundedRect(px-8,groundY-50,18,8,4); ctx.fill();
-  ctx.fillStyle="#d1a75a"; ctx.fillRect(px-5,groundY-52,11,2);
-  ctx.beginPath(); ctx.moveTo(px+18,groundY-44); ctx.lineTo(px+30,groundY-64); ctx.lineTo(px+40,groundY-62); ctx.lineTo(px+38,groundY-52); ctx.lineTo(px+26,groundY-40); ctx.closePath(); ctx.fill();
-  const tail=windSway(px,4)+Math.sin(gallop)*2;
-  ctx.beginPath(); ctx.moveTo(px-20,groundY-44); ctx.quadraticCurveTo(px-34-tail,groundY-40,px-30-tail,groundY-22); ctx.lineTo(px-24-tail*0.6,groundY-30); ctx.quadraticCurveTo(px-26,groundY-40,px-18,groundY-40); ctx.fill();
-  ctx.strokeStyle="#1c1622"; ctx.lineWidth=2;
-  for (let i=0;i<4;i++) { const t=i/3, mx=lerp(px+20,px+33,t), my=lerp(groundY-46,groundY-62,t); ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(mx-4,my-3); ctx.stroke(); }
-  ctx.fillStyle="#f2c14e"; ctx.beginPath(); ctx.arc(px+34,groundY-58,1.4,0,Math.PI*2); ctx.fill();
-  const cape=(moving?Math.sin(gallop*2)*4:0)+windSway(px,3);
-  ctx.fillStyle="#5a182e"; ctx.beginPath(); ctx.moveTo(px-4,groundY-66); ctx.quadraticCurveTo(px-16-cape,groundY-52,px-22-cape*1.4,groundY-32); ctx.lineTo(px-8,groundY-40); ctx.quadraticCurveTo(px-6,groundY-54,px+2,groundY-64); ctx.fill();
-  ctx.fillStyle="#7a2440"; roundedRect(px-6,groundY-70,16,26,6); ctx.fill();
-  ctx.fillStyle="rgba(255,255,255,0.12)"; roundedRect(px-4,groundY-68,4,18,3); ctx.fill();
-  ctx.fillStyle="rgba(0,0,0,0.18)"; roundedRect(px+4,groundY-70,6,26,4); ctx.fill();
-  ctx.fillStyle="#caa483"; ctx.beginPath(); ctx.arc(px+2,groundY-74,6,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle="#3a2e2a"; ctx.beginPath(); ctx.arc(px+4,groundY-75,1.1,0,Math.PI*2); ctx.fill();
-  if (player.hasCrown) {
-    ctx.fillStyle="#f2c14e"; ctx.beginPath();
-    ctx.moveTo(px-4,groundY-80); ctx.lineTo(px-4,groundY-86); ctx.lineTo(px-1,groundY-82);
-    ctx.lineTo(px+2,groundY-87); ctx.lineTo(px+5,groundY-82); ctx.lineTo(px+8,groundY-86); ctx.lineTo(px+8,groundY-80); ctx.closePath(); ctx.fill();
+  ctx.translate(x, -bob - player.jumpH);
+  if (player.dir<0) ctx.scale(-1,1);
+  const px=0;
+
+  if (spritesReady) {
+    // Sprite body — 48×56 px
+    spr(ctx, T.PLAYER, px, groundY, 48, 56);
+    // Crown overlay
+    if (player.hasCrown) {
+      ctx.fillStyle="#f2c14e";
+      ctx.beginPath();
+      ctx.moveTo(px-6,groundY-55); ctx.lineTo(px-6,groundY-62); ctx.lineTo(px-2,groundY-58);
+      ctx.lineTo(px+2,groundY-63); ctx.lineTo(px+6,groundY-58); ctx.lineTo(px+10,groundY-62);
+      ctx.lineTo(px+10,groundY-55); ctx.closePath(); ctx.fill();
+    }
+  } else {
+    // ── Fallback programmatic drawing ──────────────────────────
+    const moving=Math.abs(player.vx)>1, s=moving?Math.sin(gallop*2):0;
+    ctx.fillStyle="#2a2230"; ctx.strokeStyle="#2a2230"; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(px-14,groundY-26+bob); ctx.lineTo(px-14+s*8,groundY+bob); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px+12,groundY-26+bob); ctx.lineTo(px+12-s*8,groundY+bob); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px-8,groundY-26+bob); ctx.lineTo(px-8-s*8,groundY+bob); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(px+18,groundY-26+bob); ctx.lineTo(px+18+s*8,groundY+bob); ctx.stroke();
+    roundedRect(px-20,groundY-46,44,22,10); ctx.fill();
+    ctx.fillStyle="rgba(255,255,255,0.08)"; roundedRect(px-17,groundY-44,18,7,5); ctx.fill();
+    ctx.fillStyle="#5f3b28"; roundedRect(px-8,groundY-50,18,8,4); ctx.fill();
+    ctx.fillStyle="#d1a75a"; ctx.fillRect(px-5,groundY-52,11,2);
+    ctx.beginPath(); ctx.moveTo(px+18,groundY-44); ctx.lineTo(px+30,groundY-64); ctx.lineTo(px+40,groundY-62); ctx.lineTo(px+38,groundY-52); ctx.lineTo(px+26,groundY-40); ctx.closePath(); ctx.fill();
+    const tail=windSway(px,4)+Math.sin(gallop)*2;
+    ctx.beginPath(); ctx.moveTo(px-20,groundY-44); ctx.quadraticCurveTo(px-34-tail,groundY-40,px-30-tail,groundY-22); ctx.lineTo(px-24-tail*0.6,groundY-30); ctx.quadraticCurveTo(px-26,groundY-40,px-18,groundY-40); ctx.fill();
+    ctx.strokeStyle="#1c1622"; ctx.lineWidth=2;
+    for (let i=0;i<4;i++) { const tt=i/3, mx=lerp(px+20,px+33,tt), my=lerp(groundY-46,groundY-62,tt); ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(mx-4,my-3); ctx.stroke(); }
+    ctx.fillStyle="#f2c14e"; ctx.beginPath(); ctx.arc(px+34,groundY-58,1.4,0,Math.PI*2); ctx.fill();
+    const cape=(moving?Math.sin(gallop*2)*4:0)+windSway(px,3);
+    ctx.fillStyle="#5a182e"; ctx.beginPath(); ctx.moveTo(px-4,groundY-66); ctx.quadraticCurveTo(px-16-cape,groundY-52,px-22-cape*1.4,groundY-32); ctx.lineTo(px-8,groundY-40); ctx.quadraticCurveTo(px-6,groundY-54,px+2,groundY-64); ctx.fill();
+    ctx.fillStyle="#7a2440"; roundedRect(px-6,groundY-70,16,26,6); ctx.fill();
+    ctx.fillStyle="rgba(255,255,255,0.12)"; roundedRect(px-4,groundY-68,4,18,3); ctx.fill();
+    ctx.fillStyle="rgba(0,0,0,0.18)"; roundedRect(px+4,groundY-70,6,26,4); ctx.fill();
+    ctx.fillStyle="#caa483"; ctx.beginPath(); ctx.arc(px+2,groundY-74,6,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle="#3a2e2a"; ctx.beginPath(); ctx.arc(px+4,groundY-75,1.1,0,Math.PI*2); ctx.fill();
+    if (player.hasCrown) {
+      ctx.fillStyle="#f2c14e"; ctx.beginPath();
+      ctx.moveTo(px-4,groundY-80); ctx.lineTo(px-4,groundY-86); ctx.lineTo(px-1,groundY-82);
+      ctx.lineTo(px+2,groundY-87); ctx.lineTo(px+5,groundY-82); ctx.lineTo(px+8,groundY-86); ctx.lineTo(px+8,groundY-80); ctx.closePath(); ctx.fill();
+    }
   }
+
+  // ── Weapon (drawn over sprite or fallback body) ──────────────
   if (player.weapon) {
     const w=WEAPONS[player.weapon], sw=player.swing||0;
     ctx.save();
     if (w.type==="melee") {
       const baseAng=-0.22, swingOff=sw>0?-0.9*(sw/0.32):0;
-      ctx.translate(px+10,groundY-58); ctx.rotate(baseAng+swingOff);
+      ctx.translate(px+10,groundY-42); ctx.rotate(baseAng+swingOff);
       const len=clamp(w.range*0.42,18,40);
       if (sw>0) {
-        ctx.save();
-        ctx.globalCompositeOperation="lighter";
-        ctx.globalAlpha=clamp(sw/0.32,0,1)*0.42;
-        ctx.strokeStyle=w.col;
-        ctx.lineWidth=8;
-        ctx.beginPath(); ctx.arc(12,2,len*0.9,-0.6,0.9); ctx.stroke();
-        ctx.restore();
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=clamp(sw/0.32,0,1)*0.42;
+        ctx.strokeStyle=w.col; ctx.lineWidth=8;
+        ctx.beginPath(); ctx.arc(12,2,len*0.9,-0.6,0.9); ctx.stroke(); ctx.restore();
       }
       ctx.strokeStyle=w.col; ctx.lineWidth=2.5; ctx.lineCap="round";
       ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(len,0); ctx.stroke();
@@ -701,14 +774,14 @@ export function drawPlayer(dark) {
         ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.28+sw*0.4;
         ctx.strokeStyle=w.col; ctx.lineWidth=5; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(len,0); ctx.stroke(); ctx.restore();
       }
-    } else if (w.type === "ranged") {
-      ctx.strokeStyle=w.col; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(px+14,groundY-58,10,-1.25,1.25); ctx.stroke();
+    } else if (w.type==="ranged") {
+      ctx.strokeStyle=w.col; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(px+14,groundY-42,10,-1.25,1.25); ctx.stroke();
       ctx.strokeStyle="rgba(230,216,168,0.65)"; ctx.lineWidth=1;
-      ctx.beginPath(); ctx.moveTo(px+14+10*Math.cos(-1.25),groundY-58+10*Math.sin(-1.25)); ctx.lineTo(px+14+10*Math.cos(1.25),groundY-58+10*Math.sin(1.25)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(px+14+10*Math.cos(-1.25),groundY-42+10*Math.sin(-1.25)); ctx.lineTo(px+14+10*Math.cos(1.25),groundY-42+10*Math.sin(1.25)); ctx.stroke();
     } else {
-      const upgCount = (player.weaponUpgrades || []).length;
-      ctx.save(); ctx.translate(px+12, groundY-58);
-      if (sw > 0 || upgCount > 0) {
+      const upgCount=(player.weaponUpgrades||[]).length;
+      ctx.save(); ctx.translate(px+12,groundY-42);
+      if (sw>0||upgCount>0) {
         ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=(sw>0?0.55*sw/0.32:0.18)+(upgCount*0.1);
         ctx.fillStyle=w.col; ctx.beginPath(); ctx.arc(0,0,14,0,Math.PI*2); ctx.fill(); ctx.restore();
       }
@@ -718,7 +791,7 @@ export function drawPlayer(dark) {
     ctx.restore();
   }
   ctx.restore();
-  const n=player.maxHp, gap=9, hy=groundY-98-bob;
+  const n=player.maxHp, gap=9, hy=groundY-86-bob-player.jumpH;
   for (let i=0;i<n;i++) drawHeart(player.x-(n-1)*gap/2+i*gap, hy, 4, i<player.hp?"#e0556a":"rgba(255,255,255,0.18)");
 }
 
