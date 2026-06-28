@@ -59,7 +59,9 @@ export function spawnEnemy(type, portal) {
 export function planNight() {
   const d = Game.day;
   Game.threatLevel  = Math.max(1, d);
-  Game.nightQuota   = Math.round((3 + d * 3.5 + Math.pow(d * 0.7, 1.6) + Math.max(0, d - 8) * 2.25) * (Game.diffMult || 1));
+  let quotaMult = Game.diffMult || 1;
+  if (Game.diffMult > 1.5) quotaMult *= 1.35;
+  Game.nightQuota   = Math.round((3 + d * 3.5 + Math.pow(d * 0.7, 1.6) + Math.max(0, d - 8) * 2.25) * quotaMult);
   Game.nightSpawned = 0;
   Game.spawnTimer   = 0;
 }
@@ -67,6 +69,7 @@ export function planNight() {
 function nightEnemyType() {
   const d = Game.day, r = Math.random();
   const late = Math.max(0, d - 6);
+  const hardMult = Game.diffMult > 1.5 ? 1.3 : 1;
   // Legendary bosses on specific days (checked first)
   if (Game.nightSpawned === 0) {
     if (d === 10) return "legend1";
@@ -81,15 +84,15 @@ function nightEnemyType() {
     if (d >= 4)  return "boss2";
     return "boss1";
   }
-  if (d >= 6 && r < Math.min(0.30, 0.07 + late * 0.012)) return "necro";
-  if (d >= 5 && r < Math.min(0.28, 0.10 + late * 0.010)) return "demon";
-  if (d >= 4 && r < Math.min(0.24, 0.13 + late * 0.006)) return "flier";
-  if (d >= 3 && r < Math.min(0.30, 0.18 + late * 0.006)) return "ogre";
-  if (d >= 3 && r < Math.min(0.34, 0.22 + late * 0.006)) return "brute";
-  if (d <= 2 && r < 0.28) return "wraith";
-  if (d <= 2 && r < 0.52) return "crawler";
-  if (d <= 3 && r < 0.22) return "raider";
-  if (r < 0.40 + d * 0.02) return "runner";
+  if (d >= 6 && r < Math.min(0.30, (0.07 + late * 0.012) * hardMult)) return "necro";
+  if (d >= 5 && r < Math.min(0.28, (0.10 + late * 0.010) * hardMult)) return "demon";
+  if (d >= 4 && r < Math.min(0.24, (0.13 + late * 0.006) * hardMult)) return "flier";
+  if (d >= 3 && r < Math.min(0.30, (0.18 + late * 0.006) * hardMult)) return "ogre";
+  if (d >= 3 && r < Math.min(0.34, (0.22 + late * 0.006) * hardMult)) return "brute";
+  if (d <= 2 && r < 0.28 * hardMult) return "wraith";
+  if (d <= 2 && r < 0.52 * hardMult) return "crawler";
+  if (d <= 3 && r < 0.22 * hardMult) return "raider";
+  if (r < (0.40 + d * 0.02) * hardMult) return "runner";
   return "imp";
 }
 
@@ -101,7 +104,8 @@ export function updateSpawning(dt) {
     Game.spawnTimer -= dt;
     if (Game.spawnTimer <= 0) {
       const pressure = Math.min(0.55, Math.max(0, Game.day - 4) * 0.018);
-      const diffSpeedUp = Game.diffMult > 1 ? 1 / Math.sqrt(Game.diffMult) : 1;
+      let diffSpeedUp = Game.diffMult > 1 ? 1 / Math.sqrt(Game.diffMult) : 1;
+      if (Game.diffMult > 1.5) diffSpeedUp *= 0.7;
       Game.spawnTimer = rand(0.6, 1.6) * (1 - pressure) * diffSpeedUp;
       const type = nightEnemyType();
       spawnEnemy(type, pick(state.portals));
@@ -135,7 +139,8 @@ export function makeLocation(x, type, r) {
     const wList = Object.keys(WEAPONS).filter(k => WEAPONS[k].rarity === targetRar);
     if (wList.length) weaponId = wList[Math.floor(r() * wList.length)];
   }
-  const enemyCount = Math.floor(r() * (def.maxE + 1));
+  let enemyCount = Math.floor(r() * (def.maxE + 1));
+  if (Game.diffMult > 1.5) enemyCount = Math.ceil(enemyCount * 1.4);
   return { x, type, triggered: false, preActivated: false, cleared: enemyCount === 0, lootGold: goldAmt, weaponId, enemyCount, remainingEnemies: 0, lootSpawned: false, ph: r() * 6 };
 }
 

@@ -69,6 +69,7 @@ function arrowTrail(ar) {
 }
 import { Audio } from './Audio.js';
 import { spawnCoin, spawnParticles, floaty, spawnLocLoot } from './SpawnSystem.js';
+import { spawnLevelUpBeam } from '../rendering/Effects.js';
 
 // ---------- Arrow shooting ----------
 // All callers shoot at enemies; hitKind defaults to "enemy".
@@ -165,6 +166,7 @@ export function updateArrows(dt) {
                 state.archerSkillPoints = (state.archerSkillPoints || 0) + 1;
                 const fname = (ar.sourceUnit.archerName || "Bueskytte").split(" ")[0];
                 floaty(ar.sourceUnit.x, `⬆ ${fname} Niv.${ar.sourceUnit.level}! (+1ep 🏹)`, "#f2c14e");
+                spawnLevelUpBeam(ar.sourceUnit.x);
               }
               spawnParticles(e.x, enemyDrawY, 12, et.color, 80, 100);
               Audio.enemyDie();

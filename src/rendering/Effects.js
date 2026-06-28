@@ -79,7 +79,7 @@ export function initFX() {
     flies:  Array.from({length:50},  () => ({ x:R()*W, y:groundY-R()*150, ph:R()*6 })),
     dust:   Array.from({length:64},  () => ({ x:R()*W, y:R()*H, z:0.3+R()*0.7, ph:R()*6 })),
     fall:   Array.from({length:54},  () => ({ x:R()*W, y:R()*H, sp:18+R()*44, sway:2+R()*6, ph:R()*6, rot:R()*6, active:false, snow:false, color:"#9bd05a" })),
-    embers: [], smoke: [], flicker: 1,
+    embers: [], smoke: [], levelUpBeams: [], flicker: 1,
   };
 }
 
@@ -117,6 +117,7 @@ export function updateFX(dt) {
   }
   for (let i=FX.embers.length-1;i>=0;i--){ const e=FX.embers[i]; e.t+=dt; e.x+=(e.vx+wind*0.5)*dt; e.y+=e.vy*dt; e.vy*=0.99; if (e.t>e.life) FX.embers.splice(i,1); }
   for (let i=FX.smoke.length-1;i>=0;i--){ const s=FX.smoke[i]; s.t+=dt; s.x+=(wind*0.9)*dt; s.y+=s.vy*dt; s.r+=8*dt; if (s.t>s.life) FX.smoke.splice(i,1); }
+  for (let i=FX.levelUpBeams.length-1;i>=0;i--){ const b=FX.levelUpBeams[i]; b.t+=dt; if (b.t>b.life) FX.levelUpBeams.splice(i,1); }
   if (FX.embers.length>140) FX.embers.splice(0, FX.embers.length-140);
   if (FX.smoke.length>70)   FX.smoke.splice(0, FX.smoke.length-70);
 }
@@ -424,4 +425,27 @@ export function drawAmbientFront(dark, bi) {
   if (dark>0.4) { ctx.save(); ctx.globalCompositeOperation="lighter"; for (const f of FX.flies) { const tw=0.4+0.6*Math.abs(Math.sin(f.ph*3)); ctx.globalAlpha=tw*dark; ctx.fillStyle="rgba(190,255,120,0.9)"; ctx.beginPath(); ctx.arc(f.x,f.y,1.7,0,Math.PI*2); ctx.fill(); } ctx.restore(); }
   for (const p of FX.fall) { if (!p.active) continue; ctx.globalAlpha=0.85; if (p.snow) { ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(p.x,p.y,1.8,0,Math.PI*2); ctx.fill(); } else { ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot); ctx.fillStyle=p.color; ctx.beginPath(); ctx.ellipse(0,0,3.2,1.5,0,0,Math.PI*2); ctx.fill(); ctx.restore(); } }
   ctx.globalAlpha=1;
+}
+
+export function drawLevelUpBeams() {
+  if (!FX || !FX.levelUpBeams.length) return;
+  ctx.save(); ctx.globalCompositeOperation="lighter";
+  for (const b of FX.levelUpBeams) {
+    const t = clamp(b.t / b.life, 0, 1);
+    const alpha = t < 0.4 ? t / 0.4 : Math.max(0, 1 - (t - 0.4) / 0.6);
+    const height = 400 * (t < 0.5 ? 1 : 1 - (t-0.5) / 0.5);
+    const topY = groundY - height;
+    const grad = ctx.createLinearGradient(0, topY, 0, groundY);
+    grad.addColorStop(0, `rgba(255,200,0,${alpha * 0.8})`);
+    grad.addColorStop(0.3, `rgba(255,220,80,${alpha * 0.6})`);
+    grad.addColorStop(1, `rgba(255,240,120,0)`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(b.x - 60, topY, 120, height);
+  }
+  ctx.restore();
+}
+
+export function spawnLevelUpBeam(x) {
+  if (!FX) initFX();
+  FX.levelUpBeams.push({ x, t: 0, life: 0.9 });
 }

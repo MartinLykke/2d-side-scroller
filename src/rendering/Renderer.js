@@ -10,7 +10,7 @@ import {
   FX, biomeAt, skyColors, darkness, windGust, windSway,
   getTrees, getDeco, getGroundTex,
   drawTreeLayer, drawStars, drawAurora, drawCelestial, drawClouds, drawBirds,
-  drawHills, drawMountains, drawFogBand, drawGodrays, drawLowFog, drawAmbientFront,
+  drawHills, drawMountains, drawFogBand, drawGodrays, drawLowFog, drawAmbientFront, drawLevelUpBeams,
 } from './Effects.js';
 import { wallHeight } from '../entities/Wall.js';
 import { spr, ready as spritesReady, T } from './Sprites.js';
@@ -1957,7 +1957,7 @@ export function render() {
   drawEntityShadows(); drawPortals(dark); drawWalls(dark); drawBase(dark);
   drawStations(); drawCoins(); drawGroundBows(); drawGroundHammers(); drawLootItems(); drawChests();
   drawAnimals(); drawVagrants(); drawCaltrops(); drawUnits(); drawEnemies(dark); drawLegendaryEffects();
-  drawPlayer(dark); drawArrows(); drawPoisonShots(); drawSpells(); drawParticles(); drawCampLight(dark); drawFloats();
+  drawPlayer(dark); drawArrows(); drawPoisonShots(); drawSpells(); drawLevelUpBeams(); drawParticles(); drawCampLight(dark); drawFloats();
   ctx.restore();
 
   drawTreeLayer(trees.fore,1.06,0.04,20,0.45);
