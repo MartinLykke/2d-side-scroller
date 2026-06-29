@@ -76,12 +76,21 @@ import { spawnLevelUpBeam } from '../rendering/Effects.js';
 // Flying enemies push "player"-targeted arrows directly into state.arrows.
 export function shootArrow(x, y, target, sourceUnit = null, weaponId = null) {
   const tx = target.x, ty = groundY - 24;
-  const ang = Math.atan2(ty - y, tx - x);
-  const sp  = 560;
+  const dx = tx - x, dy = ty - y;
+  const dist_h = Math.hypot(dx, dy);
+
+  // Arc trajectory: longer distances get more upward aim for a parabolic path
+  const flightTime = dist_h / 400;
+  const gravity = 420;
+
+  // Calculate velocity to reach target with arc (aiming higher)
+  const vx = dx / flightTime;
+  const vy = (dy - 0.5 * gravity * flightTime * flightTime) / flightTime;
+
   state.arrows.push({
     x, y,
-    vx: Math.cos(ang) * sp,
-    vy: Math.sin(ang) * sp,
+    vx: vx,
+    vy: vy,
     target,
     life: 1.2,
     hitKind: "enemy",

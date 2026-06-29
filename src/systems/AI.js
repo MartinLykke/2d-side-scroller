@@ -188,7 +188,13 @@ function archerAI(u, dt) {
 
   if (Game.isNight) {
     const threat = closeFoe || nearestEnemy(CFG.baseX, 99999);
-    const side = threat ? (threat.x < CFG.baseX ? -1 : 1) : (u.patrolDir > 0 ? 1 : -1);
+    // Prefer side with threat, but also consider current position for distribution
+    let side = threat ? (threat.x < CFG.baseX ? -1 : 1) : (u.patrolDir > 0 ? 1 : -1);
+    // If no immediate threat, use position to naturally spread across both sides
+    if (!closeFoe && !threat) {
+      const posSide = u.x < CFG.baseX ? -1 : 1;
+      if (Math.random() < 0.7) side = posSide; // 70% stay on their side, 30% chance to cross over
+    }
     const post = assignArcherPost(u, side);
     const tgt = nearestEnemy(u.x, 520, true);
     if (!tgt || dist(u.x, tgt.x) > 150) {
