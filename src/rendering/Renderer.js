@@ -13,7 +13,6 @@ import {
   drawHills, drawMountains, drawFogBand, drawGodrays, drawLowFog, drawAmbientFront, drawLevelUpBeams,
 } from './Effects.js';
 import { wallHeight } from '../entities/Wall.js';
-import { spr, ready as spritesReady, T } from './Sprites.js';
 
 // ---------- Shared helpers ----------
 export function groundShadow(x, w, a) {
@@ -528,59 +527,38 @@ function drawHumanoid(x, anim, bodyCol, headCol, tool, dir, moving) {
 
 export function drawVagrants() {
   for (const v of state.vagrants) {
-    if (spritesReady) {
-      const tile = (Math.floor(v.x * 0.01) % 2 === 0) ? T.VAGRANT : T.VAGRANT2;
-      const bob = Math.abs(v.vx) > 1 ? Math.abs(Math.sin(v.anim)) * 2 : 0;
-      ctx.save();
-      ctx.translate(v.x, 0);
-      if (v.vx < 0) ctx.scale(-1, 1);
-      spr(ctx, tile, 0, groundY - bob, 24, 28);
-      ctx.restore();
-    } else {
-      drawHumanoid(v.x, v.anim, "#4a4438", "#9a8a6a", null, v.vx>=0?1:-1, Math.abs(v.vx)>1);
-    }
+    drawHumanoid(v.x, v.anim, "#4a4438", "#9a8a6a", null, v.vx>=0?1:-1, Math.abs(v.vx)>1);
   }
 }
 
 export function drawUnits() {
   for (const u of state.units) {
-    let body="#3a3550", head="#caa483", tool=null, tile=T.PLAYER;
-    if (u.role==="archer")  { body="#2f5040"; tool="bow";    tile=T.ARCHER; }
-    else if (u.role==="builder") { body="#6a4a28"; tool="hammer"; tile=T.BUILDER; }
-    else if (u.role==="farmer")  { body="#5a6a2a"; tool="scythe"; tile=T.FARMER; }
-    else if (u.role==="guard")   { body="#3a4a5a"; head="#b09a7a"; tile=T.GUARD; }
+    let body="#3a3550", head="#caa483", tool=null;
+    if (u.role==="archer")  { body="#2f5040"; tool="bow"; }
+    else if (u.role==="builder") { body="#6a4a28"; tool="hammer"; }
+    else if (u.role==="farmer")  { body="#5a6a2a"; tool="scythe"; }
+    else if (u.role==="guard")   { body="#3a4a5a"; head="#b09a7a"; }
     const wallLift = u.onWall && u.wall && Math.abs(u.x - u.wall.x) < 40 ? Math.max(0, wallHeight(u.wall) - 14) : 0;
 
     const shadowAlpha = u.role === "archer" && state.archerSkills.includes("master_shadows") && Game.isNight && (u.smokeReveal || 0) <= 0 ? 0.32 : 1;
-    if (spritesReady) {
-      const bob = u.moving ? Math.abs(Math.sin(u.anim)) * 2 : 0;
-      ctx.save();
-      if (wallLift > 0) { ctx.translate(0, -wallLift); }
-      ctx.globalAlpha = shadowAlpha;
-      ctx.translate(u.x, 0);
-      if (u.dir < 0) ctx.scale(-1, 1);
-      spr(ctx, tile, 0, groundY - bob, 28, 32);
-      ctx.restore();
-    } else {
-      ctx.save();
-      if (wallLift > 0) { ctx.translate(0, -wallLift); }
-      ctx.globalAlpha = shadowAlpha;
-      drawHumanoid(u.x, u.anim, body, head, tool, u.dir, u.moving);
-      if (u.role==="guard") {
-        const bob=u.moving?Math.abs(Math.sin(u.anim))*1.2:0;
-        ctx.save(); ctx.translate(u.x,0); if (u.dir<0) ctx.scale(-1,1);
-        ctx.fillStyle="#4a5060"; roundedRect(8,groundY-34-bob,10,16,3); ctx.fill();
-        ctx.fillStyle="#f2c14e"; ctx.beginPath(); ctx.arc(13,groundY-28-bob,2.5,0,Math.PI*2); ctx.fill();
-        ctx.strokeStyle="#b0b8c8"; ctx.lineWidth=2; ctx.lineCap="round";
-        ctx.beginPath(); ctx.moveTo(-8,groundY-14-bob); ctx.lineTo(-8,groundY-30-bob); ctx.stroke();
-        ctx.strokeStyle="#8a6a30"; ctx.lineWidth=3;
-        ctx.beginPath(); ctx.moveTo(-5,groundY-22-bob); ctx.lineTo(-11,groundY-22-bob); ctx.stroke();
-        ctx.fillStyle="#4a5060"; ctx.beginPath(); ctx.arc(0,groundY-38-bob,6,Math.PI,0); ctx.fill();
-        ctx.fillRect(-6,groundY-40-bob,12,3);
-        ctx.restore();
-      }
+    ctx.save();
+    if (wallLift > 0) { ctx.translate(0, -wallLift); }
+    ctx.globalAlpha = shadowAlpha;
+    drawHumanoid(u.x, u.anim, body, head, tool, u.dir, u.moving);
+    if (u.role==="guard") {
+      const bob=u.moving?Math.abs(Math.sin(u.anim))*1.2:0;
+      ctx.save(); ctx.translate(u.x,0); if (u.dir<0) ctx.scale(-1,1);
+      ctx.fillStyle="#4a5060"; roundedRect(8,groundY-34-bob,10,16,3); ctx.fill();
+      ctx.fillStyle="#f2c14e"; ctx.beginPath(); ctx.arc(13,groundY-28-bob,2.5,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle="#b0b8c8"; ctx.lineWidth=2; ctx.lineCap="round";
+      ctx.beginPath(); ctx.moveTo(-8,groundY-14-bob); ctx.lineTo(-8,groundY-30-bob); ctx.stroke();
+      ctx.strokeStyle="#8a6a30"; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.moveTo(-5,groundY-22-bob); ctx.lineTo(-11,groundY-22-bob); ctx.stroke();
+      ctx.fillStyle="#4a5060"; ctx.beginPath(); ctx.arc(0,groundY-38-bob,6,Math.PI,0); ctx.fill();
+      ctx.fillRect(-6,groundY-40-bob,12,3);
       ctx.restore();
     }
+    ctx.restore();
 
     // Archer name + level above head
     if (u.role === "archer" && u.archerName) {
@@ -783,48 +761,6 @@ export function drawEnemies(dark) {
     if (e.dir<0) ctx.scale(-1,1);
     if (isLegend) {
       drawLegendaryBody(e, t, dark, bossT);
-    } else if (spritesReady) {
-      const ETILE = {
-        imp:T.IMP, runner:T.RUNNER, wraith:T.WRAITH, crawler:T.CRAWLER,
-        raider:T.RAIDER, brute:T.BRUTE, ogre:T.OGRE, demon:T.DEMON,
-        flier:T.FLIER, necro:T.NECRO,
-        boss1:T.BOSS1, boss2:T.BOSS2, boss3:T.BOSS3, boss4:T.BOSS4,
-      };
-      const tile = ETILE[e.type] || T.IMP;
-      const sh = Math.round(w * 1.35);
-
-      // Boss pulsing aura
-      if (isBoss) {
-        ctx.save(); ctx.globalCompositeOperation="lighter";
-        const aura=0.22+0.1*Math.sin(bossT*2+e.x); ctx.globalAlpha=aura;
-        const ag=ctx.createRadialGradient(0,groundY-w*0.5,4,0,groundY-w*0.5,w*1.5);
-        ag.addColorStop(0,t.eye); ag.addColorStop(1,"rgba(0,0,0,0)");
-        ctx.fillStyle=ag; ctx.beginPath(); ctx.ellipse(0,groundY-w*0.5,w*1.5,w*0.9,0,0,Math.PI*2); ctx.fill();
-        ctx.restore();
-      }
-
-      // Sprite body
-      spr(ctx, tile, 0, groundY - bob, w, sh);
-
-      // White hit-flash overlay
-      if (e.flash > 0) {
-        ctx.save(); ctx.globalCompositeOperation="lighter";
-        ctx.globalAlpha = Math.min(e.flash * 4, 0.85);
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(-w/2, groundY - bob - sh, w, sh);
-        ctx.restore();
-      }
-
-      // Flying wings (keep visual for flier)
-      if (t.flying) {
-        ctx.fillStyle = withA(t.color, 0.55);
-        const wingFlap = Math.sin(e.anim*4)*10;
-        ctx.beginPath(); ctx.moveTo(-w*0.5,groundY-sh*0.6-bob); ctx.lineTo(-w*1.9,groundY-sh*0.6-bob-wingFlap); ctx.lineTo(-w*0.5,groundY-sh*0.3-bob); ctx.fill();
-        ctx.beginPath(); ctx.moveTo(w*0.5,groundY-sh*0.6-bob); ctx.lineTo(w*1.9,groundY-sh*0.6-bob+wingFlap); ctx.lineTo(w*0.5,groundY-sh*0.3-bob); ctx.fill();
-      }
-
-      // Gold carry indicator
-      if (e.carry>0) { ctx.fillStyle="#f2c14e"; ctx.beginPath(); ctx.arc(0,groundY-sh-4-bob,4,0,Math.PI*2); ctx.fill(); }
     } else {
       // ── Fallback programmatic drawing ──────────────────────────
       const s=Math.sin(e.anim*3);
@@ -858,7 +794,7 @@ export function drawEnemies(dark) {
         ctx.beginPath(); ctx.moveTo(-w*0.5,groundY-w*0.5-bob); ctx.lineTo(-w*1.8,groundY-w*0.5-bob-wingFlap); ctx.lineTo(-w*0.5,groundY-w*0.1-bob); ctx.fill();
         ctx.beginPath(); ctx.moveTo(w*0.5,groundY-w*0.5-bob); ctx.lineTo(w*1.8,groundY-w*0.5-bob+wingFlap); ctx.lineTo(w*0.5,groundY-w*0.1-bob); ctx.fill();
       }
-    } // end else (programmatic fallback)
+    }
     ctx.restore();
 
     if (isLegend) {
@@ -876,7 +812,7 @@ export function drawEnemies(dark) {
       continue;
     }
 
-    const sprH = spritesReady ? Math.round(t.w*1.35) : t.w;
+    const sprH = t.w;
     if (e.hp<e.maxHp) drawHpBar(e.x,groundY+drawYOff-sprH-4,t.w+(isBoss?12:4),e.hp/e.maxHp,isBoss?"#ff4080":"#d05a5a");
     if (isBoss) {
       ctx.save(); ctx.font="bold 12px Trebuchet MS"; ctx.textAlign="center";
@@ -931,47 +867,34 @@ export function drawPlayer(dark) {
   if (player.dir<0) ctx.scale(-1,1);
   const px=0;
 
-  if (spritesReady) {
-    // Sprite body — 48×56 px
-    spr(ctx, T.PLAYER, px, groundY, 48, 56);
-    // Crown overlay
-    if (player.hasCrown) {
-      ctx.fillStyle="#f2c14e";
-      ctx.beginPath();
-      ctx.moveTo(px-6,groundY-55); ctx.lineTo(px-6,groundY-62); ctx.lineTo(px-2,groundY-58);
-      ctx.lineTo(px+2,groundY-63); ctx.lineTo(px+6,groundY-58); ctx.lineTo(px+10,groundY-62);
-      ctx.lineTo(px+10,groundY-55); ctx.closePath(); ctx.fill();
-    }
-  } else {
-    // ── Fallback programmatic drawing ──────────────────────────
-    const moving=Math.abs(player.vx)>1, s=moving?Math.sin(gallop*2):0;
-    ctx.fillStyle="#2a2230"; ctx.strokeStyle="#2a2230"; ctx.lineWidth=3;
-    ctx.beginPath(); ctx.moveTo(px-14,groundY-26+bob); ctx.lineTo(px-14+s*8,groundY+bob); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(px+12,groundY-26+bob); ctx.lineTo(px+12-s*8,groundY+bob); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(px-8,groundY-26+bob); ctx.lineTo(px-8-s*8,groundY+bob); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(px+18,groundY-26+bob); ctx.lineTo(px+18+s*8,groundY+bob); ctx.stroke();
-    roundedRect(px-20,groundY-46,44,22,10); ctx.fill();
-    ctx.fillStyle="rgba(255,255,255,0.08)"; roundedRect(px-17,groundY-44,18,7,5); ctx.fill();
-    ctx.fillStyle="#5f3b28"; roundedRect(px-8,groundY-50,18,8,4); ctx.fill();
-    ctx.fillStyle="#d1a75a"; ctx.fillRect(px-5,groundY-52,11,2);
-    ctx.beginPath(); ctx.moveTo(px+18,groundY-44); ctx.lineTo(px+30,groundY-64); ctx.lineTo(px+40,groundY-62); ctx.lineTo(px+38,groundY-52); ctx.lineTo(px+26,groundY-40); ctx.closePath(); ctx.fill();
-    const tail=windSway(px,4)+Math.sin(gallop)*2;
-    ctx.beginPath(); ctx.moveTo(px-20,groundY-44); ctx.quadraticCurveTo(px-34-tail,groundY-40,px-30-tail,groundY-22); ctx.lineTo(px-24-tail*0.6,groundY-30); ctx.quadraticCurveTo(px-26,groundY-40,px-18,groundY-40); ctx.fill();
-    ctx.strokeStyle="#1c1622"; ctx.lineWidth=2;
-    for (let i=0;i<4;i++) { const tt=i/3, mx=lerp(px+20,px+33,tt), my=lerp(groundY-46,groundY-62,tt); ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(mx-4,my-3); ctx.stroke(); }
-    ctx.fillStyle="#f2c14e"; ctx.beginPath(); ctx.arc(px+34,groundY-58,1.4,0,Math.PI*2); ctx.fill();
-    const cape=(moving?Math.sin(gallop*2)*4:0)+windSway(px,3);
-    ctx.fillStyle="#5a182e"; ctx.beginPath(); ctx.moveTo(px-4,groundY-66); ctx.quadraticCurveTo(px-16-cape,groundY-52,px-22-cape*1.4,groundY-32); ctx.lineTo(px-8,groundY-40); ctx.quadraticCurveTo(px-6,groundY-54,px+2,groundY-64); ctx.fill();
-    ctx.fillStyle="#7a2440"; roundedRect(px-6,groundY-70,16,26,6); ctx.fill();
-    ctx.fillStyle="rgba(255,255,255,0.12)"; roundedRect(px-4,groundY-68,4,18,3); ctx.fill();
-    ctx.fillStyle="rgba(0,0,0,0.18)"; roundedRect(px+4,groundY-70,6,26,4); ctx.fill();
-    ctx.fillStyle="#caa483"; ctx.beginPath(); ctx.arc(px+2,groundY-74,6,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle="#3a2e2a"; ctx.beginPath(); ctx.arc(px+4,groundY-75,1.1,0,Math.PI*2); ctx.fill();
-    if (player.hasCrown) {
-      ctx.fillStyle="#f2c14e"; ctx.beginPath();
-      ctx.moveTo(px-4,groundY-80); ctx.lineTo(px-4,groundY-86); ctx.lineTo(px-1,groundY-82);
-      ctx.lineTo(px+2,groundY-87); ctx.lineTo(px+5,groundY-82); ctx.lineTo(px+8,groundY-86); ctx.lineTo(px+8,groundY-80); ctx.closePath(); ctx.fill();
-    }
+  // ── Fallback programmatic drawing ──────────────────────────
+  const moving=Math.abs(player.vx)>1, s=moving?Math.sin(gallop*2):0;
+  ctx.fillStyle="#2a2230"; ctx.strokeStyle="#2a2230"; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.moveTo(px-14,groundY-26+bob); ctx.lineTo(px-14+s*8,groundY+bob); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(px+12,groundY-26+bob); ctx.lineTo(px+12-s*8,groundY+bob); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(px-8,groundY-26+bob); ctx.lineTo(px-8-s*8,groundY+bob); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(px+18,groundY-26+bob); ctx.lineTo(px+18+s*8,groundY+bob); ctx.stroke();
+  roundedRect(px-20,groundY-46,44,22,10); ctx.fill();
+  ctx.fillStyle="rgba(255,255,255,0.08)"; roundedRect(px-17,groundY-44,18,7,5); ctx.fill();
+  ctx.fillStyle="#5f3b28"; roundedRect(px-8,groundY-50,18,8,4); ctx.fill();
+  ctx.fillStyle="#d1a75a"; ctx.fillRect(px-5,groundY-52,11,2);
+  ctx.beginPath(); ctx.moveTo(px+18,groundY-44); ctx.lineTo(px+30,groundY-64); ctx.lineTo(px+40,groundY-62); ctx.lineTo(px+38,groundY-52); ctx.lineTo(px+26,groundY-40); ctx.closePath(); ctx.fill();
+  const tail=windSway(px,4)+Math.sin(gallop)*2;
+  ctx.beginPath(); ctx.moveTo(px-20,groundY-44); ctx.quadraticCurveTo(px-34-tail,groundY-40,px-30-tail,groundY-22); ctx.lineTo(px-24-tail*0.6,groundY-30); ctx.quadraticCurveTo(px-26,groundY-40,px-18,groundY-40); ctx.fill();
+  ctx.strokeStyle="#1c1622"; ctx.lineWidth=2;
+  for (let i=0;i<4;i++) { const tt=i/3, mx=lerp(px+20,px+33,tt), my=lerp(groundY-46,groundY-62,tt); ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(mx-4,my-3); ctx.stroke(); }
+  ctx.fillStyle="#f2c14e"; ctx.beginPath(); ctx.arc(px+34,groundY-58,1.4,0,Math.PI*2); ctx.fill();
+  const cape=(moving?Math.sin(gallop*2)*4:0)+windSway(px,3);
+  ctx.fillStyle="#5a182e"; ctx.beginPath(); ctx.moveTo(px-4,groundY-66); ctx.quadraticCurveTo(px-16-cape,groundY-52,px-22-cape*1.4,groundY-32); ctx.lineTo(px-8,groundY-40); ctx.quadraticCurveTo(px-6,groundY-54,px+2,groundY-64); ctx.fill();
+  ctx.fillStyle="#7a2440"; roundedRect(px-6,groundY-70,16,26,6); ctx.fill();
+  ctx.fillStyle="rgba(255,255,255,0.12)"; roundedRect(px-4,groundY-68,4,18,3); ctx.fill();
+  ctx.fillStyle="rgba(0,0,0,0.18)"; roundedRect(px+4,groundY-70,6,26,4); ctx.fill();
+  ctx.fillStyle="#caa483"; ctx.beginPath(); ctx.arc(px+2,groundY-74,6,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle="#3a2e2a"; ctx.beginPath(); ctx.arc(px+4,groundY-75,1.1,0,Math.PI*2); ctx.fill();
+  if (player.hasCrown) {
+    ctx.fillStyle="#f2c14e"; ctx.beginPath();
+    ctx.moveTo(px-4,groundY-80); ctx.lineTo(px-4,groundY-86); ctx.lineTo(px-1,groundY-82);
+    ctx.lineTo(px+2,groundY-87); ctx.lineTo(px+5,groundY-82); ctx.lineTo(px+8,groundY-86); ctx.lineTo(px+8,groundY-80); ctx.closePath(); ctx.fill();
   }
 
   // ── Weapon (drawn over sprite or fallback body) ──────────────
@@ -1691,167 +1614,197 @@ function drawShopOverlay() {
 export function drawSpells() {
   if (!state.spells || !state.spells.length) return;
   const t = performance.now() / 1000;
+
   for (const sp of state.spells) {
-    ctx.save(); ctx.translate(sp.x, sp.y);
+    ctx.save(); 
+    ctx.translate(sp.x, sp.y);
     const age = sp.age || 0;
+    
     switch (sp.spellType) {
       case "fireball": {
-        // Ydre bloom-glød
-        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.55*(0.85+0.15*Math.sin(t*14));
-        const fg2=ctx.createRadialGradient(0,0,2,0,0,24);
-        fg2.addColorStop(0,"rgba(255,200,80,0.9)"); fg2.addColorStop(0.5,"rgba(255,80,10,0.5)"); fg2.addColorStop(1,"rgba(200,30,0,0)");
-        ctx.fillStyle=fg2; ctx.beginPath(); ctx.arc(0,0,24,0,Math.PI*2); ctx.fill(); ctx.restore();
-        // Indre kerne
-        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.9;
-        const fg=ctx.createRadialGradient(0,0,1,0,0,13);
-        fg.addColorStop(0,"rgba(255,240,180,1)"); fg.addColorStop(0.4,"rgba(255,120,40,0.85)"); fg.addColorStop(1,"rgba(220,40,0,0)");
-        ctx.fillStyle=fg; ctx.beginPath(); ctx.arc(0,0,13,0,Math.PI*2); ctx.fill(); ctx.restore();
-        // Drivende gnistrende kerne
-        const flk=0.9+0.1*Math.sin(t*22); ctx.fillStyle="#ffe8a0";
-        ctx.beginPath(); ctx.arc(0,0,5*flk,0,Math.PI*2); ctx.fill();
-        // Ild-spids i flyveretning
-        ctx.save(); ctx.globalAlpha=0.6; ctx.fillStyle="#ff6010";
-        const ang2=Math.atan2(sp.vy,sp.vx);
-        ctx.rotate(ang2); ctx.beginPath(); ctx.moveTo(14,0); ctx.lineTo(26,-5); ctx.lineTo(26,5); ctx.closePath(); ctx.fill(); ctx.restore();
+        const ang = Math.atan2(sp.vy, sp.vx);
+        ctx.save(); ctx.rotate(ang);
+
+        // Kæmpe ydre bloom-glød der flimrer aggressivt
+        ctx.save(); 
+        ctx.globalCompositeOperation = "lighter"; 
+        ctx.globalAlpha = 0.6 * (0.8 + 0.2 * Math.sin(t * 30));
+        const fg2 = ctx.createRadialGradient(0, 0, 5, -10, 0, 45);
+        fg2.addColorStop(0, "rgba(255,200,80,1)"); 
+        fg2.addColorStop(0.4, "rgba(255,60,0,0.6)"); 
+        fg2.addColorStop(1, "rgba(150,0,0,0)");
+        ctx.fillStyle = fg2; 
+        ctx.beginPath(); ctx.arc(-10, 0, 45, 0, Math.PI * 2); ctx.fill(); 
+        ctx.restore();
+
+        // Flammende hale
+        ctx.fillStyle = "#ff4400";
+        ctx.beginPath();
+        ctx.moveTo(15, 0); ctx.lineTo(-25, 12); ctx.lineTo(-40, 0); ctx.lineTo(-25, -12);
+        ctx.closePath(); ctx.fill();
+
+        // Hvid-varm indre kerne
+        ctx.save(); 
+        ctx.globalCompositeOperation = "lighter"; 
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath(); ctx.arc(5, 0, 8, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+
+        ctx.restore();
         break;
       }
+      
       case "meteor": {
-        // Sten-krop med vinkelret ildspor
-        const ang3=Math.atan2(sp.vy,sp.vx);
-        ctx.save(); ctx.rotate(ang3);
-        // Ildspor bag
-        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.7;
-        const mtg=ctx.createLinearGradient(-38,0,8,0);
-        mtg.addColorStop(0,"rgba(255,120,30,0)"); mtg.addColorStop(0.5,"rgba(255,160,60,0.6)"); mtg.addColorStop(1,"rgba(255,200,80,0.9)");
-        ctx.fillStyle=mtg; ctx.beginPath(); ctx.ellipse(-15,0,28,9,0,0,Math.PI*2); ctx.fill(); ctx.restore();
-        // Røgspor
-        ctx.save(); ctx.globalAlpha=0.35;
-        const smg=ctx.createLinearGradient(-50,0,0,0);
-        smg.addColorStop(0,"rgba(80,60,50,0)"); smg.addColorStop(1,"rgba(110,80,60,0.7)");
-        ctx.fillStyle=smg; ctx.beginPath(); ctx.ellipse(-20,0,32,14,0,0,Math.PI*2); ctx.fill(); ctx.restore();
-        // Selve meteoren
-        ctx.fillStyle="#5a3820"; ctx.beginPath(); ctx.ellipse(0,0,10,8,0,0,Math.PI*2); ctx.fill();
-        ctx.fillStyle="#7a4a28"; ctx.beginPath(); ctx.ellipse(-3,-3,5,4,0,0,Math.PI*2); ctx.fill();
-        // Ild-glød forrest
-        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.8;
-        ctx.fillStyle="#ff9940"; ctx.beginPath(); ctx.arc(4,0,12,0,Math.PI*2); ctx.fill(); ctx.restore();
+        const ang3 = Math.atan2(sp.vy, sp.vx);
+        ctx.save(); 
+        ctx.rotate(ang3);
+
+        // 1. Gigantisk, flammende og rygende hale
+        ctx.save(); 
+        ctx.globalCompositeOperation = "lighter"; 
+        ctx.globalAlpha = 0.9;
+        const mtg = ctx.createLinearGradient(-100, 0, 20, 0);
+        mtg.addColorStop(0, "rgba(100, 10, 0, 0)"); 
+        mtg.addColorStop(0.4, "rgba(255, 60, 10, 0.6)"); 
+        mtg.addColorStop(0.8, "rgba(255, 180, 50, 0.9)"); 
+        mtg.addColorStop(1, "rgba(255, 255, 180, 1)");
+        
+        ctx.fillStyle = mtg; 
+        ctx.beginPath();
+        // Halen bliver meget bred bagtil for at give fart-fornemmelse
+        ctx.moveTo(15, 0);
+        ctx.lineTo(-40, 25);
+        ctx.lineTo(-100, 5);
+        ctx.lineTo(-100, -5);
+        ctx.lineTo(-40, -25);
+        ctx.closePath(); 
+        ctx.fill(); 
+        ctx.restore();
+
+        // 2. Asymmetrisk, hakket sten (ingen kedelige ellipser mere!)
+        ctx.fillStyle = "#2b170a";
+        ctx.beginPath();
+        ctx.moveTo(22, 3);
+        ctx.lineTo(10, 18);
+        ctx.lineTo(-10, 16);
+        ctx.lineTo(-24, 6);
+        ctx.lineTo(-20, -12);
+        ctx.lineTo(-4, -20);
+        ctx.lineTo(14, -14);
+        ctx.closePath();
+        ctx.fill();
+
+        // 3. Skygger og struktur på meteoren for 3D-effekt
+        ctx.fillStyle = "#170a03";
+        ctx.beginPath();
+        ctx.moveTo(-5, -5); ctx.lineTo(-20, 2); ctx.lineTo(-10, 12);
+        ctx.closePath(); ctx.fill();
+
+        // 4. Ekstrem friktions-ild forrest på stenen (varmeskjold)
+        ctx.save(); 
+        ctx.globalCompositeOperation = "lighter"; 
+        const flicker = Math.abs(Math.sin(t * 40)) * 0.3; // Flimrer meget hurtigt
+        ctx.globalAlpha = 0.7 + flicker;
+        
+        const coreGlow = ctx.createRadialGradient(18, 0, 2, 10, 0, 40);
+        coreGlow.addColorStop(0, "rgba(255, 255, 255, 1)");
+        coreGlow.addColorStop(0.2, "rgba(255, 200, 50, 0.9)");
+        coreGlow.addColorStop(0.6, "rgba(255, 50, 0, 0.4)");
+        coreGlow.addColorStop(1, "rgba(200, 0, 0, 0)");
+        
+        ctx.fillStyle = coreGlow; 
+        ctx.beginPath(); 
+        ctx.arc(15, 0, 45, 0, Math.PI * 2); 
+        ctx.fill(); 
+        ctx.restore();
+
+        // 5. Gnister der river sig løs
+        ctx.fillStyle = "#ffcc00";
+        for (let i = 0; i < 5; i++) {
+            // Kaotisk placering bag meteoren vha. tid og alder
+            const sparkX = -30 - ((age * 120 + i * 25) % 80);
+            const sparkY = Math.sin(t * 15 + i) * 20;
+            ctx.beginPath(); ctx.arc(sparkX, sparkY, Math.random() * 2 + 1, 0, Math.PI * 2); ctx.fill();
+        }
+
         ctx.restore();
         break;
       }
+
+      // Resten af magien beholder dine flotte koncepter, men med skruet lidt op for intensiteten
       case "waterjet": {
-        // Stor vandboble med refleksion
-        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.45;
-        const wg=ctx.createRadialGradient(0,0,2,0,0,18);
-        wg.addColorStop(0,"rgba(180,230,255,0.8)"); wg.addColorStop(1,"rgba(30,100,200,0)");
-        ctx.fillStyle=wg; ctx.beginPath(); ctx.arc(0,0,18,0,Math.PI*2); ctx.fill(); ctx.restore();
-        ctx.save(); ctx.globalAlpha=0.85;
-        ctx.fillStyle="#3ab0e8"; ctx.beginPath(); ctx.arc(0,0,9,0,Math.PI*2); ctx.fill();
-        ctx.fillStyle="#b0eeff"; ctx.beginPath(); ctx.arc(-3,-3,4,0,Math.PI*2); ctx.fill();
-        ctx.fillStyle="rgba(255,255,255,0.7)"; ctx.beginPath(); ctx.arc(-2,-2,2,0,Math.PI*2); ctx.fill();
-        ctx.restore();
-        // Bølge-ringe
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.6;
+        const wg=ctx.createRadialGradient(0,0,5,0,0,25);
+        wg.addColorStop(0,"rgba(180,255,255,0.9)"); wg.addColorStop(1,"rgba(20,100,220,0)");
+        ctx.fillStyle=wg; ctx.beginPath(); ctx.arc(0,0,25,0,Math.PI*2); ctx.fill(); ctx.restore();
+        
+        ctx.fillStyle="#1a90d8"; ctx.beginPath(); ctx.arc(0,0,12,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle="#80eeff"; ctx.beginPath(); ctx.arc(-4,-4,6,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle="#ffffff"; ctx.beginPath(); ctx.arc(-3,-3,3,0,Math.PI*2); ctx.fill();
+        
         ctx.save(); ctx.globalCompositeOperation="lighter";
-        for (let ri=0;ri<2;ri++) {
-          const rp=(age*3+ri*0.5)%1, rr=12+rp*16, ra=0.4*(1-rp);
-          ctx.globalAlpha=ra; ctx.strokeStyle="#a0e8ff"; ctx.lineWidth=1.5;
+        for (let ri=0;ri<3;ri++) {
+          const rp=(age*4+ri*0.33)%1, rr=12+rp*20, ra=0.5*(1-rp);
+          ctx.globalAlpha=ra; ctx.strokeStyle="#80d8ff"; ctx.lineWidth=2.5;
           ctx.beginPath(); ctx.arc(0,0,rr,0,Math.PI*2); ctx.stroke();
         }
         ctx.restore();
-        break;
-      }
-      case "lightning": {
-        // Plasma-bold med lyn-arme
-        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.85;
-        const lg=ctx.createRadialGradient(0,0,2,0,0,16);
-        lg.addColorStop(0,"rgba(255,255,220,1)"); lg.addColorStop(0.3,"rgba(200,160,255,0.7)"); lg.addColorStop(1,"rgba(100,60,255,0)");
-        ctx.fillStyle=lg; ctx.beginPath(); ctx.arc(0,0,16,0,Math.PI*2); ctx.fill();
-        // Ydre pulserende ring
-        ctx.globalAlpha=0.4*(0.6+0.4*Math.sin(t*28));
-        ctx.strokeStyle="#ffffff"; ctx.lineWidth=2;
-        ctx.beginPath(); ctx.arc(0,0,20,0,Math.PI*2); ctx.stroke(); ctx.restore();
-        // Lynflager ud til siderne
-        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.8;
-        ctx.strokeStyle="#eeeeff"; ctx.lineWidth=1.5;
-        const numR=4;
-        for (let ri=0;ri<numR;ri++) {
-          const ra=(ri/numR)*Math.PI*2 + t*8;
-          const lx1=Math.cos(ra)*8, ly1=Math.sin(ra)*8;
-          const lx2=Math.cos(ra+0.3)*14+Math.sin(t*30+ri)*3, ly2=Math.sin(ra+0.3)*14+Math.cos(t*25+ri)*3;
-          const lx3=Math.cos(ra)*20, ly3=Math.sin(ra)*20;
-          ctx.beginPath(); ctx.moveTo(lx1,ly1); ctx.lineTo(lx2,ly2); ctx.lineTo(lx3,ly3); ctx.stroke();
-        }
-        ctx.restore();
-        ctx.fillStyle="#ffffff"; ctx.beginPath(); ctx.arc(0,0,4,0,Math.PI*2); ctx.fill();
         break;
       }
       case "arcane": {
-        // Koncentreret stråle/bold af pink/magenta mystisk energi
-        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.85;
-        const arcg=ctx.createRadialGradient(0,0,1,0,0,18);
-        arcg.addColorStop(0,"rgba(255,180,255,1)"); arcg.addColorStop(0.35,"rgba(200,80,255,0.8)"); arcg.addColorStop(1,"rgba(80,0,160,0)");
-        ctx.fillStyle=arcg; ctx.beginPath(); ctx.arc(0,0,18,0,Math.PI*2); ctx.fill();
-        // Pulserende ydre ring
-        ctx.globalAlpha=0.5*(0.6+0.4*Math.sin(t*16));
-        const arcg2=ctx.createRadialGradient(0,0,12,0,0,28);
-        arcg2.addColorStop(0,"rgba(255,100,255,0.5)"); arcg2.addColorStop(1,"rgba(120,0,200,0)");
-        ctx.fillStyle=arcg2; ctx.beginPath(); ctx.arc(0,0,28,0,Math.PI*2); ctx.fill(); ctx.restore();
-        // Roterende magiske rune-linjer
-        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.7; ctx.strokeStyle="#ff80ff"; ctx.lineWidth=1.5;
-        for (let ri=0;ri<3;ri++) {
-          const ra=t*6+ri*(Math.PI*2/3);
-          ctx.beginPath(); ctx.arc(0,0,12,ra,ra+1.2); ctx.stroke();
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.9;
+        const arcg=ctx.createRadialGradient(0,0,2,0,0,25);
+        arcg.addColorStop(0,"rgba(255,255,255,1)"); arcg.addColorStop(0.3,"rgba(255,50,255,0.9)"); arcg.addColorStop(1,"rgba(80,0,200,0)");
+        ctx.fillStyle=arcg; ctx.beginPath(); ctx.arc(0,0,25,0,Math.PI*2); ctx.fill();
+        
+        ctx.globalAlpha=0.7*(0.5+0.5*Math.sin(t*20));
+        ctx.strokeStyle="#ff55ff"; ctx.lineWidth=2.5;
+        for (let ri=0;ri<4;ri++) {
+          const ra=t*8+ri*(Math.PI*2/4);
+          ctx.beginPath(); ctx.arc(0,0,16,ra,ra+1.0); ctx.stroke();
         }
         ctx.restore();
-        ctx.fillStyle="#ffe0ff"; ctx.beginPath(); ctx.arc(0,0,5,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle="#ffffff"; ctx.beginPath(); ctx.arc(0,0,7,0,Math.PI*2); ctx.fill();
         break;
       }
       case "shadow": {
-        // Mørk tåge-bold med pulserende lilla kerne
-        ctx.save(); ctx.globalAlpha=0.7;
-        const shg=ctx.createRadialGradient(0,0,2,0,0,20);
-        shg.addColorStop(0,"rgba(30,0,50,0.95)"); shg.addColorStop(0.6,"rgba(60,0,90,0.7)"); shg.addColorStop(1,"rgba(20,0,40,0)");
-        ctx.fillStyle=shg; ctx.beginPath(); ctx.arc(0,0,20,0,Math.PI*2); ctx.fill(); ctx.restore();
-        // Skygge-kløer/arme
-        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.6;
-        ctx.strokeStyle="#cc44ff"; ctx.lineWidth=2;
-        for (let ci=0;ci<3;ci++) {
-          const ca=t*5+ci*(Math.PI*2/3);
-          const cx2=Math.cos(ca)*15, cy2=Math.sin(ca)*15;
-          const mx=Math.cos(ca+0.4)*9, my=Math.sin(ca+0.4)*9;
-          ctx.beginPath(); ctx.moveTo(mx,my); ctx.quadraticCurveTo(cx2*0.6,cy2*0.6,cx2,cy2); ctx.stroke();
+        ctx.save(); ctx.globalAlpha=0.85;
+        const shg=ctx.createRadialGradient(0,0,5,0,0,30);
+        shg.addColorStop(0,"rgba(0,0,0,1)"); shg.addColorStop(0.5,"rgba(40,0,60,0.8)"); shg.addColorStop(1,"rgba(10,0,20,0)");
+        ctx.fillStyle=shg; ctx.beginPath(); ctx.arc(0,0,30,0,Math.PI*2); ctx.fill(); ctx.restore();
+        
+        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.8;
+        ctx.strokeStyle="#aa22ff"; ctx.lineWidth=3;
+        for (let ci=0;ci<4;ci++) {
+          const ca=-t*6+ci*(Math.PI*2/4); // Roterer modsat urviseren
+          const cx2=Math.cos(ca)*22, cy2=Math.sin(ca)*22;
+          const mx=Math.cos(ca+0.6)*12, my=Math.sin(ca+0.6)*12;
+          ctx.beginPath(); ctx.moveTo(mx,my); ctx.quadraticCurveTo(cx2*0.8,cy2*0.8,cx2,cy2); ctx.stroke();
         }
         ctx.restore();
-        // Glødende kerne
-        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.85*(0.7+0.3*Math.sin(t*12));
-        ctx.fillStyle="#cc44ff"; ctx.beginPath(); ctx.arc(0,0,6,0,Math.PI*2); ctx.fill(); ctx.restore();
-        ctx.fillStyle="#ff80ff"; ctx.beginPath(); ctx.arc(0,0,2.5,0,Math.PI*2); ctx.fill();
+        ctx.fillStyle="#aa22ff"; ctx.beginPath(); ctx.arc(0,0,8,0,Math.PI*2); ctx.fill();
         break;
       }
       case "void": {
-        // Sort hul — indadtrækkende ringe og lys-distortion
-        ctx.save(); ctx.globalAlpha=0.9;
-        const vbg=ctx.createRadialGradient(0,0,1,0,0,24);
-        vbg.addColorStop(0,"rgba(0,0,0,1)"); vbg.addColorStop(0.55,"rgba(20,0,40,0.9)"); vbg.addColorStop(1,"rgba(60,0,100,0)");
-        ctx.fillStyle=vbg; ctx.beginPath(); ctx.arc(0,0,24,0,Math.PI*2); ctx.fill(); ctx.restore();
-        // Gravitationsringe der trækker indad
+        ctx.save(); ctx.globalAlpha=0.95;
+        const vbg=ctx.createRadialGradient(0,0,2,0,0,35);
+        vbg.addColorStop(0,"rgba(0,0,0,1)"); vbg.addColorStop(0.4,"rgba(15,0,30,0.9)"); vbg.addColorStop(1,"rgba(40,0,80,0)");
+        ctx.fillStyle=vbg; ctx.beginPath(); ctx.arc(0,0,35,0,Math.PI*2); ctx.fill(); ctx.restore();
+        
         ctx.save(); ctx.globalCompositeOperation="lighter";
-        for (let ri=0;ri<3;ri++) {
-          const rp=((age*1.8 + ri*0.33)%1);
-          const rr=22*(1-rp), ra=0.7*(1-rp);
-          ctx.globalAlpha=ra; ctx.strokeStyle=ri===0?"#e060ff":ri===1?"#9933ff":"#cc88ff";
-          ctx.lineWidth=1.5+ri*0.5;
+        for (let ri=0;ri<4;ri++) {
+          const rp=((age*2.5 + ri*0.25)%1);
+          const rr=30*(1-rp), ra=0.8*(1-rp);
+          ctx.globalAlpha=ra; ctx.strokeStyle=ri%2===0?"#ff44ff":"#8822ff";
+          ctx.lineWidth=2+ri;
           ctx.beginPath(); ctx.arc(0,0,rr,0,Math.PI*2); ctx.stroke();
         }
         ctx.restore();
-        // Stjerneglimmer-kerne
-        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.95*(0.8+0.2*Math.sin(t*20));
-        const vcg=ctx.createRadialGradient(0,0,0,0,0,8);
-        vcg.addColorStop(0,"rgba(255,220,255,1)"); vcg.addColorStop(1,"rgba(120,0,200,0)");
-        ctx.fillStyle=vcg; ctx.beginPath(); ctx.arc(0,0,8,0,Math.PI*2); ctx.fill(); ctx.restore();
+        ctx.fillStyle="#ffffff"; ctx.beginPath(); ctx.arc(0,0,3,0,Math.PI*2); ctx.fill();
         break;
       }
       default: {
-        ctx.fillStyle=sp.col||"#ffffff"; ctx.beginPath(); ctx.arc(0,0,6,0,Math.PI*2); ctx.fill(); break;
+        ctx.fillStyle=sp.col||"#ffffff"; ctx.beginPath(); ctx.arc(0,0,8,0,Math.PI*2); ctx.fill(); break;
       }
     }
     ctx.restore();

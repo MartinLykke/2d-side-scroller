@@ -20,7 +20,6 @@ import { updateEnemies, updateArrows, updatePlayerAttack, updateSpells, killEnem
 
 import { FX, initFX, updateFX, biomeAt } from './rendering/Effects.js';
 import { render, drawEntityShadows } from './rendering/Renderer.js';
-import { loadSprites } from './rendering/Sprites.js';
 import { UI, DEV, baseName, openSkillTree, closeSkillTree } from './rendering/HUD.js';
 
 import { makePlayer } from './entities/Player.js';
@@ -766,6 +765,5 @@ canvas.addEventListener("mousedown", e => {
 // ---------- Boot ----------
 resize();
 initFX();
-// loadSprites(); // sprites disabled — enable when better art is ready
 Game.cam = clamp(CFG.baseX - W/2, 0, Math.max(0, CFG.worldWidth - W));
 requestAnimationFrame(loop);

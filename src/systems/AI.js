@@ -142,19 +142,58 @@ function peasantAI(u, dt) {
 }
 
 function archerAI(u, dt) {
-  // Rally to legendary boss
+  // Nulstil den faste side, når det bliver dag igen
+  if (!Game.isNight && !sunsetApproaching()) {
+    u.fixedSide = null;
+  }
+
+  // Rally to legendary boss (Har højeste prioritet)
+// --- FORBEDRET ARCHER BOSS LOGIK ---
   const lb = state.legendaryBoss;
   if (lb && !lb.fleeing) {
     const d = dist(u.x, lb.x);
     u.dir = Math.sign(lb.x - u.x) || u.dir;
-    if (d > 320) moveToward(u, lb.x, 95, dt);
+
+    // Tjek om der er en sikker mur mellem skytten og bossen
+    let wallDefending = null;
+    for (const w of state.walls) {
+      if (w.commissioned && w.hp > 0 && w.buildProgress >= 1) {
+        // Hvis muren står mellem bueskytten og bossen
+        if ((u.x < w.x && w.x < lb.x) || (lb.x < w.x && w.x < u.x)) {
+          wallDefending = w;
+          break;
+        }
+      }
+    }
+
+    if (wallDefending) {
+      // Hvis vi har en mur som beskyttelse, så bliv på vores post/mur!
+      const side = u.fixedSide || (u.x < CFG.baseX ? -1 : 1);
+      const post = assignArcherPost(u, side);
+      moveToward(u, post, 84, dt);
+    } else {
+      // PANIK: Ingen mur beskytter os! Hold afstand (Kiting)
+      const idealDist = 300;
+      if (d < idealDist - 40) {
+        // Bossen er for tæt på! Løb VÆK fra bossen
+        u.dir = Math.sign(u.x - lb.x) || u.dir;
+        u.x += u.dir * 110 * dt; // Løb hurtigt bagud
+      } else if (d > idealDist + 40) {
+        // For langt væk, gå tættere på indtil vi kan ramme
+        moveToward(u, lb.x, 84, dt);
+      }
+    }
+
+    // Skyd på bossen hvis inden for rækkevidde
     if (d < 580 && u.cooldown <= 0) {
-      archerShoot(u, u.x, groundY - 42, lb);
-      u.cooldown = 0.65;
-      u.dir = Math.sign(lb.x - u.x) || u.dir;
+      const shootH = u.onWall && u.wall && Math.abs(u.x - u.wall.x) < 40 ? wallHeight(u.wall) + 16 : 40;
+      archerShoot(u, u.x, groundY - shootH, lb);
+      u.cooldown = hasSkill("heavy_ballista") ? 2.2 : 0.75; // Lidt hurtigere skud mod bossen
+      u.smokeReveal = 0.5;
     }
     return;
   }
+
   // Drop gold when near player
   if ((u.gold||0) > 0 && dist(u.x, state.player.x) < 90) {
     for (let g=0; g<u.gold; g++) spawnCoin(u.x+rand(-20,20), 1, groundY-20, rand(-50,50), rand(-200,-100));
@@ -186,33 +225,36 @@ function archerAI(u, dt) {
     return;
   }
 
-  if (Game.isNight) {
-    const threat = closeFoe || nearestEnemy(CFG.baseX, 99999);
-    // Prefer side with threat, but also consider current position for distribution
-    let side = threat ? (threat.x < CFG.baseX ? -1 : 1) : (u.patrolDir > 0 ? 1 : -1);
-    // If no immediate threat, use position to naturally spread across both sides
-    if (!closeFoe && !threat) {
-      const posSide = u.x < CFG.baseX ? -1 : 1;
-      if (Math.random() < 0.7) side = posSide; // 70% stay on their side, 30% chance to cross over
-    }
+  // --- LOGIK FOR AFTEN OG NAT (PRE-NIGHT & NIGHT) ---
+  if (Game.isNight || sunsetApproaching()) {
+    // Tildel en fast side (højre/venstre) som ikke ændrer sig før næste dag
+    const side = assignFixedSide(u);
     const post = assignArcherPost(u, side);
-    const tgt = nearestEnemy(u.x, 520, true);
-    if (!tgt || dist(u.x, tgt.x) > 150) {
+    
+    // Find kun fjender på skyttens EGEN tildelte side for at undgå at kigge mod den anden mur
+    const sideFoe = state.enemies.find(e => !e.fleeing && Math.sign(e.x - CFG.baseX) === side && dist(u.x, e.x) < 520);
+
+    // Bevægelse til posten
+    if (!sideFoe || dist(u.x, sideFoe.x) > 150) {
       if (u.onWall && u.wall && hasSkill("grappling_hook") && dist(u.x, post) > 60) {
-        u.x = post; // instant grapple to wall post
+        u.x = post; // instant grapple
       } else {
-        moveToward(u, post, 84, dt);
+        moveToward(u, post, Game.isNight ? 84 : 65, dt); // Lidt hurtigere om natten
       }
     }
-    if (tgt && u.cooldown <= 0) {
+
+    // Skyd hvis der er en fjende på din side
+    if (sideFoe && u.cooldown <= 0) {
       const shootH = u.onWall && u.wall && Math.abs(u.x - u.wall.x) < 40 ? wallHeight(u.wall) + 16 : 40;
-      archerShoot(u, u.x, groundY - shootH, tgt);
+      archerShoot(u, u.x, groundY - shootH, sideFoe);
       u.cooldown = hasSkill("heavy_ballista") ? 2.2 : 0.8;
-      u.dir = Math.sign(tgt.x - u.x) || u.dir;
+      u.dir = Math.sign(sideFoe.x - u.x) || u.dir;
       u.smokeReveal = 0.5;
     }
-  } else {
-    // If enemy is dangerously close, back away while shooting
+  } 
+  // --- LOGIK FOR DAGTIMERNE ---
+  else {
+    // Hvis fjenden er faretruende tæt på om dagen, så ryk bagud og skyd
     const tooClose = nearestEnemy(u.x, 90);
     if (tooClose) {
       u.onWall = false; u.wall = null;
@@ -225,6 +267,7 @@ function archerAI(u, dt) {
       }
       return;
     }
+
     if (bestArcherWall(u.patrolDir) || bestArcherWall(-u.patrolDir)) {
       const side = closeFoe ? (closeFoe.x < CFG.baseX ? -1 : 1) : u.patrolDir;
       const post = assignArcherPost(u, side);
@@ -260,7 +303,7 @@ function archerAI(u, dt) {
       if (dist(u.x, outerEdge) < 60) u.patrolDir *= -1;
       u.dir = u.patrolDir;
       u.x += u.patrolDir * 58 * dt;
-      // Powershot: charge when patrolling peacefully
+      
       if (hasSkill("powershot") && !u.moving) u.powerTimer = (u.powerTimer||0) + dt;
     }
   }
@@ -320,21 +363,43 @@ function farmerAI(u, dt) {
 }
 
 function guardAI(u, dt) {
-  // Rally to legendary boss
+  // --- FORBEDRET GUARD BOSS LOGIK ---
   const lb = state.legendaryBoss;
   if (lb && !lb.fleeing) {
     const d = dist(u.x, lb.x);
     u.dir = Math.sign(lb.x - u.x) || u.dir;
-    if (d > 45) { u.x += u.dir * 175 * dt; return; }
-    if (u.cooldown <= 0) {
-      lb.hp -= 4; lb.flash = 0.12;
-      u.cooldown = 0.55;
-      Audio.hit();
-      spawnParticles(lb.x, groundY - 30, 5, "#8a2a4a", 50, 70);
-      if (lb.hp <= 0) killEnemy(lb);
+
+    // Find den nærmeste mur på bossens side
+    let frontlineWall = null;
+    let bestWD = 1e9;
+    for (const w of state.walls) {
+      if (w.commissioned && w.hp > 0 && w.buildProgress >= 1) {
+        const wd = dist(w.x, lb.x);
+        if (wd < bestWD) { bestWD = wd; frontlineWall = w; }
+      }
+    }
+
+    if (frontlineWall && dist(u.x, frontlineWall.x) > 150) {
+      // Hvis vagten er langt væk fra frontlinje-muren, så ryk hen til den (lige foran den)
+      const standX = frontlineWall.x + Math.sign(lb.x - frontlineWall.x) * 30; // Stå 30px foran muren
+      moveToward(u, standX, 120, dt);
+    } else {
+      // Hvis bossen er inden for angrebsrækkevidde, eller vi ikke har flere mure: Angrib!
+      if (d > 34) {
+        u.x += u.dir * 120 * dt; // Gå kontrolleret mod bossen
+      } else if (u.cooldown <= 0) {
+        // Angrib bossen
+        lb.hp -= 4; lb.flash = 0.12;
+        u.cooldown = 0.6; // Angrebshastighed
+        Audio.hit();
+        spawnParticles(lb.x, groundY - 30, 5, "#8a2a4a", 50, 70);
+        if (lb.hp <= 0) killEnemy(lb);
+      }
     }
     return;
   }
+
+  // --- STANDARD MODSTANDER AI ---
   const foe = nearestEnemy(u.x, 300);
   if (foe) {
     const d = dist(u.x, foe.x);
@@ -350,11 +415,39 @@ function guardAI(u, dt) {
     }
     return;
   }
-  // Patrol between walls
+
+  // --- STANDARD PATRULJE (Hvis der ikke er fjender) ---
   const patrolL = CFG.baseX - 550, patrolR = CFG.baseX + 550;
   if (!u.patrolTarget || dist(u.x, u.patrolTarget) < 20)
     u.patrolTarget = clamp(CFG.baseX + (Math.random() < 0.5 ? -1 : 1) * rand(60, 450), patrolL, patrolR);
   moveToward(u, u.patrolTarget, 62, dt);
+}
+
+function getArcherSideCounts() {
+  let left = 0, right = 0;
+  for (const u of state.units) {
+    if (u.role === 'archer' && u.fixedSide) {
+      if (u.fixedSide === -1) left++;
+      if (u.fixedSide === 1) right++;
+    }
+  }
+  return { left, right };
+}
+
+function assignFixedSide(u) {
+  // Hvis skytten allerede har en fast side for denne nat/aften, så hold fast i den
+  if (u.fixedSide) return u.fixedSide;
+
+  const counts = getArcherSideCounts();
+  if (counts.left < counts.right) {
+    u.fixedSide = -1;
+  } else if (counts.right < counts.left) {
+    u.fixedSide = 1;
+  } else {
+    // Hvis der er lige mange, vælg baseret på patrolDir eller tilfældighed
+    u.fixedSide = u.patrolDir || (Math.random() < 0.5 ? -1 : 1);
+  }
+  return u.fixedSide;
 }
 
 // Dispatch table replaces the if/else chain in updateUnits.

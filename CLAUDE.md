@@ -42,7 +42,7 @@ Every module imports these directly; nothing is passed as arguments through upda
 | `src/config/` | Pure data: `config.js` (CFG constants, WALL_SLOTS, PORTALS), `weapons.js`, `armor.js`, `enemies.js`, `locations.js` |
 | `src/entities/` | Factory functions: `makePlayer()`, `makeUnit()`, `makeWall()` |
 | `src/systems/` | Stateless update functions: `AI.js`, `Combat.js`, `Economy.js`, `SpawnSystem.js`, `Audio.js`, `Input.js`, `SaveSystem.js` |
-| `src/rendering/` | Canvas drawing: `Renderer.js` (main draw), `HUD.js` (DOM HUD + DEV panel), `Effects.js` (particles, biomes, trees), `Sprites.js` (sprite loader, currently disabled) |
+| `src/rendering/` | Canvas drawing: `Renderer.js` (main draw), `HUD.js` (DOM HUD + DEV panel), `Effects.js` (particles, biomes, trees) |
 | `src/util/math.js` | Pure math helpers: `clamp`, `dist`, `lerp`, `rand`, `randInt`, `pick`, `pickR`, `mulberry32` |
 | `src/canvas.js` | Canvas element, 2D context, and `resize()` |
 
@@ -52,5 +52,4 @@ Every module imports these directly; nothing is passed as arguments through upda
 - **World coordinates**: The world is 14 000 px wide; the base sits at x=7000. Camera offset (`Game.cam`) is applied in the renderer. All entity positions are in world space.
 - **Day/night cycle**: `Game.time` runs 0→1 over `CFG.dayLength` seconds. Night is `time > 0.65 && time <= 0.93`. Enemies spawn from portals at night according to a pre-planned quota (`planNight()` in `SpawnSystem.js`).
 - **Stations**: Interactive ground markers (base, bow shop, hammer shop, farm, wall slots) are rebuilt each time the base upgrades via `buildStations()` in `game.js`. Payment is handled by `Economy.js` when the player holds `↓`/`S` nearby.
-- **Sprites disabled**: `loadSprites()` is commented out in `game.js`. All rendering is procedural (canvas 2D shapes). The `assets_temp/` folder contains Kenney tile assets for future use.
 - **Save system**: Auto-saves to `localStorage` every 5 seconds via `SaveSystem.js`.

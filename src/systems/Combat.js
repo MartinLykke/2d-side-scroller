@@ -481,37 +481,144 @@ function dealAoE(x, dmg, radius, col) {
 
 function chainLightning(x, dmg, bounces) {
   if (bounces <= 0) return;
-  let nearest = null, nd = 220;
+  let nearest = null, nd = 250; // Søgeradius for næste fjende
   for (const e of state.enemies) {
     const d = dist(e.x, x);
     if (!e.fleeing && d < nd && d > 10) { nd = d; nearest = e; }
   }
   if (!nearest) return;
-  nearest.hp -= Math.max(1, Math.floor(dmg * 0.6)); nearest.flash = 0.14;
-  spawnParticles(nearest.x, groundY - 24, 5, "#ffffaa", 50, 70);
-  if (nearest.hp <= 0) killEnemy(nearest);
-  else chainLightning(nearest.x, dmg * 0.6, bounces - 1);
+
+  const enemyDrawY = groundY - 24; 
+
+  // --- VISUEL ZIGZAG STRØMBRO MELLEM FJENDER ---
+  let curX = x;
+  let curY = enemyDrawY;
+  const steps = 6; // Antal led i kædelynet
+  
+  for (let i = 1; i <= steps; i++) {
+    const t = i / steps;
+    const baseTargetX = nearest.x;
+    const baseTargetY = enemyDrawY;
+    
+    const knækY = (i === steps) ? 0 : rand(-15, 15);
+    const nxtX = curX + (baseTargetX - x) / steps;
+    const nxtY = (baseTargetY * t) + (enemyDrawY * (1 - t)) + knækY;
+    
+    // Fyld partikler ind i leddet
+    const dSeg = Math.hypot(nxtX - curX, nxtY - curY);
+    const pSteps = Math.ceil(dSeg / 5);
+    for (let s = 0; s <= pSteps; s++) {
+      const st = s / pSteps;
+      const px = curX + (nxtX - curX) * st;
+      const py = curY + (nxtY - curY) * st;
+      spawnParticles(px, py, 1, "#ffffff", 6, 6);
+      if (Math.random() < 0.3) spawnParticles(px, py, 1, "#ccccff", 12, 8);
+    }
+    curX = nxtX;
+    curY = nxtY;
+  }
+  // ---------------------------------------------
+
+  nearest.hp -= Math.max(1, Math.floor(dmg * 0.6)); 
+  nearest.flash = 0.14;
+  Audio.hit();
+  spawnParticles(nearest.x, enemyDrawY, 10, "#ccccff", 60, 80);
+
+  if (nearest.hp <= 0) {
+    killEnemy(nearest);
+  } else {
+    // Fortsæt kæden (bounces - 1)
+    chainLightning(nearest.x, dmg * 0.6, bounces - 1);
+  }
 }
 
 function castSpell(player, wBase, tgt) {
-  const sy = groundY - 72;
-  const ang = Math.atan2((groundY - 28) - sy, tgt.x - player.x);
-  const spd = wBase.spellType === "waterjet" ? 480 : wBase.spellType === "meteor" ? 180 : 330;
   const ew = effectiveWeapon(player.weapon, player.weaponUpgrades || []);
   const aoeR = (wBase.aoeRadius || 0) + (ew.range - wBase.range) * 0.2;
+
+  if (wBase.spellType === "lightning") {
+    // 1. Gør skade med det samme på primært mål
+    tgt.hp -= ew.dmg; 
+    tgt.flash = 0.14; 
+    Audio.hit();
+    
+    const enemyY = groundY - 24;
+    spellEnemyImpact({ spellType: "lightning" }, tgt.x, enemyY);
+
+    // 2. Generer en flot ZIGZAG-EFFEKT fra himlen ned til fjenden
+    let currentX = tgt.x + rand(-20, 20); // starter lidt forskudt i skyerne
+    let currentY = groundY - 1000;         // Højt oppe over skærmen
+    const segments = 20;                   // Hvor mange knæk lynet har
+    
+    for (let i = 1; i <= segments; i++) {
+      const t = i / segments;
+      // Træk en ret linje mod fjendens fod/center
+      const targetBaseX = tgt.x;
+      const targetBaseY = enemyY;
+      
+      // Lav et tilfældigt zigzag-knæk (undtagen det sidste segment, som skal ramme fjenden præcist)
+      const knækX = (i === segments) ? 0 : rand(-35, 35);
+      const nextX = (targetBaseX * t) + (currentX * (1 - t)) + knækX;
+      const nextY = currentY + ((targetBaseY - (groundY - 1000)) / segments);
+      
+      // Fyld ud med partikler mellem hvert knæk for at gøre linjen synlig og ubrudt
+      const segDist = Math.hypot(nextX - currentX, nextY - currentY);
+      const steps = Math.ceil(segDist / 6);
+      for (let s = 0; s <= steps; s++) {
+        const st = s / steps;
+        const px = currentX + (nextX - currentX) * st;
+        const py = currentY + (nextY - currentY) * st;
+        spawnParticles(px, py, 1, "#ffffff", 5, 5);
+        if (Math.random() < 0.4) spawnParticles(px, py, 1, "#ccccff", 12, 10);
+      }
+      currentX = nextX;
+      currentY = nextY;
+    }
+
+    // 3. Aktivér kædelynet (bounces) videre fra fjendens position
+    chainLightning(tgt.x, ew.dmg, 1);
+
+    if (tgt.hp <= 0) killEnemy(tgt);
+    
+    // Spiller glød
+    spawnParticles(player.x, groundY - 72, 10, wBase.col, 50, 70);
+    Audio.bow();
+    return; // Stop her! Lynet skal ikke tilføjes til state.spells
+  }
+
+  // --- STANDARD LOGIK FOR ANDRE SPELLS (Meteor, Fireball, osv.) ---
+  let startX = player.x;
+  let startY = groundY - 72;
+  let targetX = tgt.x;
+  let targetY = groundY - 28;
+  let spd = wBase.spellType === "waterjet" ? 480 : 330;
+  let life = 2.2;
+
+  if (wBase.spellType === "meteor") {
+    const dir = Math.sign(tgt.x - player.x) || 1;
+    startX = player.x - (250 * dir); 
+    startY = groundY - 1500; 
+    spd = 650; 
+    targetX = tgt.x + (210 * dir); 
+    life = 4.0;
+  } 
+
+  const ang = Math.atan2(targetY - startY, targetX - startX);
+
   state.spells.push({
-    x: player.x, y: sy,
+    x: startX, 
+    y: startY,
     vx: Math.cos(ang) * spd,
     vy: Math.sin(ang) * spd,
     spellType: wBase.spellType || "arcane",
     dmg: ew.dmg,
-    life: 2.2,
+    life: life,
     col: wBase.col,
     aoeRadius: aoeR,
     age: 0,
   });
-  // Cast glow at player position
-  spawnParticles(player.x, sy, 10, wBase.col, 50, 70);
+
+  spawnParticles(player.x, groundY - 72, 10, wBase.col, 50, 70);
   Audio.bow();
 }
 
@@ -570,10 +677,6 @@ function spellTrail(sp) {
       break;
     case "waterjet":
       if (Math.random() < 0.5) spawnParticles(sp.x, sp.y, 1, "#4ab8e8", 14, 8);
-      break;
-    case "lightning":
-      if (Math.random() < 0.6) spawnParticles(sp.x, sp.y, 1, "#ccccff", 18, 16);
-      if (Math.random() < 0.3) spawnParticles(sp.x, sp.y, 1, "#ffffff", 8, 20);
       break;
     case "arcane":
       if (Math.random() < 0.6) spawnParticles(sp.x, sp.y, 1, "#cc44ff", 16, 14);
@@ -689,7 +792,7 @@ export function updatePlayerAttack(dt) {
   if (!tgt) return;
   player.dir = Math.sign(tgt.x - player.x) || player.dir;
   player.swing = 0.32;
-  if (wBase.type === "melee") {
+if (wBase.type === "melee") {
     tgt.hp -= w.dmg; tgt.flash = 0.14; Audio.hit();
     meleeWeaponImpact(player.weapon, tgt.x, groundY - 28);
     floaty(tgt.x, "-" + w.dmg, wBase.col);
@@ -701,7 +804,13 @@ export function updatePlayerAttack(dt) {
   } else {
     castSpell(player, wBase, tgt);
   }
-  player.attackCd = w.speed;
+  
+  // --- KONTROL AF SPELL COOLDOWN ---
+  let cooldown = w.speed;
+  if (wBase.spellType === "meteor") {
+    cooldown *= 2.5; // Gør meteoren 2.5 gange langsommere at kaste. Justér tallet efter behov!
+  }
+  player.attackCd = cooldown;
 }
 
 // ---------- Legendary boss AI ----------
