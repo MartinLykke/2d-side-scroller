@@ -396,7 +396,7 @@ abandonedfort(x, dark) {
   const wood = woodCol(dark);
   const woodDark = rgb(lerpColor([56,40,22],[14,10,6],dark));
   const stone = stoneCol(dark);
-  const stoneLt = stoneLt(dark);
+  const stoneLight = stoneLt(dark);
   const moss = rgb(lerpColor([74,104,64],[20,30,18],dark));
   const cloth = rgb(lerpColor([130,110,80],[40,30,20],dark));
   const bone = rgb(lerpColor([192,184,172],[56,52,48],dark));
@@ -412,7 +412,7 @@ abandonedfort(x, dark) {
   ctx.fillRect(x-40,groundY-30,80,22);
 
   // broken wall section
-  ctx.fillStyle=stoneLt;
+  ctx.fillStyle=stoneLight;
   ctx.fillRect(x-18,groundY-48,36,18);
 
   // collapsed corner
@@ -643,7 +643,7 @@ abandonedfort(x, dark) {
   ctx.fill();
 }, shrine(x, dark) {
   const stone = stoneCol(dark);
-  const stoneLt = stoneLt(dark);
+  const stoneLight = stoneLt(dark);
   const wood = woodCol(dark);
   const moss = rgb(lerpColor([74,104,64],[20,30,18],dark));
   const glow = rgb(lerpColor([210,190,120],[60,50,30],dark));
@@ -658,7 +658,7 @@ abandonedfort(x, dark) {
   ctx.fillStyle=stone;
   ctx.fillRect(x-18,groundY-20,36,10);
 
-  ctx.fillStyle=stoneLt;
+  ctx.fillStyle=stoneLight;
   ctx.fillRect(x-14,groundY-30,28,10);
 
   // central altar
@@ -695,7 +695,7 @@ abandonedfort(x, dark) {
   ctx.fillStyle=wood;
   ctx.fillRect(x-30,groundY-8,10,6);
 
-  ctx.fillStyle=stoneLt;
+  ctx.fillStyle=stoneLight;
   ctx.beginPath();
   ctx.ellipse(x+32,groundY-6,3,2,0,0,Math.PI*2);
   ctx.fill();
@@ -813,7 +813,7 @@ mill(x, dark) {
   const wood = woodCol(dark);
   const woodDark = rgb(lerpColor([56,40,22],[14,10,6],dark));
   const stone = stoneCol(dark);
-  const stoneLt = stoneLt(dark);
+  const stoneLight = stoneLt(dark);
   const moss = rgb(lerpColor([74,104,64],[20,30,18],dark));
   const cloth = rgb(lerpColor([130,110,80],[40,30,20],dark));
 
@@ -876,7 +876,7 @@ mill(x, dark) {
   ctx.fill();
 
   // flour/seed spill (tiny particles feel)
-  ctx.fillStyle=stoneLt;
+  ctx.fillStyle=stoneLight;
   ctx.beginPath();
   ctx.ellipse(x-8,groundY-3,3,2,0,0,Math.PI*2);
   ctx.fill();
@@ -892,7 +892,7 @@ mill(x, dark) {
   ctx.fill();
 
   // small debris stones
-  ctx.fillStyle=stoneDark;
+  ctx.fillStyle=stone;
   ctx.beginPath();
   ctx.ellipse(x+28,groundY-2,3,2,0,0,Math.PI*2);
   ctx.fill();
