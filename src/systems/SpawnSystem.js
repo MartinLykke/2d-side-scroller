@@ -155,9 +155,9 @@ export function buildLocations() {
     if (x >= CFG.worldWidth - 120) break;
     const roll = r();
     if      (roll < 0.20) { /* nothing */ }
-    else if (roll < 0.60) { state.locations.push(makeLocation(x, pickR(r,["camp","wagon","grave"]), r)); }
-    else if (roll < 0.85) { state.locations.push(makeLocation(x, pickR(r,["ruins","cave","battlefield"]), r)); }
-    else if (roll < 0.96) { state.locations.push(makeLocation(x, "watchtower", r)); }
+    else if (roll < 0.60) { state.locations.push(makeLocation(x, pickR(r,["camp","wagon","grave","shack","huntingstand","fallenTree"]), r)); }
+    else if (roll < 0.82) { state.locations.push(makeLocation(x, pickR(r,["ruins","cave","battlefield","mill","ruinedwatchtower"]), r)); }
+    else if (roll < 0.95) { state.locations.push(makeLocation(x, pickR(r,["watchtower","shrine","abandonedfort"]), r)); }
     else                  { state.locations.push(makeLocation(x, "altar", r)); }
   }
 }

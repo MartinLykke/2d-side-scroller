@@ -31,9 +31,9 @@ export function updateLocations(dt) {
       const r = mulberry32((Game.treeSeed || 1) * 13 + entry.x);
       const roll = r();
       let type;
-      if      (roll < 0.55) type = pick(["camp","wagon","grave"]);
-      else if (roll < 0.85) type = pick(["ruins","cave","battlefield"]);
-      else if (roll < 0.97) type = "watchtower";
+      if      (roll < 0.55) type = pick(["camp","wagon","grave","shack","huntingstand","fallenTree"]);
+      else if (roll < 0.82) type = pick(["ruins","cave","battlefield","mill","ruinedwatchtower"]);
+      else if (roll < 0.95) type = pick(["watchtower","shrine","abandonedfort"]);
       else                  type = "altar";
       locations.push(makeLocation(entry.x, type, r));
       state.locRespawnQueue.splice(i, 1);

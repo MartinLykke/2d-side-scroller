@@ -15,29 +15,204 @@ const LOC_DRAWERS = {
     ctx.fillStyle="rgba(0,0,0,0.25)"; ctx.beginPath(); ctx.moveTo(x+44,groundY-28); ctx.lineTo(x+64,groundY); ctx.lineTo(x+52,groundY); ctx.closePath(); ctx.fill();
     ctx.fillStyle=woodCol(dark); ctx.fillRect(x+68,groundY-14,14,14); ctx.fillRect(x+82,groundY-10,10,10);
   },
-  wagon(x, dark) {
-    ctx.save(); ctx.translate(x,groundY-10); ctx.rotate(0.32);
-    ctx.fillStyle=woodCol(dark); ctx.fillRect(-32,-12,64,22);
-    ctx.strokeStyle=rgb(lerpColor([56,40,22],[14,10,6],dark)); ctx.lineWidth=2; ctx.strokeRect(-32,-12,64,22);
-    ctx.strokeStyle=rgb(lerpColor([72,52,30],[20,14,8],dark)); ctx.lineWidth=1;
-    for (let i=-3;i<=3;i++) { ctx.beginPath(); ctx.moveTo(i*9,-12); ctx.lineTo(i*9,10); ctx.stroke(); }
-    ctx.restore();
-    ctx.strokeStyle=woodCol(dark); ctx.lineWidth=3;
-    ctx.beginPath(); ctx.arc(x-38,groundY+4,14,0,Math.PI*2); ctx.stroke();
-    ctx.beginPath(); ctx.arc(x+24,groundY-8,12,0,Math.PI*2); ctx.stroke();
-    ctx.fillStyle=woodCol(dark); ctx.fillRect(x+50,groundY-10,13,12);
-  },
-  grave(x, dark) {
-    ctx.fillStyle=stoneCol(dark); ctx.fillRect(x-8,groundY-36,16,36);
-    ctx.beginPath(); ctx.arc(x,groundY-36,8,Math.PI,0); ctx.fill();
-    ctx.strokeStyle=stoneLt(dark); ctx.lineWidth=2;
-    ctx.beginPath(); ctx.moveTo(x,groundY-32); ctx.lineTo(x,groundY-18); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x-5,groundY-26); ctx.lineTo(x+5,groundY-26); ctx.stroke();
-    const boneC=rgb(lerpColor([192,184,172],[56,52,48],dark)); ctx.fillStyle=boneC;
-    ctx.beginPath(); ctx.ellipse(x-22,groundY-2,7,3,0.3,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(x+18,groundY-1,5,2.5,-0.2,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle=rgb(lerpColor([74,104,64],[20,30,18],dark)); ctx.beginPath(); ctx.ellipse(x,groundY-33,5,2,0,0,Math.PI*2); ctx.fill();
-  },
+wagon(x, dark) {
+  const wood = woodCol(dark);
+  const woodDark = rgb(lerpColor([56,40,22],[14,10,6],dark));
+  const woodLight = rgb(lerpColor([82,60,36],[24,18,10],dark));
+
+  ctx.save();
+  ctx.translate(x,groundY-10);
+  ctx.rotate(0.32);
+
+  // vogn
+  ctx.fillStyle = wood;
+  ctx.fillRect(-32,-12,64,22);
+
+  // lys kant
+  ctx.fillStyle = woodLight;
+  ctx.fillRect(-32,-12,64,3);
+
+  // ramme
+  ctx.strokeStyle = woodDark;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(-32,-12,64,22);
+
+  // brædder
+  ctx.strokeStyle = woodLight;
+  ctx.lineWidth = 1;
+  for (let i=-3;i<=3;i++) {
+    ctx.beginPath();
+    ctx.moveTo(i*9,-12);
+    ctx.lineTo(i*9,10);
+    ctx.stroke();
+  }
+
+  // trækstang
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(32,-2);
+  ctx.lineTo(50,-6);
+  ctx.stroke();
+
+  ctx.restore();
+
+  // venstre hjul
+  ctx.strokeStyle = wood;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(x-38,groundY+4,14,0,Math.PI*2);
+  ctx.stroke();
+
+  ctx.lineWidth = 1;
+  for(let i=0;i<6;i++){
+    let a=i*Math.PI/3;
+    ctx.beginPath();
+    ctx.moveTo(x-38,groundY+4);
+    ctx.lineTo(
+      x-38+Math.cos(a)*12,
+      groundY+4+Math.sin(a)*12
+    );
+    ctx.stroke();
+  }
+  ctx.fillStyle=wood;
+  ctx.beginPath();
+  ctx.arc(x-38,groundY+4,2,0,Math.PI*2);
+  ctx.fill();
+
+  // højre hjul
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(x+24,groundY-8,12,0,Math.PI*2);
+  ctx.stroke();
+
+  ctx.lineWidth = 1;
+  for(let i=0;i<6;i++){
+    let a=i*Math.PI/3;
+    ctx.beginPath();
+    ctx.moveTo(x+24,groundY-8);
+    ctx.lineTo(
+      x+24+Math.cos(a)*10,
+      groundY-8+Math.sin(a)*10
+    );
+    ctx.stroke();
+  }
+  ctx.fillStyle=wood;
+  ctx.beginPath();
+  ctx.arc(x+24,groundY-8,2,0,Math.PI*2);
+  ctx.fill();
+
+  // kasse
+  ctx.fillStyle=wood;
+  ctx.fillRect(x+50,groundY-10,13,12);
+  ctx.strokeStyle=woodDark;
+  ctx.lineWidth=1;
+  ctx.strokeRect(x+50,groundY-10,13,12);
+
+  // sæk
+  ctx.fillStyle=rgb(lerpColor([130,112,82],[38,34,24],dark));
+  ctx.beginPath();
+  ctx.ellipse(x-56,groundY-4,7,9,0,0,Math.PI*2);
+  ctx.fill();
+
+  // lille tønde
+  ctx.fillStyle=wood;
+  ctx.fillRect(x+66,groundY-12,10,12);
+  ctx.strokeStyle=woodDark;
+  ctx.strokeRect(x+66,groundY-12,10,12);
+},
+grave(x, dark) {
+  const stone = stoneCol(dark);
+  const stoneLight = stoneLt(dark);
+  const stoneDark = rgb(lerpColor([80,74,70],[22,20,20],dark));
+
+  // skygge
+  ctx.fillStyle="rgba(0,0,0,0.18)";
+  ctx.beginPath();
+  ctx.ellipse(x+2,groundY-1,18,4,0,0,Math.PI*2);
+  ctx.fill();
+
+  // jordhøj
+  ctx.fillStyle=rgb(lerpColor([88,68,46],[26,20,16],dark));
+  ctx.beginPath();
+  ctx.ellipse(x,groundY-1,20,5,0,0,Math.PI*2);
+  ctx.fill();
+
+  // gravsten
+  ctx.fillStyle=stone;
+  ctx.fillRect(x-8,groundY-36,16,36);
+  ctx.beginPath();
+  ctx.arc(x,groundY-36,8,Math.PI,0);
+  ctx.fill();
+
+  // lys kant
+  ctx.strokeStyle=stoneLight;
+  ctx.lineWidth=2;
+  ctx.strokeRect(x-7.5,groundY-36,15,35);
+
+  // kors
+  ctx.beginPath();
+  ctx.moveTo(x,groundY-32);
+  ctx.lineTo(x,groundY-18);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(x-5,groundY-26);
+  ctx.lineTo(x+5,groundY-26);
+  ctx.stroke();
+
+  // revner
+  ctx.strokeStyle=stoneDark;
+  ctx.lineWidth=1;
+
+  ctx.beginPath();
+  ctx.moveTo(x-2,groundY-31);
+  ctx.lineTo(x+1,groundY-25);
+  ctx.lineTo(x-3,groundY-20);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(x+4,groundY-15);
+  ctx.lineTo(x+1,groundY-10);
+  ctx.stroke();
+
+  // knogler
+  const boneC=rgb(lerpColor([192,184,172],[56,52,48],dark));
+  ctx.fillStyle=boneC;
+
+  ctx.beginPath();
+  ctx.ellipse(x-22,groundY-2,7,3,0.3,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.ellipse(x+18,groundY-1,5,2.5,-0.2,0,Math.PI*2);
+  ctx.fill();
+
+  // lille sten
+  ctx.fillStyle=stoneDark;
+  ctx.beginPath();
+  ctx.ellipse(x+26,groundY-2,3,2,0,0,Math.PI*2);
+  ctx.fill();
+
+  // mos
+  ctx.fillStyle=rgb(lerpColor([74,104,64],[20,30,18],dark));
+  ctx.beginPath();
+  ctx.ellipse(x,groundY-33,5,2,0,0,Math.PI*2);
+  ctx.fill();
+
+  // ukrudt venstre
+  ctx.beginPath();
+  ctx.moveTo(x-15,groundY);
+  ctx.lineTo(x-13,groundY-6);
+  ctx.lineTo(x-11,groundY);
+  ctx.fill();
+
+  // ukrudt højre
+  ctx.beginPath();
+  ctx.moveTo(x+12,groundY);
+  ctx.lineTo(x+15,groundY-7);
+  ctx.lineTo(x+18,groundY);
+  ctx.fill();
+},
   ruins(x, dark) {
     const c=stoneCol(dark), l=stoneLt(dark);
     const col=(cx,h,broken)=>{
@@ -60,15 +235,134 @@ const LOC_DRAWERS = {
     ctx.beginPath(); ctx.ellipse(x-40,groundY-2,8,3,0.2,0,Math.PI*2); ctx.fill();
     ctx.beginPath(); ctx.ellipse(x+34,groundY-1,6,2.5,-0.3,0,Math.PI*2); ctx.fill();
   },
-  battlefield(x, dark) {
-    const wd=woodCol(dark), mt=stoneCol(dark);
-    const banner=(bx,lean)=>{ ctx.strokeStyle=wd; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(bx,groundY); ctx.lineTo(bx+lean,groundY-62); ctx.stroke(); ctx.fillStyle=rgb(lerpColor([90,30,30],[28,10,10],dark)); ctx.beginPath(); ctx.moveTo(bx+lean,groundY-62); ctx.lineTo(bx+lean+18,groundY-54); ctx.lineTo(bx+lean+12,groundY-44); ctx.lineTo(bx+lean,groundY-44); ctx.fill(); };
-    banner(x-68,-8); banner(x+42,6);
-    const sword=(sx,ang)=>{ ctx.save(); ctx.translate(sx,groundY); ctx.rotate(ang); ctx.strokeStyle=mt; ctx.lineWidth=2.5; ctx.lineCap="round"; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-30); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-5,-22); ctx.lineTo(5,-22); ctx.stroke(); ctx.restore(); };
-    sword(x-36,-0.2); sword(x-8,0.15); sword(x+20,-0.1); sword(x+50,0.22);
-    ctx.fillStyle=mt; ctx.beginPath(); ctx.ellipse(x-56,groundY-4,10,7,0.3,0,Math.PI*2); ctx.fill();
-    ctx.strokeStyle=stoneLt(dark); ctx.lineWidth=1; ctx.beginPath(); ctx.ellipse(x-56,groundY-4,10,7,0.3,0,Math.PI*2); ctx.stroke();
-  },
+battlefield(x, dark) {
+  const wd = woodCol(dark);
+  const mt = stoneCol(dark);
+  const bone = rgb(lerpColor([192,184,172],[56,52,48],dark));
+  const dirt = rgb(lerpColor([88,68,46],[24,18,14],dark));
+
+  // jord/slid
+  ctx.fillStyle=dirt;
+  ctx.beginPath();
+  ctx.ellipse(x,groundY-1,70,6,0,0,Math.PI*2);
+  ctx.fill();
+
+  // bannere
+  const banner=(bx,lean)=>{
+    ctx.strokeStyle=wd;
+    ctx.lineWidth=3;
+    ctx.beginPath();
+    ctx.moveTo(bx,groundY);
+    ctx.lineTo(bx+lean,groundY-62);
+    ctx.stroke();
+
+    ctx.fillStyle=rgb(lerpColor([90,30,30],[28,10,10],dark));
+    ctx.beginPath();
+    ctx.moveTo(bx+lean,groundY-62);
+    ctx.lineTo(bx+lean+18,groundY-54);
+    ctx.lineTo(bx+lean+12,groundY-44);
+    ctx.lineTo(bx+lean,groundY-44);
+    ctx.fill();
+  };
+
+  banner(x-68,-8);
+  banner(x+42,6);
+
+  // sværd
+  const sword=(sx,ang)=>{
+    ctx.save();
+    ctx.translate(sx,groundY);
+    ctx.rotate(ang);
+
+    ctx.strokeStyle=mt;
+    ctx.lineWidth=2.5;
+    ctx.lineCap="round";
+
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.lineTo(0,-30);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(-5,-22);
+    ctx.lineTo(5,-22);
+    ctx.stroke();
+
+    ctx.restore();
+  };
+
+  sword(x-36,-0.2);
+  sword(x-8,0.15);
+  sword(x+20,-0.1);
+  sword(x+50,0.22);
+
+  // skjold
+  ctx.fillStyle=mt;
+  ctx.beginPath();
+  ctx.ellipse(x-56,groundY-4,10,7,0.3,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.strokeStyle=stoneLt(dark);
+  ctx.lineWidth=1;
+  ctx.stroke();
+
+  // skjoldets boss
+  ctx.fillStyle=stoneLt(dark);
+  ctx.beginPath();
+  ctx.arc(x-56,groundY-4,2,0,Math.PI*2);
+  ctx.fill();
+
+  // knækket spyd
+  ctx.strokeStyle=wd;
+  ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(x+58,groundY-18);
+  ctx.lineTo(x+74,groundY);
+  ctx.stroke();
+
+  // pil
+  ctx.strokeStyle=wd;
+  ctx.lineWidth=1.5;
+  ctx.beginPath();
+  ctx.moveTo(x-12,groundY-10);
+  ctx.lineTo(x+4,groundY-3);
+  ctx.stroke();
+
+  // knogler
+  ctx.fillStyle=bone;
+  ctx.beginPath();
+  ctx.ellipse(x-26,groundY-2,5,2.5,0.3,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.ellipse(x+30,groundY-1,6,3,-0.2,0,Math.PI*2);
+  ctx.fill();
+
+  // sten
+  ctx.fillStyle=mt;
+  ctx.beginPath();
+  ctx.ellipse(x-2,groundY-1,4,3,0,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.ellipse(x+18,groundY-2,3,2,0,0,Math.PI*2);
+  ctx.fill();
+
+  // græs
+  ctx.fillStyle=rgb(lerpColor([74,104,64],[20,30,18],dark));
+
+  ctx.beginPath();
+  ctx.moveTo(x-45,groundY);
+  ctx.lineTo(x-42,groundY-6);
+  ctx.lineTo(x-39,groundY);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(x+38,groundY);
+  ctx.lineTo(x+41,groundY-5);
+  ctx.lineTo(x+44,groundY);
+  ctx.fill();
+},
   watchtower(x, dark) {
     const c=stoneCol(dark), l=stoneLt(dark), tw=38;
     ctx.fillStyle=c; ctx.fillRect(x-tw/2,groundY-112,tw,112);
@@ -98,6 +392,598 @@ const LOC_DRAWERS = {
     ctx.fillStyle=rgb(lerpColor([60,94,74],[18,28,22],dark));
     for (const [ox] of stones) { ctx.beginPath(); ctx.ellipse(x+ox,groundY-1,4,2.5,0,0,Math.PI*2); ctx.fill(); }
   },
+abandonedfort(x, dark) {
+  const wood = woodCol(dark);
+  const woodDark = rgb(lerpColor([56,40,22],[14,10,6],dark));
+  const stone = stoneCol(dark);
+  const stoneLt = stoneLt(dark);
+  const moss = rgb(lerpColor([74,104,64],[20,30,18],dark));
+  const cloth = rgb(lerpColor([130,110,80],[40,30,20],dark));
+  const bone = rgb(lerpColor([192,184,172],[56,52,48],dark));
+
+  // ground shadow
+  ctx.fillStyle="rgba(0,0,0,0.18)";
+  ctx.beginPath();
+  ctx.ellipse(x,groundY-2,80,7,0,0,Math.PI*2);
+  ctx.fill();
+
+  // stone base walls
+  ctx.fillStyle=stone;
+  ctx.fillRect(x-40,groundY-30,80,22);
+
+  // broken wall section
+  ctx.fillStyle=stoneLt;
+  ctx.fillRect(x-18,groundY-48,36,18);
+
+  // collapsed corner
+  ctx.fillStyle=stone;
+  ctx.beginPath();
+  ctx.moveTo(x+28,groundY-30);
+  ctx.lineTo(x+50,groundY-10);
+  ctx.lineTo(x+22,groundY-10);
+  ctx.closePath();
+  ctx.fill();
+
+  // wooden gate frame
+  ctx.strokeStyle=woodDark;
+  ctx.lineWidth=4;
+  ctx.beginPath();
+  ctx.moveTo(x-12,groundY);
+  ctx.lineTo(x-12,groundY-42);
+  ctx.lineTo(x+12,groundY-42);
+  ctx.lineTo(x+12,groundY);
+  ctx.stroke();
+
+  // broken gate door
+  ctx.strokeStyle=wood;
+  ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(x-10,groundY-10);
+  ctx.lineTo(x+8,groundY-28);
+  ctx.stroke();
+
+  // tower stump (left)
+  ctx.fillStyle=stone;
+  ctx.fillRect(x-55,groundY-55,18,40);
+
+  // damaged top
+  ctx.fillStyle=woodDark;
+  ctx.beginPath();
+  ctx.moveTo(x-55,groundY-55);
+  ctx.lineTo(x-37,groundY-70);
+  ctx.lineTo(x-37,groundY-55);
+  ctx.closePath();
+  ctx.fill();
+
+  // flag pole (broken)
+  ctx.strokeStyle=woodDark;
+  ctx.lineWidth=3;
+  ctx.beginPath();
+  ctx.moveTo(x+55,groundY);
+  ctx.lineTo(x+60,groundY-50);
+  ctx.stroke();
+
+  // torn banner
+  ctx.fillStyle=rgb(lerpColor([90,30,30],[28,10,10],dark));
+  ctx.beginPath();
+  ctx.moveTo(x+60,groundY-50);
+  ctx.lineTo(x+78,groundY-45);
+  ctx.lineTo(x+74,groundY-35);
+  ctx.lineTo(x+58,groundY-38);
+  ctx.closePath();
+  ctx.fill();
+
+  // inside loot sack
+  ctx.fillStyle=cloth;
+  ctx.beginPath();
+  ctx.ellipse(x-10,groundY-8,7,9,0,0,Math.PI*2);
+  ctx.fill();
+
+  // bones
+  ctx.fillStyle=bone;
+  ctx.beginPath();
+  ctx.ellipse(x+18,groundY-3,6,3,0.3,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.ellipse(x-28,groundY-2,5,2.5,-0.2,0,Math.PI*2);
+  ctx.fill();
+
+  // moss growth
+  ctx.fillStyle=moss;
+  ctx.beginPath();
+  ctx.ellipse(x,groundY-40,18,6,0,0,Math.PI*2);
+  ctx.fill();
+
+  // debris stones
+  ctx.fillStyle=stone;
+  ctx.beginPath();
+  ctx.ellipse(x-48,groundY-2,3,2,0,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.ellipse(x+48,groundY-1,2.5,1.8,0,0,Math.PI*2);
+  ctx.fill();
+},
+  shack(x, dark) {
+  const wood = woodCol(dark);
+  const woodDark = rgb(lerpColor([56,40,22],[14,10,6],dark));
+  const woodLight = rgb(lerpColor([90,64,40],[28,20,12],dark));
+  const glow = rgb(lerpColor([220,180,120],[60,40,20],dark));
+
+  // ground clutter
+  ctx.fillStyle="rgba(0,0,0,0.15)";
+  ctx.beginPath();
+  ctx.ellipse(x,groundY,50,6,0,0,Math.PI*2);
+  ctx.fill();
+
+  // main hut body (slightly tilted feel)
+  ctx.fillStyle = wood;
+  ctx.fillRect(x-28, groundY-40, 56, 34);
+
+  // broken roof
+  ctx.fillStyle = woodDark;
+  ctx.beginPath();
+  ctx.moveTo(x-34, groundY-40);
+  ctx.lineTo(x+10, groundY-62);
+  ctx.lineTo(x+38, groundY-38);
+  ctx.lineTo(x+6, groundY-36);
+  ctx.closePath();
+  ctx.fill();
+
+  // roof crack / missing plank
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
+  ctx.fillRect(x-6, groundY-58, 10, 10);
+
+  // door opening (dark interior)
+  ctx.fillStyle = "rgba(0,0,0,0.5)";
+  ctx.fillRect(x-10, groundY-22, 16, 16);
+
+  // broken door plank
+  ctx.fillStyle = woodLight;
+  ctx.save();
+  ctx.translate(x-18, groundY-18);
+  ctx.rotate(-0.4);
+  ctx.fillRect(0,0,14,3);
+  ctx.restore();
+
+  // window glow (loot hint / life inside)
+  ctx.fillStyle = glow;
+  ctx.fillRect(x+10, groundY-30, 10, 8);
+
+  // window frame
+  ctx.strokeStyle = woodDark;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x+10, groundY-30, 10, 8);
+
+  // fallen crate
+  ctx.fillStyle = wood;
+  ctx.fillRect(x+30, groundY-10, 12, 10);
+
+  // spilled loot hint (cloth / sack)
+  ctx.fillStyle = rgb(lerpColor([130,110,80],[40,30,20],dark));
+  ctx.beginPath();
+  ctx.ellipse(x-36, groundY-4, 6, 8, 0.3, 0, Math.PI*2);
+  ctx.fill();
+
+  // small debris (stones)
+  ctx.fillStyle = woodDark;
+  ctx.beginPath();
+  ctx.ellipse(x+46, groundY-2, 3, 2, 0, 0, Math.PI*2);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.ellipse(x-44, groundY-1, 2, 1.5, 0, 0, Math.PI*2);
+  ctx.fill();
+}, ruinedwatchtower(x, dark) {
+  const wood = woodCol(dark);
+  const woodDark = rgb(lerpColor([56,40,22],[14,10,6],dark));
+  const rope = rgb(lerpColor([120,90,60],[40,30,20],dark));
+  const bone = rgb(lerpColor([192,184,172],[56,52,48],dark));
+
+  // base shadow
+  ctx.fillStyle="rgba(0,0,0,0.18)";
+  ctx.beginPath();
+  ctx.ellipse(x,groundY-2,55,6,0,0,Math.PI*2);
+  ctx.fill();
+
+  // broken platform
+  ctx.fillStyle=wood;
+  ctx.fillRect(x-22,groundY-45,44,10);
+
+  // main tower frame
+  ctx.strokeStyle=woodDark;
+  ctx.lineWidth=3;
+  ctx.beginPath();
+  ctx.moveTo(x-18,groundY);
+  ctx.lineTo(x-10,groundY-55);
+  ctx.lineTo(x+10,groundY-55);
+  ctx.lineTo(x+18,groundY);
+  ctx.stroke();
+
+  // broken side beam
+  ctx.beginPath();
+  ctx.moveTo(x+10,groundY-30);
+  ctx.lineTo(x+30,groundY-15);
+  ctx.stroke();
+
+  // ladder
+  ctx.strokeStyle=wood;
+  ctx.lineWidth=2;
+  for(let i=0;i<5;i++){
+    ctx.beginPath();
+    ctx.moveTo(x-12,groundY-10-i*8);
+    ctx.lineTo(x-2,groundY-10-i*8);
+    ctx.stroke();
+  }
+
+  // hanging rope (loot hint)
+  ctx.strokeStyle=rope;
+  ctx.beginPath();
+  ctx.moveTo(x+20,groundY-45);
+  ctx.lineTo(x+26,groundY-10);
+  ctx.stroke();
+
+  // small bag
+  ctx.fillStyle=rgb(lerpColor([140,120,90],[40,30,20],dark));
+  ctx.beginPath();
+  ctx.ellipse(x+28,groundY-8,6,8,0,0,Math.PI*2);
+  ctx.fill();
+
+  // bones / remains
+  ctx.fillStyle=bone;
+  ctx.beginPath();
+  ctx.ellipse(x-28,groundY-2,6,3,0.2,0,Math.PI*2);
+  ctx.fill();
+
+  // small stone
+  ctx.fillStyle=woodDark;
+  ctx.beginPath();
+  ctx.ellipse(x-38,groundY-1,3,2,0,0,Math.PI*2);
+  ctx.fill();
+}, shrine(x, dark) {
+  const stone = stoneCol(dark);
+  const stoneLt = stoneLt(dark);
+  const wood = woodCol(dark);
+  const moss = rgb(lerpColor([74,104,64],[20,30,18],dark));
+  const glow = rgb(lerpColor([210,190,120],[60,50,30],dark));
+
+  // ground shadow
+  ctx.fillStyle="rgba(0,0,0,0.18)";
+  ctx.beginPath();
+  ctx.ellipse(x,groundY-2,45,6,0,0,Math.PI*2);
+  ctx.fill();
+
+  // base stones
+  ctx.fillStyle=stone;
+  ctx.fillRect(x-18,groundY-20,36,10);
+
+  ctx.fillStyle=stoneLt;
+  ctx.fillRect(x-14,groundY-30,28,10);
+
+  // central altar
+  ctx.fillStyle=stone;
+  ctx.fillRect(x-10,groundY-40,20,12);
+
+  // cracked top stone
+  ctx.strokeStyle="rgba(0,0,0,0.25)";
+  ctx.lineWidth=1;
+  ctx.beginPath();
+  ctx.moveTo(x,groundY-40);
+  ctx.lineTo(x-4,groundY-34);
+  ctx.lineTo(x+2,groundY-30);
+  ctx.stroke();
+
+  // pillars (simple ruins)
+  ctx.fillStyle=stone;
+  ctx.fillRect(x-26,groundY-38,6,28);
+  ctx.fillRect(x+20,groundY-38,6,28);
+
+  // moss overlay
+  ctx.fillStyle=moss;
+  ctx.beginPath();
+  ctx.ellipse(x,groundY-28,18,6,0,0,Math.PI*2);
+  ctx.fill();
+
+  // glow (loot hint / magic feel)
+  ctx.fillStyle=glow;
+  ctx.beginPath();
+  ctx.ellipse(x,groundY-32,6,3,0,0,Math.PI*2);
+  ctx.fill();
+
+  // small offerings (loot hint)
+  ctx.fillStyle=wood;
+  ctx.fillRect(x-30,groundY-8,10,6);
+
+  ctx.fillStyle=stoneLt;
+  ctx.beginPath();
+  ctx.ellipse(x+32,groundY-6,3,2,0,0,Math.PI*2);
+  ctx.fill();
+
+  // grass
+  ctx.fillStyle=moss;
+  ctx.beginPath();
+  ctx.moveTo(x-22,groundY);
+  ctx.lineTo(x-20,groundY-6);
+  ctx.lineTo(x-18,groundY);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(x+24,groundY);
+  ctx.lineTo(x+26,groundY-5);
+  ctx.lineTo(x+28,groundY);
+  ctx.fill();
+},
+huntingstand(x, dark) {
+  const wood = woodCol(dark);
+  const woodDark = rgb(lerpColor([56,40,22],[14,10,6],dark));
+  const rope = rgb(lerpColor([120,90,60],[40,30,20],dark));
+  const cloth = rgb(lerpColor([130,110,80],[40,30,20],dark));
+  const bone = rgb(lerpColor([192,184,172],[56,52,48],dark));
+
+  // ground shadow
+  ctx.fillStyle="rgba(0,0,0,0.18)";
+  ctx.beginPath();
+  ctx.ellipse(x,groundY-2,50,6,0,0,Math.PI*2);
+  ctx.fill();
+
+  // main platform
+  ctx.fillStyle=wood;
+  ctx.fillRect(x-18,groundY-35,36,10);
+
+  // legs
+  ctx.strokeStyle=woodDark;
+  ctx.lineWidth=3;
+  ctx.beginPath();
+  ctx.moveTo(x-16,groundY-25);
+  ctx.lineTo(x-22,groundY);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(x+16,groundY-25);
+  ctx.lineTo(x+22,groundY);
+  ctx.stroke();
+
+  // ladder
+  ctx.lineWidth=2;
+  for(let i=0;i<4;i++){
+    ctx.beginPath();
+    ctx.moveTo(x-10,groundY-10-i*6);
+    ctx.lineTo(x+10,groundY-10-i*6);
+    ctx.stroke();
+  }
+
+  // small roof plank (lean-to feel)
+  ctx.fillStyle=woodDark;
+  ctx.beginPath();
+  ctx.moveTo(x-22,groundY-35);
+  ctx.lineTo(x+22,groundY-35);
+  ctx.lineTo(x+12,groundY-48);
+  ctx.lineTo(x-32,groundY-48);
+  ctx.closePath();
+  ctx.fill();
+
+  // rope hanging
+  ctx.strokeStyle=rope;
+  ctx.beginPath();
+  ctx.moveTo(x+10,groundY-35);
+  ctx.lineTo(x+14,groundY-10);
+  ctx.stroke();
+
+  // sack (loot hint)
+  ctx.fillStyle=cloth;
+  ctx.beginPath();
+  ctx.ellipse(x+14,groundY-8,6,8,0,0,Math.PI*2);
+  ctx.fill();
+
+  // arrows stuck in wood
+  ctx.strokeStyle=woodDark;
+  ctx.lineWidth=1.5;
+  ctx.beginPath();
+  ctx.moveTo(x-8,groundY-20);
+  ctx.lineTo(x-2,groundY-28);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(x+2,groundY-18);
+  ctx.lineTo(x+8,groundY-26);
+  ctx.stroke();
+
+  // bone (small wildlife hint)
+  ctx.fillStyle=bone;
+  ctx.beginPath();
+  ctx.ellipse(x-30,groundY-2,5,2.5,0.2,0,Math.PI*2);
+  ctx.fill();
+
+  // grass tufts
+  ctx.fillStyle=rgb(lerpColor([74,104,64],[20,30,18],dark));
+  ctx.beginPath();
+  ctx.moveTo(x-20,groundY);
+  ctx.lineTo(x-18,groundY-6);
+  ctx.lineTo(x-16,groundY);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(x+22,groundY);
+  ctx.lineTo(x+24,groundY-5);
+  ctx.lineTo(x+26,groundY);
+  ctx.fill();
+},
+mill(x, dark) {
+  const wood = woodCol(dark);
+  const woodDark = rgb(lerpColor([56,40,22],[14,10,6],dark));
+  const stone = stoneCol(dark);
+  const stoneLt = stoneLt(dark);
+  const moss = rgb(lerpColor([74,104,64],[20,30,18],dark));
+  const cloth = rgb(lerpColor([130,110,80],[40,30,20],dark));
+
+  // ground shadow
+  ctx.fillStyle="rgba(0,0,0,0.18)";
+  ctx.beginPath();
+  ctx.ellipse(x,groundY-2,60,6,0,0,Math.PI*2);
+  ctx.fill();
+
+  // stone base
+  ctx.fillStyle=stone;
+  ctx.fillRect(x-28,groundY-30,56,18);
+
+  // wooden mill house
+  ctx.fillStyle=wood;
+  ctx.fillRect(x-24,groundY-60,48,30);
+
+  // broken roof
+  ctx.fillStyle=woodDark;
+  ctx.beginPath();
+  ctx.moveTo(x-30,groundY-60);
+  ctx.lineTo(x+10,groundY-80);
+  ctx.lineTo(x+34,groundY-58);
+  ctx.lineTo(x+6,groundY-54);
+  ctx.closePath();
+  ctx.fill();
+
+  // window opening
+  ctx.fillStyle="rgba(0,0,0,0.45)";
+  ctx.fillRect(x+6,groundY-50,10,10);
+
+  // broken mill wheel
+  ctx.strokeStyle=wood;
+  ctx.lineWidth=3;
+  ctx.beginPath();
+  ctx.arc(x+40,groundY-25,14,0,Math.PI*2);
+  ctx.stroke();
+
+  ctx.lineWidth=1.5;
+  for(let i=0;i<5;i++){
+    let a=i*Math.PI/2.5;
+    ctx.beginPath();
+    ctx.moveTo(x+40,groundY-25);
+    ctx.lineTo(x+40+Math.cos(a)*12,x+Math.sin(a)*12+groundY-25);
+    ctx.stroke();
+  }
+
+  // fallen beam
+  ctx.strokeStyle=woodDark;
+  ctx.lineWidth=3;
+  ctx.beginPath();
+  ctx.moveTo(x-20,groundY-10);
+  ctx.lineTo(x+10,groundY-5);
+  ctx.stroke();
+
+  // sack loot hint
+  ctx.fillStyle=cloth;
+  ctx.beginPath();
+  ctx.ellipse(x-18,groundY-6,7,9,0,0,Math.PI*2);
+  ctx.fill();
+
+  // flour/seed spill (tiny particles feel)
+  ctx.fillStyle=stoneLt;
+  ctx.beginPath();
+  ctx.ellipse(x-8,groundY-3,3,2,0,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.ellipse(x-2,groundY-2,2,1.5,0,0,Math.PI*2);
+  ctx.fill();
+
+  // moss
+  ctx.fillStyle=moss;
+  ctx.beginPath();
+  ctx.ellipse(x,groundY-40,10,4,0,0,Math.PI*2);
+  ctx.fill();
+
+  // small debris stones
+  ctx.fillStyle=stoneDark;
+  ctx.beginPath();
+  ctx.ellipse(x+28,groundY-2,3,2,0,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.ellipse(x-34,groundY-1,2.5,1.8,0,0,Math.PI*2);
+  ctx.fill();
+}, fallenTree(x, dark) {
+  const wood = woodCol(dark);
+  const woodDark = rgb(lerpColor([56,40,22],[14,10,6],dark));
+  const bark = rgb(lerpColor([92,64,40],[26,18,10],dark));
+  const moss = rgb(lerpColor([74,104,64],[20,30,18],dark));
+  const cloth = rgb(lerpColor([130,110,80],[40,30,20],dark));
+  const bone = rgb(lerpColor([192,184,172],[56,52,48],dark));
+
+  // ground shadow
+  ctx.fillStyle="rgba(0,0,0,0.18)";
+  ctx.beginPath();
+  ctx.ellipse(x,groundY-2,70,6,0,0,Math.PI*2);
+  ctx.fill();
+
+  // fallen trunk
+  ctx.fillStyle=bark;
+  ctx.save();
+  ctx.translate(x,groundY-10);
+  ctx.rotate(-0.35);
+  ctx.fillRect(-50,-10,100,18);
+  ctx.restore();
+
+  // broken root end
+  ctx.fillStyle=woodDark;
+  ctx.beginPath();
+  ctx.ellipse(x-52,groundY-8,10,7,0,0,Math.PI*2);
+  ctx.fill();
+
+  // hollow opening (loot hint)
+  ctx.fillStyle="rgba(0,0,0,0.5)";
+  ctx.beginPath();
+  ctx.ellipse(x+18,groundY-12,10,6,0.2,0,Math.PI*2);
+  ctx.fill();
+
+  // moss on top
+  ctx.fillStyle=moss;
+  ctx.beginPath();
+  ctx.ellipse(x,groundY-18,22,5,0,0,Math.PI*2);
+  ctx.fill();
+
+  // small broken branch
+  ctx.strokeStyle=woodDark;
+  ctx.lineWidth=3;
+  ctx.beginPath();
+  ctx.moveTo(x+30,groundY-18);
+  ctx.lineTo(x+48,groundY-6);
+  ctx.stroke();
+
+  // sack inside hollow
+  ctx.fillStyle=cloth;
+  ctx.beginPath();
+  ctx.ellipse(x+20,groundY-10,6,8,0,0,Math.PI*2);
+  ctx.fill();
+
+  // bones slightly sticking out
+  ctx.fillStyle=bone;
+  ctx.beginPath();
+  ctx.ellipse(x-18,groundY-3,5,2.5,0.3,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.ellipse(x-6,groundY-2,4,2,-0.2,0,Math.PI*2);
+  ctx.fill();
+
+  // small stones
+  ctx.fillStyle=woodDark;
+  ctx.beginPath();
+  ctx.ellipse(x+40,groundY-2,3,2,0,0,Math.PI*2);
+  ctx.fill();
+
+  // grass tufts
+  ctx.fillStyle=moss;
+  ctx.beginPath();
+  ctx.moveTo(x-30,groundY);
+  ctx.lineTo(x-28,groundY-6);
+  ctx.lineTo(x-26,groundY);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(x+34,groundY);
+  ctx.lineTo(x+36,groundY-5);
+  ctx.lineTo(x+38,groundY);
+  ctx.fill();
+}
 };
 
 function drawTorch(x, y) {
