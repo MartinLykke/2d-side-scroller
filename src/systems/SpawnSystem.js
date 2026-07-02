@@ -1,4 +1,4 @@
-import { CFG, PORTALS, WALL_SLOTS } from '../config/config.js';
+import { CFG, PORTALS, WALL_SLOTS, FOREST } from '../config/config.js';
 import { ENEMY_TYPES } from '../config/enemies.js';
 import { LOC_DEFS } from '../config/locations.js';
 import { WEAPONS } from '../config/weapons.js';
@@ -33,25 +33,28 @@ export function spawnVagrant() {
 
 export function spawnAnimal() {
   if (state.animals.length > 6) return;
+  // Animals live in the dense forest belts beyond the outer wall slots
   const side = pick([-1, 1]);
-  const x = side < 0 ? rand(1300, 2600) : rand(CFG.worldWidth - 2600, CFG.worldWidth - 1300);
+  const x = CFG.baseX + side * rand(FOREST.startDist + 60, FOREST.endDist - 60);
   state.animals.push({
-    x, vx: rand(20, 40) * pick([-1, 1]),
-    state: "graze", alive: true, anim: rand(0, 6),
-    flee: 0, type: pick(["rabbit","rabbit","deer"]),
+    x, vx: 0, dir: pick([-1, 1]),
+    state: "graze", stateT: rand(2, 5), alive: true, anim: rand(0, 6),
+    flee: 0, fleeT: 0, type: pick(["rabbit","rabbit","deer"]),
+    eatDown: 0, headT: rand(1, 3), scan: 0, earFlick: 0,
+    dying: false, deathT: 0,
   });
 }
 
 export function spawnEnemy(type, portal) {
   const t = ENEMY_TYPES[type];
   state.enemies.push({
-    x: portal.x, vx: 0, type,
+    x: portal.x, vx: 0, type, tag: type === "imp" || type === "fireImp" ? "Imp" : "Enemy",
     hp: t.hp, maxHp: t.hp,
     dir: portal.side > 0 ? -1 : 1,
-    state: "advance", target: null, attackCd: 0,
+    state: "advance", aiState: type === "imp" ? "advance" : undefined, target: null, attackCd: 0,
     carry: 0, anim: rand(0, 6), flash: 0, attackAnim: 0, fleeing: false, portal,
-    fy: t.flying ? -(80 + rand(0, 30)) : 0,
-    shootCd: t.flying ? rand(0.5, 2) : 0,
+    fy: t.flying ? -(t.fireball ? rand(105, 145) : 80 + rand(0, 30)) : 0,
+    shootCd: t.flying ? rand(0.5, t.fireball ? 1.4 : 2) : 0,
     poisonCd: t.rangedShoot ? rand(1, t.shootInterval || 5) : undefined,
   });
 }
@@ -85,6 +88,7 @@ function nightEnemyType() {
     return "boss1";
   }
   if (d >= 6 && r < Math.min(0.30, (0.07 + late * 0.012) * hardMult)) return "necro";
+  if (d >= 5 && r < Math.min(0.30, (0.09 + late * 0.010) * hardMult)) return "fireImp";
   if (d >= 5 && r < Math.min(0.28, (0.10 + late * 0.010) * hardMult)) return "demon";
   if (d >= 4 && r < Math.min(0.24, (0.13 + late * 0.006) * hardMult)) return "flier";
   if (d >= 3 && r < Math.min(0.30, (0.18 + late * 0.006) * hardMult)) return "ogre";
@@ -146,20 +150,6 @@ export function makeLocation(x, type, r) {
 
 export function buildLocations() {
   state.locations = [];
-  const r = mulberry32((Game.treeSeed || 1) * 31 + 17);
-  let x = 120;
-  while (x < CFG.worldWidth - 120) {
-    x += 280 + r() * 320;
-    if (Math.abs(x - CFG.baseX) < 520) continue;
-    if (WALL_SLOTS.some(w => Math.abs(x - w.x) < 200)) continue;
-    if (x >= CFG.worldWidth - 120) break;
-    const roll = r();
-    if      (roll < 0.20) { /* nothing */ }
-    else if (roll < 0.60) { state.locations.push(makeLocation(x, pickR(r,["camp","wagon","grave","shack","huntingstand","fallenTree"]), r)); }
-    else if (roll < 0.82) { state.locations.push(makeLocation(x, pickR(r,["ruins","cave","battlefield","mill","ruinedwatchtower"]), r)); }
-    else if (roll < 0.95) { state.locations.push(makeLocation(x, pickR(r,["watchtower","shrine","abandonedfort"]), r)); }
-    else                  { state.locations.push(makeLocation(x, "altar", r)); }
-  }
 }
 
 export function spawnLocLoot(loc) {

@@ -2,13 +2,14 @@ import { Game, state } from '../state.js';
 import { CFG } from '../config/config.js';
 import { makeUnit } from '../entities/Unit.js';
 import { spawnVagrant, planNight } from './SpawnSystem.js';
+import { buildForest } from './ForestSystem.js';
 
 const SAVE_KEY = "kingdom_embers_save_v1";
 
 export function saveGame() {
   if (Game.state !== "play") return;
   try {
-    const { player, base, walls, units, vagrants, locations } = state;
+    const { player, base, walls, units, vagrants, locations, forestTrees } = state;
     const snap = {
       day: Game.day, time: Game.time, treeSeed: Game.treeSeed,
       coins: player.coins, px: player.x, hasCrown: player.hasCrown,
@@ -16,12 +17,15 @@ export function saveGame() {
       locations: locations.map(l => ({ triggered: l.triggered, cleared: l.cleared, lootSpawned: l.lootSpawned })),
       base: { level: base.level, hp: base.hp, maxHp: base.maxHp },
       walls: walls.map(w => ({ commissioned: w.commissioned, level: w.level, hp: w.hp, maxHp: w.maxHp, buildProgress: w.buildProgress })),
+      forestTrees: forestTrees.map(t => ({ marked: t.marked, chopped: t.chopped, chopProgress: t.chopProgress, lying: t.lying })),
       units: units.map(u => ({ role: u.role, x: u.x, archerName: u.archerName, level: u.level, xp: u.xp })),
       vagrants: vagrants.length,
       farm: state.farmBuilt,
       farmLevel: state.farmLevel,
       archerSkillPoints: state.archerSkillPoints || 0,
       archerSkills: state.archerSkills || [],
+      guardSkillPoints: state.guardSkillPoints || 0,
+      guardSkills: state.guardSkills || [],
     };
     localStorage.setItem(SAVE_KEY, JSON.stringify(snap));
   } catch (e) {}
@@ -39,7 +43,9 @@ export function loadGame() {
     if (!snap) return false;
 
     Game.day = snap.day; Game.time = snap.time; Game.treeSeed = snap.treeSeed;
-    const { player, base, walls, locations } = state;
+    buildForest();
+    const { player, base, walls, locations, forestTrees } = state;
+    if (snap.forestTrees) snap.forestTrees.forEach((s, i) => { if (forestTrees[i]) Object.assign(forestTrees[i], s); });
     player.coins = snap.coins; player.x = snap.px; player.hasCrown = snap.hasCrown;
     player.hp = snap.hp || CFG.playerMaxHp;
     player.weapon = snap.weapon || null;
@@ -61,6 +67,8 @@ export function loadGame() {
     state.farmLevel = snap.farmLevel || (snap.farm ? 1 : 0);
     state.archerSkillPoints = snap.archerSkillPoints || 0;
     state.archerSkills = snap.archerSkills || [];
+    state.guardSkillPoints = snap.guardSkillPoints || 0;
+    state.guardSkills = snap.guardSkills || [];
     Game.threatLevel = Math.max(1, snap.day || 1);
     planNight();
     return true;

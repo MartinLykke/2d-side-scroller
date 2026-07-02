@@ -58,6 +58,10 @@ export const WEAPON_UPGRADES = {
     { id:"wide_range", name:"Bred rækkevidde",desc:"+70 px rækkevidde",     effect:{ range:70 } },
     { id:"critical",   name:"Kritisk udladning",desc:"+5 trylleslagskade",  effect:{ dmg:5 } },
   ],
+  meteor_tome: [
+    { id:"ice_meteor", name:"Ismeteor", desc:"Meteoren bliver til en iskold komet, der fryser fjender i eksplosionen", effect:{ meteorIce:true } },
+    { id:"double_up",  name:"Dobbelt op", desc:"Kaster sjÃ¦ldnere, men kalder to meteorer ned", effect:{ meteorDouble:true } },
+  ],
 };
 
 export function effectiveWeapon(weaponId, upgrades) {

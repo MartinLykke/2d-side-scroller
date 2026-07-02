@@ -2,7 +2,7 @@
 // meleeDmg = damage dealt to the player on a direct melee hit
 export const ENEMY_TYPES = {
   // --- Early game (day 1-3) ---
-  imp:     { hp: 3,  speed: 60,  w: 22, color: "#3a2a4a", eye: "#ff5a3c", reward: 1,  dmg: 6,  meleeDmg: 1 },
+  imp:     { hp: 6,  speed: 60,  w: 22, color: "#8f221c", eye: "#ffd060", reward: 1,  dmg: 6,  meleeDmg: 1 },
   runner:  { hp: 2,  speed: 112, w: 19, color: "#46243a", eye: "#ff8a3c", reward: 1,  dmg: 4,  meleeDmg: 1 },
   wraith:  { hp: 2,  speed: 88,  w: 19, color: "#1c1e30", eye: "#88b8ff", reward: 1,  dmg: 4,  meleeDmg: 1 },
   crawler: { hp: 5,  speed: 44,  w: 27, color: "#28301a", eye: "#88cc44", reward: 1,  dmg: 9,  meleeDmg: 1 },
@@ -12,6 +12,7 @@ export const ENEMY_TYPES = {
   ogre:    { hp: 18, speed: 30,  w: 40, color: "#263a20", eye: "#66ff44", reward: 4,  dmg: 18, meleeDmg: 1, rangedShoot: true, shootRange: 320, shootInterval: 6 },
   demon:   { hp: 7,  speed: 148, w: 20, color: "#6a1a1a", eye: "#ff1a1a", reward: 2,  dmg: 10, meleeDmg: 1 },
   flier:   { hp: 6,  speed: 70,  w: 24, color: "#1a2a5a", eye: "#44aaff", reward: 3,  dmg: 8,  meleeDmg: 1, flying: true },
+  fireImp: { hp: 8,  speed: 64,  w: 25, color: "#9b2418", eye: "#ffd060", reward: 3,  dmg: 9,  meleeDmg: 2, flying: true, fireball: true, shootRange: 430, shootInterval: 2.8 },
   necro:   { hp: 28, speed: 32,  w: 42, color: "#2a1a3a", eye: "#aa44ff", reward: 7,  dmg: 22, meleeDmg: 2, rangedShoot: true, shootRange: 360, shootInterval: 4.5 },
   // --- Tiered bosses ---
   boss1:   { name:"Stenbjelder",    hp: 38,  speed: 34,  w: 62,  color: "#2a1a3e", eye: "#ff40a0", reward: 9,  dmg: 20, meleeDmg: 2, noKnockback: true, rangedShoot: true, shootRange: 380, shootInterval: 5 },

@@ -1,14 +1,26 @@
 import { CFG } from '../config/config.js';
 import { ENEMY_TYPES } from '../config/enemies.js';
-import { dist, rand } from '../util/math.js';
+import { clamp, dist, rand } from '../util/math.js';
 import { groundY } from '../canvas.js';
 import { Game, state } from '../state.js';
 import { Audio } from './Audio.js';
 import { spawnCoin, spawnParticles, floaty, spawnLocLoot } from './SpawnSystem.js';
 import { spawnLevelUpBeam } from '../rendering/Effects.js';
-import { killEnemy } from '../util/EnemyUtils.js';
+import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../util/EnemyUtils.js';
+import { startArcherShoot, SHOOT_RELEASE_TIME } from '../rendering/Archer.js';
+import { wallHeight } from '../entities/Wall.js';
 
 function arrowTrail(ar) {
+  if (ar.enemyFireball) {
+    spawnParticles(ar.x, ar.y, 3, "#ff6a20", 22, 20);
+    if (Math.random() < 0.75) spawnParticles(ar.x, ar.y, 1, "#ffd060", 10, 24);
+    if (Math.random() < 0.35) spawnParticles(ar.x, ar.y, 1, "#5a0710", 18, 8);
+    return;
+  }
+  if (ar.fireArrow) {
+    spawnParticles(ar.x, ar.y, 2, "#ff6a20", 16, 14);
+    if (Math.random() < 0.55) spawnParticles(ar.x, ar.y, 1, "#ffd060", 9, 18);
+  }
   if (ar.weaponId === "dark_bow") {
     if (Math.random() < 0.5) spawnParticles(ar.x, ar.y, 1, "#880099", 8, 5);
   } else if (ar.weaponId === "void_bow") {
@@ -17,6 +29,26 @@ function arrowTrail(ar) {
     spawnParticles(ar.x, ar.y, 2, "#ff6820", 15, 12);
     if (Math.random() < 0.4) spawnParticles(ar.x, ar.y, 1, "#ffcc40", 8, 8);
   }
+}
+
+function stickArrowInEnemy(e, ar, enemyDrawY) {
+  if (e.type !== "imp" || ar.ballista) return;
+  if (!e.stuckArrows) e.stuckArrows = [];
+  if (e.stuckArrows.length >= 5) e.stuckArrows.shift();
+  const facing = e.dir < 0 ? -1 : 1;
+  const drawYOff = e.aiState === "stacking" && e.impStackY !== undefined ? e.impStackY : (e.fy || 0);
+  const localX = clamp((ar.x - e.x) * facing, -4, 9);
+  const localY = clamp(ar.y - drawYOff, groundY - 29, groundY - 10);
+  e.stuckArrows.push({
+    x: localX,
+    y: localY,
+    a: Math.atan2(ar.vy, ar.vx) * facing,
+    weaponId: ar.weaponId || null,
+  });
+}
+
+function enemyDrawYOffset(e) {
+  return e.type === "imp" && e.aiState === "stacking" && e.impStackY !== undefined ? e.impStackY : (e.fy || 0);
 }
 
 export function shootArrow(x, y, target, sourceUnit = null, weaponId = null) {
@@ -30,6 +62,9 @@ export function shootArrow(x, y, target, sourceUnit = null, weaponId = null) {
   const vx = dx / flightTime;
   const vy = (dy - 0.5 * gravity * flightTime * flightTime) / flightTime;
 
+  // Archer units hold the arrow until the draw animation releases the string
+  const delay = sourceUnit && sourceUnit.role === "archer" ? SHOOT_RELEASE_TIME : 0;
+
   state.arrows.push({
     x, y,
     vx: vx,
@@ -39,31 +74,56 @@ export function shootArrow(x, y, target, sourceUnit = null, weaponId = null) {
     hitKind: "enemy",
     sourceUnit,
     weaponId,
+    delay,
   });
-  Audio.bow();
+  if (!delay) Audio.bow();
+
+  if (sourceUnit && sourceUnit.role === "archer") {
+    startArcherShoot(sourceUnit);
+  }
+
   if (weaponId === "dark_bow") spawnParticles(x, y, 8, "#880099", 40, 60);
   else if (weaponId === "void_bow") spawnParticles(x, y, 6, "#9933ff", 30, 50);
   else if (weaponId === "dragons_bow") { spawnParticles(x, y, 10, "#ff6620", 50, 80); spawnParticles(x, y, 5, "#ffcc40", 30, 60); }
 }
 
 export function updateArrows(dt) {
-  const { arrows, enemies, animals, player } = state;
+  const { arrows, enemies, animals, player, units } = state;
   for (let i = arrows.length - 1; i >= 0; i--) {
     const ar = arrows[i];
+    if (ar.delay > 0) {
+      ar.delay -= dt;
+      if (ar.delay <= 0) { ar.delay = 0; Audio.bow(); }
+      continue;
+    }
     ar.x += ar.vx * dt; ar.y += ar.vy * dt; ar.vy += 420 * dt; ar.life -= dt;
     arrowTrail(ar);
     let hit = false;
 
-    if (ar.hitKind !== "player") {
+    if (ar.hitKind === "enemy") {
       for (const e of enemies) {
         if (e.fleeing) continue;
         if (ar._hitEnemies && ar._hitEnemies.includes(e)) continue;
         const et = ENEMY_TYPES[e.type];
-        const enemyDrawY = et.flying ? groundY + (e.fy || -80) : groundY - 24;
+        const enemyDrawY = et.flying ? groundY + (e.fy || -80) : groundY - 24 + enemyDrawYOffset(e);
         if (dist(ar.x, e.x) < et.w * 0.7 && Math.abs(ar.y - enemyDrawY) < 40) {
+          if (e.dying) {
+            stickArrowInEnemy(e, ar, enemyDrawY);
+            hit = true;
+            break;
+          }
           const dmg = ar.dmgMult ? Math.round(ar.dmgMult) : 1;
+          stickArrowInEnemy(e, ar, enemyDrawY);
           e.hp -= dmg; e.flash = 0.12; Audio.hit();
-          if (ar.fireArrow) { e.burn = 3; e.burnTick = 0.5; spawnParticles(e.x, enemyDrawY, 5, "#ff6a20", 30, 40); }
+          spawnImpBlood(e, ar.powered || ar.ballista ? 1.7 : 1, enemyDrawY);
+          if (ar.fireArrow) {
+            e.burn = Math.max(e.burn || 0, 4);
+            e.burnTick = 1;
+            e.burnDmg = Math.max(e.burnDmg || 0, 1);
+            e.ignited = true;
+            spawnParticles(e.x, enemyDrawY, 12, "#ff6a20", 55, 70);
+            spawnParticles(e.x, enemyDrawY, 7, "#ffd060", 35, 85);
+          }
           if (ar.powered) { if (!et.noKnockback) e.knock = (e.knock||0) + Math.sign(e.x - ar.vx) * 400; spawnParticles(e.x, enemyDrawY, 10, "#ffcc60", 60, 80); }
           if (ar.weaponId === "dark_bow") {
             spawnParticles(e.x, enemyDrawY, 12, "#aa44cc", 70, 90);
@@ -114,20 +174,8 @@ export function updateArrows(dt) {
                 floaty(ar.sourceUnit.x, `⬆ ${fname} Niv.${ar.sourceUnit.level}! (+1ep 🏹)`, "#f2c14e");
                 spawnLevelUpBeam(ar.sourceUnit.x);
               }
-              spawnParticles(e.x, enemyDrawY, 12, et.color, 80, 100);
-              Audio.enemyDie();
-              if (window._addXP) window._addXP(et.reward * 8);
-              if (e.locIdx !== undefined && state.locations[e.locIdx]) {
-                const loc = state.locations[e.locIdx];
-                loc.remainingEnemies--;
-                if (loc.remainingEnemies <= 0 && !loc.lootSpawned) {
-                  loc.cleared = true; loc.lootSpawned = true;
-                  state.chests.push({ x: loc.x, lootGold: loc.lootGold, weaponId: loc.weaponId, open: false, openAnim: 0, life: 1 });
-                  if (window._floaty) window._floaty(loc.x, "📦 Kiste!", "#f2c14e");
-                }
-              }
-              if (state.legendaryBoss === e) { state.legendaryBoss = null; state.legendaryEffects = []; for (const u of state.units) u.rallied = false; }
-              const idx = state.enemies.indexOf(e); if (idx >= 0) state.enemies.splice(idx, 1);
+              const knockDir = Math.sign(e.x - ar.x) || 1;
+              killEnemyWithAnimation(e, knockDir);
             } else {
               killEnemy(e);
             }
@@ -137,10 +185,10 @@ export function updateArrows(dt) {
       }
     }
 
-    if (!hit && ar.hitKind !== "player") {
+    if (!hit && ar.hitKind === "enemy") {
       for (const a of animals) {
-        if (a.alive && dist(ar.x, a.x) < 16 && ar.y > groundY - 36) {
-          a.alive = false;
+        if (a.alive && !a.dying && dist(ar.x, a.x) < 16 && ar.y > groundY - 36) {
+          a.dying = true; a.deathT = 0;
           spawnParticles(a.x, groundY - 20, 8, "#7a4a2a");
           const reward = a.type === "deer" ? 3 : 1;
           for (let k = 0; k < reward; k++) spawnCoin(a.x + rand(-15, 15), 1, groundY - 20, rand(-50, 50), rand(-220, -120));
@@ -153,15 +201,43 @@ export function updateArrows(dt) {
     if (!hit && ar.hitKind === "player") {
       if (dist(ar.x, player.x) < 18 && Math.abs(ar.y - (groundY - 50)) < 50) {
         if (player.invuln <= 0 && !window._DEV_GOD_MODE) {
-          player.hp -= 1; player.invuln = CFG.playerInvuln; player.hurt = 0.35; player.hpShowTimer = 3;
+          player.hp -= ar.dmg || 1; player.invuln = CFG.playerInvuln; player.hurt = 0.35; player.hpShowTimer = 3;
           player.knock = (player.x < ar.x ? -1 : 1) * -120;
-          spawnParticles(player.x, groundY - 50, 4, "#c1453b");
+          if (ar.enemyFireball) {
+            spawnParticles(player.x, groundY - 50, 16, "#ff6a20", 85, 95);
+            spawnParticles(player.x, groundY - 50, 8, "#ffd060", 50, 90);
+            Game.screenShake = Math.max(Game.screenShake, 0.22);
+          } else {
+            spawnParticles(player.x, groundY - 50, 4, "#c1453b");
+          }
           Audio.hit();
         }
         hit = true;
       }
     }
 
+    if (!hit && ar.hitKind === "unit") {
+      for (const u of units) {
+        if (u.hp <= 0 || u.dying) continue;
+        const uy = u.onWall && u.wall ? groundY - wallHeight(u.wall) - 18 : groundY - 30;
+        if (dist(ar.x, u.x) < (ar.radius || 22) && Math.abs(ar.y - uy) < 46) {
+          u.hp -= ar.dmg || 1;
+          u.panic = 0.9;
+          u.knock = (u.knock || 0) + Math.sign(u.x - ar.x || 1) * 90;
+          spawnParticles(u.x, uy, 14, "#ff6a20", 75, 90);
+          spawnParticles(u.x, uy, 6, "#ffd060", 42, 80);
+          Game.screenShake = Math.max(Game.screenShake, 0.18);
+          Audio.hit();
+          hit = true;
+          break;
+        }
+      }
+    }
+
+    if (ar.enemyFireball && (hit || ar.life <= 0 || ar.y > groundY - 6)) {
+      spawnParticles(ar.x, Math.min(ar.y, groundY - 8), 16, "#ff6a20", 80, 90);
+      spawnParticles(ar.x, Math.min(ar.y, groundY - 8), 7, "#ffd060", 45, 80);
+    }
     if (hit || ar.life <= 0 || ar.y > groundY - 6) arrows.splice(i, 1);
   }
 }

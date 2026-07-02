@@ -9,14 +9,26 @@ import { spawnEnemy, planNight, floaty, spawnParticles } from '../systems/SpawnS
 import { pick } from '../util/math.js';
 import { groundY } from '../canvas.js';
 import { ARCHER_SKILLS } from '../config/archerSkills.js';
+import { GUARD_SKILLS } from '../config/guardSkills.js';
+import { makeUnit } from '../entities/Unit.js';
 
 // ── Skill Tree ────────────────────────────────────────────────
-const BRANCH_NAMES = { 1: "🎯 Pilen", 2: "🏹 Buen", 3: "🌲 Taktik" };
+const BRANCH_NAMES = {
+  archer: { 1: "🎯 Pilen", 2: "🏹 Buen", 3: "🌲 Taktik" },
+  guard: { 1: "🗡️ Spyd", 2: "🛡 Skjold", 3: "⚔ Taktik" },
+};
+const SKILL_TREES = { archer: ARCHER_SKILLS, guard: GUARD_SKILLS };
 
-function skillUnlocked(id) { return state.archerSkills.includes(id); }
+function currentSkillTree() { return Game.skillTreeType || "archer"; }
+function skillUnlocked(id) {
+  const type = currentSkillTree();
+  return type === "guard" ? state.guardSkills.includes(id) : state.archerSkills.includes(id);
+}
 function skillAvailable(sk) {
   if (skillUnlocked(sk.id)) return false;
-  if ((state.archerSkillPoints || 0) < sk.cost) return false;
+  const type = currentSkillTree();
+  const points = type === "guard" ? (state.guardSkillPoints || 0) : (state.archerSkillPoints || 0);
+  if (points < sk.cost) return false;
   return sk.requires.every(r => skillUnlocked(r));
 }
 
@@ -24,14 +36,39 @@ function renderSkillTree() {
   const branchesEl = document.getElementById("st-branches");
   const ultimatesEl = document.getElementById("st-ultimates");
   const ptEl = document.getElementById("st-points");
+  const titleEl = document.getElementById("st-title");
+  const tabsEl = document.getElementById("st-tabs");
   if (!branchesEl) return;
 
-  ptEl.textContent = `Evnepoint: ${state.archerSkillPoints || 0}`;
+  const type = currentSkillTree();
+  const points = type === "guard" ? (state.guardSkillPoints || 0) : (state.archerSkillPoints || 0);
+  ptEl.textContent = `Evnepoint: ${points}`;
+
+  // Update title
+  if (titleEl) {
+    const titles = { archer: "🏹 BUESKYTTERNES EVNETRÆ", guard: "🛡️ VAGTENS EVNETRÆ" };
+    titleEl.textContent = titles[type];
+  }
+
+  // Update tabs
+  if (tabsEl) {
+    tabsEl.innerHTML = "";
+    for (const t of ["archer", "guard"]) {
+      const btn = document.createElement("button");
+      btn.textContent = t === "archer" ? "🏹 Bueskytte" : "🛡️ Vagt";
+      btn.style.cssText = `background:${t===type?"rgba(242,193,78,0.2)":"rgba(255,255,255,0.05)"};border:1px solid ${t===type?"#f2c14e":"rgba(255,255,255,0.2)"};color:${t===type?"#f2c14e":"#c8b890"};padding:6px 16px;border-radius:6px;cursor:pointer;font-size:13px;font-family:inherit;transition:background 0.15s;`;
+      btn.onclick = () => { Game.skillTreeType = t; renderSkillTree(); };
+      tabsEl.appendChild(btn);
+    }
+  }
+
+  const skillTree = SKILL_TREES[type];
+  const branchNames = BRANCH_NAMES[type];
 
   // Build 3 branch columns
   const branches = { 1: [], 2: [], 3: [] };
   const ultimates = [];
-  for (const sk of Object.values(ARCHER_SKILLS)) {
+  for (const sk of Object.values(skillTree)) {
     if (sk.ultimate) ultimates.push(sk);
     else branches[sk.branch].push(sk);
   }
@@ -42,7 +79,7 @@ function renderSkillTree() {
     const col = document.createElement("div");
     col.style.cssText = "display:flex;flex-direction:column;gap:8px;";
     const hdr = document.createElement("div");
-    hdr.textContent = BRANCH_NAMES[b];
+    hdr.textContent = branchNames[b];
     hdr.style.cssText = "font-size:12px;font-weight:bold;color:#f2c14e;text-align:center;margin-bottom:4px;letter-spacing:1px;";
     col.appendChild(hdr);
     for (const sk of branches[b]) {
@@ -62,6 +99,8 @@ function renderSkillTree() {
 function makeSkillNode(sk) {
   const unlocked = skillUnlocked(sk.id);
   const available = skillAvailable(sk);
+  const type = currentSkillTree();
+  const skillTree = SKILL_TREES[type];
   const div = document.createElement("div");
   const bg = unlocked ? "rgba(155,208,90,0.15)" : available ? "rgba(242,193,78,0.12)" : "rgba(255,255,255,0.04)";
   const border = unlocked ? "rgba(155,208,90,0.6)" : available ? "rgba(242,193,78,0.5)" : "rgba(255,255,255,0.1)";
@@ -69,15 +108,21 @@ function makeSkillNode(sk) {
   div.innerHTML = `
     <div style="font-size:12px;font-weight:bold;color:${unlocked?"#9bd05a":available?"#f2c14e":"#7a6a50"};">${sk.name} ${unlocked?"✓":""}</div>
     <div style="font-size:10px;color:#9a8a70;margin-top:3px;line-height:1.4;">${sk.desc}</div>
-    <div style="font-size:10px;margin-top:5px;color:${available?"#f2c14e":"#5a4a38"};">Kost: ${sk.cost} point${sk.requires.length?" · Kræver: "+sk.requires.map(r=>ARCHER_SKILLS[r]?.name||r).join(", "):""}</div>
+    <div style="font-size:10px;margin-top:5px;color:${available?"#f2c14e":"#5a4a38"};">Kost: ${sk.cost} point${sk.requires.length?" · Kræver: "+sk.requires.map(r=>skillTree[r]?.name||r).join(", "):""}</div>
   `;
   if (available) {
     div.onmouseenter = () => div.style.background = "rgba(242,193,78,0.22)";
     div.onmouseleave = () => div.style.background = bg;
     div.onclick = () => {
-      state.archerSkillPoints -= sk.cost;
-      state.archerSkills.push(sk.id);
-      floaty(state.base.x, `🏹 ${sk.name} låst op!`, "#f2c14e");
+      if (type === "guard") {
+        state.guardSkillPoints -= sk.cost;
+        state.guardSkills.push(sk.id);
+        floaty(state.base.x, `🛡️ ${sk.name} låst op!`, "#f2c14e");
+      } else {
+        state.archerSkillPoints -= sk.cost;
+        state.archerSkills.push(sk.id);
+        floaty(state.base.x, `🏹 ${sk.name} låst op!`, "#f2c14e");
+      }
       Audio.upgrade();
       renderSkillTree();
     };
@@ -174,10 +219,18 @@ export const UI = {
     const spEl = document.getElementById("hud-skillpts");
     const spTxt = document.getElementById("hud-skillpts-text");
     if (spEl && spTxt) {
-      const sp = state.archerSkillPoints || 0;
-      spEl.style.display = sp > 0 ? "" : "none";
-      spTxt.textContent = sp + " ep 🏹";
-      spEl.style.borderColor = sp > 0 ? "#f2c14e88" : "";
+      const archSp = state.archerSkillPoints || 0;
+      const guardSp = state.guardSkillPoints || 0;
+      const totalSp = archSp + guardSp;
+      spEl.style.display = totalSp > 0 ? "" : "none";
+      if (archSp > 0 && guardSp > 0) {
+        spTxt.textContent = archSp + " ep 🏹 · " + guardSp + " ep 🛡️";
+      } else if (guardSp > 0) {
+        spTxt.textContent = guardSp + " ep 🛡️";
+      } else {
+        spTxt.textContent = archSp + " ep 🏹";
+      }
+      spEl.style.borderColor = totalSp > 0 ? "#f2c14e88" : "";
       spEl.style.color = "#f2c14e";
     }
 
@@ -255,6 +308,31 @@ export const DEV = {
     window._upgradeBase?.();
   },
 
+  maxBaseLevel() {
+    if (Game.state!=="play") return;
+    while (state.base.level < 4) {
+      window._upgradeBase?.();
+    }
+    floaty(state.base.x, "🏰 Maksimal niveau nået!", "#f2c14e");
+  },
+
+  maxWallLevels() {
+    if (Game.state!=="play") return;
+    const { walls } = state;
+    if (!walls || walls.length === 0) {
+      floaty(state.base.x, "Ingen mure at opgradere", "#ff8a6a");
+      return;
+    }
+    for (const w of walls) {
+      w.commissioned = true;
+      w.level = 5;
+      w.maxHp = CFG.wallHp[5];
+      w.hp = w.maxHp;
+      w.buildProgress = 1;
+    }
+    floaty(state.base.x, "⬆ Alle mure → maks niveau!", "#9bd05a");
+  },
+
   healAll() {
     if (Game.state!=="play") return;
     state.player.hp=state.player.maxHp; state.base.hp=state.base.maxHp;
@@ -263,10 +341,29 @@ export const DEV = {
     floaty(state.base.x,"💚 Helbredt!","#9bd05a");
   },
 
-  doSpawnEnemy(type) {
+  spawnEnemyNearBase(type) {
     if (Game.state!=="play") return;
-    spawnEnemy(type, pick(state.portals));
-    floaty(state.portals[0].x,"👹 "+type+"!","#ff6a4a");
+    const portal = { x: state.base.x + pick([-1, 1]) * 750, side: pick([-1, 1]) };
+    spawnEnemy(type, portal);
+    floaty(state.base.x, "👹 " + type + "!","#ff6a4a");
+  },
+
+  spawn8ImpsRight() {
+    if (Game.state!=="play") return;
+    for (let i = 0; i < 8; i++) {
+      const portal = { x: state.base.x + 750 + i * 120, side: 1 };
+      spawnEnemy("imp", portal);
+    }
+    floaty(state.base.x, "👹 8x Imp!","#ff6a4a");
+  },
+
+  spawnFireImpsRight() {
+    if (Game.state!=="play") return;
+    for (let i = 0; i < 4; i++) {
+      const portal = { x: state.base.x + 780 + i * 140, side: 1 };
+      spawnEnemy("fireImp", portal);
+    }
+    floaty(state.base.x, "4x Ild-imp!", "#ff6a20");
   },
 
   killAll() {
@@ -302,6 +399,19 @@ export const DEV = {
       state.player.weapon=null;
       floaty(state.player.x,"Våben droppet","#c8c8c8");
     }
+  },
+
+  spawnUnit(role) {
+    if (Game.state!=="play") return;
+    const popCap = CFG.popCapByLevel[state.base.level];
+    if (state.units.length + state.vagrants.length >= popCap) {
+      floaty(state.base.x,"Befolkningsloft nået","#ff8a6a");
+      return;
+    }
+    const u = makeUnit(role, state.base.x + pick([-1, 1]) * 120);
+    state.units.push(u);
+    const roleNames = { archer: "🏹 Bueskytter", builder: "🔨 Bygmand", farmer: "🌾 Landmand", guard: "🛡 Vagt" };
+    floaty(state.base.x, roleNames[role] + " født!", "#9bd05a");
   },
 
   updateStats(dt) {

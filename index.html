@@ -91,16 +91,17 @@
       </div>
     </div>
 
-    <!-- Archer Skill Tree (toggle with K) -->
+    <!-- Skill Tree (toggle with K) -->
     <div id="skill-tree-screen" class="hidden" style="position:absolute;inset:0;background:rgba(8,5,18,0.88);display:flex;align-items:center;justify-content:center;z-index:120;font-family:inherit;">
       <div id="skill-tree-card" style="background:rgba(20,14,30,0.97);border:1.5px solid rgba(200,170,100,0.35);border-radius:14px;padding:28px 32px;max-width:720px;width:95%;color:#d4c8a8;position:relative;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
-          <h2 style="margin:0;font-size:20px;color:#f2c14e;letter-spacing:2px;">🏹 BUESKYTTERNES EVNETRÆ</h2>
+          <h2 id="st-title" style="margin:0;font-size:20px;color:#f2c14e;letter-spacing:2px;">🏹 BUESKYTTERNES EVNETRÆ</h2>
           <div style="display:flex;align-items:center;gap:16px;">
             <span id="st-points" style="color:#9bd05a;font-size:15px;font-weight:bold;"></span>
             <button onclick="window._closeSkillTree()" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:#c8b890;padding:4px 14px;border-radius:6px;cursor:pointer;font-size:14px;font-family:inherit;">Luk ✕</button>
           </div>
         </div>
+        <div id="st-tabs" style="display:flex;gap:8px;margin-bottom:14px;"></div>
         <div id="st-branches" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:18px;"></div>
         <div id="st-ultimates" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;padding-top:14px;border-top:1px solid rgba(200,170,100,0.2);"></div>
         <p style="margin:12px 0 0;font-size:11px;color:#7a6a50;text-align:center;">Tryk <kbd style="background:rgba(255,255,255,0.1);padding:1px 6px;border-radius:3px;">K</kbd> for at åbne/lukke evnetræet</p>
@@ -140,24 +141,32 @@
           <button class="dev-btn" onclick="DEV.upgradeBase()">Opgradér base ⬆</button>
           <button class="dev-btn" onclick="DEV.healAll()">Fuld helbred 💚</button>
         </div>
+        <div class="dev-row" style="margin-top:4px">
+          <button class="dev-btn dev-danger" onclick="DEV.maxBaseLevel()">Max base 🏰</button>
+          <button class="dev-btn dev-danger" onclick="DEV.maxWallLevels()">Max mure 🧱</button>
+        </div>
       </div>
 
       <div class="dev-section">
         <div class="dev-label">Spawn fjende</div>
         <div class="dev-row">
-          <button class="dev-btn" onclick="DEV.doSpawnEnemy('imp')">Imp</button>
-          <button class="dev-btn" onclick="DEV.doSpawnEnemy('wraith')">Wraith</button>
-          <button class="dev-btn" onclick="DEV.doSpawnEnemy('crawler')">Crawler</button>
-          <button class="dev-btn" onclick="DEV.doSpawnEnemy('raider')">Raider</button>
+          <button class="dev-btn" onclick="DEV.spawnEnemyNearBase('imp')">Imp</button>
+          <button class="dev-btn" onclick="DEV.spawnEnemyNearBase('fireImp')">Ild-imp</button>
+          <button class="dev-btn" onclick="DEV.spawnEnemyNearBase('raider')">Raider</button>
+          <button class="dev-btn dev-danger" onclick="DEV.killAll()">💀 Dræb alle</button>
         </div>
         <div class="dev-row" style="margin-top:4px">
-          <button class="dev-btn" onclick="DEV.doSpawnEnemy('runner')">Runner</button>
-          <button class="dev-btn" onclick="DEV.doSpawnEnemy('brute')">Brute</button>
-          <button class="dev-btn" onclick="DEV.doSpawnEnemy('boss')">Boss</button>
-          <button class="dev-btn" onclick="DEV.doSpawnEnemy('necro')">Necro</button>
+          <button class="dev-btn" onclick="DEV.spawn8ImpsRight()">8x Imp højre</button>
         </div>
-        <div class="dev-row" style="margin-top:4px">
-          <button class="dev-btn dev-danger" onclick="DEV.killAll()">💀 Dræb alle fjender</button>
+      </div>
+
+      <div class="dev-section">
+        <div class="dev-label">Spawn enhed</div>
+        <div class="dev-row">
+          <button class="dev-btn" onclick="DEV.spawnUnit('archer')">🏹 Bueskytter</button>
+          <button class="dev-btn" onclick="DEV.spawnUnit('builder')">🔨 Bygmand</button>
+          <button class="dev-btn" onclick="DEV.spawnUnit('farmer')">🌾 Landmand</button>
+          <button class="dev-btn" onclick="DEV.spawnUnit('guard')">🛡️ Vagt</button>
         </div>
       </div>
 
@@ -171,37 +180,11 @@
       <div class="dev-section">
         <div class="dev-label">Giv våben</div>
         <div class="dev-row">
-          <button class="dev-btn" onclick="DEV.giveWeapon('rusty_sword')">Rustent sværd</button>
-          <button class="dev-btn" onclick="DEV.giveWeapon('sword')">Sværd</button>
           <button class="dev-btn" onclick="DEV.giveWeapon('short_bow')">Kortbue</button>
-        </div>
-        <div class="dev-row" style="margin-top:4px">
-          <button class="dev-btn" onclick="DEV.giveWeapon('flame_sword')" style="color:#ff9a6a">Flammesværd</button>
-          <button class="dev-btn" onclick="DEV.giveWeapon('gilded_spear')" style="color:#e8b840">Forgyldt spyd</button>
-          <button class="dev-btn" onclick="DEV.giveWeapon('ice_axe')" style="color:#6abaff">Isøkse</button>
-        </div>
-        <div class="dev-row" style="margin-top:4px">
-          <button class="dev-btn" onclick="DEV.giveWeapon('shadow_axe')" style="color:#aa44cc">Skyggeøkse</button>
-          <button class="dev-btn" onclick="DEV.giveWeapon('thunder_blade')" style="color:#cc66ff">Tordenblade</button>
-          <button class="dev-btn" onclick="DEV.giveWeapon('void_bow')" style="color:#9933ff">Tomrumsbue</button>
-        </div>
-        <div class="dev-row" style="margin-top:4px">
-          <button class="dev-btn" onclick="DEV.giveWeapon('kings_sword')" style="color:#f2c14e">Kongens sværd</button>
-          <button class="dev-btn" onclick="DEV.giveWeapon('sunblade')" style="color:#ffdd44">Solblade</button>
-          <button class="dev-btn" onclick="DEV.giveWeapon('dragons_bow')" style="color:#ff9922">Drakebue</button>
-        </div>
-        <div class="dev-row" style="margin-top:4px">
-          <button class="dev-btn" onclick="DEV.giveWeapon('fire_tome')" style="color:#ff6a2a">Ildtome</button>
-          <button class="dev-btn" onclick="DEV.giveWeapon('hydro_tome')" style="color:#4ab8e8">Vandtome</button>
           <button class="dev-btn" onclick="DEV.giveWeapon('lightning_tome')" style="color:#f0e060">Lyntome</button>
-        </div>
-        <div class="dev-row" style="margin-top:4px">
           <button class="dev-btn" onclick="DEV.giveWeapon('meteor_tome')" style="color:#ff8840">Meteortome</button>
-          <button class="dev-btn" onclick="DEV.giveWeapon('arcane_tome')" style="color:#b080ff">Arkanetome</button>
-          <button class="dev-btn" onclick="DEV.giveWeapon('shadow_tome')" style="color:#8822cc">Skyggetome</button>
         </div>
         <div class="dev-row" style="margin-top:4px">
-          <button class="dev-btn" onclick="DEV.giveWeapon('void_tome')" style="color:#e0a0ff">Tomhedstome</button>
           <button class="dev-btn dev-danger" onclick="DEV.dropWeapon()">Drop våben</button>
         </div>
       </div>

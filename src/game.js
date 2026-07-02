@@ -11,12 +11,15 @@ import { keys } from './systems/Input.js';
 import { saveGame, hasSave, loadGame, deleteSave } from './systems/SaveSystem.js';
 import { updateSpawning, floaty, spawnParticles, spawnAnimal, planNight, buildLocations, spawnEnemy } from './systems/SpawnSystem.js';
 import { updatePayment, updateCoins } from './systems/Economy.js';
+import { updateForestTrees } from './systems/ForestSystem.js';
 import { updateUnits, updateAssignments, updateVagrants, updateAnimals, nearestEnemy, updateCaltrops } from './systems/AI.js';
 import { updateEnemies, updateArrows, updatePlayerAttack, updateSpells, updateLegendaryEffects, updatePoisonShots } from './systems/Combat.js';
+import { updateDyingEnemies } from './util/EnemyUtils.js';
 
 import { FX, initFX, updateFX as updateFXEffects, biomeAt } from './rendering/Effects.js';
 import { render, drawEntityShadows } from './rendering/Renderer.js';
 import { UI, DEV, baseName } from './rendering/HUD.js';
+import { updateArcherShoot } from './rendering/Archer.js';
 
 import { makePlayer } from './entities/Player.js';
 import { makeWall } from './entities/Wall.js';
@@ -140,19 +143,30 @@ function updateAutosave(dt) {
   if (Game.autosaveTimer<=0) { Game.autosaveTimer=5; saveGame(); }
 }
 
+function updateArcherAnimations(dt) {
+  for (const u of state.units) {
+    if (u.role === "archer") {
+      updateArcherShoot(u, dt);
+    }
+  }
+}
+
 function update(dt) {
   updateTime(dt);
   updatePlayer(dt);
   updatePlayerAttack(dt);
   updatePayment(dt);
+  updateForestTrees(dt);
   updateVagrants(dt);
   updateAssignments();
   updateUnits(dt);
+  updateArcherAnimations(dt);
   updateAnimals(dt);
   updateLocations(dt);
   updatePortals();
   updateCaltrops(dt);
   updateEnemies(dt);
+  updateDyingEnemies(dt);
   updateArrows(dt);
   updateSpells(dt);
   updatePoisonShots(dt);
@@ -246,4 +260,5 @@ resize();
 initFX();
 Game.cam = clamp(CFG.baseX - W/2, 0, Math.max(0, CFG.worldWidth - W));
 setupInputHandlers();
+Game.start(false);
 requestAnimationFrame(loop);

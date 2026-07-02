@@ -48,6 +48,14 @@ export function setPickupWeapon(fn) {
   pickupWeaponFn = fn;
 }
 
+export function shopTierUnlocked() {
+  const lvl = state.base?.level || 1;
+  if (lvl >= 4) return 6;
+  if (lvl >= 3) return 4;
+  if (lvl >= 2) return 2;
+  return 1;
+}
+
 export function tryOpenShop() {
   const shopSt = state.stations.find(s => s.id === "shop");
   if (shopSt && state.base.level >= 2 && dist(state.player.x, shopSt.x()) < 100) {
@@ -57,7 +65,9 @@ export function tryOpenShop() {
 }
 
 export function currentShopList() {
-  return Game.shopTab === 1 ? ARMOR_SHOP : WEAPON_SHOP;
+  const tier = shopTierUnlocked();
+  const list = Game.shopTab === 1 ? ARMOR_SHOP : WEAPON_SHOP;
+  return list.filter(item => (item.tier || 1) <= tier);
 }
 
 export function tryBuyShopItem(item) {

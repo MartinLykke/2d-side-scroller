@@ -4,13 +4,14 @@ import { groundY } from '../canvas.js';
 import { Game, state } from '../state.js';
 import { Audio } from './Audio.js';
 import { spawnParticles, floaty } from './SpawnSystem.js';
-import { killEnemy } from '../util/EnemyUtils.js';
+import { killEnemy, spawnImpBlood } from '../util/EnemyUtils.js';
 import { ENEMY_TYPES } from '../config/enemies.js';
 
 function dealAoE(x, dmg, radius, col) {
   for (const e of state.enemies) {
     if (!e.fleeing && dist(e.x, x) < radius) {
       e.hp -= dmg; e.flash = 0.14;
+      spawnImpBlood(e, 0.9 + dmg * 0.08);
       if (e.hp <= 0) killEnemy(e);
     }
   }
@@ -58,6 +59,7 @@ function chainLightning(x, dmg, bounces) {
   nearest.flash = 0.14;
   Audio.hit();
   spawnParticles(nearest.x, enemyDrawY, 10, "#ccccff", 60, 80);
+  spawnImpBlood(nearest, 1 + dmg * 0.05, enemyDrawY);
 
   if (nearest.hp <= 0) {
     killEnemy(nearest);
@@ -76,6 +78,7 @@ export function castSpell(player, wBase, tgt) {
     Audio.hit();
 
     const enemyY = groundY - 24;
+    spawnImpBlood(tgt, 1 + ew.dmg * 0.07, enemyY);
     spellEnemyImpact({ spellType: "lightning" }, tgt.x, enemyY);
 
     let currentX = tgt.x + rand(-20, 20);
@@ -179,6 +182,7 @@ export function updateSpells(dt) {
       if (dist(sp.x, e.x) < et.w * 0.75 && Math.abs(sp.y - ey) < 44) {
         e.hp -= sp.dmg; e.flash = 0.14; Audio.hit();
         spellEnemyImpact(sp, e.x, ey);
+        spawnImpBlood(e, 1 + sp.dmg * 0.08, ey);
         if (!et.noKnockback) e.knock = (e.knock || 0) + Math.sign(e.x - sp.vx) * 140;
         if (e.hp <= 0) killEnemy(e);
         else if (sp.aoeRadius > 0) dealAoE(sp.x, Math.max(1, Math.floor(sp.dmg * 0.65)), sp.aoeRadius, sp.col);

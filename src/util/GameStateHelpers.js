@@ -27,7 +27,7 @@ export function upgradeBase() {
     setTimeout(() => floaty(base.x, "🌾 Gårdsstation tilgængelig!", "#9bd05a"), 1800);
   } else if (base.level === 3) {
     setTimeout(() => floaty(base.x, "⚔ Rekrutteringshal åbnet!", "#f2c14e"), 900);
-    setTimeout(() => floaty(base.x, "Ansæt garder til forsvar!", "#cdbfa3"), 1800);
+    setTimeout(() => floaty(base.x, "Ansæt guards til forsvar!", "#cdbfa3"), 1800);
   } else if (base.level === 4) {
     setTimeout(() => floaty(base.x, "👑 Kongelig Garde aktiveret!", "#f2c14e"), 900);
     setTimeout(() => floaty(base.x, "✨ Legendariske våben tilgængelige!", "#c69fff"), 1800);

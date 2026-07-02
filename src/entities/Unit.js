@@ -9,9 +9,9 @@ export function generateArcherName() {
 
 export function makeUnit(role, x) {
   const u = {
-    role, x, vx: 0, dir: 1, state: "idle", targetX: x,
-    hp:    role === "archer" ? 6 : 5,
-    maxHp: role === "archer" ? 6 : 5,
+    role, tag: role === "guard" ? "Guard" : "Unit", x, vx: 0, dir: 1, state: "idle", targetX: x,
+    hp:    role === "archer" ? 6 : role === "guard" ? 8 : 5,
+    maxHp: role === "archer" ? 6 : role === "guard" ? 8 : 5,
     cooldown: 0, anim: rand(0, 6),
     wall: null, retreating: false, workTimer: 0, panic: 0,
     patrolDir: Math.random() < 0.5 ? -1 : 1,
@@ -26,6 +26,19 @@ export function makeUnit(role, x) {
     u.smoked = 0;
     u.smokeReveal = 0;
     u.barrageCount = 0;
+    // Animation states for shooting sequence
+    u.shootState = null; // null, "anticipation", "pull", "release", "follow-through"
+    u.shootTimer = 0;
+  }
+  if (role === "guard") {
+    u.strike = 0;
+    u.aiState = "patrol";
+    u.combatTarget = null;
+    u.onWall = false;
+    u.wallClimbT = 0;
+    u.wallClimbTimer = 0;
+    u.level = 1;
+    u.xp = 0;
   }
   return u;
 }

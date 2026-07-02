@@ -2,10 +2,11 @@ import { clamp, lerpColor, rgb, lerp, withA, shade } from '../util/math.js';
 import { ctx, W, H, groundY } from '../canvas.js';
 import { Game, state } from '../state.js';
 import { WEAPONS } from '../config/weapons.js';
-import { darkness, skyColors, drawStars, drawAurora, drawCelestial, drawClouds, drawBirds, getTrees, drawMountains, drawHills, drawTreeLayer, drawFogBand, drawGodrays, drawLowFog, drawAmbientFront, drawLevelUpBeams, biomeAt, FX, windSway } from './Effects.js';
+import { drawPlayer as drawPlayerBody } from './Player.js';
+import { darkness, skyColors, drawStars, drawAurora, drawCelestial, drawClouds, drawBirds, getTrees, drawMountains, drawHills, drawTreeLayer, drawSunShafts, drawFogBand, drawLowFog, drawAmbientFront, drawLevelUpBeams, biomeAt, FX, windSway } from './Effects.js';
 
 // Import all render modules
-import { drawGroundTexture, drawGroundDeco, drawEntityShadows, drawPortals, drawWalls, drawBase, drawStations, drawBackgroundWash } from './RenderWorld.js';
+import { drawGroundTexture, drawGroundDeco, drawEntityShadows, drawPortals, drawWalls, drawBase, drawStations, drawBackgroundWash, drawForestTrees } from './RenderWorld.js';
 import { drawVagrants, drawUnits, drawEnemies, drawAnimals } from './RenderEntities.js';
 import { drawCoins, drawArrows, drawLootItems, drawChests, drawGroundBows, drawGroundHammers } from './RenderItems.js';
 import { drawCaltrops, drawPoisonShots, drawLegendaryEffects, drawParticles, drawFloats, drawSpells, drawCampLight } from './RenderEffects.js';
@@ -50,41 +51,14 @@ function drawPlayer(dark) {
   const { player } = state;
   const x=player.x, bob=player.bob, gallop=player.gallop;
   drawWeaponSwingArc(x, player);
-  drawFocusHalo(x, groundY-36-bob-player.jumpH, 92, 52, [255,210,110], 0.11+0.12*dark);
   ctx.save();
   if (player.invuln>0&&Math.floor(player.invuln*12)%2===0) ctx.globalAlpha=0.45;
   ctx.translate(x, -bob - player.jumpH);
   if (player.dir<0) ctx.scale(-1,1);
-  const px=0;
 
-  const moving=Math.abs(player.vx)>1, s=moving?Math.sin(gallop*2):0;
-  ctx.fillStyle="#2a2230"; ctx.strokeStyle="#2a2230"; ctx.lineWidth=3;
-  ctx.beginPath(); ctx.moveTo(px-14,groundY-26+bob); ctx.lineTo(px-14+s*8,groundY+bob); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(px+12,groundY-26+bob); ctx.lineTo(px+12-s*8,groundY+bob); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(px-8,groundY-26+bob); ctx.lineTo(px-8-s*8,groundY+bob); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(px+18,groundY-26+bob); ctx.lineTo(px+18+s*8,groundY+bob); ctx.stroke();
-  roundedRect(px-20,groundY-46,44,22,10); ctx.fill();
-  ctx.fillStyle="rgba(255,255,255,0.08)"; roundedRect(px-17,groundY-44,18,7,5); ctx.fill();
-  ctx.fillStyle="#5f3b28"; roundedRect(px-8,groundY-50,18,8,4); ctx.fill();
-  ctx.fillStyle="#d1a75a"; ctx.fillRect(px-5,groundY-52,11,2);
-  ctx.beginPath(); ctx.moveTo(px+18,groundY-44); ctx.lineTo(px+30,groundY-64); ctx.lineTo(px+40,groundY-62); ctx.lineTo(px+38,groundY-52); ctx.lineTo(px+26,groundY-40); ctx.closePath(); ctx.fill();
-  const tail=windSway(px,4)+Math.sin(gallop)*2;
-  ctx.beginPath(); ctx.moveTo(px-20,groundY-44); ctx.quadraticCurveTo(px-34-tail,groundY-40,px-30-tail,groundY-22); ctx.lineTo(px-24-tail*0.6,groundY-30); ctx.quadraticCurveTo(px-26,groundY-40,px-18,groundY-40); ctx.fill();
-  ctx.strokeStyle="#1c1622"; ctx.lineWidth=2;
-  for (let i=0;i<4;i++) { const tt=i/3, mx=lerp(px+20,px+33,tt), my=lerp(groundY-46,groundY-62,tt); ctx.beginPath(); ctx.moveTo(mx,my); ctx.lineTo(mx-4,my-3); ctx.stroke(); }
-  ctx.fillStyle="#f2c14e"; ctx.beginPath(); ctx.arc(px+34,groundY-58,1.4,0,Math.PI*2); ctx.fill();
-  const cape=(moving?Math.sin(gallop*2)*4:0)+windSway(px,3);
-  ctx.fillStyle="#5a182e"; ctx.beginPath(); ctx.moveTo(px-4,groundY-66); ctx.quadraticCurveTo(px-16-cape,groundY-52,px-22-cape*1.4,groundY-32); ctx.lineTo(px-8,groundY-40); ctx.quadraticCurveTo(px-6,groundY-54,px+2,groundY-64); ctx.fill();
-  ctx.fillStyle="#7a2440"; roundedRect(px-6,groundY-70,16,26,6); ctx.fill();
-  ctx.fillStyle="rgba(255,255,255,0.12)"; roundedRect(px-4,groundY-68,4,18,3); ctx.fill();
-  ctx.fillStyle="rgba(0,0,0,0.18)"; roundedRect(px+4,groundY-70,6,26,4); ctx.fill();
-  ctx.fillStyle="#caa483"; ctx.beginPath(); ctx.arc(px+2,groundY-74,6,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle="#3a2e2a"; ctx.beginPath(); ctx.arc(px+4,groundY-75,1.1,0,Math.PI*2); ctx.fill();
-  if (player.hasCrown) {
-    ctx.fillStyle="#f2c14e"; ctx.beginPath();
-    ctx.moveTo(px-4,groundY-80); ctx.lineTo(px-4,groundY-86); ctx.lineTo(px-1,groundY-82);
-    ctx.lineTo(px+2,groundY-87); ctx.lineTo(px+5,groundY-82); ctx.lineTo(px+8,groundY-86); ctx.lineTo(px+8,groundY-80); ctx.closePath(); ctx.fill();
-  }
+  // Draw player body using new detailed rendering
+  drawPlayerBody(player, player.dir, Math.abs(player.vx) > 1, gallop);
+  const px = 0;
 
   if (player.weapon) {
     const w=WEAPONS[player.weapon], sw=player.swing||0;
@@ -157,31 +131,36 @@ export function render() {
   drawTreeLayer(trees.far,0.26,0.78,5);
   drawFogBand(groundY-150,110,dark,0.6);
   drawTreeLayer(trees.mid,0.46,0.50,9);
-  drawGodrays(dark);
   drawTreeLayer(trees.near,0.70,0.28,14);
+  drawSunShafts(dark);
   drawBackgroundWash(dark);
 
   const bi=biomeAt(Game.cam+W/2);
+  // grass band -> warm earth -> dark loam
   const gg=ctx.createLinearGradient(0,groundY,0,H);
   gg.addColorStop(0,rgb(lerpColor(bi.gT,[14,16,26],dark)));
-  gg.addColorStop(1,rgb(lerpColor(bi.gB,[6,8,16],dark)));
+  gg.addColorStop(0.16,rgb(lerpColor(shade(bi.gT,0.88),[12,14,22],dark)));
+  gg.addColorStop(0.34,rgb(lerpColor(lerpColor(bi.gB,[96,72,48],0.3),[9,11,18],dark)));
+  gg.addColorStop(1,rgb(lerpColor(lerpColor(bi.gB,[44,32,24],0.5),[6,8,16],dark)));
   ctx.fillStyle=gg; ctx.fillRect(0,groundY,W,H-groundY);
-  ctx.fillStyle=withA(lerpColor(shade(bi.gT,1.25),[44,48,64],dark),0.55);
+  // sunlit grass lip
+  ctx.fillStyle=withA(lerpColor(shade(bi.gT,1.3),[44,48,64],dark),0.6);
   ctx.fillRect(0,groundY,W,2);
+  ctx.fillStyle=withA(lerpColor(shade(bi.gT,1.12),[30,34,48],dark),0.3);
+  ctx.fillRect(0,groundY+2,W,3);
 
   const zoom=Game.zoom||1;
   const _sk=Game.screenShake||0;
   const _skx=_sk>0?(Math.random()-0.5)*_sk*12:0, _sky=_sk>0?(Math.random()-0.5)*_sk*7:0;
   ctx.save();
   ctx.translate(W/2+_skx, groundY+_sky); ctx.scale(zoom,zoom); ctx.translate(-W/2-Game.cam,-groundY);
-  drawGroundTexture(dark); drawGroundDeco(dark); drawLocations(dark);
+  drawGroundTexture(dark); drawGroundDeco(dark); drawForestTrees(dark); drawLocations(dark);
   drawEntityShadows(); drawPortals(dark); drawWalls(dark); drawBase(dark);
   drawStations(); drawCoins(); drawGroundBows(); drawGroundHammers(); drawLootItems(); drawChests();
   drawAnimals(); drawVagrants(); drawCaltrops(); drawUnits(); drawEnemies(dark); drawLegendaryEffects();
   drawPlayer(dark); drawArrows(); drawPoisonShots(); drawSpells(); drawLevelUpBeams(); drawParticles(); drawCampLight(dark); drawFloats();
   ctx.restore();
 
-  drawTreeLayer(trees.fore,1.06,0.04,20,0.45);
   drawLowFog(dark,bi); drawAmbientFront(dark,bi);
 
   const v=ctx.createRadialGradient(W/2,groundY-60,W*0.18,W/2,groundY-60,W*0.82);

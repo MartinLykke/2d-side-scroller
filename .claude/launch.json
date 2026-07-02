@@ -2,9 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "kingdom",
-      "runtimeExecutable": "C:\\Users\\marti\\AppData\\Local\\Programs\\Python\\Python311\\python.exe",
-      "runtimeArgs": ["serve.py"],
+      "name": "http-server",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server"],
       "port": 8000,
       "autoPort": true
     }

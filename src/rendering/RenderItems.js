@@ -19,9 +19,36 @@ export function drawCoins() {
 export function drawArrows() {
   const t = performance.now() / 1000;
   for (const ar of state.arrows) {
+    if (ar.delay > 0) continue; // still nocked on the archer's bow
     const ang=Math.atan2(ar.vy,ar.vx);
     ctx.save(); ctx.translate(ar.x,ar.y); ctx.rotate(ang);
     const wid = ar.weaponId;
+    if (ar.enemyFireball) {
+      ctx.save(); ctx.globalCompositeOperation="lighter";
+      const pulse = 0.85 + 0.15 * Math.sin(t * 24 + ar.x);
+      const fg=ctx.createRadialGradient(0,0,2,0,0,20 * pulse);
+      fg.addColorStop(0,"rgba(255,245,150,1)");
+      fg.addColorStop(0.35,"rgba(255,105,20,0.85)");
+      fg.addColorStop(1,"rgba(160,20,0,0)");
+      ctx.fillStyle=fg; ctx.beginPath(); ctx.arc(0,0,20 * pulse,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle="#ffd060"; ctx.beginPath(); ctx.arc(4,0,5,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle="#ff5a16"; ctx.beginPath(); ctx.moveTo(-18,0); ctx.quadraticCurveTo(-7,-10,3,-3); ctx.quadraticCurveTo(-7,8,-18,0); ctx.fill();
+      ctx.restore();
+      ctx.restore();
+      continue;
+    }
+    if (ar.fireArrow) {
+      ctx.save(); ctx.globalCompositeOperation="lighter";
+      const fg=ctx.createRadialGradient(1,0,1,1,0,17);
+      fg.addColorStop(0,"rgba(255,230,110,0.95)");
+      fg.addColorStop(0.45,"rgba(255,100,20,0.65)");
+      fg.addColorStop(1,"rgba(180,20,0,0)");
+      ctx.fillStyle=fg; ctx.beginPath(); ctx.arc(1,0,17,0,Math.PI*2); ctx.fill();
+      ctx.globalAlpha=0.7;
+      ctx.strokeStyle="#ff7a20"; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.moveTo(-18,0); ctx.lineTo(5,0); ctx.stroke();
+      ctx.restore();
+    }
     if (wid === "dark_bow") {
       ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.55;
       const dg=ctx.createRadialGradient(0,0,1,0,0,12);
@@ -58,11 +85,16 @@ export function drawArrows() {
       ctx.strokeStyle="#ff8820"; ctx.lineWidth=1;
       for (let k=0;k<4;k++) { const bx=-5-k*4; const fl=Math.sin(t*20+k)*3; ctx.beginPath(); ctx.moveTo(bx,0); ctx.lineTo(bx-2,-4+fl); ctx.stroke(); } ctx.restore();
     } else {
-      ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.28;
-      ctx.strokeStyle="#f2c14e"; ctx.lineWidth=5; ctx.beginPath(); ctx.moveTo(-18,0); ctx.lineTo(3,0); ctx.stroke(); ctx.restore();
-      ctx.strokeStyle="#e8d8a8"; ctx.lineWidth=2;
-      ctx.beginPath(); ctx.moveTo(-7,0); ctx.lineTo(5,0); ctx.stroke();
-      ctx.fillStyle="#e8d8a8"; ctx.beginPath(); ctx.moveTo(5,0); ctx.lineTo(1,-2); ctx.lineTo(1,2); ctx.fill();
+      // Same arrow the archer nocks: wooden shaft, steel head, green fletching
+      ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.16;
+      ctx.strokeStyle="#e8d8a8"; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(-16,0); ctx.lineTo(2,0); ctx.stroke(); ctx.restore();
+      ctx.strokeStyle="#c9b48a"; ctx.lineWidth=1.4;
+      ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(5,0); ctx.stroke();
+      ctx.fillStyle="#b8bcc4";
+      ctx.beginPath(); ctx.moveTo(5,-1.6); ctx.lineTo(8.5,0); ctx.lineTo(5,1.6); ctx.closePath(); ctx.fill();
+      ctx.fillStyle="#8fae4a";
+      ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(-13,-2.6); ctx.lineTo(-8.5,-0.6); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(-13,2.6); ctx.lineTo(-8.5,0.6); ctx.closePath(); ctx.fill();
     }
     ctx.restore();
   }

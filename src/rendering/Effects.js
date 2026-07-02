@@ -75,7 +75,7 @@ export function initFX() {
     stars:  Array.from({length:180}, () => ({ x:R()*W, y:R()*groundY*0.82, s:R()*1.7+0.3, tw:R()*6 })),
     clouds: Array.from({length:7},   () => ({ x:R()*W, y:24+R()*groundY*0.42, s:0.6+R()*1.0, sp:5+R()*9, o:0.4+R()*0.4 })),
     birds:  Array.from({length:6},   () => ({ x:R()*W, y:55+R()*180, sp:16+R()*24, ph:R()*6, dir:R()<0.5?1:-1, scale:0.7+R()*0.6 })),
-    butter: Array.from({length:10},  () => ({ x:R()*W, y:groundY-R()*120, ph:R()*6, c:["#f2c14e","#ece4d2","#d9883c","#cfe6f2","#e58fb0"][(R()*5)|0] })),
+    butter: Array.from({length:4},   () => ({ x:R()*W, y:groundY-R()*120, ph:R()*6, c:["#f2c14e","#ece4d2","#d9883c","#cfe6f2","#e58fb0"][(R()*5)|0] })),
     flies:  Array.from({length:50},  () => ({ x:R()*W, y:groundY-R()*150, ph:R()*6 })),
     dust:   Array.from({length:64},  () => ({ x:R()*W, y:R()*H, z:0.3+R()*0.7, ph:R()*6 })),
     fall:   Array.from({length:54},  () => ({ x:R()*W, y:R()*H, sp:18+R()*44, sway:2+R()*6, ph:R()*6, rot:R()*6, active:false, snow:false, color:"#9bd05a" })),
@@ -132,7 +132,7 @@ function pickType(b, r) {
   return t<0.4?"pine":t<0.66?"fir":t<0.82?"oak":t<0.92?"widepine":"birch";
 }
 
-function makeTree(x, baseH, r) {
+export function makeTree(x, baseH, r) {
   const b = biomeAt(x), type = pickType(b, r);
   const h = baseH * (0.7+r()*0.7);
   const w = (type==="widepine"?h*0.72:(type==="oak"||type==="bush")?h*0.85:type==="dead"?h*0.42:h*0.5) * (0.82+r()*0.4);
@@ -151,19 +151,24 @@ function makeTree(x, baseH, r) {
   return { x, type, h, w, phase:r()*6, tiers, lean, broken:r()<0.2, snow:b.snow&&r()<0.85, moss:b.moss&&r()<0.6, clusters, branches };
 }
 
-function drawTree(t, cx, baseY, light, dark, depthDark, swayAmp) {
+export function drawTree(t, cx, baseY, light, dark, depthDark, swayAmp) {
   const Ht=t.h, Wd=t.w, lean=t.lean;
   const sw = (hf) => windSway(t.phase, swayAmp)*Math.pow(clamp(hf,0,1),1.35) + lean*hf*Wd*0.7;
   const trunkCol = shade(dark, 0.68);
   if (depthDark < 0.5) { ctx.save(); ctx.globalAlpha=0.16*(1-depthDark); ctx.fillStyle="#0a0810"; ctx.beginPath(); ctx.ellipse(cx,groundY+2,Wd*0.5*(1.15-depthDark),Wd*0.5*(1.15-depthDark)*0.26,0,0,Math.PI*2); ctx.fill(); ctx.restore(); }
 
   if (t.type==="pine"||t.type==="fir"||t.type==="widepine") {
-    ctx.fillStyle=withA(trunkCol,1); ctx.fillRect(cx-Wd*0.05, baseY-Ht*0.16, Wd*0.1, Ht*0.16);
+    // tapered trunk
+    ctx.fillStyle=withA(trunkCol,1);
+    ctx.beginPath(); ctx.moveTo(cx-Wd*0.07,baseY); ctx.lineTo(cx+Wd*0.07,baseY);
+    ctx.lineTo(cx+Wd*0.035,baseY-Ht*0.2); ctx.lineTo(cx-Wd*0.035,baseY-Ht*0.2); ctx.closePath(); ctx.fill();
     for (let i=0;i<t.tiers;i++) {
       const bhf=i/t.tiers, thf=(i+1)/t.tiers;
       const tw=Wd*(1-bhf*0.78)*0.5, by=baseY-bhf*Ht-Ht*0.05, ty=baseY-thf*Ht;
       const bx=cx+sw(bhf), tx=cx+sw(thf);
       ctx.fillStyle=withA(dark,1); ctx.beginPath(); ctx.moveTo(bx-tw,by); ctx.lineTo(bx+tw,by); ctx.lineTo(tx,ty); ctx.closePath(); ctx.fill();
+      // shaded facet away from the sun
+      ctx.fillStyle=withA(shade(dark,0.74),0.55); ctx.beginPath(); ctx.moveTo(bx+tw,by); ctx.lineTo(bx+tw*0.22,by); ctx.lineTo(tx,ty); ctx.closePath(); ctx.fill();
       ctx.fillStyle=withA(light,0.5); ctx.beginPath(); ctx.moveTo(bx-tw,by); ctx.lineTo(bx-tw*0.16,by); ctx.lineTo(tx,ty); ctx.closePath(); ctx.fill();
       if (t.snow) { ctx.fillStyle="rgba(238,244,251,0.92)"; ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(tx-tw*0.5,by-(by-ty)*0.5); ctx.lineTo(tx+tw*0.5,by-(by-ty)*0.5); ctx.closePath(); ctx.fill(); }
     }
@@ -188,7 +193,11 @@ function drawTree(t, cx, baseY, light, dark, depthDark, swayAmp) {
     ctx.lineCap="butt";
     if (isBirch) { ctx.strokeStyle="rgba(40,44,48,0.45)"; ctx.lineWidth=1; for (let k=1;k<4;k++){ const yy=baseY-trunkH*k/4; ctx.beginPath(); ctx.moveTo(cx-tw,yy); ctx.lineTo(cx+tw*0.4,yy); ctx.stroke(); } }
     for (const cl of t.clusters) { const ox=cx+sw(cl.dy)+cl.dx, oy=baseY-cl.dy*Ht; ctx.fillStyle=withA(dark,1); ctx.beginPath(); ctx.arc(ox,oy,cl.r,0,Math.PI*2); ctx.fill(); }
+    // deep shade on the underside of the canopy
+    for (const cl of t.clusters) { const ox=cx+sw(cl.dy)+cl.dx, oy=baseY-cl.dy*Ht; ctx.fillStyle=withA(shade(dark,0.72),0.4); ctx.beginPath(); ctx.arc(ox+cl.r*0.24,oy+cl.r*0.3,cl.r*0.6,0,Math.PI*2); ctx.fill(); }
     for (const cl of t.clusters) { const ox=cx+sw(cl.dy)+cl.dx, oy=baseY-cl.dy*Ht; ctx.fillStyle=withA(light,0.42); ctx.beginPath(); ctx.arc(ox-cl.r*0.3,oy-cl.r*0.32,cl.r*0.62,0,Math.PI*2); ctx.fill(); }
+    // dappled sun spots on the crown
+    for (const cl of t.clusters) { const ox=cx+sw(cl.dy)+cl.dx, oy=baseY-cl.dy*Ht; ctx.fillStyle=withA(shade(light,1.18),0.22); ctx.beginPath(); ctx.arc(ox-cl.r*0.42,oy-cl.r*0.46,cl.r*0.32,0,Math.PI*2); ctx.fill(); }
     if (t.snow) for (const cl of t.clusters) { const ox=cx+sw(cl.dy)+cl.dx, oy=baseY-cl.dy*Ht; ctx.fillStyle="rgba(238,244,251,0.85)"; ctx.beginPath(); ctx.arc(ox-cl.r*0.18,oy-cl.r*0.46,cl.r*0.5,0,Math.PI*2); ctx.fill(); }
   }
   if (t.broken&&t.type!=="dead") { ctx.strokeStyle=withA(trunkCol,1); ctx.lineWidth=Math.max(1.5,Wd*0.07); ctx.beginPath(); ctx.moveTo(cx,baseY-Ht*0.34); ctx.lineTo(cx+Wd*0.4,baseY-Ht*0.28); ctx.stroke(); }
@@ -260,11 +269,12 @@ let groundTexCache=null;
 export function getGroundTex() {
   if (groundTexCache&&groundTexCache.seed===Game.treeSeed) return groundTexCache;
   const r=mulberry32((Game.treeSeed||1)*13+7);
-  const fringe=[],patches=[],pebbles=[];
-  for (let x=0;x<CFG.worldWidth;x+=12+r()*16) fringe.push({x, h:5+r()*9, ph:r()*6});
+  const fringe=[],patches=[],pebbles=[],specks=[];
+  for (let x=0;x<CFG.worldWidth;x+=8+r()*10) fringe.push({x, h:6+r()*11, ph:r()*6, lt:r()<0.4});
   for (let x=0;x<CFG.worldWidth;x+=24+r()*38) patches.push({x, dy:r()*60, r:9+r()*24, light:r()<0.5});
   for (let x=0;x<CFG.worldWidth;x+=28+r()*56) pebbles.push({x, dy:8+r()*70, r:1.4+r()*3});
-  groundTexCache={seed:Game.treeSeed, fringe, patches, pebbles};
+  for (let x=0;x<CFG.worldWidth;x+=7+r()*12)  specks.push({x, dy:14+r()*85, r:0.6+r()*1.5, light:r()<0.3});
+  groundTexCache={seed:Game.treeSeed, fringe, patches, pebbles, specks};
   return groundTexCache;
 }
 
@@ -296,29 +306,8 @@ export function drawAurora(dark) {
   ctx.restore();
 }
 
-let lastSun={ cx:0, cy:120, isMoon:false };
 export function drawCelestial(skyTop) {
-  const t=Game.time;
-  const isMoon=t>0.6&&t<0.95;
-  const isSun=t<=0.6;
-  if (!isMoon && !isSun) return;
-  const frac=clamp(isMoon?(t-0.6)/0.35:t/0.6, 0, 1);
-  const cx=lerp(W*0.12,W*0.88,frac), cy=groundY-70-Math.sin(frac*Math.PI)*(groundY*0.58);
-  lastSun={cx,cy,isMoon};
-  ctx.save();
-  if (isMoon) {
-    const gl=ctx.createRadialGradient(cx,cy,4,cx,cy,84); gl.addColorStop(0,"rgba(210,224,255,0.4)"); gl.addColorStop(1,"rgba(210,224,255,0)");
-    ctx.fillStyle=gl; ctx.fillRect(cx-90,cy-90,180,180);
-    ctx.fillStyle="rgba(238,240,228,0.97)"; ctx.beginPath(); ctx.arc(cx,cy,24,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle="rgba(206,214,204,0.5)"; ctx.beginPath(); ctx.arc(cx-6,cy+5,5,0,Math.PI*2); ctx.arc(cx+8,cy-7,3,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle=rgb(skyTop); ctx.beginPath(); ctx.arc(cx+9,cy-6,22,0,Math.PI*2); ctx.fill();
-  } else {
-    const warm=t<0.12||t>0.93;
-    const gl=ctx.createRadialGradient(cx,cy,8,cx,cy,155); gl.addColorStop(0,warm?"rgba(255,168,88,0.5)":"rgba(255,226,150,0.45)"); gl.addColorStop(1,"rgba(255,210,120,0)");
-    ctx.fillStyle=gl; ctx.fillRect(cx-160,cy-160,320,320);
-    ctx.fillStyle=warm?"rgba(255,196,120,0.98)":"rgba(255,232,156,0.98)"; ctx.beginPath(); ctx.arc(cx,cy,32,0,Math.PI*2); ctx.fill();
-  }
-  ctx.restore();
+  // Sun/moon disc removed — day/night lighting is still driven by Game.time via darkness().
 }
 
 export function drawClouds(dark, top) {
@@ -347,9 +336,20 @@ export function drawHills(hills, dark) {
   for (const h of hills) {
     const px=h.x-off; if (px<-h.w||px>W+h.w) continue;
     const b=biomeAt(h.x);
-    ctx.fillStyle=rgb(lerpColor(atmo(b.gT,haze,0.9),b.snow?[236,241,248]:haze,b.snow?0.5:0.22));
+    const hillCol=lerpColor(atmo(b.gT,haze,0.9),b.snow?[236,241,248]:haze,b.snow?0.5:0.22);
+    ctx.fillStyle=rgb(hillCol);
     ctx.beginPath(); ctx.moveTo(px-h.w,groundY+4); ctx.quadraticCurveTo(px,groundY+4-h.h,px+h.w,groundY+4); ctx.closePath(); ctx.fill();
     if (b.snow) { ctx.fillStyle="rgba(245,248,252,0.7)"; ctx.beginPath(); ctx.moveTo(px-h.w*0.3,groundY+4-h.h*0.7); ctx.quadraticCurveTo(px,groundY+4-h.h,px+h.w*0.3,groundY+4-h.h*0.7); ctx.lineTo(px,groundY+4-h.h*0.45); ctx.closePath(); ctx.fill(); }
+    else {
+      // faint conifer silhouettes along the crest
+      ctx.fillStyle=withA(shade(hillCol,0.85),0.85);
+      for (let i=-3;i<=3;i++) {
+        const t=i*0.2, tx=px+t*h.w;
+        const ty=groundY+4-h.h*0.5*(1-t*t)+2;
+        const s=6+((i*i+((h.x|0)%5))%3)*3;
+        ctx.beginPath(); ctx.moveTo(tx-s*0.55,ty); ctx.lineTo(tx,ty-s*1.9); ctx.lineTo(tx+s*0.55,ty); ctx.closePath(); ctx.fill();
+      }
+    }
   }
 }
 
@@ -357,25 +357,64 @@ export function drawMountains(mountains, dark) {
   const haze=hazeColor(dark), off=Game.cam*0.06;
   for (const m of mountains) {
     const px=m.x-off; if (px<-m.w*2||px>W+m.w*2) continue;
-    // body: cool atmospheric grey-blue, independent of biome
-    const bodyCol=lerpColor([88,100,122],haze,0.40+dark*0.35);
+    const mist=0.40+dark*0.32;
+    // faint echo ridge behind the main peak for depth
+    ctx.fillStyle=withA(lerpColor([100,106,134],haze,Math.min(1,mist+0.22)),0.85);
+    ctx.beginPath(); ctx.moveTo(px-m.w*1.5,groundY+4);
+    ctx.quadraticCurveTo(px-m.w*0.35,groundY+4-m.h*0.7,px+m.w*0.75,groundY+4);
+    ctx.closePath(); ctx.fill();
+    // body: cool desaturated indigo, independent of biome
+    const bodyCol=lerpColor([86,94,124],haze,mist);
     ctx.fillStyle=rgb(bodyCol); ctx.beginPath();
     ctx.moveTo(px-m.w, groundY+4);
-    // jagged profile using pre-generated offsets
     for (let k=0;k<m.pts.length;k++) { ctx.lineTo(px+m.pts[k][0], groundY+4-m.pts[k][1]); }
     ctx.lineTo(px+m.w, groundY+4); ctx.closePath(); ctx.fill();
-    // snow cap on the top 30%
-    const snowH=m.h*0.28, peakX=px+m.pts[m.peak][0], peakY=groundY+4-m.h;
-    ctx.fillStyle=rgb(lerpColor([235,240,248],[180,195,215],dark*0.5));
-    ctx.beginPath(); ctx.moveTo(peakX-m.w*0.2, groundY+4-m.h+snowH);
-    ctx.lineTo(peakX, peakY); ctx.lineTo(peakX+m.w*0.18, groundY+4-m.h+snowH*0.9);
-    ctx.closePath(); ctx.fill();
-    // subtle edge highlight
-    ctx.strokeStyle=rgb(lerpColor([200,210,225],[80,90,110],dark*0.6));
-    ctx.lineWidth=1.2; ctx.globalAlpha=0.35;
-    ctx.beginPath(); ctx.moveTo(peakX, peakY); ctx.lineTo(peakX+m.w*0.18, groundY+4-m.h+snowH*0.9); ctx.stroke();
-    ctx.globalAlpha=1;
+    // shaded facet on the far side of the peak
+    const peakX=px+m.pts[m.peak][0], peakY=groundY+4-m.pts[m.peak][1];
+    ctx.fillStyle=withA(shade(bodyCol,0.84),0.9);
+    ctx.beginPath(); ctx.moveTo(peakX,peakY);
+    for (let k=m.peak;k<m.pts.length;k++) ctx.lineTo(px+m.pts[k][0],groundY+4-m.pts[k][1]);
+    ctx.lineTo(px+m.w,groundY+4); ctx.lineTo(peakX,groundY+4); ctx.closePath(); ctx.fill();
+    // snow following the jagged profile above the snow line
+    const snowLine=m.h*0.62, snowCol=lerpColor([236,241,249],[176,190,214],dark*0.5);
+    ctx.fillStyle=withA(snowCol,0.95); ctx.beginPath();
+    let started=false;
+    for (let k=0;k<m.pts.length;k++) {
+      const p=m.pts[k];
+      if (p[1]>snowLine) {
+        if (!started) { ctx.moveTo(px+p[0],groundY+4-snowLine); started=true; }
+        ctx.lineTo(px+p[0],groundY+4-p[1]);
+      } else if (started) { ctx.lineTo(px+p[0],groundY+4-snowLine); }
+    }
+    if (started) { ctx.closePath(); ctx.fill(); }
+    // sunlit rim on the near slope
+    ctx.strokeStyle=withA(lerpColor([210,218,232],[80,90,112],dark*0.6),0.4);
+    ctx.lineWidth=1.4; ctx.beginPath();
+    for (let k=0;k<=m.peak;k++) { const p=m.pts[k]; k===0?ctx.moveTo(px+p[0],groundY+4-p[1]):ctx.lineTo(px+p[0],groundY+4-p[1]); }
+    ctx.stroke();
+    // rising mist at the foot
+    const fg=ctx.createLinearGradient(0,groundY-m.h*0.45,0,groundY+4);
+    fg.addColorStop(0,withA(haze,0)); fg.addColorStop(1,withA(haze,0.4));
+    ctx.fillStyle=fg; ctx.fillRect(px-m.w,groundY-m.h*0.45,m.w*2,m.h*0.45+4);
   }
+}
+
+// Dappled shafts of golden light slanting down through the canopy (daytime only).
+export function drawSunShafts(dark) {
+  const a=(1-dark)*0.12; if (a<=0.01) return;
+  const span=W+420;
+  ctx.save(); ctx.globalCompositeOperation="lighter";
+  for (let i=0;i<5;i++) {
+    const sx=(((i*span/5 - Game.cam*0.22) % span) + span) % span - 210;
+    const wob=Math.sin(Game.windT*0.22+i*1.7);
+    const alpha=a*(0.45+0.55*(0.5+0.5*Math.sin(Game.windT*0.13+i*2.1)));
+    const grad=ctx.createLinearGradient(sx,0,sx-140,groundY);
+    grad.addColorStop(0,`rgba(255,232,170,${alpha})`); grad.addColorStop(1,"rgba(255,232,170,0)");
+    ctx.fillStyle=grad;
+    ctx.beginPath(); ctx.moveTo(sx,-10); ctx.lineTo(sx+42+wob*8,-10);
+    ctx.lineTo(sx-96+wob*14,groundY+6); ctx.lineTo(sx-158+wob*14,groundY+6); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
 }
 
 export function drawFogBand(y, h, dark, intensity) {
@@ -385,24 +424,6 @@ export function drawFogBand(y, h, dark, intensity) {
   const grad=ctx.createLinearGradient(0,y-h,0,y+h);
   grad.addColorStop(0,withA(col,0)); grad.addColorStop(0.5,withA(col,a)); grad.addColorStop(1,withA(col,0));
   ctx.fillStyle=grad; ctx.fillRect(0,y-h,W,h*2);
-}
-
-export function drawGodrays(dark) {
-  if (dark>0.55||lastSun.isMoon) return;
-  const a=0.06*(1-dark*1.6); if (a<=0) return;
-  ctx.save(); ctx.globalCompositeOperation="lighter";
-  const sx=lastSun.cx, sy=lastSun.cy;
-  const rayOrigin = sy + 36; // start below the sun disc so rays don't emerge from inside it
-  const shift=Math.sin(Game.windT*0.3)*8;
-  for (let i=-2;i<=2;i++) {
-    const topx=sx+i*7+shift*0.3, botx=sx+i*46+shift, wTop=9, wBot=26;
-    const grad=ctx.createLinearGradient(0,rayOrigin,0,groundY);
-    grad.addColorStop(0,`rgba(255,240,190,${a})`); grad.addColorStop(1,"rgba(255,240,190,0)");
-    ctx.fillStyle=grad;
-    ctx.beginPath(); ctx.moveTo(topx-wTop,rayOrigin); ctx.lineTo(topx+wTop,rayOrigin);
-    ctx.lineTo(botx+wBot,groundY); ctx.lineTo(botx-wBot,groundY); ctx.closePath(); ctx.fill();
-  }
-  ctx.restore();
 }
 
 export function drawLowFog(dark, bi) {

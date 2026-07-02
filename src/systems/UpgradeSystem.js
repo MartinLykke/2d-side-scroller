@@ -30,6 +30,7 @@ export function checkUpgrade() {
   const pool = [
     ...(WEAPON_UPGRADES.generic || []),
     ...(WEAPON_UPGRADES[wDef.type] || []),
+    ...(WEAPON_UPGRADES[player.weapon] || []),
   ];
   const applied = (player.weaponUpgrades || []).map(u => u.id);
   const available = pool.filter(u => !applied.includes(u.id));

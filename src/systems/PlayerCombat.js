@@ -7,7 +7,7 @@ import { groundY } from '../canvas.js';
 import { Game, state } from '../state.js';
 import { Audio } from './Audio.js';
 import { spawnParticles, floaty } from './SpawnSystem.js';
-import { killEnemy } from '../util/EnemyUtils.js';
+import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../util/EnemyUtils.js';
 import { shootArrow } from './ProjectileSystem.js';
 import { castSpell } from './SpellSystem.js';
 
@@ -99,10 +99,14 @@ export function updatePlayerAttack(dt) {
   if (wBase.type === "melee") {
     tgt.hp -= w.dmg; tgt.flash = 0.14; Audio.hit();
     meleeWeaponImpact(player.weapon, tgt.x, groundY - 28);
+    spawnImpBlood(tgt, 1 + w.dmg * 0.12, groundY - 28);
     floaty(tgt.x, "-" + w.dmg, wBase.col);
     const et = ENEMY_TYPES[tgt.type];
     if (!et.noKnockback) tgt.knock = (tgt.knock || 0) + Math.sign(tgt.x - player.x) * 220;
-    if (tgt.hp <= 0) killEnemy(tgt);
+    if (tgt.hp <= 0) {
+      const knockDir = Math.sign(tgt.x - player.x) || 1;
+      killEnemyWithAnimation(tgt, knockDir);
+    }
   } else if (wBase.type === "ranged") {
     shootArrow(player.x, groundY - 72, tgt, null, player.weapon);
   } else {

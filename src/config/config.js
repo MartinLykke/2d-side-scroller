@@ -34,13 +34,22 @@ export const STATIONS_X = {
 };
 
 export const WALL_SLOTS = [
-  { x: CFG.baseX - 560,  side: -1 },
-  { x: CFG.baseX - 1020, side: -1 },
-  { x: CFG.baseX + 560,  side:  1 },
-  { x: CFG.baseX + 1020, side:  1 },
+  { x: CFG.baseX - 340,  side: -1 },
+  { x: CFG.baseX - 620,  side: -1 },
+  { x: CFG.baseX + 340,  side:  1 },
+  { x: CFG.baseX + 620,  side:  1 },
 ];
 
 export const PORTALS = [
-  { x: CFG.baseX - 1900, side: -1 },
-  { x: CFG.baseX + 1900, side:  1 },
+  { x: 500, side: -1 },
+  { x: CFG.worldWidth - 500, side:  1 },
 ];
+
+// Dense forest: spawns only beyond the outermost wall slots, harvestable by builders.
+export const FOREST = {
+  startDist: 720,   // must be just beyond the outermost wall slot
+  endDist: 1650,    // stays clear of the portals
+  spacing: 46,
+  interactRange: 70,
+  chopWork: 1.6,    // seconds of builder work to fell a tree
+};

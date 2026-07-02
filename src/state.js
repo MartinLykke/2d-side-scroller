@@ -22,9 +22,10 @@ export const Game = {
   upgradeMenuOpen: false,
   upgradeOptions: null,
   upgradeIdx: 0,
-  zoom: 1,
+  zoom: 1.2,
   legendaryIntro: null,
   screenShake: 0,
+  skillTreeType: "archer",
 };
 
 // All mutable entity arrays and per-play variables live here so every
@@ -47,6 +48,7 @@ export const state = {
   chests: [],
   weaponPickup: null,
   locations: [],
+  forestTrees: [],
   groundBows: [],
   groundHammers: [],
   spells: [],
@@ -60,6 +62,8 @@ export const state = {
   caltrops: [],
   archerSkillPoints: 0,
   archerSkills: [],
+  guardSkillPoints: 0,
+  guardSkills: [],
   payCooldown: 0,
   payHoldTime: 0,
   lastPaidStation: null,

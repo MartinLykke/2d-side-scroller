@@ -7,6 +7,7 @@ import { makeWall } from '../entities/Wall.js';
 import { makeUnit } from '../entities/Unit.js';
 import { Audio } from './Audio.js';
 import { floaty, spawnCoin, spawnParticles, spawnAnimal, planNight, buildLocations } from './SpawnSystem.js';
+import { buildForest } from './ForestSystem.js';
 import { upgradeBase } from '../util/GameStateHelpers.js';
 import { addXP } from './UpgradeSystem.js';
 import { baseName } from '../rendering/HUD.js';
@@ -62,7 +63,7 @@ export function buildStations() {
       cost:()=> state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level] ? 0 : 8,
       label:()=> state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level]
         ? "Befolkningsgrænse nået"
-        : "Rekruttér garde (8🪙) – nærkampenhed",
+        : "Rekruttér vagt (8🪙) – nærkampenhed",
       onPaid:()=>{
         if (state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level]) { floaty(STATIONS_X.guard, "Befolkningsgrænse nået!", "#ff8a6a"); return; }
         const u = makeUnit("guard", STATIONS_X.guard + rand(-20, 20));
@@ -145,6 +146,7 @@ export function newGame() {
   Game.treeSeed = randInt(1, 99999);
   buildStations();
   buildLocations();
+  buildForest();
 
   // Game clock
   Game.time              = 0.06;
@@ -153,12 +155,10 @@ export function newGame() {
   Game.wasNight          = false;
   Game.threatLevel       = 1;
   Game.autosaveTimer     = 0;
-  Game.zoom              = 1;
+  Game.zoom              = 1.2;
   Game.legendaryIntro    = null;
 
-  // Seed starting coins and population
-  for (let i = 0; i < 6; i++)
-    state.coins.push({ x: CFG.baseX + rand(-200, 200), y: groundY, vy: 0, value: 1, settled: true, life: 9999, magnet: false, vx: 0 });
+  // Seed starting population
   for (let i = 0; i < 2; i++)
     state.vagrants.push({ x: CFG.baseX + rand(-320, 320), vx: 0, targetX: CFG.baseX + rand(-260, 260), state: "wander", anim: rand(0, 6) });
   for (let i = 0; i < 4; i++) spawnAnimal();

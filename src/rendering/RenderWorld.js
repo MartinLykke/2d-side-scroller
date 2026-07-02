@@ -1,8 +1,8 @@
-import { clamp, lerp, lerpColor, rgb, withA, shade } from '../util/math.js';
+import { clamp, lerp, lerpColor, rgb, withA, shade, atmo, hazeColor } from '../util/math.js';
 import { CFG, STATIONS_X } from '../config/config.js';
 import { ctx, W, H, groundY } from '../canvas.js';
 import { Game, state } from '../state.js';
-import { FX, biomeAt, getGroundTex, getDeco, windGust, windSway } from './Effects.js';
+import { FX, biomeAt, getGroundTex, getDeco, windGust, windSway, drawTree } from './Effects.js';
 import { wallHeight } from '../entities/Wall.js';
 import { groundShadow, roundedRect, stoneCol, stoneLt, woodCol, litWindow, drawHpBar } from './DrawHelpers.js';
 import { ENEMY_TYPES } from '../config/enemies.js';
@@ -18,15 +18,29 @@ export function drawGroundTexture(dark) {
   for (const p of tex.pebbles) {
     if (p.x<camL||p.x>camR) continue;
     ctx.fillStyle=withA(lerpColor([120,118,124],[40,40,52],dark),0.7); ctx.beginPath(); ctx.ellipse(p.x,groundY+9+p.dy,p.r,p.r*0.7,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=withA(lerpColor([200,200,206],[70,72,86],dark),0.35); ctx.beginPath(); ctx.ellipse(p.x-p.r*0.25,groundY+8.4+p.dy,p.r*0.5,p.r*0.3,0,0,Math.PI*2); ctx.fill();
+  }
+  // fine dirt speckles give the soil grain
+  if (tex.specks) for (const s of tex.specks) {
+    if (s.x<camL||s.x>camR) continue;
+    const b=biomeAt(s.x);
+    const col=s.light?lerpColor(shade(b.gB,1.5),[60,64,80],dark):lerpColor(shade(b.gB,0.55),[8,10,16],dark);
+    ctx.fillStyle=withA(col,0.55);
+    ctx.fillRect(s.x,groundY+s.dy,s.r*2,s.r);
   }
   ctx.lineCap="round";
   for (const f of tex.fringe) {
     if (f.x<camL||f.x>camR) continue;
-    const b=biomeAt(f.x), col=b.snow?lerpColor([226,233,243],[120,140,170],dark):lerpColor(shade(b.gT,1.04),[18,26,18],dark);
+    const b=biomeAt(f.x), col=b.snow?lerpColor([226,233,243],[120,140,170],dark):lerpColor(shade(b.gT,f.lt?1.28:1.04),[18,26,18],dark);
     const sway=windSway(f.ph,4);
     ctx.strokeStyle=rgb(col); ctx.lineWidth=2;
     ctx.beginPath(); ctx.moveTo(f.x,groundY+2); ctx.quadraticCurveTo(f.x+sway*0.5,groundY-f.h*0.6,f.x+sway,groundY-f.h); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(f.x+3,groundY+2); ctx.quadraticCurveTo(f.x+3+sway*0.4,groundY-f.h*0.5,f.x+3+sway*0.8,groundY-f.h*0.8); ctx.stroke();
+    // pale inner blade for a two-tone tuft
+    if (!b.snow) {
+      ctx.strokeStyle=withA(lerpColor(shade(b.gT,1.45),[36,48,36],dark),0.8); ctx.lineWidth=1.1;
+      ctx.beginPath(); ctx.moveTo(f.x+1.5,groundY+2); ctx.quadraticCurveTo(f.x+1.5+sway*0.45,groundY-f.h*0.55,f.x+1.5+sway*0.9,groundY-f.h*0.9); ctx.stroke();
+    }
   }
   ctx.lineCap="butt";
 }
@@ -39,7 +53,11 @@ function drawDeco(it, b, dark) {
     case "grass": case "snowtuft": {
       const col=it.kind==="snowtuft"?lerpColor([230,238,248],[120,140,170],dark):g1;
       ctx.strokeStyle=rgb(col); ctx.lineWidth=1.6*s;
-      for (let i=-1;i<=1;i++){ ctx.beginPath(); ctx.moveTo(x+i*3*s,groundY); ctx.quadraticCurveTo(x+i*3*s+sway*0.5,groundY-7*s,x+i*4*s+sway,groundY-12*s); ctx.stroke(); } break; }
+      for (let i=-2;i<=2;i++){ ctx.beginPath(); ctx.moveTo(x+i*2.4*s,groundY); ctx.quadraticCurveTo(x+i*2.4*s+sway*0.5,groundY-(7-Math.abs(i))*s,x+i*3.4*s+sway,groundY-(13-Math.abs(i)*2.5)*s); ctx.stroke(); }
+      if (it.kind==="grass") {
+        ctx.strokeStyle=withA(lerpColor(shade(b.gT,1.35),[30,44,30],dark),0.85); ctx.lineWidth=1*s;
+        ctx.beginPath(); ctx.moveTo(x,groundY); ctx.quadraticCurveTo(x+sway*0.55,groundY-8*s,x+sway*1.1,groundY-14*s); ctx.stroke();
+      } break; }
     case "flower": {
       ctx.strokeStyle=rgb(g1); ctx.lineWidth=1.4*s; ctx.beginPath(); ctx.moveTo(x,groundY); ctx.quadraticCurveTo(x+sway*0.5,groundY-8*s,x+sway,groundY-13*s); ctx.stroke();
       ctx.fillStyle=it.flower; ctx.beginPath(); ctx.arc(x+sway,groundY-14*s,2.4*s,0,Math.PI*2); ctx.fill();
@@ -171,6 +189,72 @@ export function drawPortals(dark) {
   }
 }
 
+function drawLog(x, dir, len) {
+  ctx.save();
+  ctx.translate(x, groundY - 6);
+  groundShadow(x, len * 0.6, 0.2);
+  const barkD = "#4a3420", barkL = "#7a5a34", ring = "#c9a878";
+  ctx.fillStyle = barkD; roundedRect(-len / 2, -7, len, 14, 6); ctx.fill();
+  ctx.fillStyle = barkL; roundedRect(-len / 2, -7, len, 5, 4); ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.25)"; ctx.lineWidth = 1;
+  for (let i = -len / 2 + 8; i < len / 2 - 4; i += 10) { ctx.beginPath(); ctx.moveTo(i, -7); ctx.lineTo(i, 7); ctx.stroke(); }
+  const capX = dir * len / 2;
+  ctx.fillStyle = ring; ctx.beginPath(); ctx.ellipse(capX, 0, 4, 7, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "rgba(90,60,30,0.6)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.ellipse(capX, 0, 2.4, 4.2, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+
+export function drawForestTrees(dark) {
+  const haze = hazeColor(dark);
+  const camL = Game.cam - 60, camR = Game.cam + W + 60;
+  for (const ft of state.forestTrees) {
+    if (ft.chopped) continue;
+    if (ft.x < camL || ft.x > camR) continue;
+    const b = biomeAt(ft.x);
+    // stagger apparent depth so the dense forest reads as layered rows
+    const depth = 0.05 + (Math.abs(Math.floor(ft.x / 60)) % 3) * 0.07;
+    const light = atmo(b.treeL, haze, depth), dcol = atmo(b.treeD, haze, depth);
+
+    if (ft.lying) { drawLog(ft.x, ft.fallDir, Math.max(60, ft.tree.h * 0.6)); continue; }
+
+    if (ft.falling) {
+      // Ease-in rotation around the trunk base for a weighty toppling feel.
+      const ease = Math.sin(ft.fallAngle) * ft.fallAngle / (Math.PI / 2);
+      ctx.save();
+      ctx.translate(ft.x, groundY);
+      ctx.rotate(ft.fallDir * ease * (Math.PI / 2));
+      ctx.translate(-ft.x, -groundY);
+      drawTree(ft.tree, ft.x, groundY + 4, light, dcol, depth, 0);
+      ctx.restore();
+      continue;
+    }
+
+    drawTree(ft.tree, ft.x, groundY + 4, light, dcol, depth, 16);
+    // ferny undergrowth hugging the trunk base
+    ctx.save(); ctx.lineCap = "round";
+    ctx.strokeStyle = withA(atmo(shade(b.gT, 0.62), haze, depth), 0.9); ctx.lineWidth = 1.6;
+    for (let i = -2; i <= 2; i++) {
+      const sway = windSway(ft.tree.phase + i, 3);
+      const fh = 11 + ((i * i + (Math.abs(ft.x | 0) % 4)) % 3) * 4;
+      ctx.beginPath(); ctx.moveTo(ft.x + i * 5, groundY + 2);
+      ctx.quadraticCurveTo(ft.x + i * 7 + sway, groundY - fh * 0.55, ft.x + i * 10 + sway, groundY - fh);
+      ctx.stroke();
+    }
+    ctx.restore();
+    if (ft.marked) {
+      const bob = Math.sin(performance.now() / 300 + ft.x) * 3;
+      ctx.save(); ctx.font = "16px serif"; ctx.textAlign = "center"; ctx.globalAlpha = 0.9;
+      ctx.fillText(ft.beingChopped ? "🪓" : "🔖", ft.x, groundY - ft.tree.h - 14 + bob);
+      ctx.restore();
+      if (ft.chopProgress > 0) {
+        ctx.fillStyle = "rgba(0,0,0,0.4)"; ctx.fillRect(ft.x - 14, groundY - ft.tree.h - 26, 28, 4);
+        ctx.fillStyle = "#caa46a"; ctx.fillRect(ft.x - 14, groundY - ft.tree.h - 26, 28 * clamp(ft.chopProgress, 0, 1), 4);
+      }
+    }
+  }
+}
+
 export function drawWalls(dark) {
   const night=dark>0.25;
   for (const w of state.walls) {
@@ -236,7 +320,7 @@ export function drawWalls(dark) {
       ctx.fillStyle=col;
       for (let i=0;i<5;i++) ctx.fillRect(x-platW/2+i*(mW2*2), platY2-11, mW2, 12);
 
-      const ladX = x + tw/2 - 6;
+      const ladX = x + (w.side > 0 ? -tw/2 + 6 : tw/2 - 6);
       const ladTop = platY2 + platH;
       const ladBot = groundY;
       ctx.strokeStyle="#5a3a1a"; ctx.lineWidth=3; ctx.lineCap="round";
@@ -248,7 +332,7 @@ export function drawWalls(dark) {
       }
       const lad2Top = platY1;
       const lad2Bot = platY2 + platH;
-      const lad2X   = x + tw/2 - 6;
+      const lad2X   = x + (w.side > 0 ? -tw/2 + 6 : tw/2 - 6);
       ctx.lineWidth=3;
       ctx.beginPath(); ctx.moveTo(lad2X-5,lad2Bot); ctx.lineTo(lad2X-5,lad2Top); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(lad2X+5,lad2Bot); ctx.lineTo(lad2X+5,lad2Top); ctx.stroke();
@@ -301,9 +385,97 @@ function drawStationIcon(x, emoji) {
   ctx.restore();
 }
 
+function drawBoothPerson(x, skin, robe, robeD) {
+  const y=groundY-6;
+  ctx.save();
+  ctx.fillStyle=robeD; ctx.fillRect(x-6,y-22,12,22);
+  ctx.fillStyle=robe; ctx.fillRect(x-6,y-22,7,22);
+  ctx.fillStyle=skin; ctx.fillRect(x-7,y-18,3.5,8); ctx.fillRect(x+3.5,y-18,3.5,8);
+  ctx.beginPath(); ctx.arc(x,y-27,5,0,Math.PI*2); ctx.fillStyle=skin; ctx.fill();
+  ctx.fillStyle=robeD; ctx.beginPath(); ctx.arc(x,y-28.4,5.3,Math.PI,0); ctx.fill();
+  ctx.fillStyle="rgba(0,0,0,0.25)"; ctx.beginPath(); ctx.arc(x+1.6,y-26,3.7,-0.4,2.6); ctx.fill();
+  ctx.restore();
+}
+
+function drawBoothBack(x, canopy, canopyD, post) {
+  ctx.save();
+  ctx.strokeStyle=post; ctx.lineWidth=4; ctx.lineCap="round";
+  ctx.beginPath(); ctx.moveTo(x-24,groundY); ctx.lineTo(x-24,groundY-44); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x+24,groundY); ctx.lineTo(x+24,groundY-44); ctx.stroke();
+  ctx.lineCap="butt";
+  ctx.fillStyle=canopyD;
+  ctx.beginPath(); ctx.moveTo(x-30,groundY-42); ctx.lineTo(x+30,groundY-42); ctx.lineTo(x+25,groundY-54); ctx.lineTo(x-25,groundY-54); ctx.closePath(); ctx.fill();
+  ctx.fillStyle=canopy;
+  for (let i=-3;i<3;i++) {
+    ctx.beginPath();
+    ctx.moveTo(x-25+ (i+3.5)*(50/7)-3, groundY-54);
+    ctx.lineTo(x-25+ (i+4.5)*(50/7)-3, groundY-54);
+    ctx.lineTo(x-30+ (i+4.5)*(60/7), groundY-42);
+    ctx.lineTo(x-30+ (i+3.5)*(60/7), groundY-42);
+    ctx.closePath();
+    if (i%2===0) ctx.fill();
+  }
+  ctx.fillStyle="rgba(0,0,0,0.2)";
+  ctx.beginPath(); ctx.moveTo(x-25,groundY-54); ctx.lineTo(x-30,groundY-42); ctx.lineTo(x-22,groundY-42); ctx.lineTo(x-19,groundY-54); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+function drawBoothCounter(x) {
+  ctx.save();
+  const woodL="#8a6338", woodD="#5f4326";
+  ctx.fillStyle=woodD; ctx.fillRect(x-21,groundY-18,42,18);
+  ctx.fillStyle=woodL; ctx.fillRect(x-21,groundY-18,42,5);
+  ctx.strokeStyle="rgba(0,0,0,0.22)"; ctx.lineWidth=1;
+  for (let i=-2;i<=2;i++) { ctx.beginPath(); ctx.moveTo(x+i*7.5,groundY-13); ctx.lineTo(x+i*7.5,groundY); ctx.stroke(); }
+  ctx.restore();
+}
+
+function drawBowStation(x) {
+  drawBoothBack(x,"#8a3a34","#5f2622","#4a3520");
+  drawBoothPerson(x-5,"#d8a878","#3a5a44","#264030");
+  drawBoothCounter(x);
+  ctx.save();
+  ctx.translate(x+9,groundY-18);
+  for (let i=0;i<2;i++) {
+    const bx=i*6-3, ang=(i-0.5)*0.5;
+    ctx.save(); ctx.translate(bx,-2); ctx.rotate(ang);
+    ctx.strokeStyle="#6a4222"; ctx.lineWidth=1.4;
+    ctx.beginPath(); ctx.arc(0,0,6.5,Math.PI*0.5,Math.PI*1.5); ctx.stroke();
+    ctx.strokeStyle="rgba(230,220,200,0.8)"; ctx.lineWidth=0.6;
+    ctx.beginPath(); ctx.moveTo(0,-6.5); ctx.lineTo(0,6.5); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.strokeStyle="#7a5a30"; ctx.lineWidth=1;
+  for (let i=0;i<3;i++) { ctx.beginPath(); ctx.moveTo(-9+i*2,-1); ctx.lineTo(-3+i*2,-6); ctx.stroke(); }
+  ctx.fillStyle="#c0392b";
+  for (let i=0;i<3;i++) { ctx.beginPath(); ctx.moveTo(-3+i*2,-6); ctx.lineTo(-4.4+i*2,-7.4); ctx.lineTo(-1.6+i*2,-7.4); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
+}
+
+function drawHammerStation(x) {
+  drawBoothBack(x,"#39547a","#243954","#4a3f2e");
+  drawBoothPerson(x-5,"#c89468","#6a5030","#463420");
+  drawBoothCounter(x);
+  ctx.save();
+  ctx.translate(x+9,groundY-18);
+  ctx.strokeStyle="#5a4028"; ctx.lineWidth=2.2; ctx.lineCap="round";
+  ctx.beginPath(); ctx.moveTo(-6,-1); ctx.lineTo(1,-11); ctx.stroke();
+  ctx.fillStyle="#7a7a82"; ctx.save(); ctx.translate(1,-11); ctx.rotate(-0.5);
+  ctx.fillRect(-5,-3.5,10,7); ctx.fillStyle="rgba(255,255,255,0.15)"; ctx.fillRect(-5,-3.5,10,2);
+  ctx.restore();
+  ctx.strokeStyle="#5a4028"; ctx.lineWidth=1.8;
+  ctx.beginPath(); ctx.moveTo(4,-0.5); ctx.lineTo(10,-9); ctx.stroke();
+  ctx.fillStyle="#8a8a92"; ctx.beginPath(); ctx.arc(10,-9,2.2,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle="#9a6a3a"; ctx.beginPath(); ctx.ellipse(-9,-1,4,2.1,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle="#c0392b"; ctx.fillRect(-11,-9,3.5,8.5);
+  ctx.fillStyle="rgba(255,255,255,0.15)"; ctx.fillRect(-11,-9,1.4,8.5);
+  ctx.lineCap="butt";
+  ctx.restore();
+}
+
 export function drawStations() {
-  drawStationIcon(STATIONS_X.bow,"🏹");
-  drawStationIcon(STATIONS_X.hammer,"🔨");
+  drawBowStation(STATIONS_X.bow);
+  drawHammerStation(STATIONS_X.hammer);
   const farmLvl = state.farmLevel || 0;
   drawStationIcon(STATIONS_X.farm, farmLvl>0?"🌾":"🌱");
   if (farmLvl >= 1) {
