@@ -1,16 +1,16 @@
 import { CFG } from '../config/config.js';
 import { WEAPONS, RARITY_COL, RARITY_NAME } from '../config/weapons.js';
 import { ARMORS, ARMOR_RARITY_COL, ARMOR_RARITY_NAME } from '../config/armor.js';
-import { LOC_DEFS } from '../config/locations.js';
 import { dist, clamp } from '../util/math.js';
-import { Game, state } from '../state.js';
-import { Audio } from '../systems/Audio.js';
-import { spawnEnemy, planNight, floaty, spawnParticles } from '../systems/SpawnSystem.js';
+import { Game, state } from '../core/state.js';
+import { Audio } from '../systems/infrastructure/Audio.js';
+import { spawnEnemy, spawnFireDragon, spawnBoss, planNight, floaty, spawnParticles } from '../systems/world/SpawnSystem.js';
 import { pick } from '../util/math.js';
-import { groundY } from '../canvas.js';
+import { groundY } from '../core/canvas.js';
 import { ARCHER_SKILLS } from '../config/archerSkills.js';
 import { GUARD_SKILLS } from '../config/guardSkills.js';
 import { makeUnit } from '../entities/Unit.js';
+import { saveMeta } from '../systems/infrastructure/RoguelikeSystem.js';
 
 // ── Skill Tree ────────────────────────────────────────────────
 const BRANCH_NAMES = {
@@ -174,17 +174,22 @@ export const UI = {
   toggleMute() { Audio.init(); this.muted = !Audio.toggle(); },
 
   refresh() {
-    const { player, base, units, vagrants, stations, locations } = state;
-    document.getElementById("hud-day-text").textContent   = "Dag " + Game.day;
+    const { player, base, units, vagrants, stations } = state;
     const ph = phaseName();
-    document.getElementById("hud-phase-text").textContent = ph;
+    const dayText = ph === "Nat" ? "Nat " + Game.day : "Dag " + Game.day;
+    document.getElementById("hud-day-text").textContent = dayText;
+    document.getElementById("hud-phase-text").textContent = "";
     document.getElementById("hud-phase-icon").textContent = ph==="Nat"?"🌙":ph==="Aften"?"🌆":ph==="Daggry"?"🌅":"☀";
-    document.getElementById("hud-base-text").textContent  = baseName(base.level);
-    document.getElementById("hud-coins-text").textContent = player.coins + "/" + CFG.maxCoinsCarry;
-    document.getElementById("hud-hp-text").textContent    = Math.max(0,player.hp) + "/" + player.maxHp;
+    document.getElementById("hud-base-text").textContent = "";
+    document.getElementById("hud-coins-text").textContent = player.coins;
+    document.getElementById("hud-hp-text").textContent    = "";
 
-    const arch  = units.filter(u=>u.role==="archer").length;
-    const build = units.filter(u=>u.role==="builder").length;
+    let arch = 0, build = 0;
+    for (let i = 0; i < units.length; i++) {
+      const r = units[i].role;
+      if (r === "archer") arch++;
+      else if (r === "builder") build++;
+    }
     const popCap = CFG.popCapByLevel[base.level];
     document.getElementById("hud-pop-text").textContent   = (units.length + vagrants.length) + "/" + popCap;
     document.getElementById("hud-arch-text").textContent  = arch;
@@ -193,7 +198,11 @@ export const UI = {
     let obj = "🎯 Overlev så længe du kan. Trusselsniveau " + (Game.threatLevel || Game.day);
     if (base.level<4) obj += " · opgradér basen ("+base.level+"/4)";
     else obj += " · slottet står";
-    if (Game.isNight) obj="🌙 NAT — "+(Game.nightQuota-state.enemies.filter(e=>!e.fleeing).length>0?"horden angriber!":"hold linjen!");
+    if (Game.isNight) {
+      let activeEnemies = 0;
+      for (let i = 0; i < state.enemies.length; i++) if (!state.enemies[i].fleeing) activeEnemies++;
+      obj="🌙 NAT — "+(Game.nightQuota-activeEnemies>0?"horden angriber!":"hold linjen!");
+    }
     document.getElementById("hud-objective").textContent = obj;
 
     const wEl=document.getElementById("hud-weapon-text"), wPill=document.getElementById("hud-weapon");
@@ -203,7 +212,7 @@ export const UI = {
       wEl.textContent=w.name+" ("+RARITY_NAME[w.rarity]+")"+(upgs>0?" ×"+upgs:"");
       wPill.style.borderColor=RARITY_COL[w.rarity]+"99";
       wPill.style.color=RARITY_COL[w.rarity];
-    } else { wEl.textContent="Intet våben"; wPill.style.borderColor=""; wPill.style.color=""; }
+    } else { wEl.textContent=""; wPill.style.borderColor=""; wPill.style.color=""; }
 
     const aEl=document.getElementById("hud-armor-text"), aPill=document.getElementById("hud-armor");
     if (aEl && aPill) {
@@ -212,27 +221,18 @@ export const UI = {
         aEl.textContent=a.name+" ("+ARMOR_RARITY_NAME[a.rarity]+") +" +a.defense+"🛡";
         aPill.style.borderColor=ARMOR_RARITY_COL[a.rarity]+"99";
         aPill.style.color=ARMOR_RARITY_COL[a.rarity];
-      } else { aEl.textContent="Ingen rustning"; aPill.style.borderColor=""; aPill.style.color=""; }
+      } else { aEl.textContent=""; aPill.style.borderColor=""; aPill.style.color=""; }
     }
 
-    // Skill points pill
+
+    document.getElementById("hud-base").classList.add("hidden");
+    document.getElementById("hud-objective").classList.add("hidden");
+    document.getElementById("hud-hp").classList.add("hidden");
+    document.getElementById("hud-weapon").classList.add("hidden");
+    document.getElementById("hud-armor").classList.add("hidden");
+    document.getElementById("hud-pop").classList.add("hidden");
     const spEl = document.getElementById("hud-skillpts");
-    const spTxt = document.getElementById("hud-skillpts-text");
-    if (spEl && spTxt) {
-      const archSp = state.archerSkillPoints || 0;
-      const guardSp = state.guardSkillPoints || 0;
-      const totalSp = archSp + guardSp;
-      spEl.style.display = totalSp > 0 ? "" : "none";
-      if (archSp > 0 && guardSp > 0) {
-        spTxt.textContent = archSp + " ep 🏹 · " + guardSp + " ep 🛡️";
-      } else if (guardSp > 0) {
-        spTxt.textContent = guardSp + " ep 🛡️";
-      } else {
-        spTxt.textContent = archSp + " ep 🏹";
-      }
-      spEl.style.borderColor = totalSp > 0 ? "#f2c14e88" : "";
-      spEl.style.color = "#f2c14e";
-    }
+    if (spEl) spEl.style.display = "none";
 
     let near=null, nd=CFG.payRange;
     for (const s of stations) { const c=s.cost(); if (c<=0) continue; const d=dist(player.x,s.x()); if (d<nd) { nd=d; near=s; } }
@@ -272,6 +272,28 @@ export const DEV = {
     if (Game.state!=="play") return;
     state.player.coins=clamp(state.player.coins+n,0,CFG.maxCoinsCarry);
     floaty(state.player.x,"+"+n+"🪙","#f2c14e");
+  },
+
+  give1000Gold() {
+    if (Game.state!=="play") return;
+    state.player.coins+=1000;
+    floaty(state.player.x,"+1000🪙","#f2c14e");
+  },
+
+  addEmbers(n) {
+    Game.meta = Game.meta || { embers: 0, upgrades: {}, totalRuns: 0, bestDay: 1, totalKills: 0, lastReward: 0, lastDay: 1, lastKills: 0 };
+    Game.meta.embers = (Game.meta.embers || 0) + n;
+    saveMeta();
+    const x = state.player ? state.player.x : 0;
+    floaty(x,"+"+n+"🔥","#8fd8ff");
+  },
+
+  resetUpgrades() {
+    if (!Game.meta) return;
+    Game.meta.upgrades = {};
+    saveMeta();
+    const x = state.player ? state.player.x : 0;
+    floaty(x,"Opgraderinger nulstillet","#ff8a6a");
   },
 
   skipToNight() {
@@ -363,7 +385,19 @@ export const DEV = {
       const portal = { x: state.base.x + 780 + i * 140, side: 1 };
       spawnEnemy("fireImp", portal);
     }
-    floaty(state.base.x, "4x Ild-imp!", "#ff6a20");
+    floaty(state.base.x, "4x Flying Imp!", "#ff6a20");
+  },
+
+  spawnFireDragonBoss() {
+    if (Game.state!=="play") return;
+    const side = pick([-1, 1]);
+    spawnFireDragon({ x: state.base.x + side * 900, side });
+  },
+
+  spawnMagmaGolemBoss() {
+    if (Game.state!=="play") return;
+    const side = pick([-1, 1]);
+    spawnBoss("magmaGolem", { x: state.base.x + side * 1000, side });
   },
 
   killAll() {
@@ -418,9 +452,13 @@ export const DEV = {
     this._fps+=(1/Math.max(dt,0.001)-this._fps)*0.08;
     const el=document.getElementById("dev-stats");
     if (!el||document.getElementById("dev-panel").classList.contains("hidden")) return;
-    const arch  = state.units ? state.units.filter(u=>u.role==="archer").length  : 0;
-    const build = state.units ? state.units.filter(u=>u.role==="builder").length : 0;
-    const farm  = state.units ? state.units.filter(u=>u.role==="farmer").length  : 0;
+    let arch = 0, build = 0, farm = 0;
+    if (state.units) for (let i = 0; i < state.units.length; i++) {
+      const r = state.units[i].role;
+      if (r === "archer") arch++;
+      else if (r === "builder") build++;
+      else if (r === "farmer") farm++;
+    }
     el.innerHTML=
       `FPS: <b>${Math.round(this._fps)}</b> &nbsp;|&nbsp; Dag: <b>${Game.day}</b> &nbsp;t: <b>${Game.time.toFixed(3)}</b><br>`+
       `Fjender: <b>${state.enemies?.length||0}</b> &nbsp;|&nbsp; Enheder: <b>${state.units?.length||0}</b> (🏹${arch} 🔨${build} 🌾${farm})<br>`+

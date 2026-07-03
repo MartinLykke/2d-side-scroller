@@ -1,8 +1,9 @@
-import { lerpColor, rgb } from '../util/math.js';
-import { ctx, W, groundY } from '../canvas.js';
-import { Game, state } from '../state.js';
-import { stoneCol, stoneLt, woodCol } from './DrawHelpers.js';
-import { biomeAt, windSway, FX } from './Effects.js';
+import { lerpColor, rgb } from '../../util/math.js';
+import { ctx, W, groundY } from '../../core/canvas.js';
+import { Game, state } from '../../core/state.js';
+import { stoneCol, stoneLt, woodCol } from '../DrawHelpers.js';
+import { biomeAt, windSway, FX } from '../Effects.js';
+import { LOC_DEFS } from '../../config/locations.js';
 
 const LOC_DRAWERS = {
   camp(x, dark) {
@@ -994,6 +995,87 @@ function drawTorch(x, y) {
   ctx.fillStyle="rgba(255,234,160,0.98)"; ctx.beginPath(); ctx.ellipse(x,y-15,1.5,3.4*fl,0,0,Math.PI*2); ctx.fill();
 }
 
+function drawVagrantCamp(x, count, dark) {
+  const fl = (FX && FX.flicker) || 1;
+  const t = performance.now() / 1000;
+
+  // campfire: stones in a ring
+  const stoneC = rgb(lerpColor([90,84,78],[28,26,24],dark));
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI / 3;
+    const sx = x + Math.cos(a) * 8, sy = groundY - 2 + Math.sin(a) * 3;
+    ctx.fillStyle = stoneC;
+    ctx.beginPath(); ctx.ellipse(sx, sy, 3, 2, 0, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // embers / ash
+  ctx.fillStyle = rgb(lerpColor([60,40,30],[20,14,10],dark));
+  ctx.beginPath(); ctx.ellipse(x, groundY - 1, 6, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+
+  // fire glow
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  const ga = 0.25 + 0.12 * Math.sin(t * 3.1);
+  const gr = ctx.createRadialGradient(x, groundY - 10, 2, x, groundY - 8, 40);
+  gr.addColorStop(0, `rgba(255,140,40,${ga})`); gr.addColorStop(1, "rgba(255,80,20,0)");
+  ctx.fillStyle = gr; ctx.beginPath(); ctx.ellipse(x, groundY - 8, 40, 22, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // flames
+  ctx.fillStyle = `rgba(255,160,50,${0.8 * fl})`;
+  ctx.beginPath(); ctx.ellipse(x, groundY - 8, 3, 7 * fl, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = `rgba(255,220,120,${0.9 * fl})`;
+  ctx.beginPath(); ctx.ellipse(x, groundY - 8, 1.5, 4 * fl, 0, 0, Math.PI * 2); ctx.fill();
+
+  // logs in fire
+  const logC = woodCol(dark);
+  ctx.strokeStyle = logC; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(x - 8, groundY - 2); ctx.lineTo(x + 3, groundY - 7); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x + 7, groundY - 1); ctx.lineTo(x - 2, groundY - 6); ctx.stroke();
+
+  // sitting vagrant figures around the fire
+  const SKIN = "#d3ac82";
+  const PALETTES = [
+    { tunic: "#6e6250", pants: "#4a4234", hair: "#4a3826" },
+    { tunic: "#5d6652", pants: "#443c30", hair: "#2e2418" },
+    { tunic: "#71584a", pants: "#4c4438", hair: "#6a5a42" },
+  ];
+  const spots = count === 1 ? [[-28, 1]] : count === 2 ? [[-28, 1],[28, -1]] : [[-28, 1],[28, -1],[0, 1]];
+  for (let i = 0; i < Math.min(count, spots.length); i++) {
+    const [ox, dir] = spots[i];
+    const P = PALETTES[i % PALETTES.length];
+    const sx = x + ox;
+    const breathe = Math.sin(t * 1.4 + i * 2.1) * 0.4;
+
+    ctx.save();
+    ctx.translate(sx, 0);
+    if (dir < 0) ctx.scale(-1, 1);
+
+    const sitY = groundY - 8;
+    // legs folded
+    ctx.strokeStyle = P.pants; ctx.lineWidth = 2.5; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-3, sitY); ctx.lineTo(-6, sitY + 5); ctx.lineTo(-2, sitY + 7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(3, sitY); ctx.lineTo(6, sitY + 5); ctx.lineTo(2, sitY + 7); ctx.stroke();
+
+    // torso
+    ctx.fillStyle = P.tunic;
+    ctx.fillRect(-4, sitY - 10 + breathe, 8, 10);
+
+    // arms resting on knees
+    ctx.strokeStyle = SKIN; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-3, sitY - 5 + breathe); ctx.lineTo(-5, sitY + 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(3, sitY - 5 + breathe); ctx.lineTo(5, sitY + 2); ctx.stroke();
+
+    // head
+    ctx.fillStyle = SKIN;
+    ctx.beginPath(); ctx.arc(0, sitY - 14 + breathe, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = P.hair;
+    ctx.beginPath(); ctx.arc(-0.4, sitY - 15.5 + breathe, 3.8, Math.PI * 0.95, Math.PI * 2.02); ctx.fill();
+
+    ctx.lineCap = "butt";
+    ctx.restore();
+  }
+}
+
 export function drawLocations(dark) {
   if (!state.locations) return;
   const { player, locations } = state;
@@ -1025,6 +1107,11 @@ export function drawLocations(dark) {
     ctx.translate(-loc.x, -groundY);
     LOC_DRAWERS[loc.type]?.(loc.x, dark);
     ctx.restore();
+
+    const def = LOC_DEFS[loc.type];
+    if (!loc.triggered && def && def.vagrants > 0) {
+      drawVagrantCamp(loc.x, def.vagrants, dark);
+    }
 
     if (loc.preActivated && !loc.cleared && loc.remainingEnemies > 0) {
       const skullY=groundY-170;

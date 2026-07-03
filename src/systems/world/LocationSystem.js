@@ -1,9 +1,9 @@
-import { state, Game } from '../state.js';
-import { LOC_DEFS } from '../config/locations.js';
-import { CFG } from '../config/config.js';
-import { ENEMY_TYPES } from '../config/enemies.js';
-import { W } from '../canvas.js';
-import { dist, rand, pick, mulberry32 } from '../util/math.js';
+import { state, Game } from '../../core/state.js';
+import { LOC_DEFS } from '../../config/locations.js';
+import { CFG } from '../../config/config.js';
+import { ENEMY_TYPES } from '../../config/enemies.js';
+import { W } from '../../core/canvas.js';
+import { dist, rand, pick, mulberry32 } from '../../util/math.js';
 import { floaty, spawnLocLoot, makeLocation } from './SpawnSystem.js';
 
 export const LOC_FADE_DIST   = 900;

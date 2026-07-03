@@ -1,15 +1,17 @@
-import { CFG } from '../config/config.js';
-import { WEAPONS, effectiveWeapon } from '../config/weapons.js';
-import { ARMORS } from '../config/armor.js';
-import { ENEMY_TYPES } from '../config/enemies.js';
-import { dist, rand } from '../util/math.js';
-import { groundY } from '../canvas.js';
-import { Game, state } from '../state.js';
-import { Audio } from './Audio.js';
-import { spawnParticles, floaty } from './SpawnSystem.js';
-import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../util/EnemyUtils.js';
+import { CFG } from '../../config/config.js';
+import { WEAPONS, effectiveWeapon } from '../../config/weapons.js';
+import { ARMORS } from '../../config/armor.js';
+import { ENEMY_TYPES } from '../../config/enemies.js';
+import { dist, rand, applyCrit } from '../../util/math.js';
+import { groundY } from '../../core/canvas.js';
+import { Game, state } from '../../core/state.js';
+import { Audio } from '../infrastructure/Audio.js';
+import { spawnParticles, floaty } from '../world/SpawnSystem.js';
+import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js';
 import { shootArrow } from './ProjectileSystem.js';
 import { castSpell } from './SpellSystem.js';
+import { startArcherShoot } from '../../rendering/sprites/Archer.js';
+import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 
 function meleeWeaponImpact(weaponId, x, y) {
   switch (weaponId) {
@@ -80,35 +82,79 @@ export function meleeHitPlayer(e, t, knockForce) {
   return true;
 }
 
+function triggerIceNova(player) {
+  const { enemies } = state;
+  Audio.hit();
+  Game.screenShake = Math.max(Game.screenShake, 0.6);
+  spawnParticles(player.x, groundY - 40, 40, "#bfefff", 160, 140);
+  spawnParticles(player.x, groundY - 40, 20, "#ffffff", 100, 160);
+  spawnParticles(player.x, groundY - 40, 15, "#6abaff", 120, 100);
+  floaty(player.x, "❄ Is-eksplosion!", "#bfefff", 22);
+  for (const e of enemies) {
+    if (e.fleeing || e.dying) continue;
+    if (dist(player.x, e.x) < 320) {
+      e.rooted = Math.max(e.rooted || 0, 5);
+      e.frost = Math.max(e.frost || 0, 5);
+      spawnParticles(e.x, groundY - 30, 10, "#bfefff", 70, 80);
+      spawnParticles(e.x, groundY - 30, 5, "#ffffff", 40, 90);
+    }
+  }
+}
+
 export function updatePlayerAttack(dt) {
   const { player, enemies } = state;
   if (!player.weapon) return;
+  if (player.weapon === "short_bow" && (player.weaponUpgrades || []).some(u => u.id === "is_eksplosion")) {
+    player.iceNovaCd = (player.iceNovaCd || 0) - dt;
+    if (player.iceNovaCd <= 0) {
+      triggerIceNova(player);
+      player.iceNovaCd = 10;
+    }
+  }
   if (player.swing > 0) player.swing -= dt;
   player.attackCd -= dt;
   if (player.attackCd > 0) return;
   const wBase = WEAPONS[player.weapon];
   const w = effectiveWeapon(player.weapon, player.weaponUpgrades || []);
-  let tgt = null, bd = w.range;
+  let tgt = null, bd = w.range, tgtIsAnimal = false;
   for (const e of enemies) {
     const d = dist(player.x, e.x);
-    if (d < bd) { bd = d; tgt = e; }
+    if (d < bd) { bd = d; tgt = e; tgtIsAnimal = false; }
+  }
+  for (const a of state.animals) {
+    if (a.type !== "bear" || !a.alive || a.dying) continue;
+    const d = dist(player.x, a.x);
+    if (d < bd) { bd = d; tgt = a; tgtIsAnimal = true; }
   }
   if (!tgt) return;
   player.dir = Math.sign(tgt.x - player.x) || player.dir;
   player.swing = 0.32;
   if (wBase.type === "melee") {
-    tgt.hp -= w.dmg; tgt.flash = 0.14; Audio.hit();
+    const crit = applyCrit(w.dmg * permanentDamageMultiplier(), CFG.critChance, CFG.critMultiplier);
+    tgt.hp -= crit.damage; tgt.flash = 0.14; Audio.hit();
     meleeWeaponImpact(player.weapon, tgt.x, groundY - 28);
-    spawnImpBlood(tgt, 1 + w.dmg * 0.12, groundY - 28);
-    floaty(tgt.x, "-" + w.dmg, wBase.col);
-    const et = ENEMY_TYPES[tgt.type];
-    if (!et.noKnockback) tgt.knock = (tgt.knock || 0) + Math.sign(tgt.x - player.x) * 220;
-    if (tgt.hp <= 0) {
-      const knockDir = Math.sign(tgt.x - player.x) || 1;
-      killEnemyWithAnimation(tgt, knockDir);
+    floaty(tgt.x, (crit.isCrit ? "⭐ " : "") + "-" + crit.damage, wBase.col, crit.isCrit ? 24 : 15);
+    if (tgtIsAnimal) {
+      spawnParticles(tgt.x, groundY - 30, 5, "#8a2a2a");
+      if (tgt.hp <= 0) {
+        tgt.dying = true; tgt.deathT = 0;
+        spawnParticles(tgt.x, groundY - 20, 8, "#7a4a2a");
+        const reward = 8;
+        for (let k = 0; k < reward; k++) spawnCoin(tgt.x + rand(-15, 15), 1, groundY - 20, rand(-50, 50), rand(-220, -120));
+        floaty(tgt.x, "+" + reward + "🪙", "#f2c14e");
+      }
+    } else {
+      spawnImpBlood(tgt, 1 + crit.damage * 0.12, groundY - 28);
+      const et = ENEMY_TYPES[tgt.type];
+      if (!et.noKnockback) tgt.knock = (tgt.knock || 0) + Math.sign(tgt.x - player.x) * 220;
+      if (tgt.hp <= 0) {
+        const knockDir = Math.sign(tgt.x - player.x) || 1;
+        killEnemyWithAnimation(tgt, knockDir);
+      }
     }
   } else if (wBase.type === "ranged") {
-    shootArrow(player.x, groundY - 72, tgt, null, player.weapon);
+    startArcherShoot(player);
+    shootArrow(player.x, groundY - 30, tgt, player, player.weapon);
   } else {
     castSpell(player, wBase, tgt);
   }

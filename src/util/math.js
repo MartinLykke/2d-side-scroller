@@ -4,7 +4,14 @@ export const dist = (a, b) => Math.abs(a - b);
 export const rand = (a, b) => a + Math.random() * (b - a);
 export const randInt = (a, b) => Math.floor(rand(a, b + 1));
 export const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
-export const pickR = (r, arr) => arr[Math.floor(r() * arr.length)];
+
+
+export function applyCrit(damage, critChance, critMultiplier) {
+  if (Math.random() < critChance) {
+    return { damage: Math.round(damage * critMultiplier), isCrit: true };
+  }
+  return { damage: Math.round(damage), isCrit: false };
+}
 
 export function lerpColor(c1, c2, t) {
   return [

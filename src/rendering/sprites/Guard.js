@@ -1,4 +1,4 @@
-import { ctx, groundY } from '../canvas.js';
+import { ctx, groundY } from '../../core/canvas.js';
 
 // ---------------------------------------------------------------------------
 // Procedural guard (unlocked at base level 3): steel kettle helm, padded

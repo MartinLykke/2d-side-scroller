@@ -1,17 +1,17 @@
-import { CFG, PORTALS, WALL_SLOTS, FOREST } from '../config/config.js';
-import { ENEMY_TYPES } from '../config/enemies.js';
-import { LOC_DEFS } from '../config/locations.js';
-import { WEAPONS } from '../config/weapons.js';
-import { clamp, rand, pick, pickR, mulberry32 } from '../util/math.js';
-import { groundY } from '../canvas.js';
-import { Game, state } from '../state.js';
+import { CFG, PORTALS, WALL_SLOTS, FOREST } from '../../config/config.js';
+import { ENEMY_TYPES, BOSS_SCHEDULE } from '../../config/enemies.js';
+import { LOC_DEFS } from '../../config/locations.js';
+import { WEAPONS } from '../../config/weapons.js';
+import { clamp, rand, pick, mulberry32 } from '../../util/math.js';
+import { groundY } from '../../core/canvas.js';
+import { Game, state } from '../../core/state.js';
 
 export function spawnCoin(x, value = 1, fromY = -40, vx = 0, vy = -180) {
   state.coins.push({ x, y: fromY, vy, value, settled: false, life: 60, magnet: false, vx });
 }
 
-export function floaty(x, text, color = "#f2c14e") {
-  state.floatTexts.push({ x, y: groundY - 90, text, color, life: 1.4, vy: -34 });
+export function floaty(x, text, color = "#f2c14e", size = 15) {
+  state.floatTexts.push({ x, y: groundY - 90, text, color, life: 1.4, vy: -34, size });
 }
 
 export function spawnParticles(x, y, n, color, spread = 60, up = 80) {
@@ -33,9 +33,10 @@ export function spawnVagrant() {
 
 export function spawnAnimal() {
   if (state.animals.length > 6) return;
-  // Animals live in the dense forest belts beyond the outer wall slots
-  const side = pick([-1, 1]);
-  const x = CFG.baseX + side * rand(FOREST.startDist + 60, FOREST.endDist - 60);
+  const bears = state.animals.filter(a => a.type === "bear").length;
+  if (bears < 2 && Math.random() < 0.15) return spawnBear();
+  // Deer and rabbits spawn across the entire forest-covered map
+  const x = rand(0, CFG.worldWidth);
   state.animals.push({
     x, vx: 0, dir: pick([-1, 1]),
     state: "graze", stateT: rand(2, 5), alive: true, anim: rand(0, 6),
@@ -45,7 +46,22 @@ export function spawnAnimal() {
   });
 }
 
+// Bears keep to the deep forest, well past the trees nearest the base
+export function spawnBear() {
+  const side = pick([-1, 1]);
+  const x = clamp(CFG.baseX + side * rand(2600, CFG.baseX - 900), 900, CFG.worldWidth - 900);
+  state.animals.push({
+    x, vx: 0, dir: pick([-1, 1]),
+    state: "graze", stateT: rand(2, 5), alive: true, anim: rand(0, 6),
+    flee: 0, fleeT: 0, type: "bear",
+    hp: 12, maxHp: 12, attackCd: 0, attackAnim: 0, flash: 0,
+    eatDown: 0, headT: rand(1, 3), scan: 0, earFlick: 0,
+    dying: false, deathT: 0,
+  });
+}
+
 export function spawnEnemy(type, portal) {
+  if (!ENEMY_TYPES[type]) type = "imp";
   const t = ENEMY_TYPES[type];
   state.enemies.push({
     x: portal.x, vx: 0, type, tag: type === "imp" || type === "fireImp" ? "Imp" : "Enemy",
@@ -57,6 +73,40 @@ export function spawnEnemy(type, portal) {
     shootCd: t.flying ? rand(0.5, t.fireball ? 1.4 : 2) : 0,
     poisonCd: t.rangedShoot ? rand(1, t.shootInterval || 5) : undefined,
   });
+}
+
+// Per-boss entrance rigging, run right after the boss entity is spawned.
+const BOSS_RIGGERS = {
+  fireDragon(drg, portal) {
+    drg.patrolDir = portal.side > 0 ? -1 : 1;
+    drg.dropCd = rand(3, 5);
+    floaty(CFG.baseX, "🐉 Ilddragen nærmer sig!", "#ff6a20");
+    // Imps ride on the dragon's back and drop off over the base
+    for (let k = 0; k < 4; k++) {
+      spawnEnemy("imp", portal);
+      const r = state.enemies[state.enemies.length - 1];
+      r.ridingDragon = drg;
+      r.riderSeat = k;
+      r.fy = (drg.fy || -110) - 52;
+    }
+  },
+  magmaGolem(golem, portal) {
+    floaty(CFG.baseX, "🌋 Jorden skælver – Magmakolossen vandrer!", "#ff6a20");
+    Game.screenShake = Math.max(Game.screenShake || 0, 0.4);
+    spawnParticles(portal.x, groundY - 20, 30, "#ff6a20", 160, 180);
+    spawnParticles(portal.x, groundY - 10, 18, "#6b5a45", 200, 120);
+  },
+};
+
+export function spawnBoss(type, portal) {
+  spawnEnemy(type, portal);
+  const boss = state.enemies[state.enemies.length - 1];
+  BOSS_RIGGERS[type]?.(boss, portal);
+  return boss;
+}
+
+export function spawnFireDragon(portal) {
+  return spawnBoss("fireDragon", portal);
 }
 
 export function planNight() {
@@ -71,33 +121,10 @@ export function planNight() {
 
 function nightEnemyType() {
   const d = Game.day, r = Math.random();
-  const late = Math.max(0, d - 6);
   const hardMult = Game.diffMult > 1.5 ? 1.3 : 1;
-  // Legendary bosses on specific days (checked first)
-  if (Game.nightSpawned === 0) {
-    if (d === 10) return "legend1";
-    if (d === 15) return "legend2";
-    if (d >= 20 && d % 5 === 0) return "legend3";
-  }
-  // Tiered bosses on even nights (days 2-8, and continuing after legendary days)
-  if (Game.nightSpawned === 0 && Game.nightQuota >= 10 && d >= 2 && d % 2 === 0) {
-    if (d >= 12) return "boss4";
-    if (d >= 8)  return "boss4";
-    if (d >= 6)  return "boss3";
-    if (d >= 4)  return "boss2";
-    return "boss1";
-  }
-  if (d >= 6 && r < Math.min(0.30, (0.07 + late * 0.012) * hardMult)) return "necro";
-  if (d >= 5 && r < Math.min(0.30, (0.09 + late * 0.010) * hardMult)) return "fireImp";
-  if (d >= 5 && r < Math.min(0.28, (0.10 + late * 0.010) * hardMult)) return "demon";
-  if (d >= 4 && r < Math.min(0.24, (0.13 + late * 0.006) * hardMult)) return "flier";
-  if (d >= 3 && r < Math.min(0.30, (0.18 + late * 0.006) * hardMult)) return "ogre";
-  if (d >= 3 && r < Math.min(0.34, (0.22 + late * 0.006) * hardMult)) return "brute";
-  if (d <= 2 && r < 0.28 * hardMult) return "wraith";
-  if (d <= 2 && r < 0.52 * hardMult) return "crawler";
-  if (d <= 3 && r < 0.22 * hardMult) return "raider";
-  if (r < (0.40 + d * 0.02) * hardMult) return "runner";
-  return "imp";
+  if (Game.nightSpawned === 0 && BOSS_SCHEDULE[d]) return BOSS_SCHEDULE[d];
+  const flyingImpChance = Math.min(0.45, Math.max(0, d - 2) * 0.055 * hardMult);
+  return r < flyingImpChance ? "fireImp" : "imp";
 }
 
 export function updateSpawning(dt) {
@@ -112,10 +139,17 @@ export function updateSpawning(dt) {
       if (Game.diffMult > 1.5) diffSpeedUp *= 0.7;
       Game.spawnTimer = rand(0.6, 1.6) * (1 - pressure) * diffSpeedUp;
       const type = nightEnemyType();
-      spawnEnemy(type, pick(state.portals));
+      const portal = pick(state.portals);
+      let spawned;
+      if (ENEMY_TYPES[type] && ENEMY_TYPES[type].boss) {
+        spawned = spawnBoss(type, portal);
+      } else {
+        spawnEnemy(type, portal);
+        spawned = state.enemies[state.enemies.length - 1];
+      }
       Game.nightSpawned++;
       if (ENEMY_TYPES[type] && ENEMY_TYPES[type].legendary) {
-        const lb = state.enemies[state.enemies.length - 1];
+        const lb = spawned;
         lb.specialCd  = 3;
         lb.specialPhase = 0;
         lb.specialTimer = 0;

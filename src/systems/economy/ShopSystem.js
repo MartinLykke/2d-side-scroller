@@ -1,9 +1,9 @@
-import { state, Game } from '../state.js';
-import { WEAPONS } from '../config/weapons.js';
-import { ARMORS } from '../config/armor.js';
-import { dist } from '../util/math.js';
-import { Audio } from './Audio.js';
-import { floaty } from './SpawnSystem.js';
+import { state, Game } from '../../core/state.js';
+import { WEAPONS } from '../../config/weapons.js';
+import { ARMORS } from '../../config/armor.js';
+import { dist } from '../../util/math.js';
+import { Audio } from '../infrastructure/Audio.js';
+import { floaty } from '../world/SpawnSystem.js';
 
 export const WEAPON_SHOP = [
   { weaponId: 'rusty_sword',   price: 6,  tier: 1 },

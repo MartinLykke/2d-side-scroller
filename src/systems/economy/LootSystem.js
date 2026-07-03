@@ -1,9 +1,9 @@
-import { state } from '../state.js';
-import { groundY } from '../canvas.js';
-import { dist, rand } from '../util/math.js';
-import { keys } from './Input.js';
-import { spawnCoin, spawnParticles, floaty } from './SpawnSystem.js';
-import { Audio } from './Audio.js';
+import { state } from '../../core/state.js';
+import { groundY } from '../../core/canvas.js';
+import { dist, rand } from '../../util/math.js';
+import { keys } from '../input/Input.js';
+import { spawnCoin, spawnParticles, floaty } from '../world/SpawnSystem.js';
+import { Audio } from '../infrastructure/Audio.js';
 
 let pickupWeaponFn = null;
 

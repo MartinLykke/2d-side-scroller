@@ -1,4 +1,4 @@
-import { ctx, groundY } from '../canvas.js';
+import { ctx, groundY } from '../../core/canvas.js';
 
 // The player: a regal warrior-king with armor and crown, drawn in the villager style
 // Uses the same local-space convention as Archer/Builder/Villager

@@ -1,6 +1,6 @@
-import { clamp, lerp } from '../util/math.js';
-import { ctx, groundY } from '../canvas.js';
-import { state } from '../state.js';
+import { clamp, lerp } from '../../util/math.js';
+import { ctx, groundY } from '../../core/canvas.js';
+import { state } from '../../core/state.js';
 
 // ---------------------------------------------------------------------------
 // Procedural forest game: deer and rabbit.
@@ -222,10 +222,171 @@ function drawRabbit(a) {
   ctx.restore();
 }
 
+// ---------------- Bear ----------------
+const BEAR = { body: "#5a4028", dark: "#463020", belly: "#6e5236", muzzle: "#8a6a48", claw: "#2c2018", eye: "#1a120a" };
+
+function drawBear(a) {
+  const t = performance.now() / 1000;
+  const chase = a.state === "chase" && !a.dying;
+  const walk = a.state === "walk" && !a.dying;
+  const dp = a.dying ? ease(Math.min(a.deathT / 1.3, 1)) : 0;
+  // Ny angrebslogik: en hurtig svirpende bevægelse
+  const atk = a.attackAnim > 0 ? Math.sin(ease(a.attackAnim / 0.4) * Math.PI * 1.5) : 0; // Gør slaget mere dynamisk
+  const rear = a.attackAnim > 0 ? Math.sin(ease(a.attackAnim / 0.4) * Math.PI) * 0.3 : 0; // Let løft af kroppen
+
+  ctx.save();
+  ctx.translate(a.x, 0);
+  if (a.dir < 0) ctx.scale(-1, 1);
+  ctx.globalAlpha = fadeAlpha(a);
+
+  const g = a.anim;
+  const lope = chase ? Math.abs(Math.sin(g * 0.9)) * 3 * (1 - dp) : 0;
+  const roll = walk ? Math.sin(g * 0.8) * 0.9 : 0;
+  const sniff = a.dying ? 0 : ease(a.eatDown || 0);
+
+  // Justeret bodyY for kortere ben
+  const baseGround = groundY - 6; // Bjørnen er tættere på jorden
+  const bodyY = lerp(baseGround - 14 - lope + roll - rear * 15, groundY - 5, dp);
+  const bodyRot = -rear * 0.5 + dp * 0.4;
+
+  // --- legs: KORTERE OG TYKKERE ---
+  if (dp < 1) {
+    const fold = dp * 6;
+    ctx.strokeStyle = BEAR.dark; ctx.lineWidth = 7; ctx.lineCap = "round"; // Tykkere ben
+    // Definér benpositioner (x, fase)
+    const legPositions = [[9, 0], [11, Math.PI], [-7, Math.PI], [-9, 0]];
+
+    for (let i = 0; i < legPositions.length; i++) {
+      const [ax, phase] = legPositions[i];
+      let footX = ax, lift = 0, fPhase = phase;
+
+      if (chase) {
+        const sw = Math.sin(g * 2.2 + fPhase);
+        footX = ax + sw * 5;
+        lift = Math.max(0, -Math.cos(g * 2.2 + fPhase)) * 3;
+      } else if (walk) {
+        footX = ax + Math.sin(g * 1.8 + fPhase) * 2.5;
+      }
+
+      const front = ax > 0;
+      // Frontbenene løftes slet ikke ved almindelig gang/løb, kun ved angreb
+      const z = front ? groundY - lift - fold : groundY - lift - fold;
+
+      ctx.beginPath();
+      // Hofte/skulder til fod
+      ctx.moveTo(ax * 0.7, bodyY + 2);
+      ctx.lineTo(footX, z);
+      ctx.stroke();
+    }
+    ctx.lineCap = "butt";
+  }
+
+  // --- body: med skulderhump ---
+  ctx.save();
+  ctx.translate(0, bodyY); ctx.rotate(-bodyRot);
+  ctx.fillStyle = BEAR.body;
+  ctx.beginPath(); ctx.ellipse(0, 0, 17, 9.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(5, -6.5, 7.5, 5, -0.15, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = BEAR.belly;
+  ctx.beginPath(); ctx.ellipse(0, 4, 11, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = BEAR.dark;
+  ctx.beginPath(); ctx.arc(-16.5, -2, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // --- head ---
+  const upHead = { x: 19, y: bodyY - 8 };
+  const downHead = { x: 21, y: baseGround - 6 };
+  const head = a.dying
+    ? { x: lerp(upHead.x, 14, dp), y: lerp(upHead.y, baseGround - 6, dp) }
+    : { x: lerp(upHead.x, downHead.x, sniff * (1 - atk)), y: lerp(upHead.y, downHead.y, sniff * (1 - atk)) };
+
+  // thick neck
+  ctx.strokeStyle = BEAR.body; ctx.lineWidth = 8; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(11, bodyY - 3); ctx.lineTo(head.x - 3, head.y + 1); ctx.stroke();
+  ctx.lineCap = "butt";
+
+  // skull + muzzle
+  ctx.fillStyle = BEAR.body;
+  ctx.beginPath(); ctx.arc(head.x, head.y, 5.2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = BEAR.muzzle;
+  ctx.beginPath(); ctx.ellipse(head.x + 5, head.y + 1.5, 3.4, 2.3, 0.1, 0, Math.PI * 2); ctx.fill();
+  // nose
+  ctx.fillStyle = BEAR.eye;
+  ctx.beginPath(); ctx.arc(head.x + 7.8, head.y + 1, 1.1, 0, Math.PI * 2); ctx.fill();
+  // eye
+  ctx.fillStyle = chase ? "#7a1a10" : BEAR.eye;
+  ctx.beginPath(); ctx.arc(head.x + 1.5, head.y - 1.5, 1, 0, Math.PI * 2); ctx.fill();
+  // round ears
+  ctx.fillStyle = BEAR.body;
+  ctx.beginPath(); ctx.arc(head.x - 2.5, head.y - 4.5, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(head.x + 1.5, head.y - 5.2, 2, 0, Math.PI * 2); ctx.fill();
+
+  // --- NYT: Angrebsarm med klo (tegnes separat for at svinge) ---
+  if (a.attackAnim > 0) {
+    ctx.save();
+    // Flyt transformationspunktet til skulderen
+    ctx.translate(7, bodyY - 2);
+    // Roter armen baseret på 'atk' (0 -> 1.5 PI)
+    ctx.rotate(atk * 1.8 - 0.5);
+
+    // Overarm
+    ctx.strokeStyle = BEAR.body; ctx.lineWidth = 7; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(12, 0); ctx.stroke();
+
+    // Underarm og pote
+    ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(22, 5); ctx.stroke();
+
+    // Kløer (stikker ud fra poten)
+    if (atk > 0.5) {
+        ctx.strokeStyle = BEAR.claw; ctx.lineWidth = 2;
+        const clawLen = 6 + Math.sin(atk*Math.PI)*3;
+        for (let c = 0; c < 3; c++) {
+            ctx.beginPath();
+            ctx.moveTo(22 + c*1, 5 + c*0.5);
+            ctx.lineTo(22 + clawLen + c*0.5, 8 + c*1);
+            ctx.stroke();
+        }
+    }
+    ctx.restore();
+  } else {
+      // Standard frontben (hvis ikke angriber)
+      ctx.strokeStyle = BEAR.dark; ctx.lineWidth = 7; ctx.lineCap = "round";
+      const baseFrontLegX = 8;
+      const fPhase = 0; // fast fase når den ikke løber
+      const fX = chase ? baseFrontLegX + Math.sin(g * 2.2 + fPhase)*5 : baseFrontLegX;
+      const fZ = chase ? groundY - Math.max(0, -Math.cos(g * 2.2 + fPhase))*3 : groundY;
+
+      ctx.beginPath();
+      ctx.moveTo(baseFrontLegX*0.7, bodyY + 2);
+      ctx.lineTo(fX, fZ);
+      ctx.stroke();
+  }
+
+  // hit flash
+  if (a.flash > 0) {
+    ctx.globalAlpha = Math.min(1, a.flash * 5) * 0.55 * fadeAlpha(a);
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath(); ctx.ellipse(2, bodyY - 2, 20, 13, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = fadeAlpha(a);
+  }
+
+  ctx.restore();
+
+  // hp bar
+  if (!a.dying && a.hp !== undefined && a.hp < a.maxHp) {
+    const w = 30, frac = Math.max(0, a.hp / a.maxHp);
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fillRect(a.x - w / 2, baseGround - 42, w, 3.5);
+    ctx.fillStyle = frac > 0.4 ? "#9bd05a" : "#c1453b";
+    ctx.fillRect(a.x - w / 2, baseGround - 42, w * frac, 3.5);
+  }
+}
+
 export function drawAnimals() {
   for (const a of state.animals) {
     if (!a.alive) continue;
     if (a.type === "deer") drawDeer(a);
+    else if (a.type === "bear") drawBear(a);
     else drawRabbit(a);
   }
 }

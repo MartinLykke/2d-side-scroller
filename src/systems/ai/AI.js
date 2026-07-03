@@ -1,15 +1,15 @@
-import { CFG, STATIONS_X } from '../config/config.js';
-import { ENEMY_TYPES } from '../config/enemies.js';
-import { clamp, dist, rand, pick } from '../util/math.js';
-import { groundY } from '../canvas.js';
-import { Game, state } from '../state.js';
-import { Audio } from './Audio.js';
-import { spawnParticles, spawnCoin, floaty } from './SpawnSystem.js';
-import { shootArrow, killEnemy } from './Combat.js';
-import { killEnemyWithAnimation, spawnImpBlood } from '../util/EnemyUtils.js';
-import { wallHeight } from '../entities/Wall.js';
-import { makeUnit } from '../entities/Unit.js';
-import { nearestChoppableTree, chopTree, nearestLog, deliverLog } from './ForestSystem.js';
+import { CFG, STATIONS_X } from '../../config/config.js';
+import { ENEMY_TYPES } from '../../config/enemies.js';
+import { clamp, dist, rand, pick } from '../../util/math.js';
+import { groundY } from '../../core/canvas.js';
+import { Game, state } from '../../core/state.js';
+import { Audio } from '../infrastructure/Audio.js';
+import { spawnParticles, spawnCoin, floaty } from '../world/SpawnSystem.js';
+import { shootArrow, killEnemy } from '../combat/Combat.js';
+import { killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js';
+import { wallHeight } from '../../entities/Wall.js';
+import { makeUnit } from '../../entities/Unit.js';
+import { nearestChoppableTree, chopTree, nearestLog, deliverLog } from '../world/ForestSystem.js';
 
 function hasSkill(id) { return state.archerSkills.includes(id); }
 
@@ -112,23 +112,34 @@ function bestArcherWall(side) {
   return best;
 }
 
-function assignArcherPost(u, preferredSide) {
+const ARCHER_CLIMB_SPEED = 1 / 3; // ~3 seconds to climb up or down a wall
+
+function assignArcherPost(u, preferredSide, dt) {
   let wall = bestArcherWall(preferredSide);
   if (!wall) wall = bestArcherWall(-preferredSide);
+
+  if (wall !== u.wall) u.wallClimbT = 0;
   u.wall = wall;
 
   if (!wall) {
     u.onWall = false;
+    u.wallClimbT = 0;
     return CFG.baseX + preferredSide * 110;
   }
 
-  const { slot, onWall } = reserveWallSlot(wall);
-  u.onWall = onWall;
-  if (onWall) return wall.x + wallStandOffset(wall, slot);
+  const { slot, onWall: wantOnWall } = reserveWallSlot(wall);
+  const postX = wantOnWall
+    ? wall.x + wallStandOffset(wall, slot)
+    : wall.x + Math.sign(CFG.baseX - wall.x) * (slot - archerWallCapacity(wall) + 1) * 26;
 
-  const innerDir = Math.sign(CFG.baseX - wall.x);
-  const behind = slot - archerWallCapacity(wall);
-  return wall.x + innerDir * (behind + 1) * 26;
+  // Archers must first walk to the foot of the wall before they can start climbing it
+  const nearWall = dist(u.x, wall.x) < 60;
+  const climbTarget = (wantOnWall && nearWall) ? 1 : 0;
+  u.wallClimbT = clamp((u.wallClimbT || 0) + Math.sign(climbTarget - (u.wallClimbT || 0)) * ARCHER_CLIMB_SPEED * dt, 0, 1);
+  if (Math.abs((u.wallClimbT || 0) - climbTarget) < 0.02) u.wallClimbT = climbTarget;
+  u.onWall = u.wallClimbT >= 0.98;
+
+  return postX;
 }
 
 function sunsetApproaching() {
@@ -172,7 +183,7 @@ function archerAI(u, dt) {
     if (wallDefending) {
       // Hvis vi har en mur som beskyttelse, så bliv på vores post/mur!
       const side = u.fixedSide || (u.x < CFG.baseX ? -1 : 1);
-      const post = assignArcherPost(u, side);
+      const post = assignArcherPost(u, side, dt);
       moveToward(u, post, 84, dt);
     } else {
       // PANIK: Ingen mur beskytter os! Hold afstand (Kiting)
@@ -232,15 +243,15 @@ function archerAI(u, dt) {
   if (Game.isNight || sunsetApproaching()) {
     // Tildel en fast side (højre/venstre) som ikke ændrer sig før næste dag
     const side = assignFixedSide(u);
-    const post = assignArcherPost(u, side);
-    
+    const post = assignArcherPost(u, side, dt);
+
     // Find kun fjender på skyttens EGEN tildelte side for at undgå at kigge mod den anden mur
     const sideFoe = state.enemies.find(e => !e.fleeing && Math.sign(e.x - CFG.baseX) === side && dist(u.x, e.x) < 520);
 
     // Bevægelse til posten
     if (!sideFoe || dist(u.x, sideFoe.x) > 150) {
       if (u.onWall && u.wall && hasSkill("grappling_hook") && dist(u.x, post) > 60) {
-        u.x = post; // instant grapple
+        u.x = post; u.wallClimbT = 1; u.onWall = true; // instant grapple
       } else {
         moveToward(u, post, Game.isNight ? 84 : 65, dt); // Lidt hurtigere om natten
       }
@@ -290,23 +301,7 @@ function archerAI(u, dt) {
       }
     }
 
-    if (bestArcherWall(u.patrolDir) || bestArcherWall(-u.patrolDir)) {
-      const side = closeFoe ? (closeFoe.x < CFG.baseX ? -1 : 1) : u.patrolDir;
-      const post = assignArcherPost(u, side);
-      if (u.onWall && u.wall && hasSkill("grappling_hook") && dist(u.x, post) > 60) {
-        u.x = post;
-      } else {
-        moveToward(u, post, 58, dt);
-      }
-      if (closeFoe && u.cooldown <= 0 && dist(u.x, closeFoe.x) < 540) {
-        const shootH = u.onWall && u.wall && Math.abs(u.x - u.wall.x) < 40 ? wallHeight(u.wall) + 16 : 40;
-        archerShoot(u, u.x, groundY - shootH, closeFoe);
-        u.cooldown = hasSkill("heavy_ballista") ? 2.2 : 1.1;
-        u.dir = Math.sign(closeFoe.x - u.x) || u.dir;
-        u.smokeReveal = 0.5;
-      }
-      if (!closeFoe && Math.random() < 0.004) u.patrolDir *= -1;
-    } else if (closeFoe) {
+    if (closeFoe) {
       u.onWall = false; u.wall = null;
       const d = dist(u.x, closeFoe.x);
       if (d > 240) moveToward(u, closeFoe.x, 64, dt);
@@ -335,6 +330,24 @@ const BUILDER_TASK_SPEED = 200;
 
 function builderAI(u, dt) {
   u.working = false;
+  // Imps hunt builders, so any imp nearby sends the builder sprinting home.
+  for (const e of state.enemies) {
+    if (e.type !== "imp" || e.hp <= 0 || e.dying || e.fleeing) continue;
+    if (dist(u.x, e.x) < 260) { u.panic = Math.max(u.panic || 0, 0.6); break; }
+  }
+  if (u.panic > 0) {
+    if (u.pendingLog) { u.pendingLog.claimedBy = null; u.pendingLog = null; }
+    if (u.carryLog) {
+      u.carryLog.x = u.x;
+      u.carryLog.lying = true;
+      u.carryLog.claimedBy = null;
+      u.carryLog.carriedBy = null;
+      u.carryLog = null;
+    } // drop the log and run
+    u.dir = Math.sign(CFG.baseX - u.x) || u.dir;
+    moveToward(u, CFG.baseX, 150, dt);
+    return;
+  }
   // A log already picked up gets carried home no matter what else is going on.
   if (u.carryLog) {
     if (moveToward(u, CFG.baseX, BUILDER_TASK_SPEED, dt)) {
@@ -379,11 +392,13 @@ function builderAI(u, dt) {
   }
 
   // No wall work pending: finish fetching a claimed log, or claim a new one.
-  if (u.pendingLog && (u.pendingLog.chopped || u.pendingLog.claimedBy !== u)) u.pendingLog = null;
+  if (u.pendingLog && (u.pendingLog.chopped || u.pendingLog.carriedBy || u.pendingLog.claimedBy !== u)) u.pendingLog = null;
   if (u.pendingLog) {
     const log = u.pendingLog;
     if (moveToward(u, log.x, BUILDER_TASK_SPEED, dt)) {
       log.claimedBy = null;
+      log.carriedBy = u;
+      log.lying = false;
       u.carryLog = log; u.pendingLog = null;
     }
     return;
@@ -414,6 +429,7 @@ function builderAI(u, dt) {
 }
 
 function farmerAI(u, dt) {
+  if (u.panic > 0) { moveToward(u, CFG.baseX, 150, dt); return; }
   if (sunsetApproaching() && dist(u.x, CFG.baseX) > 180) {
     moveToward(u, CFG.baseX, 120, dt); return;
   }
@@ -1200,26 +1216,14 @@ export function updateVagrants(dt) {
     const target = v.targetX;
     const spd = v.speed || 38;
     if (dist(v.x, target) > 6) { v.vx = Math.sign(target - v.x) * spd; v.x += v.vx * dt; v.anim += dt * (spd > 80 ? 12 : 4); }
-    else v.vx = 0;
-  }
-
-  // Recruit: hold pay key next to a standing vagrant
-  const { player } = state;
-  const keys = window._KEYS;
-  if (player.coins > 0 && keys && (keys["arrowdown"] || keys["s"])) {
-    for (let i = 0; i < vagrants.length; i++) {
-      const v = vagrants[i];
-      if (v.bowTarget || v.hammerTarget) continue;
-      if (dist(player.x, v.x) < 46 && Math.abs(v.vx) < 1) {
-        if (state.payCooldown <= 0) {
-          player.coins--; state.payCooldown = CFG.payInterval;
-          Audio.recruit();
-          units.push(makeUnit("peasant", v.x));
-          vagrants.splice(i, 1);
-          floaty(v.x, "🙋 Undersåt!");
-          spawnParticles(v.x, groundY - 30, 8, "#cdbfa3");
-        }
-        break;
+    else {
+      v.vx = 0;
+      if (dist(v.x, CFG.baseX) < 400) {
+        units.push(makeUnit("peasant", v.x));
+        vagrants.splice(i, 1);
+        floaty(v.x, "🙋 Undersåt!");
+        spawnParticles(v.x, groundY - 30, 8, "#cdbfa3");
+        Audio.recruit();
       }
     }
   }
@@ -1235,6 +1239,68 @@ export function nearestAnimal(x, range) {
   return best;
 }
 
+// Bear: territorial predator. Chases and mauls any friendly character
+// (player, units, vagrants) in sight. Ignores enemies entirely — and they
+// ignore it, since it lives in the animals array, not the enemies array.
+function updateBear(a, dt) {
+  const { player, units, vagrants } = state;
+  a.attackCd -= dt;
+  if (a.attackAnim > 0) a.attackAnim -= dt;
+  if (a.flash > 0) a.flash -= dt;
+
+  // Sight: wider once already aggroed so victims can't juke it easily
+  const sight = a.state === "chase" ? 430 : 320;
+  let target = null, td = sight;
+  if (player && player.hp > 0) { const d = dist(player.x, a.x); if (d < td) { td = d; target = player; } }
+  for (const u of units) { const d = dist(u.x, a.x); if (d < td) { td = d; target = u; } }
+  for (const v of vagrants) { const d = dist(v.x, a.x); if (d < td) { td = d; target = v; } }
+
+  if (target) {
+    a.state = "chase";
+    a.dir = Math.sign(target.x - a.x) || a.dir;
+    a.anim += dt * 9;
+    if (td > 30) a.x += a.dir * 96 * dt;
+    if (td < 36 && a.attackCd <= 0) {
+      a.attackCd = 1.4;
+      a.attackAnim = 0.4;
+      Audio.hit();
+      if (target === player) {
+        if (player.invuln <= 0 && !window._DEV_GOD_MODE) {
+          player.hp -= 1; player.invuln = CFG.playerInvuln; player.hurt = 0.35; player.hpShowTimer = 3;
+          player.knock = Math.sign(player.x - a.x) * 160;
+          spawnParticles(player.x, groundY - 50, 6, "#c1453b");
+        }
+      } else if (target.hp !== undefined) {
+        target.hp -= 2; target.panic = 1;
+        spawnParticles(target.x, groundY - 40, 6, "#c1453b");
+      } else {
+        // Vagrants have no hp — one swipe scares them off for good
+        const idx = vagrants.indexOf(target);
+        if (idx !== -1) { vagrants.splice(idx, 1); spawnParticles(target.x, groundY - 40, 8, "#c1453b"); floaty(target.x, "😱", "#cdbfa3"); }
+      }
+    }
+  } else if (a.state === "chase") {
+    a.state = "graze"; a.stateT = rand(2, 4);
+  } else if (a.state === "walk") {
+    a.stateT -= dt;
+    a.anim += dt * 5;
+    a.x += a.dir * 26 * dt;
+    if (a.stateT <= 0) { a.state = "graze"; a.stateT = rand(3, 6); }
+  } else { // graze / sniff around
+    a.stateT -= dt;
+    a.anim += dt * 3;
+    if (a.stateT <= 0) { a.state = "walk"; a.stateT = rand(1.5, 3.5); a.dir = pick([-1, 1]); }
+  }
+
+  // Eating/sniffing head-bob reuses the shared grazing cycle
+  a.headT -= dt;
+  if (a.headT <= 0) { a.headUp = !a.headUp; a.headT = a.headUp ? rand(1, 2.2) : rand(2, 4.5); }
+  const grazing = a.state === "graze" && !a.headUp;
+  a.eatDown = clamp(a.eatDown + (grazing ? dt * 2 : -dt * 3), 0, 1);
+
+  a.x = clamp(a.x, 800, CFG.worldWidth - 800);
+}
+
 export function updateAnimals(dt) {
   const { animals } = state;
   for (let i = animals.length - 1; i >= 0; i--) {
@@ -1247,6 +1313,8 @@ export function updateAnimals(dt) {
       if (a.deathT > 5) a.alive = false;
       continue;
     }
+
+    if (a.type === "bear") { updateBear(a, dt); continue; }
 
     const fleeing = a.state === "flee";
     a.anim += dt * (fleeing ? 10 : 6);

@@ -1,4 +1,4 @@
-import { ctx, groundY } from '../canvas.js';
+import { ctx, groundY } from '../../core/canvas.js';
 
 // ---------------------------------------------------------------------------
 // Procedural builder: stocky craftsman with leather apron, flat cap and a

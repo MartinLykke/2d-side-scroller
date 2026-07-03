@@ -1,17 +1,21 @@
-import { WEAPONS, effectiveWeapon } from '../config/weapons.js';
-import { dist, rand } from '../util/math.js';
-import { groundY } from '../canvas.js';
-import { Game, state } from '../state.js';
-import { Audio } from './Audio.js';
-import { spawnParticles, floaty } from './SpawnSystem.js';
-import { killEnemy, spawnImpBlood } from '../util/EnemyUtils.js';
-import { ENEMY_TYPES } from '../config/enemies.js';
+import { WEAPONS, effectiveWeapon } from '../../config/weapons.js';
+import { CFG } from '../../config/config.js';
+import { dist, rand, applyCrit } from '../../util/math.js';
+import { groundY } from '../../core/canvas.js';
+import { Game, state } from '../../core/state.js';
+import { Audio } from '../infrastructure/Audio.js';
+import { spawnParticles, floaty } from '../world/SpawnSystem.js';
+import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js';
+import { ENEMY_TYPES } from '../../config/enemies.js';
+import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 
 function dealAoE(x, dmg, radius, col) {
   for (const e of state.enemies) {
     if (!e.fleeing && dist(e.x, x) < radius) {
-      e.hp -= dmg; e.flash = 0.14;
-      spawnImpBlood(e, 0.9 + dmg * 0.08);
+      const crit = applyCrit(dmg, CFG.critChance, CFG.critMultiplier);
+      e.hp -= crit.damage; e.flash = 0.14;
+      spawnImpBlood(e, 0.9 + crit.damage * 0.08);
+      floaty(e.x, (crit.isCrit ? "⭐ " : "") + "-" + crit.damage, crit.isCrit ? "#ffff00" : col, crit.isCrit ? 24 : 15);
       if (e.hp <= 0) killEnemy(e);
     }
   }
@@ -55,11 +59,14 @@ function chainLightning(x, dmg, bounces) {
     curY = nxtY;
   }
 
-  nearest.hp -= Math.max(1, Math.floor(dmg * 0.6));
+  const baseDmg = Math.max(1, Math.floor(dmg * 0.6));
+  const crit = applyCrit(baseDmg, CFG.critChance, CFG.critMultiplier);
+  nearest.hp -= crit.damage;
   nearest.flash = 0.14;
   Audio.hit();
   spawnParticles(nearest.x, enemyDrawY, 10, "#ccccff", 60, 80);
-  spawnImpBlood(nearest, 1 + dmg * 0.05, enemyDrawY);
+  spawnImpBlood(nearest, 1 + crit.damage * 0.05, enemyDrawY);
+  floaty(nearest.x, (crit.isCrit ? "⭐ " : "") + "-" + crit.damage, crit.isCrit ? "#ffff00" : "#ccccff", crit.isCrit ? 24 : 15);
 
   if (nearest.hp <= 0) {
     killEnemy(nearest);
@@ -70,10 +77,12 @@ function chainLightning(x, dmg, bounces) {
 
 export function castSpell(player, wBase, tgt) {
   const ew = effectiveWeapon(player.weapon, player.weaponUpgrades || []);
+  const dmgMult = permanentDamageMultiplier();
   const aoeR = (wBase.aoeRadius || 0) + (ew.range - wBase.range) * 0.2;
 
   if (wBase.spellType === "lightning") {
-    tgt.hp -= ew.dmg;
+    const crit = applyCrit(ew.dmg * dmgMult, CFG.critChance, CFG.critMultiplier);
+    tgt.hp -= crit.damage;
     tgt.flash = 0.14;
     Audio.hit();
 
@@ -107,7 +116,7 @@ export function castSpell(player, wBase, tgt) {
       currentY = nextY;
     }
 
-    chainLightning(tgt.x, ew.dmg, 1);
+    chainLightning(tgt.x, ew.dmg * dmgMult, 1);
 
     if (tgt.hp <= 0) killEnemy(tgt);
 
@@ -140,7 +149,7 @@ export function castSpell(player, wBase, tgt) {
     vx: Math.cos(ang) * spd,
     vy: Math.sin(ang) * spd,
     spellType: wBase.spellType || "arcane",
-    dmg: ew.dmg,
+    dmg: ew.dmg * dmgMult,
     life: life,
     col: wBase.col,
     aoeRadius: aoeR,

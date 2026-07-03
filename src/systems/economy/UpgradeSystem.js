@@ -1,7 +1,7 @@
-import { state, Game } from '../state.js';
-import { WEAPONS, WEAPON_UPGRADES } from '../config/weapons.js';
-import { floaty } from './SpawnSystem.js';
-import { Audio } from './Audio.js';
+import { state, Game } from '../../core/state.js';
+import { WEAPONS, WEAPON_UPGRADES, SHORT_BOW_BRANCH } from '../../config/weapons.js';
+import { floaty } from '../world/SpawnSystem.js';
+import { Audio } from '../infrastructure/Audio.js';
 
 export function xpToNext(level) {
   return 60 + level * 45;
@@ -27,12 +27,23 @@ export function checkUpgrade() {
   player.pendingUpgrade = false;
   if (!player.weapon) return;
   const wDef = WEAPONS[player.weapon];
+  const applied = (player.weaponUpgrades || []).map(u => u.id);
+
+  if (player.weapon === "short_bow") {
+    const next = SHORT_BOW_BRANCH.find(u => !applied.includes(u.id) && (!u.requires || applied.includes(u.requires)));
+    if (next) {
+      Game.upgradeOptions = [next];
+      Game.upgradeMenuOpen = true;
+      Game.upgradeIdx = 0;
+      return;
+    }
+  }
+
   const pool = [
     ...(WEAPON_UPGRADES.generic || []),
     ...(WEAPON_UPGRADES[wDef.type] || []),
     ...(WEAPON_UPGRADES[player.weapon] || []),
   ];
-  const applied = (player.weaponUpgrades || []).map(u => u.id);
   const available = pool.filter(u => !applied.includes(u.id));
   if (available.length === 0) { floaty(player.x, "Våben fuldt opgraderet!", "#f2c14e"); return; }
   const shuffled = available.slice().sort(() => Math.random() - 0.5);

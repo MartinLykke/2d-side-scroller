@@ -64,6 +64,13 @@ export const WEAPON_UPGRADES = {
   ],
 };
 
+// Dedicated "Aura & Kontrol" branch for the Kortbue — offered one at a time, in order.
+export const SHORT_BOW_BRANCH = [
+  { id:"frostbue",      name:"Frostbue",         desc:"Hver pil sænker fjendens bevægelseshastighed markant.", effect:{ frostArrow:true } },
+  { id:"faengslende_pile", name:"Fængslende Pile", desc:"Ramte fjender bliver låst fast til jorden i 3 sekunder.", effect:{ rootArrow:true }, requires:"frostbue" },
+  { id:"is_eksplosion", name:"Is-eksplosion",     desc:"Ultimate: Skaber en massiv is-eksplosion, der fryser alle fjender i nærheden i 5 sekunder.", effect:{ iceUltimate:true }, requires:"faengslende_pile", ultimate:true },
+];
+
 export function effectiveWeapon(weaponId, upgrades) {
   const base = WEAPONS[weaponId];
   if (!upgrades || upgrades.length === 0) return base;

@@ -1,4 +1,4 @@
-import { ctx, groundY } from '../canvas.js';
+import { ctx, groundY } from '../../core/canvas.js';
 
 // ---------------------------------------------------------------------------
 // Procedural hooded archer: idle / walk / run / shoot, mirrored for east/west.
@@ -48,7 +48,7 @@ export function updateArcherShoot(u, dt) {
   if (u.shootTimer >= SHOOT_TOTAL) { u.shootState = null; u.shootTimer = 0; }
 }
 
-function shootPose(u) {
+export function shootPose(u) {
   if (!u.shootState) return null;
   let el = 0;
   for (const [phase, dur] of SHOOT_PHASES) {
@@ -58,9 +58,9 @@ function shootPose(u) {
   return { phase: "recoil", p: 1 };
 }
 
-const ease = p => p * p * (3 - 2 * p); // smoothstep
+export const ease = p => p * p * (3 - 2 * p); // smoothstep
 
-function limb(x1, y1, x2, y2, col, w) {
+export function limb(x1, y1, x2, y2, col, w) {
   ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = "round";
   ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
   ctx.lineCap = "butt";
@@ -68,7 +68,7 @@ function limb(x1, y1, x2, y2, col, w) {
 
 // Recurve bow centered on the grip hand. `aim`: 0 = held low at side,
 // 1 = raised level. `pull`: 0..1 string draw amount toward `pullPt`.
-function drawBow(hx, hy, aim, pull, pullPt) {
+export function drawBow(hx, hy, aim, pull, pullPt) {
   const rot = (1 - aim) * 0.9; // lowered bow tilts forward/down
   ctx.save();
   ctx.translate(hx, hy);

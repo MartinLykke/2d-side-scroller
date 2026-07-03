@@ -1,14 +1,14 @@
-import { CFG } from '../config/config.js';
-import { ENEMY_TYPES } from '../config/enemies.js';
-import { dist, rand } from '../util/math.js';
-import { groundY } from '../canvas.js';
-import { state } from '../state.js';
-import { Audio } from './Audio.js';
-import { spawnParticles, floaty } from './SpawnSystem.js';
-import { meleeHitPlayer } from './PlayerCombat.js';
-import { killEnemy, spawnImpBlood } from '../util/EnemyUtils.js';
-import { updateLegendaryBoss } from './BossAI.js';
-import { wallHeight } from '../entities/Wall.js';
+import { CFG } from '../../config/config.js';
+import { ENEMY_TYPES } from '../../config/enemies.js';
+import { dist, rand, applyCrit } from '../../util/math.js';
+import { groundY } from '../../core/canvas.js';
+import { Game, state } from '../../core/state.js';
+import { Audio } from '../infrastructure/Audio.js';
+import { spawnParticles, floaty } from '../world/SpawnSystem.js';
+import { meleeHitPlayer } from '../combat/PlayerCombat.js';
+import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js';
+import { wallHeight } from '../../entities/Wall.js';
+import { updateBoss, dropRiderFromDragon } from './BossAI.js';
 
 const IMP_STACK_STEP = 18;
 const IMP_ATTACH_RANGE = 34;
@@ -20,6 +20,14 @@ let impStackSequence = 1;
 
 function mix(a, b, t) {
   return a + (b - a) * Math.max(0, Math.min(1, t));
+}
+
+const APPROACH_SLOW_RANGE = 260;
+const APPROACH_FAR_MULT = 2.0;
+const APPROACH_NEAR_MULT = 0.55;
+function approachSpeedMult(distToBase) {
+  if (distToBase >= APPROACH_SLOW_RANGE) return APPROACH_FAR_MULT;
+  return mix(APPROACH_NEAR_MULT, APPROACH_FAR_MULT, distToBase / APPROACH_SLOW_RANGE);
 }
 
 function wallAt(side, x) {
@@ -137,12 +145,15 @@ function nearestGuardForImp(e, range = 220) {
     if (topGuard) return topGuard;
   }
   let best = null, bd = range;
+  let bestOther = null, bod = range;
   for (const u of state.units) {
-    if (u.role !== "guard" || u.hp <= 0 || u.dying) continue;
+    if (u.hp <= 0 || u.dying) continue;
     const d = dist(e.x, u.x);
-    if (d < bd) { bd = d; best = u; }
+    if (u.role === "guard") { if (d < bd) { bd = d; best = u; } }
+    else if (!u.onWall) { if (d < bod) { bod = d; bestOther = u; } }
   }
-  return best;
+  // Guards are the preferred duel target; stray workers get hunted when no guard is close.
+  return best || bestOther;
 }
 
 function topGuardsForWall(w) {
@@ -193,8 +204,19 @@ function startImpVault(e, w) {
 
 function killWall(w) {
   w.hp = 0; w.level = 0; w.commissioned = false; w.buildProgress = 0;
-  floaty(w.x, "Mur faldet!", "#ff6a4a");
+  floaty(w.x, "💥 Mur faldet!", "#ff6a4a");
   spawnParticles(w.x, groundY - 30, 16, "#caa46a", 80, 80);
+}
+
+// Shared wall-chipping attack: crit roll, hit feedback and collapse check.
+function damageWall(wall, baseDmg, particleCount = 3) {
+  const crit = applyCrit(baseDmg, CFG.critChance, CFG.critMultiplier);
+  wall.hp -= crit.damage;
+  wall.flash = 0.15;
+  spawnParticles(wall.x, groundY - 30, particleCount, "#caa46a", 30, 30);
+  if (crit.isCrit) floaty(wall.x, "⭐ CRIT", "#ffff00", 24);
+  Audio.hit();
+  if (wall.hp <= 0) killWall(wall);
 }
 
 function shootEnemyFireball(e, t, target) {
@@ -242,12 +264,14 @@ function impAttackGuard(e, t, guard) {
   if (e.attackCd > 0 || e.aiState === "recovery") return;
   e.attackCd = 0.75;
   e.attackAnim = 0.25;
-  guard.hp -= t.meleeDmg || 1;
+  const crit = applyCrit(t.meleeDmg || 1, CFG.critChance, CFG.critMultiplier);
+  guard.hp -= crit.damage;
   guard.panic = 0.25;
   guard.aiState = "combat";
   guard.combatTarget = e;
   guard.strike = Math.max(guard.strike || 0, 0.12);
   spawnParticles(guard.x, groundY - 30, 3, "#7a1f1f");
+  floaty(guard.x, (crit.isCrit ? "⭐ " : "") + "-" + crit.damage, crit.isCrit ? "#ffff00" : "#7a1f1f", crit.isCrit ? 24 : 15);
   Audio.hit();
 }
 
@@ -258,6 +282,8 @@ function beginImpAttack(e, targetKind, target, kind) {
   e.impAttackTarget = targetKind === "player" ? null : target;
   e.impAttackT = 0;
   e.impAttackHit = false;
+  e.impPounceLaunched = false;
+  e.impPounceLanded = false;
   e.impAttackStartX = e.x;
   e.impAttackStartY = e.fy || 0;
   e.impAttackLandX = kind === "pounce" && target ? e.x + Math.max(-96, Math.min(96, target.x - e.x)) : e.x;
@@ -279,11 +305,13 @@ function hitImpAttackTarget(e, t, target, kind) {
   if (e.impAttackTargetKind === "player") {
     meleeHitPlayer(e, { ...t, meleeDmg: kind === "pounce" ? Math.max(1, (t.meleeDmg || 1) + 1) : (t.meleeDmg || 1) }, kind === "pounce" ? 260 : 190);
   } else if (target.hp > 0 && !target.dying) {
-    const dmg = kind === "tail" ? 1 : kind === "pounce" ? 2 : (t.meleeDmg || 1);
-    target.hp -= dmg;
+    const baseDmg = kind === "tail" ? 1 : kind === "pounce" ? 2 : (t.meleeDmg || 1);
+    const crit = applyCrit(baseDmg, CFG.critChance, CFG.critMultiplier);
+    target.hp -= crit.damage;
     target.panic = 0.35;
     target.knock = (target.knock || 0) + Math.sign(target.x - e.x) * (kind === "pounce" ? 120 : 55);
     spawnParticles(target.x, groundY - 30, kind === "pounce" ? 5 : 3, "#7a1f1f");
+    floaty(target.x, (crit.isCrit ? "⭐ " : "") + "-" + crit.damage, crit.isCrit ? "#ffff00" : "#7a1f1f", crit.isCrit ? 24 : 15);
     Audio.hit();
   }
 }
@@ -291,13 +319,17 @@ function hitImpAttackTarget(e, t, target, kind) {
 function chooseImpAttack(d) {
   if (d > 38 && d < 118 && Math.random() < 0.45) return "pounce";
   if (d > 20 && d < 52 && Math.random() < 0.34) return "tail";
-  return "claw";
+  if (d < 34) return "claw";
+  return "pounce"; // too far for a claw to connect — leap the gap instead
 }
 
 function updateImpAttack(e, t, dt) {
   const target = impAttackTarget(e);
   if (!target || target.hp <= 0 || target.dying) {
     e.fy = e.impAttackStartY || 0;
+    e.impPounceP = null;
+    e.impPounceLaunched = false;
+    e.impPounceLanded = false;
     setImpState(e, e.breachedWall ? "vaulting" : "advance");
     return true;
   }
@@ -310,25 +342,40 @@ function updateImpAttack(e, t, dt) {
 
   if (kind === "pounce") {
     const windup = 0.22;
+    e.impPounceP = p;
     if (p < windup) {
       e.fy = e.impAttackStartY || 0;
     } else {
-      const lp = (p - windup) / (1 - windup);
-      e.x = mix(e.impAttackStartX || e.x, e.impAttackLandX || e.x, Math.min(1, lp));
-      e.fy = (e.impAttackStartY || 0) - Math.sin(Math.min(1, lp) * Math.PI) * 38;
-      if (lp > 0.58 && dist(e.x, target.x) < 36) hitImpAttackTarget(e, t, target, kind);
+      const lp = Math.min(1, (p - windup) / (1 - windup));
+      // airborne through 85% of the leap, the rest is a landing crouch on the ground
+      const air = Math.min(1, lp / 0.85);
+      e.x = mix(e.impAttackStartX || e.x, e.impAttackLandX || e.x, air);
+      e.fy = (e.impAttackStartY || 0) - Math.sin(air * Math.PI) * 54;
+      if (!e.impPounceLaunched) {
+        e.impPounceLaunched = true;
+        spawnParticles(e.impAttackStartX || e.x, groundY - 4, 5, "#6b5a45", 40, 45);
+      }
+      if (air >= 1 && !e.impPounceLanded) {
+        e.impPounceLanded = true;
+        spawnParticles(e.x, groundY - 3, 7, "#6b5a45", 55, 55);
+        Audio.hit?.();
+      }
+      if (lp > 0.55 && dist(e.x, target.x) < 40) hitImpAttackTarget(e, t, target, kind);
     }
   } else {
     if (dist(e.x, target.x) > (kind === "tail" ? 44 : 26) && p < 0.45) {
       e.x += e.dir * t.speed * 0.45 * dt;
     }
     const hitAt = kind === "tail" ? 0.52 : 0.48;
-    const range = kind === "tail" ? 48 : 30;
+    const range = kind === "tail" ? 48 : 34;
     if (p >= hitAt && dist(e.x, target.x) < range) hitImpAttackTarget(e, t, target, kind);
   }
 
   if (e.impAttackT >= total) {
     e.fy = e.wallTopWall ? -wallHeight(e.wallTopWall) : 0;
+    e.impPounceP = null;
+    e.impPounceLaunched = false;
+    e.impPounceLanded = false;
     e.impAttackKind = null;
     e.impAttackTarget = null;
     e.impAttackTargetKind = null;
@@ -342,9 +389,9 @@ function updateImpPlayerCombat(e, t, dt) {
   const player = state.player;
   if (!player || player.hp <= 0 || e.wallTopWall || e.aiState === "climbOver" || e.aiState === "stacking" || e.aiState === "stackQueue") return false;
   const d = dist(e.x, player.x);
-  const near = d < 92 && e.carry === 0;
+  const near = d < 130 && e.carry === 0;
   if (!near && e.aiState !== "attackPlayer") return false;
-  if (d > 150 || e.breachedWall) {
+  if (d > 240 || e.breachedWall) {
     if (e.aiState === "attackPlayer") setImpState(e, "advance");
     return false;
   }
@@ -357,7 +404,11 @@ function updateImpPlayerCombat(e, t, dt) {
     return true;
   }
   if (d > 27) {
-    e.x += e.dir * t.speed * 1.25 * dt;
+    // Sprint burst: the closer it gets, the harder it pushes — punishes kiting
+    const sprint = 1.6 + 1.6 * Math.max(0, 1 - d / 240);
+    e.x += e.dir * t.speed * sprint * dt;
+    e.anim += dt * 4;
+    if (Math.random() < 0.3) spawnParticles(e.x - e.dir * 8, groundY - 4, 1, "#6b5a45", 20, 26);
     return true;
   }
   return true;
@@ -388,6 +439,12 @@ function updateImpCombat(e, t, dt) {
     setImpState(e, e.breachedWall ? "vaulting" : "advance");
     return false;
   }
+  // Give up on workers that outrun the chase and get back to the assault.
+  if (guard.role !== "guard" && dist(e.x, guard.x) > 260) {
+    e.combatTarget = null;
+    setImpState(e, e.breachedWall ? "vaulting" : "advance");
+    return false;
+  }
 
   let targetX = guard.x;
   if (e.wallTopWall) {
@@ -408,13 +465,20 @@ function updateImpCombat(e, t, dt) {
     return true;
   }
   if (!e.wallTopWall && d > 22) {
-    e.x += e.dir * t.speed * 1.15 * dt;
+    // Sprint at prey on the ground; kick up dust so it reads as a burst
+    e.x += e.dir * t.speed * 2.6 * dt;
+    e.anim += dt * 4;
+    if (Math.random() < 0.3) spawnParticles(e.x - e.dir * 8, groundY - 4, 1, "#6b5a45", 20, 26);
     return true;
   }
 
   setImpState(e, "combat");
-  guard.aiState = "combat";
-  guard.combatTarget = e;
+  if (guard.role === "guard") {
+    guard.aiState = "combat";
+    guard.combatTarget = e;
+  } else {
+    guard.panic = Math.max(guard.panic || 0, 0.6);
+  }
   return true;
 }
 
@@ -434,6 +498,20 @@ function updateImp(e, t, dt) {
   if (e.aiState === "combat") return updateImpCombat(e, t, dt);
 
   if (updateImpPlayerCombat(e, t, dt)) return true;
+
+  // Any unit caught in the open gets hunted down (guards duel, workers get chased).
+  if ((e.aiState === "advance" || !e.aiState) && e.carry === 0) {
+    let b = null, bd = 150;
+    for (const u of state.units) {
+      if (u.hp <= 0 || u.dying || u.onWall) continue;
+      const d = dist(e.x, u.x);
+      if (d < bd) { bd = d; b = u; }
+    }
+    if (b) {
+      e.combatTarget = b;
+      return updateImpCombat(e, t, dt);
+    }
+  }
 
   if (e.aiState === "vaulting") {
     const w = e.vaultWall;
@@ -575,11 +653,7 @@ function updateImp(e, t, dt) {
   if (e.attackCd <= 0) {
     e.attackCd = 1.15;
     e.attackAnim = 0.18;
-    wall.hp -= Math.max(1, t.dmg * 0.12);
-    wall.flash = 0.12;
-    spawnParticles(wall.x, groundY - 30, 2, "#caa46a", 24, 24);
-    Audio.hit();
-    if (wall.hp <= 0) killWall(wall);
+    damageWall(wall, Math.max(1, t.dmg * 0.12), 2);
   }
   return true;
 }
@@ -590,12 +664,45 @@ export function updateEnemies(dt) {
     const e = enemies[i];
     const t = ENEMY_TYPES[e.type];
 
+    if (!t) { enemies.splice(i, 1); continue; }
     if (e.dying) continue;
     initEnemyAI(e);
 
+    // Imps riding on the fire dragon's back stay seated until dropped
+    if (e.ridingDragon) {
+      const drg = e.ridingDragon;
+      if (drg.dying || !enemies.includes(drg)) {
+        dropRiderFromDragon(e);
+      } else {
+        e.anim += dt * 2;
+        if (e.flash > 0) e.flash -= dt;
+        const seat = e.riderSeat || 0;
+        e.x = drg.x - drg.dir * (seat * 27 - 16);
+        e.fy = (drg.fy || -110) - 50 + (seat % 2) * 4 + Math.sin((drg.anim || 0) * 0.7 + seat) * 2;
+        e.dir = drg.dir;
+        continue;
+      }
+    }
+
     if (e.home !== undefined) { updateLocEnemy(e, t, dt); continue; }
-    if (t.legendary) {
-      updateLegendaryBoss(e, t, dt);
+
+    // Night bosses run their own state machines in BossAI.js
+    if (t.boss) {
+      e.anim += dt * (t.flying ? 5 : 2.6);
+      if (e.flash > 0) e.flash -= dt;
+      if (e.attackAnim > 0) e.attackAnim -= dt;
+      e.attackCd -= dt;
+      if (e.shootCd !== undefined) e.shootCd -= dt;
+      if (e.slow > 0) e.slow -= dt;
+      if (e.frost > 0) e.frost -= dt;
+      if (e.rooted > 0) e.rooted -= dt;
+      if (e.fleeing) {
+        const tx = e.portal ? e.portal.x : (e.x < CFG.baseX ? 0 : CFG.worldWidth);
+        e.dir = Math.sign(tx - e.x); e.x += e.dir * t.speed * 1.6 * dt;
+        if (dist(e.x, tx) < 40) enemies.splice(i, 1);
+        continue;
+      }
+      updateBoss(e, t, dt);
       continue;
     }
 
@@ -629,7 +736,7 @@ export function updateEnemies(dt) {
         continue;
       }
       e.dir = Math.sign(base.x - e.x) || e.dir;
-      e.x += e.dir * t.speed * dt;
+      e.x += e.dir * t.speed * approachSpeedMult(Math.abs(base.x - e.x)) * dt;
       if (e.shootCd !== undefined && e.shootCd <= 0 && dist(e.x, player.x) < 380) {
         const arrowY = groundY + (e.fy || -80);
         state.arrows.push({ x: e.x, y: arrowY, vx: Math.sign(player.x - e.x) * 320, vy: 180, target: {x: player.x}, life: 1.5, hitKind: "player" });
@@ -700,6 +807,14 @@ export function updateEnemies(dt) {
       if (e.burn <= 0) { e.burn = 0; e.ignited = false; e.burnDmg = 0; }
     }
     if (e.slow > 0) e.slow -= dt;
+    if (e.frost > 0) {
+      e.frost -= dt;
+      if (Math.random() < 0.5) spawnParticles(e.x, groundY - 26, 1, "#bfefff", 14, 26);
+    }
+    if (e.rooted > 0) {
+      e.rooted -= dt;
+      if (Math.random() < 0.4) spawnParticles(e.x, groundY - 12, 1, "#8fd8ff", 10, 18);
+    }
 
     // Update state timers
     if (e.stateTimer > 0) e.stateTimer -= dt;
@@ -774,8 +889,10 @@ export function updateEnemies(dt) {
                 changeState(e, "attacking", 0.5);
                 e.attackCd = 0.7; e.attackAnim = 0.22;
                 for (const u of wallUnitsNearby) {
-                  u.hp -= t.dmg; u.panic = 1;
+                  const crit = applyCrit(t.dmg, CFG.critChance, CFG.critMultiplier);
+                  u.hp -= crit.damage; u.panic = 1;
                   spawnParticles(u.x, groundY - 30, 3, "#7a1f1f");
+                  floaty(u.x, (crit.isCrit ? "⭐ " : "") + "-" + crit.damage, crit.isCrit ? "#ffff00" : "#7a1f1f", crit.isCrit ? 24 : 15);
                 }
                 Audio.hit();
               }
@@ -790,15 +907,7 @@ export function updateEnemies(dt) {
           if (e.attackCd <= 0 && e.aiState !== "recovery") {
             changeState(e, "attacking", 0.5);
             e.attackCd = 0.7; e.attackAnim = 0.22;
-            wall.hp -= t.dmg * 0.5; // Imps do half damage
-            wall.flash = 0.15;
-            spawnParticles(wall.x, groundY - 30, 3, "#caa46a", 30, 30);
-            Audio.hit();
-            if (wall.hp <= 0) {
-              wall.hp = 0; wall.level = 0; wall.commissioned = false; wall.buildProgress = 0;
-              floaty(wall.x, "💥 Mur faldet!", "#ff6a4a");
-              spawnParticles(wall.x, groundY - 30, 16, "#caa46a", 80, 80);
-            }
+            damageWall(wall, t.dmg * 0.5);
           }
         }
       } else {
@@ -806,14 +915,7 @@ export function updateEnemies(dt) {
         if (e.attackCd <= 0 && e.aiState !== "recovery") {
           changeState(e, "attacking", 0.5);
           e.attackCd = 0.7; e.attackAnim = 0.22;
-          wall.hp -= t.dmg; wall.flash = 0.15;
-          spawnParticles(wall.x, groundY - 30, 3, "#caa46a", 30, 30);
-          Audio.hit();
-          if (wall.hp <= 0) {
-            wall.hp = 0; wall.level = 0; wall.commissioned = false; wall.buildProgress = 0;
-            floaty(wall.x, "💥 Mur faldet!", "#ff6a4a");
-            spawnParticles(wall.x, groundY - 30, 16, "#caa46a", 80, 80);
-          }
+          damageWall(wall, t.dmg);
         }
       }
       continue;
@@ -859,7 +961,8 @@ export function updateEnemies(dt) {
         }
       } else {
         // Chasing phase: move towards player
-        if (d > 24) e.x += e.dir * t.speed * 1.4 * dt;
+        const chaseMult = e.rooted > 0 ? 0.02 : (e.frost > 0 ? 0.3 : 1);
+        if (d > 24) e.x += e.dir * t.speed * 1.4 * chaseMult * dt;
 
         // Transition to attacking when close enough
         if (d < 30 && e.attackCd <= 0) {
@@ -870,7 +973,10 @@ export function updateEnemies(dt) {
       continue;
     }
 
-    if (!e.aggroUnit) {
+    // Imps fight units through their own attack system (updateImpCombat); the generic
+    // aggro state machine conflicts with updateImp resetting aiState every frame.
+    if (e.type === "imp") e.aggroUnit = null;
+    if (!e.aggroUnit && e.type !== "imp") {
       let best = null, bd = 200;
       for (const u of units) { const d = dist(e.x, u.x); if (d < bd) { bd = d; best = u; } }
       if (best) e.aggroUnit = best;
@@ -896,13 +1002,16 @@ export function updateEnemies(dt) {
           } else {
             changeState(e, "recovery", 0.4);
             e.attackCd = 0.8; e.attackAnim = 0.22;
-            e.aggroUnit.hp -= 2; e.aggroUnit.panic = 1;
+            const crit = applyCrit(2, CFG.critChance, CFG.critMultiplier);
+            e.aggroUnit.hp -= crit.damage; e.aggroUnit.panic = 1;
             spawnParticles(e.aggroUnit.x, groundY - 30, 3, "#7a1f1f");
+            floaty(e.aggroUnit.x, (crit.isCrit ? "⭐ " : "") + "-" + crit.damage, crit.isCrit ? "#ffff00" : "#7a1f1f", crit.isCrit ? 24 : 15);
             Audio.hit();
           }
         }
       } else {
-        if (d > 32) e.x += e.dir * t.speed * 1.3 * dt;
+        const unitChaseMult = e.rooted > 0 ? 0.02 : (e.frost > 0 ? 0.3 : 1);
+        if (d > 32) e.x += e.dir * t.speed * 1.3 * unitChaseMult * dt;
         if (d < 40 && e.attackCd <= 0) {
           changeState(e, "attacking", 0.4 + Math.random() * 0.2);
         }
@@ -915,11 +1024,11 @@ export function updateEnemies(dt) {
       if (e.attackCd <= 0 && e.aiState !== "recovery") {
         changeState(e, "attacking", 0.4);
         e.attackCd = 0.9; e.attackAnim = 0.22;
-        base.hp -= t.dmg; base.flash = 0.2;
+        const crit = applyCrit(t.dmg, CFG.critChance, CFG.critMultiplier);
+        base.hp -= crit.damage; base.flash = 0.2;
         spawnParticles(base.x + rand(-30, 30), groundY - 30, 4, "#ff6a4a");
+        floaty(base.x, (crit.isCrit ? "⭐ " : "") + "-" + crit.damage, crit.isCrit ? "#ffff00" : "#ff6a4a", crit.isCrit ? 24 : 15);
         Audio.hit();
-        const c = state.coins.find(cc => cc.settled && dist(cc.x, base.x) < 120);
-        if (c) { e.carry++; state.coins.splice(state.coins.indexOf(c), 1); e.fleeing = true; }
       }
       continue;
     }
@@ -941,8 +1050,8 @@ export function updateEnemies(dt) {
     // Default movement: walk towards base if not in a special state
     if (e.aiState !== "attacking" && e.aiState !== "recovery") {
       e.dir = Math.sign(base.x - e.x) || e.dir;
-      const slowMult = e.slow > 0 ? 0.45 : 1;
-      e.x += e.dir * t.speed * slowMult * dt;
+      const slowMult = e.rooted > 0 ? 0.02 : (e.frost > 0 ? 0.3 : (e.slow > 0 ? 0.45 : 1));
+      e.x += e.dir * t.speed * slowMult * approachSpeedMult(Math.abs(base.x - e.x)) * dt;
     }
   }
 }

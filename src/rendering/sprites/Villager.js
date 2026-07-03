@@ -1,4 +1,4 @@
-import { ctx, groundY } from '../canvas.js';
+import { ctx, groundY } from '../../core/canvas.js';
 
 // ---------------------------------------------------------------------------
 // Procedural villager: the plain folk — vagrants wandering in and peasants

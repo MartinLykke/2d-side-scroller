@@ -1,4 +1,4 @@
-import { CFG } from './config/config.js';
+import { CFG } from '../config/config.js';
 
 export const canvas  = document.getElementById("game");
 export const ctx     = canvas.getContext("2d");
@@ -9,7 +9,7 @@ export let W = 0, H = 0, groundY = 0, DPR = 1;
 const ZOOM = 1.3;
 
 export function resize() {
-  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  DPR = Math.min(window.devicePixelRatio || 1, 1.5);
   W   = Math.floor(window.innerWidth  / ZOOM);
   H   = Math.floor(window.innerHeight / ZOOM);
   canvas.width  = Math.floor(window.innerWidth  * DPR);

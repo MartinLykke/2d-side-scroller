@@ -1,9 +1,9 @@
-import { state, Game } from '../state.js';
-import { canvas, W, H } from '../canvas.js';
-import { UI, closeSkillTree, openSkillTree } from '../rendering/HUD.js';
-import { tryOpenShop, handleShopKeys, currentShopList, tryBuyShopItem } from './ShopSystem.js';
-import { applyUpgrade } from './UpgradeSystem.js';
-import { triggerBarrage } from './AI.js';
+import { state, Game } from '../../core/state.js';
+import { canvas, W, H } from '../../core/canvas.js';
+import { UI, closeSkillTree, openSkillTree } from '../../rendering/HUD.js';
+import { tryOpenShop, handleShopKeys, currentShopList, tryBuyShopItem } from '../economy/ShopSystem.js';
+import { applyUpgrade } from '../economy/UpgradeSystem.js';
+import { triggerBarrage } from '../ai/AI.js';
 
 export function setupInputHandlers() {
   // UI buttons

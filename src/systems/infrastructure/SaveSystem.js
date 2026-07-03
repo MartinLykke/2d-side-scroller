@@ -1,23 +1,23 @@
-import { Game, state } from '../state.js';
-import { CFG } from '../config/config.js';
-import { makeUnit } from '../entities/Unit.js';
-import { spawnVagrant, planNight } from './SpawnSystem.js';
-import { buildForest } from './ForestSystem.js';
+import { Game, state } from '../../core/state.js';
+import { CFG } from '../../config/config.js';
+import { makeUnit } from '../../entities/Unit.js';
+import { spawnVagrant, planNight } from '../world/SpawnSystem.js';
+import { buildForest } from '../world/ForestSystem.js';
 
 const SAVE_KEY = "kingdom_embers_save_v1";
 
 export function saveGame() {
   if (Game.state !== "play") return;
   try {
-    const { player, base, walls, units, vagrants, locations, forestTrees } = state;
+    const { player, base, walls, units, vagrants, forestTrees } = state;
     const snap = {
       day: Game.day, time: Game.time, treeSeed: Game.treeSeed,
       coins: player.coins, px: player.x, hasCrown: player.hasCrown,
       hp: player.hp, weapon: player.weapon, armor: player.armor,
-      locations: locations.map(l => ({ triggered: l.triggered, cleared: l.cleared, lootSpawned: l.lootSpawned })),
       base: { level: base.level, hp: base.hp, maxHp: base.maxHp },
       walls: walls.map(w => ({ commissioned: w.commissioned, level: w.level, hp: w.hp, maxHp: w.maxHp, buildProgress: w.buildProgress })),
-      forestTrees: forestTrees.map(t => ({ marked: t.marked, chopped: t.chopped, chopProgress: t.chopProgress, lying: t.lying })),
+      buildings: (state.buildings || []).map(b => ({ built: b.built, level: b.level })),
+      forestTrees: forestTrees.map(t => ({ marked: t.marked, chopped: t.chopped, chopProgress: t.chopProgress, lying: t.lying || !!t.carriedBy })),
       units: units.map(u => ({ role: u.role, x: u.x, archerName: u.archerName, level: u.level, xp: u.xp })),
       vagrants: vagrants.length,
       farm: state.farmBuilt,
@@ -44,16 +44,15 @@ export function loadGame() {
 
     Game.day = snap.day; Game.time = snap.time; Game.treeSeed = snap.treeSeed;
     buildForest();
-    const { player, base, walls, locations, forestTrees } = state;
+    const { player, base, walls, forestTrees } = state;
     if (snap.forestTrees) snap.forestTrees.forEach((s, i) => { if (forestTrees[i]) Object.assign(forestTrees[i], s); });
     player.coins = snap.coins; player.x = snap.px; player.hasCrown = snap.hasCrown;
     player.hp = snap.hp || CFG.playerMaxHp;
     player.weapon = snap.weapon || null;
     player.armor  = snap.armor  || null;
-
-    if (snap.locations) snap.locations.forEach((s, i) => { if (locations[i]) Object.assign(locations[i], s); });
     base.level = snap.base.level; base.hp = snap.base.hp; base.maxHp = snap.base.maxHp;
     walls.forEach((w, i) => { const s = snap.walls[i]; if (s) Object.assign(w, s); });
+    if (snap.buildings) snap.buildings.forEach((s, i) => { if (state.buildings[i]) Object.assign(state.buildings[i], s); });
     state.units = snap.units.map(s => {
       const u = makeUnit(s.role, s.x);
       if (s.archerName) u.archerName = s.archerName;

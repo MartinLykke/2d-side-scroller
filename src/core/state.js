@@ -26,6 +26,13 @@ export const Game = {
   legendaryIntro: null,
   screenShake: 0,
   skillTreeType: "archer",
+  meta: null,
+  runKills: 0,
+  hubMessage: "",
+  hubT: 0,
+  hubTransitionT: 0,
+  hubTransitionFromX: 0,
+  runStartAnim: 0,
 };
 
 // All mutable entity arrays and per-play variables live here so every
@@ -47,8 +54,8 @@ export const state = {
   lootItems: [],
   chests: [],
   weaponPickup: null,
-  locations: [],
   forestTrees: [],
+  forestCamps: [],
   groundBows: [],
   groundHammers: [],
   spells: [],
@@ -69,4 +76,6 @@ export const state = {
   lastPaidStation: null,
   legendaryBoss: null,
   legendaryEffects: [],
+  firePools: [],
+  beacon: null,
 };

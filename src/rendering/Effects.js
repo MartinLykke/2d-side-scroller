@@ -1,7 +1,7 @@
 import { clamp, lerp, lerpColor, rgb, withA, shade, hazeColor, atmo, rand, mulberry32 } from '../util/math.js';
 import { CFG } from '../config/config.js';
-import { ctx, W, H, groundY } from '../canvas.js';
-import { Game, state } from '../state.js';
+import { ctx, W, H, groundY } from '../core/canvas.js';
+import { Game, state } from '../core/state.js';
 
 // ---------- Biomes ----------
 export const BIOME_DEFS = [
@@ -72,13 +72,13 @@ export let FX = null;
 export function initFX() {
   const R = Math.random;
   FX = {
-    stars:  Array.from({length:180}, () => ({ x:R()*W, y:R()*groundY*0.82, s:R()*1.7+0.3, tw:R()*6 })),
-    clouds: Array.from({length:7},   () => ({ x:R()*W, y:24+R()*groundY*0.42, s:0.6+R()*1.0, sp:5+R()*9, o:0.4+R()*0.4 })),
-    birds:  Array.from({length:6},   () => ({ x:R()*W, y:55+R()*180, sp:16+R()*24, ph:R()*6, dir:R()<0.5?1:-1, scale:0.7+R()*0.6 })),
-    butter: Array.from({length:4},   () => ({ x:R()*W, y:groundY-R()*120, ph:R()*6, c:["#f2c14e","#ece4d2","#d9883c","#cfe6f2","#e58fb0"][(R()*5)|0] })),
-    flies:  Array.from({length:50},  () => ({ x:R()*W, y:groundY-R()*150, ph:R()*6 })),
-    dust:   Array.from({length:64},  () => ({ x:R()*W, y:R()*H, z:0.3+R()*0.7, ph:R()*6 })),
-    fall:   Array.from({length:54},  () => ({ x:R()*W, y:R()*H, sp:18+R()*44, sway:2+R()*6, ph:R()*6, rot:R()*6, active:false, snow:false, color:"#9bd05a" })),
+    stars:  Array.from({length:90}, () => ({ x:R()*W, y:R()*groundY*0.82, s:R()*1.7+0.3, tw:R()*6 })),
+    clouds: Array.from({length:4},  () => ({ x:R()*W, y:24+R()*groundY*0.42, s:0.6+R()*1.0, sp:5+R()*9, o:0.4+R()*0.4 })),
+    birds:  Array.from({length:4},  () => ({ x:R()*W, y:55+R()*180, sp:16+R()*24, ph:R()*6, dir:R()<0.5?1:-1, scale:0.7+R()*0.6 })),
+    butter: Array.from({length:2},  () => ({ x:R()*W, y:groundY-R()*120, ph:R()*6, c:["#f2c14e","#ece4d2","#d9883c","#cfe6f2","#e58fb0"][(R()*5)|0] })),
+    flies:  Array.from({length:20}, () => ({ x:R()*W, y:groundY-R()*150, ph:R()*6 })),
+    dust:   Array.from({length:24}, () => ({ x:R()*W, y:R()*H, z:0.3+R()*0.7, ph:R()*6 })),
+    fall:   Array.from({length:24}, () => ({ x:R()*W, y:R()*H, sp:18+R()*44, sway:2+R()*6, ph:R()*6, rot:R()*6, active:false, snow:false, color:"#9bd05a" })),
     embers: [], smoke: [], levelUpBeams: [], flicker: 1,
   };
 }
@@ -111,9 +111,9 @@ export function updateFX(dt) {
   }
 
   const base = state.base;
-  if (base) {
+  // ember column only while an actual campfire burns at the base (lvl 1-3)
+  if (base && base.level < 4) {
     if (Math.random()<0.7) FX.embers.push({ x:base.x+rand(-7,7), y:groundY-12, vx:rand(-9,9), vy:-rand(30,64), life:rand(0.7,1.7), t:0, s:rand(1,2.4) });
-    if (Math.random()<0.3) FX.smoke.push({ x:base.x+rand(-5,5), y:groundY-28, vy:-rand(13,24), r:rand(5,9), life:rand(1.6,3), t:0 });
   }
   for (let i=FX.embers.length-1;i>=0;i--){ const e=FX.embers[i]; e.t+=dt; e.x+=(e.vx+wind*0.5)*dt; e.y+=e.vy*dt; e.vy*=0.99; if (e.t>e.life) FX.embers.splice(i,1); }
   for (let i=FX.smoke.length-1;i>=0;i--){ const s=FX.smoke[i]; s.t+=dt; s.x+=(wind*0.9)*dt; s.y+=s.vy*dt; s.r+=8*dt; if (s.t>s.life) FX.smoke.splice(i,1); }
@@ -132,44 +132,61 @@ function pickType(b, r) {
   return t<0.4?"pine":t<0.66?"fir":t<0.82?"oak":t<0.92?"widepine":"birch";
 }
 
-export function makeTree(x, baseH, r) {
-  const b = biomeAt(x), type = pickType(b, r);
-  const h = baseH * (0.7+r()*0.7);
-  const w = (type==="widepine"?h*0.72:(type==="oak"||type==="bush")?h*0.85:type==="dead"?h*0.42:h*0.5) * (0.82+r()*0.4);
+export function makeTree(x, baseH, r, opts = {}) {
+  const b = biomeAt(x);
+  let type = pickType(b, r);
+  if (opts.harvestable && type === "dead") type = r() < 0.5 ? "fir" : "oak";
+  const heightBoost = opts.harvestable ? 1.18 : 1;
+  let h = baseH * heightBoost * (0.76+r()*0.56);
+  if (type === "dead") h *= 0.82;
+  const w = (type==="widepine"?h*0.74:(type==="oak"||type==="bush")?h*0.82:type==="dead"?h*0.42:h*0.52) * (0.82+r()*0.4);
   const tiers = 3+((r()*4)|0), lean = (r()-0.5)*(type==="crooked"?0.5:0.16);
   let clusters=null, branches=null;
   if (type==="oak"||type==="bush"||type==="crooked"||type==="birch") {
     clusters=[];
-    const n=type==="bush"?4:type==="birch"?3:6+((r()*3)|0), cy=type==="bush"?0.46:type==="birch"?0.85:0.76;
-    for (let i=0;i<n;i++) clusters.push({ dx:(r()-0.5)*w*0.9, dy:cy-r()*0.36, r:(0.28+r()*0.22)*w });
+    const n=type==="bush"?5:type==="birch"?5:9+((r()*5)|0), cy=type==="bush"?0.46:type==="birch"?0.82:0.74;
+    for (let i=0;i<n;i++) {
+      const ring = i / Math.max(1, n - 1);
+      clusters.push({
+        dx:(r()-0.5)*w*(0.55+ring*0.45),
+        dy:cy-r()*0.42 + Math.sin(i*2.1)*0.035,
+        r:(0.20+r()*0.20)*w*(type==="birch"?0.82:1),
+      });
+    }
   }
   if (type==="dead") {
     branches=[];
     const n=3+((r()*4)|0);
     for (let i=0;i<n;i++) branches.push({ hf:0.38+r()*0.56, side:r()<0.5?-1:1, len:(0.18+r()*0.22)*h, up:0.3+r()*0.5, broken:r()<0.3 });
   }
-  return { x, type, h, w, phase:r()*6, tiers, lean, broken:r()<0.2, snow:b.snow&&r()<0.85, moss:b.moss&&r()<0.6, clusters, branches };
+  return { x, type, h, w, phase:r()*6, tiers, lean, trunkW:0.08+r()*0.035, broken:r()<0.16, snow:b.snow&&r()<0.85, moss:b.moss&&r()<0.6, clusters, branches };
 }
 
 export function drawTree(t, cx, baseY, light, dark, depthDark, swayAmp) {
   const Ht=t.h, Wd=t.w, lean=t.lean;
   const sw = (hf) => windSway(t.phase, swayAmp)*Math.pow(clamp(hf,0,1),1.35) + lean*hf*Wd*0.7;
   const trunkCol = shade(dark, 0.68);
+  const trunkHi = shade(trunkCol, 1.35);
   if (depthDark < 0.5) { ctx.save(); ctx.globalAlpha=0.16*(1-depthDark); ctx.fillStyle="#0a0810"; ctx.beginPath(); ctx.ellipse(cx,groundY+2,Wd*0.5*(1.15-depthDark),Wd*0.5*(1.15-depthDark)*0.26,0,0,Math.PI*2); ctx.fill(); ctx.restore(); }
 
   if (t.type==="pine"||t.type==="fir"||t.type==="widepine") {
     // tapered trunk
+    const tw0 = Wd*(t.trunkW || 0.08), tw1 = tw0*0.38;
     ctx.fillStyle=withA(trunkCol,1);
-    ctx.beginPath(); ctx.moveTo(cx-Wd*0.07,baseY); ctx.lineTo(cx+Wd*0.07,baseY);
-    ctx.lineTo(cx+Wd*0.035,baseY-Ht*0.2); ctx.lineTo(cx-Wd*0.035,baseY-Ht*0.2); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(cx-tw0,baseY); ctx.lineTo(cx+tw0,baseY);
+    ctx.lineTo(cx+tw1,baseY-Ht*0.34); ctx.lineTo(cx-tw1,baseY-Ht*0.34); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle=withA(trunkHi,0.35); ctx.lineWidth=Math.max(1,tw0*0.28);
+    ctx.beginPath(); ctx.moveTo(cx-tw0*0.34,baseY-4); ctx.lineTo(cx-tw1*0.2,baseY-Ht*0.31); ctx.stroke();
     for (let i=0;i<t.tiers;i++) {
       const bhf=i/t.tiers, thf=(i+1)/t.tiers;
-      const tw=Wd*(1-bhf*0.78)*0.5, by=baseY-bhf*Ht-Ht*0.05, ty=baseY-thf*Ht;
+      const tw=Wd*(1-bhf*0.78)*0.55, by=baseY-bhf*Ht-Ht*0.05, ty=baseY-thf*Ht;
       const bx=cx+sw(bhf), tx=cx+sw(thf);
       ctx.fillStyle=withA(dark,1); ctx.beginPath(); ctx.moveTo(bx-tw,by); ctx.lineTo(bx+tw,by); ctx.lineTo(tx,ty); ctx.closePath(); ctx.fill();
       // shaded facet away from the sun
       ctx.fillStyle=withA(shade(dark,0.74),0.55); ctx.beginPath(); ctx.moveTo(bx+tw,by); ctx.lineTo(bx+tw*0.22,by); ctx.lineTo(tx,ty); ctx.closePath(); ctx.fill();
       ctx.fillStyle=withA(light,0.5); ctx.beginPath(); ctx.moveTo(bx-tw,by); ctx.lineTo(bx-tw*0.16,by); ctx.lineTo(tx,ty); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle=withA(shade(light,1.12),0.25); ctx.lineWidth=Math.max(1,Wd*0.012);
+      ctx.beginPath(); ctx.moveTo(bx-tw*0.72,by-Ht*0.012); ctx.lineTo(tx,ty+Ht*0.035); ctx.lineTo(bx+tw*0.46,by-Ht*0.01); ctx.stroke();
       if (t.snow) { ctx.fillStyle="rgba(238,244,251,0.92)"; ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(tx-tw*0.5,by-(by-ty)*0.5); ctx.lineTo(tx+tw*0.5,by-(by-ty)*0.5); ctx.closePath(); ctx.fill(); }
     }
   } else if (t.type==="dead") {
@@ -185,13 +202,24 @@ export function drawTree(t, cx, baseY, light, dark, depthDark, swayAmp) {
     }
     ctx.lineCap="butt";
   } else {
-    const trunkH=t.type==="bush"?Ht*0.12:t.type==="birch"?Ht*0.6:Ht*0.42;
-    const tw=Wd*0.09, isBirch=t.type==="birch";
+    const trunkH=t.type==="bush"?Ht*0.12:t.type==="birch"?Ht*0.68:Ht*0.5;
+    const tw=Wd*(t.trunkW || 0.09), isBirch=t.type==="birch";
     ctx.strokeStyle=withA(isBirch?lerpColor(light,[232,234,236],0.55):trunkCol,1);
     ctx.lineWidth=Math.max(2,tw*2); ctx.lineCap="round";
     ctx.beginPath(); ctx.moveTo(cx,baseY); ctx.lineTo(cx+sw(trunkH/Ht),baseY-trunkH); ctx.stroke();
+    ctx.strokeStyle=isBirch?"rgba(255,255,255,0.5)":withA(trunkHi,0.35);
+    ctx.lineWidth=Math.max(1,tw*0.38);
+    ctx.beginPath(); ctx.moveTo(cx-tw*0.35,baseY-4); ctx.lineTo(cx+sw(trunkH/Ht)-tw*0.2,baseY-trunkH+4); ctx.stroke();
     ctx.lineCap="butt";
     if (isBirch) { ctx.strokeStyle="rgba(40,44,48,0.45)"; ctx.lineWidth=1; for (let k=1;k<4;k++){ const yy=baseY-trunkH*k/4; ctx.beginPath(); ctx.moveTo(cx-tw,yy); ctx.lineTo(cx+tw*0.4,yy); ctx.stroke(); } }
+    if (t.type!=="bush") {
+      ctx.strokeStyle=withA(trunkCol,0.62); ctx.lineWidth=Math.max(1,tw*0.7); ctx.lineCap="round";
+      for (let i=0;i<Math.min(5,t.clusters.length);i++) {
+        const cl=t.clusters[i], bx=cx+sw(trunkH/Ht), by=baseY-trunkH*0.72;
+        ctx.beginPath(); ctx.moveTo(bx,by); ctx.quadraticCurveTo(cx+cl.dx*0.35,baseY-cl.dy*Ht+cl.r*0.2,cx+sw(cl.dy)+cl.dx*0.72,baseY-cl.dy*Ht+cl.r*0.08); ctx.stroke();
+      }
+      ctx.lineCap="butt";
+    }
     for (const cl of t.clusters) { const ox=cx+sw(cl.dy)+cl.dx, oy=baseY-cl.dy*Ht; ctx.fillStyle=withA(dark,1); ctx.beginPath(); ctx.arc(ox,oy,cl.r,0,Math.PI*2); ctx.fill(); }
     // deep shade on the underside of the canopy
     for (const cl of t.clusters) { const ox=cx+sw(cl.dy)+cl.dx, oy=baseY-cl.dy*Ht; ctx.fillStyle=withA(shade(dark,0.72),0.4); ctx.beginPath(); ctx.arc(ox+cl.r*0.24,oy+cl.r*0.3,cl.r*0.6,0,Math.PI*2); ctx.fill(); }
@@ -221,24 +249,11 @@ export function getTrees() {
   const r=mulberry32(Game.treeSeed||1);
   const far=[],mid=[],near=[],fore=[],hills=[],mountains=[];
   const campX = CFG.baseX;
-  for (let x=-100;x<CFG.worldWidth+100;x+=110) { const tx=x+r()*80; if(Math.abs(tx-campX)>900) far.push(makeTree(tx, 72, r)); }
-  for (let x=-100;x<CFG.worldWidth+100;x+=86)  { const tx=x+r()*64; if(Math.abs(tx-campX)>820) mid.push(makeTree(tx, 120, r)); }
-  for (let x=-100;x<CFG.worldWidth+100;x+=70)  { const tx=x+r()*48; if(Math.abs(tx-campX)>750) near.push(makeTree(tx, 178, r)); }
+  for (let x=-140;x<CFG.worldWidth+140;x+=96)  { const tx=x+r()*70; if(Math.abs(tx-campX)>260) far.push(makeTree(tx, 165, r)); }
+  for (let x=-120;x<CFG.worldWidth+120;x+=82)  { const tx=x+r()*58; if(Math.abs(tx-campX)>300) mid.push(makeTree(tx, 225, r)); }
+  for (let x=-100;x<CFG.worldWidth+100;x+=74)  { const tx=x+r()*48; if(Math.abs(tx-campX)>380) near.push(makeTree(tx, 285, r)); }
   for (let x=-100;x<CFG.worldWidth+100;x+=520) { const tx=x+r()*220; if(Math.abs(tx-campX)>700) fore.push(makeTree(tx, 150, r)); }
   for (let x=-300;x<CFG.worldWidth+300;x+=170) hills.push({ x:x+r()*120, h:50+r()*130, w:200+r()*230 });
-  for (let x=-600;x<CFG.worldWidth+600;x+=320) {
-    const w=200+r()*160, h=110+r()*140;
-    const nPts=6+((r()*4)|0);
-    const pts=[];
-    for (let k=0;k<=nPts;k++) {
-      const t=k/nPts, ox=(t-0.5)*w*2;
-      const envelope=Math.max(0,1-Math.pow((t-0.5)*2,2));
-      const jitter=(r()-0.5)*h*0.35;
-      pts.push([ox, h*envelope+jitter*envelope]);
-    }
-    const peak=pts.reduce((bi,p,i)=>p[1]>pts[bi][1]?i:bi,0);
-    mountains.push({ x:x+r()*180, h, w, pts, peak });
-  }
   treeCache={ seed:Game.treeSeed, far, mid, near, fore, hills, mountains };
   return treeCache;
 }
@@ -290,25 +305,6 @@ export function drawStars(dark) {
   ctx.restore();
 }
 
-export function drawAurora(dark) {
-  if (dark<0.6) return;
-  const a=(dark-0.6)/0.4*0.12;
-  ctx.save(); ctx.globalCompositeOperation="lighter";
-  for (let b=0;b<2;b++) {
-    const baseY=64+b*42; ctx.beginPath();
-    for (let x=0;x<=W;x+=22) { const y=baseY+Math.sin(x*0.01+Game.windT*0.3+b)*22+Math.sin(x*0.03+Game.windT*0.5)*10; x===0?ctx.moveTo(x,y):ctx.lineTo(x,y); }
-    for (let x=W;x>=0;x-=22) ctx.lineTo(x,baseY+64+Math.sin(x*0.01+Game.windT*0.3+b)*22);
-    ctx.closePath();
-    const grad=ctx.createLinearGradient(0,baseY,0,baseY+72);
-    grad.addColorStop(0,`rgba(80,255,170,${a})`); grad.addColorStop(1,"rgba(80,180,255,0)");
-    ctx.fillStyle=grad; ctx.fill();
-  }
-  ctx.restore();
-}
-
-export function drawCelestial(skyTop) {
-  // Sun/moon disc removed — day/night lighting is still driven by Game.time via darkness().
-}
 
 export function drawClouds(dark, top) {
   const a=(1-dark)*0.9; if (a<=0.02) return;
@@ -351,70 +347,6 @@ export function drawHills(hills, dark) {
       }
     }
   }
-}
-
-export function drawMountains(mountains, dark) {
-  const haze=hazeColor(dark), off=Game.cam*0.06;
-  for (const m of mountains) {
-    const px=m.x-off; if (px<-m.w*2||px>W+m.w*2) continue;
-    const mist=0.40+dark*0.32;
-    // faint echo ridge behind the main peak for depth
-    ctx.fillStyle=withA(lerpColor([100,106,134],haze,Math.min(1,mist+0.22)),0.85);
-    ctx.beginPath(); ctx.moveTo(px-m.w*1.5,groundY+4);
-    ctx.quadraticCurveTo(px-m.w*0.35,groundY+4-m.h*0.7,px+m.w*0.75,groundY+4);
-    ctx.closePath(); ctx.fill();
-    // body: cool desaturated indigo, independent of biome
-    const bodyCol=lerpColor([86,94,124],haze,mist);
-    ctx.fillStyle=rgb(bodyCol); ctx.beginPath();
-    ctx.moveTo(px-m.w, groundY+4);
-    for (let k=0;k<m.pts.length;k++) { ctx.lineTo(px+m.pts[k][0], groundY+4-m.pts[k][1]); }
-    ctx.lineTo(px+m.w, groundY+4); ctx.closePath(); ctx.fill();
-    // shaded facet on the far side of the peak
-    const peakX=px+m.pts[m.peak][0], peakY=groundY+4-m.pts[m.peak][1];
-    ctx.fillStyle=withA(shade(bodyCol,0.84),0.9);
-    ctx.beginPath(); ctx.moveTo(peakX,peakY);
-    for (let k=m.peak;k<m.pts.length;k++) ctx.lineTo(px+m.pts[k][0],groundY+4-m.pts[k][1]);
-    ctx.lineTo(px+m.w,groundY+4); ctx.lineTo(peakX,groundY+4); ctx.closePath(); ctx.fill();
-    // snow following the jagged profile above the snow line
-    const snowLine=m.h*0.62, snowCol=lerpColor([236,241,249],[176,190,214],dark*0.5);
-    ctx.fillStyle=withA(snowCol,0.95); ctx.beginPath();
-    let started=false;
-    for (let k=0;k<m.pts.length;k++) {
-      const p=m.pts[k];
-      if (p[1]>snowLine) {
-        if (!started) { ctx.moveTo(px+p[0],groundY+4-snowLine); started=true; }
-        ctx.lineTo(px+p[0],groundY+4-p[1]);
-      } else if (started) { ctx.lineTo(px+p[0],groundY+4-snowLine); }
-    }
-    if (started) { ctx.closePath(); ctx.fill(); }
-    // sunlit rim on the near slope
-    ctx.strokeStyle=withA(lerpColor([210,218,232],[80,90,112],dark*0.6),0.4);
-    ctx.lineWidth=1.4; ctx.beginPath();
-    for (let k=0;k<=m.peak;k++) { const p=m.pts[k]; k===0?ctx.moveTo(px+p[0],groundY+4-p[1]):ctx.lineTo(px+p[0],groundY+4-p[1]); }
-    ctx.stroke();
-    // rising mist at the foot
-    const fg=ctx.createLinearGradient(0,groundY-m.h*0.45,0,groundY+4);
-    fg.addColorStop(0,withA(haze,0)); fg.addColorStop(1,withA(haze,0.4));
-    ctx.fillStyle=fg; ctx.fillRect(px-m.w,groundY-m.h*0.45,m.w*2,m.h*0.45+4);
-  }
-}
-
-// Dappled shafts of golden light slanting down through the canopy (daytime only).
-export function drawSunShafts(dark) {
-  const a=(1-dark)*0.12; if (a<=0.01) return;
-  const span=W+420;
-  ctx.save(); ctx.globalCompositeOperation="lighter";
-  for (let i=0;i<5;i++) {
-    const sx=(((i*span/5 - Game.cam*0.22) % span) + span) % span - 210;
-    const wob=Math.sin(Game.windT*0.22+i*1.7);
-    const alpha=a*(0.45+0.55*(0.5+0.5*Math.sin(Game.windT*0.13+i*2.1)));
-    const grad=ctx.createLinearGradient(sx,0,sx-140,groundY);
-    grad.addColorStop(0,`rgba(255,232,170,${alpha})`); grad.addColorStop(1,"rgba(255,232,170,0)");
-    ctx.fillStyle=grad;
-    ctx.beginPath(); ctx.moveTo(sx,-10); ctx.lineTo(sx+42+wob*8,-10);
-    ctx.lineTo(sx-96+wob*14,groundY+6); ctx.lineTo(sx-158+wob*14,groundY+6); ctx.closePath(); ctx.fill();
-  }
-  ctx.restore();
 }
 
 export function drawFogBand(y, h, dark, intensity) {

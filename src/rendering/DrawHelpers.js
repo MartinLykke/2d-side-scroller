@@ -1,5 +1,5 @@
 import { clamp, lerp, lerpColor, rgb, withA, shade } from '../util/math.js';
-import { ctx, groundY } from '../canvas.js';
+import { ctx, groundY } from '../core/canvas.js';
 
 // ---------- Basic shapes ----------
 export function groundShadow(x, w, a) {

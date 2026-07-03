@@ -1,9 +1,9 @@
-import { clamp, dist } from '../util/math.js';
-import { WEAPONS, RARITY_COL } from '../config/weapons.js';
-import { ctx, W, H, groundY } from '../canvas.js';
-import { Game, state } from '../state.js';
-import { windSway } from './Effects.js';
-import { roundedRect, groundShadow, drawTomeIcon } from './DrawHelpers.js';
+import { clamp, dist } from '../../util/math.js';
+import { WEAPONS, RARITY_COL } from '../../config/weapons.js';
+import { ctx, W, H, groundY } from '../../core/canvas.js';
+import { Game, state } from '../../core/state.js';
+import { windSway } from '../Effects.js';
+import { roundedRect, groundShadow, drawTomeIcon } from '../DrawHelpers.js';
 
 export function drawCoins() {
   const t=performance.now();
@@ -24,7 +24,8 @@ export function drawArrows() {
     ctx.save(); ctx.translate(ar.x,ar.y); ctx.rotate(ang);
     const wid = ar.weaponId;
     if (ar.enemyFireball) {
-      ctx.save(); ctx.globalCompositeOperation="lighter";
+      const sc = ar.big ? 2.1 : 1;
+      ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.scale(sc, sc);
       const pulse = 0.85 + 0.15 * Math.sin(t * 24 + ar.x);
       const fg=ctx.createRadialGradient(0,0,2,0,0,20 * pulse);
       fg.addColorStop(0,"rgba(255,245,150,1)");
@@ -33,6 +34,12 @@ export function drawArrows() {
       ctx.fillStyle=fg; ctx.beginPath(); ctx.arc(0,0,20 * pulse,0,Math.PI*2); ctx.fill();
       ctx.fillStyle="#ffd060"; ctx.beginPath(); ctx.arc(4,0,5,0,Math.PI*2); ctx.fill();
       ctx.fillStyle="#ff5a16"; ctx.beginPath(); ctx.moveTo(-18,0); ctx.quadraticCurveTo(-7,-10,3,-3); ctx.quadraticCurveTo(-7,8,-18,0); ctx.fill();
+      if (ar.big) {
+        ctx.globalAlpha = 0.55;
+        ctx.strokeStyle = "#ff8a30"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(-30,0); ctx.quadraticCurveTo(-16,-7+Math.sin(t*30)*3,-4,-2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-30,0); ctx.quadraticCurveTo(-16,7+Math.sin(t*26)*3,-4,2); ctx.stroke();
+      }
       ctx.restore();
       ctx.restore();
       continue;
@@ -86,8 +93,6 @@ export function drawArrows() {
       for (let k=0;k<4;k++) { const bx=-5-k*4; const fl=Math.sin(t*20+k)*3; ctx.beginPath(); ctx.moveTo(bx,0); ctx.lineTo(bx-2,-4+fl); ctx.stroke(); } ctx.restore();
     } else {
       // Same arrow the archer nocks: wooden shaft, steel head, green fletching
-      ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.16;
-      ctx.strokeStyle="#e8d8a8"; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(-16,0); ctx.lineTo(2,0); ctx.stroke(); ctx.restore();
       ctx.strokeStyle="#c9b48a"; ctx.lineWidth=1.4;
       ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(5,0); ctx.stroke();
       ctx.fillStyle="#b8bcc4";

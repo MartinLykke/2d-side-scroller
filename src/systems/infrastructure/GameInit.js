@@ -1,16 +1,18 @@
-import { state, Game } from '../state.js';
-import { CFG, WALL_SLOTS, PORTALS, STATIONS_X } from '../config/config.js';
-import { groundY } from '../canvas.js';
-import { rand, randInt, clamp } from '../util/math.js';
-import { makePlayer } from '../entities/Player.js';
-import { makeWall } from '../entities/Wall.js';
-import { makeUnit } from '../entities/Unit.js';
+import { state, Game } from '../../core/state.js';
+import { CFG, WALL_SLOTS, PORTALS, STATIONS_X } from '../../config/config.js';
+import { groundY } from '../../core/canvas.js';
+import { rand, randInt, clamp } from '../../util/math.js';
+import { makePlayer } from '../../entities/Player.js';
+import { makeWall } from '../../entities/Wall.js';
+import { makeUnit } from '../../entities/Unit.js';
 import { Audio } from './Audio.js';
-import { floaty, spawnCoin, spawnParticles, spawnAnimal, planNight, buildLocations } from './SpawnSystem.js';
-import { buildForest } from './ForestSystem.js';
-import { upgradeBase } from '../util/GameStateHelpers.js';
-import { addXP } from './UpgradeSystem.js';
-import { baseName } from '../rendering/HUD.js';
+import { floaty, spawnCoin, spawnParticles, spawnAnimal, planNight } from '../world/SpawnSystem.js';
+import { buildForest } from '../world/ForestSystem.js';
+import { makeBuildings, buildingCost, buildingLabel, payBuilding } from '../world/OutpostSystem.js';
+import { upgradeBase } from '../../util/GameStateHelpers.js';
+import { addXP } from '../economy/UpgradeSystem.js';
+import { baseName } from '../../rendering/HUD.js';
+import { applyPermanentUpgrades, applyPermanentWorldUpgrades } from './RoguelikeSystem.js';
 
 export function buildStations() {
 
@@ -29,28 +31,32 @@ export function buildStations() {
     label:()=>"Køb bue (skab en bueskytte)",
     onPaid:()=>{ state.groundBows.push({ x:STATIONS_X.bow+rand(-12,12), claimed:false }); floaty(STATIONS_X.bow,"🏹 Bue klar!"); Audio.recruit(); },
   });
-  state.stations.push({
-    id:"hammer", x:()=>STATIONS_X.hammer, paid:0,
-    cost:()=>CFG.hammerCost,
-    label:()=>"Køb hammer (skab en bygger)",
-    onPaid:()=>{ state.groundHammers.push({ x:STATIONS_X.hammer+rand(-12,12), claimed:false }); floaty(STATIONS_X.hammer,"🔨 Hammer klar!"); Audio.recruit(); },
-  });
-  state.stations.push({
-    id:"farm", x:()=>STATIONS_X.farm, paid:0,
-    cost:()=>state.farmLevel>=5?0:CFG.farmUpgradeCosts[state.farmLevel],
-    label:()=>{
-      if (state.farmLevel===0) return "Byg gård (passiv guldindkomst)";
-      if (state.farmLevel>=5) return "Gård er fuldt opgraderet (niveau 5)";
-      return `Opgradér gård niveau ${state.farmLevel}→${state.farmLevel+1}`;
-    },
-    onPaid:()=>{
-      state.farmLevel++;
-      state.farmBuilt = true;
-      if (state.farmLevel===1) { state.pendingFarmers++; floaty(STATIONS_X.farm,"🌾 Gård bygget!"); }
-      else floaty(STATIONS_X.farm,`🌾 Gård niveau ${state.farmLevel}!`,"#9bd05a");
-      Audio.build();
-    },
-  });
+  if (state.base.level >= 2) {
+    state.stations.push({
+      id:"hammer", x:()=>STATIONS_X.hammer, paid:0,
+      cost:()=>CFG.hammerCost,
+      label:()=>"Køb hammer (skab en bygger)",
+      onPaid:()=>{ state.groundHammers.push({ x:STATIONS_X.hammer+rand(-12,12), claimed:false }); floaty(STATIONS_X.hammer,"🔨 Hammer klar!"); Audio.recruit(); },
+    });
+  }
+  if (state.base.level >= 2) {
+    state.stations.push({
+      id:"farm", x:()=>STATIONS_X.farm, paid:0,
+      cost:()=>state.farmLevel>=5?0:CFG.farmUpgradeCosts[state.farmLevel],
+      label:()=>{
+        if (state.farmLevel===0) return "Byg gård (passiv guldindkomst)";
+        if (state.farmLevel>=5) return "Gård er fuldt opgraderet (niveau 5)";
+        return `Opgradér gård niveau ${state.farmLevel}→${state.farmLevel+1}`;
+      },
+      onPaid:()=>{
+        state.farmLevel++;
+        state.farmBuilt = true;
+        if (state.farmLevel===1) { state.pendingFarmers++; floaty(STATIONS_X.farm,"🌾 Gård bygget!"); }
+        else floaty(STATIONS_X.farm,`🌾 Gård niveau ${state.farmLevel}!`,"#9bd05a");
+        Audio.build();
+      },
+    });
+  }
   state.stations.push({
     id:"shop", x:()=>STATIONS_X.shop, paid:0,
     cost:()=>0,
@@ -102,11 +108,20 @@ export function buildStations() {
       },
     });
   });
+  for (const b of (state.buildings || [])) {
+    state.stations.push({
+      id:"building", building:b, x:()=>b.x, paid:0,
+      cost:()=>buildingCost(b),
+      label:()=>buildingLabel(b),
+      onPaid:()=>payBuilding(b),
+    });
+  }
 }
 
 export function newGame() {
   // Entity arrays
   state.player     = makePlayer();
+  applyPermanentUpgrades(state.player);
   state.base       = { x: CFG.baseX, level: 1, hp: CFG.baseMaxHp[1], maxHp: CFG.baseMaxHp[1], paid: 0, flash: 0 };
   state.units      = [];
   state.vagrants   = [];
@@ -118,6 +133,7 @@ export function newGame() {
   state.floatTexts = [];
   state.portals    = PORTALS.map(p => ({ ...p }));
   state.walls      = WALL_SLOTS.map(makeWall);
+  state.buildings  = makeBuildings();
 
   // Timers and flags
   state.pendingHammers  = 0;
@@ -142,10 +158,11 @@ export function newGame() {
   state.vagrantTimer    = 1;
   state.animalTimer     = 2;
 
+  applyPermanentWorldUpgrades();
+
   // World generation
   Game.treeSeed = randInt(1, 99999);
   buildStations();
-  buildLocations();
   buildForest();
 
   // Game clock
@@ -157,10 +174,11 @@ export function newGame() {
   Game.autosaveTimer     = 0;
   Game.zoom              = 1.2;
   Game.legendaryIntro    = null;
+  Game.runKills          = 0;
 
   // Seed starting population
   for (let i = 0; i < 2; i++)
     state.vagrants.push({ x: CFG.baseX + rand(-320, 320), vx: 0, targetX: CFG.baseX + rand(-260, 260), state: "wander", anim: rand(0, 6) });
-  for (let i = 0; i < 4; i++) spawnAnimal();
+  for (let i = 0; i < 10; i++) spawnAnimal();
   planNight();
 }

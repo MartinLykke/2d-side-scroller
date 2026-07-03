@@ -1,8 +1,7 @@
-import { clamp } from '../util/math.js';
-import { ctx, groundY } from '../canvas.js';
-import { Game, state } from '../state.js';
-import { FX } from './Effects.js';
-import { drawFocusHalo } from './DrawHelpers.js';
+import { clamp } from '../../util/math.js';
+import { ctx, groundY } from '../../core/canvas.js';
+import { Game, state } from '../../core/state.js';
+import { FX } from '../Effects.js';
 
 export function drawCaltrops() {
   if (!state.caltrops || !state.caltrops.length) return;
@@ -17,6 +16,45 @@ export function drawCaltrops() {
     }
   }
   ctx.restore();
+}
+
+// Burning magma pools left by the colossus' boulder volleys
+export function drawFirePools() {
+  if (!state.firePools || !state.firePools.length) return;
+  const T = performance.now() / 1000;
+  for (const p of state.firePools) {
+    const fade = Math.min(1, p.life / 1.2) * Math.min(1, (p.maxLife - p.life) / 0.3 + 0.2);
+    ctx.save();
+    // molten puddle
+    ctx.globalAlpha = 0.85 * fade;
+    const pg = ctx.createRadialGradient(p.x, groundY - 2, 2, p.x, groundY - 2, p.r);
+    pg.addColorStop(0, "rgba(255,214,96,0.95)");
+    pg.addColorStop(0.4, "rgba(255,106,32,0.8)");
+    pg.addColorStop(0.8, "rgba(150,30,8,0.55)");
+    pg.addColorStop(1, "rgba(60,10,4,0)");
+    ctx.fillStyle = pg;
+    ctx.beginPath(); ctx.ellipse(p.x, groundY - 2, p.r, p.r * 0.16, 0, 0, Math.PI * 2); ctx.fill();
+    // flickering flame tongues
+    ctx.globalCompositeOperation = "lighter";
+    for (let k = 0; k < 5; k++) {
+      const fx = p.x + Math.sin(p.ph + k * 2.4) * p.r * 0.6;
+      const fh = (7 + Math.sin(T * (9 + k) + p.ph + k) * 3.5) * fade;
+      ctx.globalAlpha = 0.5 * fade;
+      ctx.fillStyle = "#ff6a20";
+      ctx.beginPath(); ctx.ellipse(fx, groundY - 4 - fh * 0.5, 3.2, fh, Math.sin(T * 4 + k) * 0.2, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.45 * fade;
+      ctx.fillStyle = "#ffd060";
+      ctx.beginPath(); ctx.ellipse(fx, groundY - 3 - fh * 0.35, 1.4, fh * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    // ground glow
+    ctx.globalAlpha = 0.3 * fade;
+    const glow = ctx.createRadialGradient(p.x, groundY - 6, 4, p.x, groundY - 6, p.r * 1.5);
+    glow.addColorStop(0, "rgba(255,140,40,0.7)");
+    glow.addColorStop(1, "rgba(120,20,0,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.ellipse(p.x, groundY - 8, p.r * 1.5, p.r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
 }
 
 export function drawPoisonShots() {
@@ -66,15 +104,6 @@ export function drawLegendaryEffects() {
 export function drawParticles() {
   for (const p of state.particles) {
     ctx.globalAlpha=p.fly?1:clamp(p.life*1.5,0,1);
-    if (!p.fly && p.life>0.12) {
-      ctx.save();
-      ctx.globalCompositeOperation="lighter";
-      ctx.globalAlpha=clamp(p.life,0,1)*0.18;
-      ctx.fillStyle=p.color;
-      ctx.beginPath(); ctx.arc(p.x,p.y,p.size*2.2,0,Math.PI*2); ctx.fill();
-      ctx.restore();
-      ctx.globalAlpha=p.fly?1:clamp(p.life*1.5,0,1);
-    }
     ctx.fillStyle=p.color; ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);
   }
   ctx.globalAlpha=1;
@@ -82,8 +111,11 @@ export function drawParticles() {
 
 export function drawFloats() {
   ctx.textAlign="center";
+  let lastSz = 0;
   for (const f of state.floatTexts) {
-    ctx.globalAlpha=clamp(f.life,0,1); ctx.font="bold 15px Trebuchet MS";
+    const sz = f.size || 15;
+    ctx.globalAlpha=clamp(f.life,0,1);
+    if (sz !== lastSz) { ctx.font=`bold ${sz}px Trebuchet MS`; lastSz = sz; }
     ctx.fillStyle="rgba(0,0,0,0.5)"; ctx.fillText(f.text,f.x+1,f.y+1);
     ctx.fillStyle=f.color; ctx.fillText(f.text,f.x,f.y);
   }
@@ -281,10 +313,9 @@ export function drawSpells() {
 
 export function drawCampLight(dark) {
   const { base } = state;
-  drawFocusHalo(base.x, groundY-24, 170, 68, [255,158,70], 0.08+0.14*Math.max(dark,Game.isNight?1:0));
   for (const s of FX.smoke) { const k=s.t/s.life; ctx.globalAlpha=(1-k)*0.16; ctx.fillStyle="rgba(58,54,58,1)"; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill(); }
   ctx.globalAlpha=1;
-  const warm=Math.max(0.22,dark,Game.isNight?0.55:0)*0.95;
+  const warm=Math.max(dark,Game.isNight?0.55:0)*0.95;
   if (warm>0.05) {
     ctx.save(); ctx.globalCompositeOperation="lighter";
     const fl=FX.flicker, R=240*fl;

@@ -1,9 +1,9 @@
-import { state, Game } from '../state.js';
+import { state, Game } from '../core/state.js';
 import { CFG } from '../config/config.js';
-import { groundY } from '../canvas.js';
-import { rand } from '../util/math.js';
-import { Audio } from '../systems/Audio.js';
-import { floaty, spawnParticles } from '../systems/SpawnSystem.js';
+import { groundY } from '../core/canvas.js';
+import { rand } from './math.js';
+import { Audio } from '../systems/infrastructure/Audio.js';
+import { floaty, spawnParticles } from '../systems/world/SpawnSystem.js';
 import { baseName } from '../rendering/HUD.js';
 
 let buildStationsFn = null;

@@ -1,9 +1,9 @@
-import { CFG } from '../config/config.js';
-import { clamp, dist, rand } from '../util/math.js';
-import { groundY } from '../canvas.js';
-import { Game, state } from '../state.js';
-import { Audio } from './Audio.js';
-import { spawnCoin, spawnParticles } from './SpawnSystem.js';
+import { CFG } from '../../config/config.js';
+import { clamp, dist, rand } from '../../util/math.js';
+import { groundY } from '../../core/canvas.js';
+import { Game, state } from '../../core/state.js';
+import { Audio } from '../infrastructure/Audio.js';
+import { spawnCoin, spawnParticles } from '../world/SpawnSystem.js';
 
 function flyingCoin(fromX, toX) {
   state.particles.push({

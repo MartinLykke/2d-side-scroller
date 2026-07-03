@@ -1,44 +1,83 @@
-import { CFG, FOREST } from '../config/config.js';
-import { clamp, dist, rand, mulberry32 } from '../util/math.js';
-import { Game, state } from '../state.js';
-import { groundY } from '../canvas.js';
-import { Audio } from './Audio.js';
+import { CFG, FOREST } from '../../config/config.js';
+import { clamp, dist, rand, mulberry32 } from '../../util/math.js';
+import { Game, state } from '../../core/state.js';
+import { groundY } from '../../core/canvas.js';
+import { Audio } from '../infrastructure/Audio.js';
 import { spawnParticles, spawnCoin, floaty } from './SpawnSystem.js';
-import { makeTree } from '../rendering/Effects.js';
+import { makeTree } from '../../rendering/Effects.js';
 
-// Dense forest fills the whole map with occasional gaps.
-// Players mark a tree (S / ArrowDown while nearby) and builders fell it
-// once their higher-priority wall work is done.
+const CAMP_SPACING = 600;
+const CAMP_TRIGGER = 120;
+const CAMP_CLEAR_DIST = 140;
+
 export function buildForest() {
   const r = mulberry32((Game.treeSeed || 1) + 777);
   const trees = [];
-  const gapChance = 0.15; // 15% chance to leave a gap
+  const camps = [];
+  const gapChance = 0.15;
   const excludeLeft = CFG.baseX - FOREST.startDist;
   const excludeRight = CFG.baseX + FOREST.startDist;
 
-  for (let x = 100; x < CFG.worldWidth - FOREST.endDist; x += FOREST.spacing) {
-    // Skip trees in the exclusion zone around the base
-    if (x >= excludeLeft && x <= excludeRight) continue;
+  // Place camps at intervals in the forest, both sides of base
+  const campPositions = [];
+  for (let x = excludeLeft - CAMP_SPACING; x > 200; x -= CAMP_SPACING + r() * 300) {
+    campPositions.push(x + r() * 80 - 40);
+  }
+  for (let x = excludeRight + CAMP_SPACING; x < CFG.worldWidth - 200; x += CAMP_SPACING + r() * 300) {
+    campPositions.push(x + r() * 80 - 40);
+  }
 
-    // Randomly skip trees to create gaps
+  for (const cx of campPositions) {
+    const vcount = 1 + Math.floor(r() * 3);
+    camps.push({ x: cx, vagrants: vcount, triggered: false });
+  }
+
+  for (let x = 100; x < CFG.worldWidth - FOREST.endDist; x += FOREST.spacing) {
+    if (x >= excludeLeft && x <= excludeRight) continue;
     if (r() < gapChance) continue;
 
-    // Add slight random offset to x position
     const offsetX = x + r() * (FOREST.spacing * 0.4) - (FOREST.spacing * 0.2);
-    const tree = makeTree(offsetX, 130 + r() * 60, r);
+
+    // Clear trees near camp positions
+    let nearCamp = false;
+    for (const c of camps) {
+      if (Math.abs(offsetX - c.x) < CAMP_CLEAR_DIST) { nearCamp = true; break; }
+    }
+    if (nearCamp) continue;
+
+    const tree = makeTree(offsetX, 170 + r() * 80, r, { harvestable: true });
     trees.push({
       x: offsetX, tree,
       marked: false, chopped: false, beingChopped: false,
       chopProgress: 0,
-      falling: false, fallDir: Math.random() < 0.5 ? -1 : 1, fallAngle: 0,
-      lying: false, claimedBy: null,
+      falling: false, fallDir: Math.random() < 0.5 ? -1 : 1, fallAngle: 0, fallT: 0,
+      lying: false, claimedBy: null, carriedBy: null,
     });
   }
 
   state.forestTrees = trees;
+  state.forestCamps = camps;
 }
 
 const FALL_TIME = 0.85; // seconds for a felled tree to hit the ground
+
+export function updateForestCamps(dt) {
+  const { player, forestCamps } = state;
+  if (!forestCamps) return;
+  for (const camp of forestCamps) {
+    if (camp.triggered) continue;
+    if (dist(player.x, camp.x) < CAMP_TRIGGER) {
+      camp.triggered = true;
+      let spawned = 0;
+      for (let j = 0; j < camp.vagrants; j++) {
+        if (state.vagrants.length + state.units.length >= CFG.popCapByLevel[state.base.level]) break;
+        state.vagrants.push({ x: camp.x + rand(-40, 40), vx: 0, targetX: CFG.baseX + rand(-260, 260), state: "wander", anim: rand(0, 6), speed: 190 });
+        spawned++;
+      }
+      if (spawned > 0) floaty(camp.x, `🙋 ${spawned} overlevende!`, "#cdbfa3");
+    }
+  }
+}
 
 export function updateForestTrees(dt) {
   const { player, forestTrees } = state;
@@ -47,10 +86,15 @@ export function updateForestTrees(dt) {
   // Progress any trees currently falling over; once down they become a log.
   for (const t of forestTrees) {
     if (!t.falling) continue;
-    t.fallAngle = Math.min(1, t.fallAngle + dt / FALL_TIME) * (Math.PI / 2);
-    if (t.fallAngle >= Math.PI / 2 - 0.001) {
+    t.fallT = Math.min(1, (t.fallT || 0) + dt / FALL_TIME);
+    const eased = t.fallT < 0.7
+      ? 1.18 * t.fallT * t.fallT
+      : 1 - Math.pow(1 - t.fallT, 3) * 0.08;
+    t.fallAngle = clamp(eased, 0, 1) * (Math.PI / 2);
+    if (t.fallT >= 1) {
       t.falling = false;
       t.lying = true;
+      t.carriedBy = null;
       floaty(t.x, "🪵 Træ fældet!", "#caa46a");
     }
   }
@@ -60,7 +104,7 @@ export function updateForestTrees(dt) {
   if (!interact) return;
   let nearest = null, nd = FOREST.interactRange;
   for (const t of forestTrees) {
-    if (t.chopped || t.marked || t.falling || t.lying) continue;
+    if (t.chopped || t.marked || t.falling || t.lying || t.carriedBy) continue;
     const d = dist(player.x, t.x);
     if (d < nd) { nd = d; nearest = t; }
   }
@@ -76,7 +120,7 @@ export function nearestChoppableTree(x) {
   if (!forestTrees || !forestTrees.length) return null;
   let best = null, bd = 1e9;
   for (const t of forestTrees) {
-    if (t.chopped || t.falling || t.lying || !t.marked) continue;
+    if (t.chopped || t.falling || t.lying || t.carriedBy || !t.marked) continue;
     const d = dist(x, t.x);
     if (d < bd) { bd = d; best = t; }
   }
@@ -89,7 +133,7 @@ export function nearestLog(x) {
   if (!forestTrees || !forestTrees.length) return null;
   let best = null, bd = 1e9;
   for (const t of forestTrees) {
-    if (!t.lying || t.claimedBy) continue;
+    if (!t.lying || t.claimedBy || t.carriedBy) continue;
     const d = dist(x, t.x);
     if (d < bd) { bd = d; best = t; }
   }
@@ -104,6 +148,7 @@ export function chopTree(tree, dt, u) {
     tree.beingChopped = false;
     tree.falling = true;
     tree.fallAngle = 0;
+    tree.fallT = 0;
     spawnParticles(tree.x, groundY - 10, 10, "#8a6a3a", 40, 60);
     Audio.build();
   }
@@ -114,7 +159,10 @@ export function deliverLog(log) {
   log.chopped = true;
   log.lying = false;
   log.claimedBy = null;
-  for (let i = 0; i < 3; i++) spawnCoin(CFG.baseX + rand(-24, 24), 1, groundY - 20, rand(-60, 60));
+  log.carriedBy = null;
+  const camps = (state.buildings || []).filter(b => b.type === "lumber" && b.built).length;
+  const coins = 3 + camps * CFG.lumberLogBonus;
+  for (let i = 0; i < coins; i++) spawnCoin(CFG.baseX + rand(-24, 24), 1, groundY - 20, rand(-60, 60));
   floaty(CFG.baseX, "🪵 Træstamme leveret!", "#caa46a");
   Audio.build();
 }

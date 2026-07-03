@@ -114,11 +114,17 @@
       <div id="dev-stats" class="dev-stats"></div>
 
       <div class="dev-section">
-        <div class="dev-label">Guld</div>
+        <div class="dev-label">Guld &amp; Sjæleglød</div>
         <div class="dev-row">
           <button class="dev-btn" onclick="DEV.addCoins(10)">+10 🪙</button>
           <button class="dev-btn" onclick="DEV.addCoins(50)">+50 🪙</button>
-          <button class="dev-btn" onclick="DEV.addCoins(60)">Max 🪙</button>
+          <button class="dev-btn" onclick="DEV.give1000Gold()">+1000 🪙</button>
+        </div>
+        <div class="dev-row">
+          <button class="dev-btn" onclick="DEV.addEmbers(10)">+10 🔥</button>
+          <button class="dev-btn" onclick="DEV.addEmbers(50)">+50 🔥</button>
+          <button class="dev-btn" onclick="DEV.addEmbers(500)">+500 🔥</button>
+          <button class="dev-btn dev-danger" onclick="DEV.resetUpgrades()">Nulstil opgraderinger</button>
         </div>
       </div>
 
@@ -127,11 +133,9 @@
         <div class="dev-row">
           <button class="dev-btn" onclick="DEV.skipToNight()">→ Nat 🌙</button>
           <button class="dev-btn" onclick="DEV.skipToDay()">→ Dag ☀</button>
-        </div>
-        <div class="dev-row" style="margin-top:4px">
-          <button class="dev-btn dev-danger" onclick="DEV.skipToDay10()">→ Dag 10 ☠</button>
-          <button class="dev-btn dev-danger" onclick="DEV.skipToDay15()">→ Dag 15 ☠</button>
-          <button class="dev-btn dev-danger" onclick="DEV.skipToDay20()">→ Dag 20 ☠</button>
+          <button class="dev-btn dev-danger" onclick="DEV.skipToDay10()">Dag 10 ☠</button>
+          <button class="dev-btn dev-danger" onclick="DEV.skipToDay15()">Dag 15 ☠</button>
+          <button class="dev-btn dev-danger" onclick="DEV.skipToDay20()">Dag 20 ☠</button>
         </div>
       </div>
 
@@ -140,8 +144,6 @@
         <div class="dev-row">
           <button class="dev-btn" onclick="DEV.upgradeBase()">Opgradér base ⬆</button>
           <button class="dev-btn" onclick="DEV.healAll()">Fuld helbred 💚</button>
-        </div>
-        <div class="dev-row" style="margin-top:4px">
           <button class="dev-btn dev-danger" onclick="DEV.maxBaseLevel()">Max base 🏰</button>
           <button class="dev-btn dev-danger" onclick="DEV.maxWallLevels()">Max mure 🧱</button>
         </div>
@@ -152,40 +154,33 @@
         <div class="dev-row">
           <button class="dev-btn" onclick="DEV.spawnEnemyNearBase('imp')">Imp</button>
           <button class="dev-btn" onclick="DEV.spawnEnemyNearBase('fireImp')">Ild-imp</button>
-          <button class="dev-btn" onclick="DEV.spawnEnemyNearBase('raider')">Raider</button>
+          <button class="dev-btn" onclick="DEV.spawn8ImpsRight()">8x Imp</button>
+          <button class="dev-btn" onclick="DEV.spawnFireDragonBoss()">🐉 Drage</button>
           <button class="dev-btn dev-danger" onclick="DEV.killAll()">💀 Dræb alle</button>
-        </div>
-        <div class="dev-row" style="margin-top:4px">
-          <button class="dev-btn" onclick="DEV.spawn8ImpsRight()">8x Imp højre</button>
         </div>
       </div>
 
       <div class="dev-section">
         <div class="dev-label">Spawn enhed</div>
         <div class="dev-row">
-          <button class="dev-btn" onclick="DEV.spawnUnit('archer')">🏹 Bueskytter</button>
-          <button class="dev-btn" onclick="DEV.spawnUnit('builder')">🔨 Bygmand</button>
-          <button class="dev-btn" onclick="DEV.spawnUnit('farmer')">🌾 Landmand</button>
-          <button class="dev-btn" onclick="DEV.spawnUnit('guard')">🛡️ Vagt</button>
+          <button class="dev-btn" onclick="DEV.spawnUnit('archer')">🏹</button>
+          <button class="dev-btn" onclick="DEV.spawnUnit('builder')">🔨</button>
+          <button class="dev-btn" onclick="DEV.spawnUnit('farmer')">🌾</button>
+          <button class="dev-btn" onclick="DEV.spawnUnit('guard')">🛡️</button>
         </div>
       </div>
 
       <div class="dev-section">
-        <div class="dev-label">Spiller</div>
+        <div class="dev-label">Spiller &amp; Våben</div>
         <div class="dev-row">
           <button class="dev-btn" id="dev-god-btn" onclick="DEV.toggleGodMode()">God mode: ⚫ FRA</button>
+          <button class="dev-btn dev-danger" onclick="window._enterDeathHub&&window._enterDeathHub('Dev-test: kronen faldt mellem verdener.')">Dødshub</button>
         </div>
-      </div>
-
-      <div class="dev-section">
-        <div class="dev-label">Giv våben</div>
         <div class="dev-row">
           <button class="dev-btn" onclick="DEV.giveWeapon('short_bow')">Kortbue</button>
           <button class="dev-btn" onclick="DEV.giveWeapon('lightning_tome')" style="color:#f0e060">Lyntome</button>
           <button class="dev-btn" onclick="DEV.giveWeapon('meteor_tome')" style="color:#ff8840">Meteortome</button>
-        </div>
-        <div class="dev-row" style="margin-top:4px">
-          <button class="dev-btn dev-danger" onclick="DEV.dropWeapon()">Drop våben</button>
+          <button class="dev-btn dev-danger" onclick="DEV.dropWeapon()">Drop</button>
         </div>
       </div>
 
@@ -213,6 +208,6 @@
     </div>
   </div>
 
-  <script type="module" src="src/game.js"></script>
+  <script type="module" src="src/core/game.js"></script>
 </body>
 </html>

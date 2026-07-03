@@ -1,10 +1,10 @@
-import { clamp } from '../util/math.js';
-import { WEAPONS, RARITY_COL, RARITY_NAME, WEAPON_UPGRADES, effectiveWeapon } from '../config/weapons.js';
-import { ARMORS, ARMOR_RARITY_COL, ARMOR_RARITY_NAME } from '../config/armor.js';
-import { ENEMY_TYPES } from '../config/enemies.js';
-import { ctx, W, H, groundY } from '../canvas.js';
-import { Game, state } from '../state.js';
-import { roundedRect, drawHeart, drawTomeIcon } from './DrawHelpers.js';
+import { clamp } from '../../util/math.js';
+import { WEAPONS, RARITY_COL, RARITY_NAME, WEAPON_UPGRADES, effectiveWeapon } from '../../config/weapons.js';
+import { ARMORS, ARMOR_RARITY_COL, ARMOR_RARITY_NAME } from '../../config/armor.js';
+import { ENEMY_TYPES } from '../../config/enemies.js';
+import { ctx, W, H, groundY } from '../../core/canvas.js';
+import { Game, state } from '../../core/state.js';
+import { roundedRect, drawHeart, drawTomeIcon } from '../DrawHelpers.js';
 
 // ---------- Weapon pickup overlay ----------
 export function drawWeaponPickupOverlay() {
@@ -340,7 +340,7 @@ function drawLegendaryBossHead(intro, cx, cy, size) {
   ctx.fillStyle=col;
   ctx.beginPath(); ctx.ellipse(cx,cy,w*0.55,w*0.65,0,0,Math.PI*2); ctx.fill();
   ctx.fillStyle=col;
-  const hc=intro.bossType==="legend3"?7:intro.bossType==="legend2"?5:5;
+  const hc=5;
   for(let i=0;i<hc;i++){const hx=cx+(i/(hc-1)-0.5)*w*0.9,hh=i%2===0?w*0.45:w*0.3;ctx.beginPath();ctx.moveTo(hx-4,cy-w*0.6);ctx.lineTo(hx,cy-w*0.6-hh);ctx.lineTo(hx+4,cy-w*0.6);ctx.fill();}
   ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.fillStyle=eye;
   ctx.globalAlpha=0.7+0.25*Math.sin(T*4); ctx.beginPath();
@@ -369,6 +369,7 @@ export function drawLegendaryIntro() {
   ctx.fillStyle="rgba(6,4,14,0.92)";
   roundedRect(cx-panW/2, py, panW, panH, 16); ctx.fill();
   const ET = ENEMY_TYPES[intro.bossType];
+  if (!ET) { Game.legendaryIntro = null; ctx.restore(); return; }
   ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.5*alpha;
   ctx.strokeStyle=ET.eye; ctx.lineWidth=2;
   roundedRect(cx-panW/2, py, panW, panH, 16); ctx.stroke();
@@ -386,11 +387,12 @@ export function drawLegendaryIntro() {
     legend1:"Stamper jorden og sender en shockwave der ødelægger alt inden for 200px.",
     legend2:"Lader op og charger med lynhurtig fart og knuser alt i vejen.",
     legend3:"Udsender en kæmpemæssig tomhedspuls der rammer alt inden for 310px.",
+    magmaGolem:"Panserskal af obsidian – ram den glødende kerne når den åbner sig! Knuser mure og efterlader brændende magmasøer.",
   };
   ctx.fillText(descs[intro.bossType]||"", tx, py+120);
   ctx.fillStyle="rgba(255,255,255,0.1)"; roundedRect(tx, py+140, panW-230, 12, 6); ctx.fill();
   ctx.fillStyle=ET.eye;
-  const barW=(panW-230)*(intro.bossType==="legend3"?1:intro.bossType==="legend2"?0.7:0.45);
+  const barW=(panW-230)*0.7;
   roundedRect(tx, py+140, barW, 12, 6); ctx.fill();
   ctx.fillStyle="rgba(255,255,255,0.5)"; ctx.font="10px Trebuchet MS"; ctx.textAlign="left";
   ctx.fillText("Liv: " + ET.hp, tx, py+168);

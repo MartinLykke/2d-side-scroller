@@ -1,8 +1,9 @@
 import { ENEMY_TYPES } from '../config/enemies.js';
-import { groundY } from '../canvas.js';
-import { Game, state } from '../state.js';
-import { spawnCoin, spawnParticles, floaty } from '../systems/SpawnSystem.js';
-import { Audio } from '../systems/Audio.js';
+import { groundY } from '../core/canvas.js';
+import { Game, state } from '../core/state.js';
+import { spawnCoin, spawnParticles, floaty } from '../systems/world/SpawnSystem.js';
+import { Audio } from '../systems/infrastructure/Audio.js';
+import { registerEnemyKill } from '../systems/infrastructure/RoguelikeSystem.js';
 
 export function spawnImpBlood(e, intensity = 1, y = null) {
   if (!e || e.type !== "imp") return;
@@ -29,6 +30,9 @@ export function killEnemyWithAnimation(e, knockDirection = 0) {
   e.deathSpin = e.type === "imp" ? (e.deathDir < 0 ? -1 : 1) * (0.85 + Math.random() * 0.35 + violence * 1.7) : 1;
   e.knock = e.type === "imp" ? e.deathDir * (110 + Math.random() * 70 + violence * 210) : knockDirection * 600;
   e.deathVy = e.type === "imp" && e.deathKind === "impFallBack" ? -(85 + Math.random() * 50 + violence * 95) : 0;
+  if (t.flying) {
+    e.deathDuration = Math.max(e.deathDuration, (e.fy !== undefined ? Math.abs(e.fy) : 80) / 260 + 0.35);
+  }
   e.deathGravity = 420 + violence * 55;
   e.deathFriction = Math.max(1.8, 5.5 - violence * 0.75);
   e.overkillViolence = violence;
@@ -43,6 +47,7 @@ export function killEnemyWithAnimation(e, knockDirection = 0) {
   }
 
   Audio.enemyDie();
+  registerEnemyKill(t.reward);
   if (window._addXP) window._addXP(t.reward * 8);
 
   if (t.legendary && state.legendaryBoss === e) {
@@ -53,15 +58,13 @@ export function killEnemyWithAnimation(e, knockDirection = 0) {
     if (window._floaty) window._floaty(e.x, "⚔ " + t.name + " besejret!", "#f2c14e");
   }
 
-  if (e.locIdx !== undefined && state.locations[e.locIdx]) {
-    const loc = state.locations[e.locIdx];
-    loc.remainingEnemies--;
-    if (loc.remainingEnemies <= 0 && !loc.lootSpawned) {
-      loc.cleared = true;
-      loc.lootSpawned = true;
-      state.chests.push({ x: loc.x, lootGold: loc.lootGold, weaponId: loc.weaponId, open: false, openAnim: 0, life: 1 });
-      if (window._floaty) window._floaty(loc.x, "📦 Kiste!", "#f2c14e");
-    }
+  if (e.type === "fireDragon") {
+    state.lootItems.push({ x: e.x, weaponId: "meteor_tome", dropVy: -350, dropY: groundY - 150 });
+    if (window._floaty) window._floaty(e.x, "⚔ Meteortome droppet!", "#f2c14e");
+  }
+  if (e.type === "magmaGolem") {
+    state.lootItems.push({ x: e.x, weaponId: "sunblade", dropVy: -350, dropY: groundY - 150 });
+    if (window._floaty) window._floaty(e.x, "⚔ Solblade droppet!", "#f2c14e");
   }
 
   // Coins are dropped during the death animation
@@ -75,6 +78,7 @@ export function killEnemy(e) {
     return;
   }
   const t = ENEMY_TYPES[e.type];
+  registerEnemyKill(t.reward);
   for (let k = 0; k < t.reward; k++) spawnCoin(e.x + Math.random() * 44 - 22, 1, groundY - 28, Math.random() * 160 - 80, Math.random() * 120 - 260);
   spawnParticles(e.x, groundY - 24, 12, t.color === "#1f1830" ? "#ff2a6a" : "#6a2a4a", 80, 100);
   Audio.enemyDie();
@@ -85,17 +89,6 @@ export function killEnemy(e) {
     for (const u of state.units) u.rallied = false;
     spawnParticles(e.x, groundY - 80, 80, t.eye, 300, 250);
     if (window._floaty) window._floaty(e.x, "⚔ " + t.name + " besejret!", "#f2c14e");
-  }
-
-  if (e.locIdx !== undefined && state.locations[e.locIdx]) {
-    const loc = state.locations[e.locIdx];
-    loc.remainingEnemies--;
-    if (loc.remainingEnemies <= 0 && !loc.lootSpawned) {
-      loc.cleared = true;
-      loc.lootSpawned = true;
-      state.chests.push({ x: loc.x, lootGold: loc.lootGold, weaponId: loc.weaponId, open: false, openAnim: 0, life: 1 });
-      if (window._floaty) window._floaty(loc.x, "📦 Kiste!", "#f2c14e");
-    }
   }
   const idx = state.enemies.indexOf(e);
   if (idx >= 0) state.enemies.splice(idx, 1);
@@ -127,22 +120,14 @@ export function updateDyingEnemies(dt) {
         e.x += e.knock * dt; e.knock *= 0.9; if (Math.abs(e.knock) < 2) e.knock = 0;
       }
 
-      // Remove after animation completes
+      // Flying enemies tumble to the ground as they die
+      if (et.flying && e.fy !== undefined && e.fy < 0) {
+        e.deathVy = (e.deathVy || 0) + (e.deathGravity || 420) * dt;
+        e.fy = Math.min(0, e.fy + e.deathVy * dt);
+        if (e.fy >= 0) { e.fy = 0; e.deathVy = 0; }
+      }
+
       if (e.deathT >= e.deathDuration) {
-        // Update location info before removing
-        const et = t[e.type];
-        if (e.locIdx !== undefined && state.locations[e.locIdx]) {
-          const loc = state.locations[e.locIdx];
-          if (loc.remainingEnemies > 0) {
-            loc.remainingEnemies--;
-            if (loc.remainingEnemies <= 0 && !loc.lootSpawned) {
-              loc.cleared = true;
-              loc.lootSpawned = true;
-              state.chests.push({ x: loc.x, lootGold: loc.lootGold, weaponId: loc.weaponId, open: false, openAnim: 0, life: 1 });
-              if (window._floaty) window._floaty(loc.x, "📦 Kiste!", "#f2c14e");
-            }
-          }
-        }
         state.enemies.splice(i, 1);
       }
     }
