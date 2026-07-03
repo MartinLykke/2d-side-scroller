@@ -179,7 +179,20 @@ export function makeLocation(x, type, r) {
   }
   let enemyCount = Math.floor(r() * (def.maxE + 1));
   if (Game.diffMult > 1.5) enemyCount = Math.ceil(enemyCount * 1.4);
-  return { x, type, triggered: false, preActivated: false, cleared: enemyCount === 0, lootGold: goldAmt, weaponId, enemyCount, remainingEnemies: 0, lootSpawned: false, ph: r() * 6 };
+  return {
+    x, type,
+    triggered: false,
+    preActivated: false,
+    cleared: enemyCount === 0,
+    lootGold: goldAmt,
+    weaponId,
+    enemyCount,
+    remainingEnemies: 0,
+    remainingVagrants: def.vagrants || 0,
+    blockedUntilExit: false,
+    lootSpawned: false,
+    ph: r() * 6,
+  };
 }
 
 export function buildLocations() {

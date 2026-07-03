@@ -167,7 +167,7 @@ export function drawTree(t, cx, baseY, light, dark, depthDark, swayAmp) {
   const sw = (hf) => windSway(t.phase, swayAmp)*Math.pow(clamp(hf,0,1),1.35) + lean*hf*Wd*0.7;
   const trunkCol = shade(dark, 0.68);
   const trunkHi = shade(trunkCol, 1.35);
-  if (depthDark < 0.5) { ctx.save(); ctx.globalAlpha=0.16*(1-depthDark); ctx.fillStyle="#0a0810"; ctx.beginPath(); ctx.ellipse(cx,groundY+2,Wd*0.5*(1.15-depthDark),Wd*0.5*(1.15-depthDark)*0.26,0,0,Math.PI*2); ctx.fill(); ctx.restore(); }
+  if (depthDark < 0.5) { ctx.save(); ctx.globalAlpha=0.16*(1-depthDark); ctx.fillStyle="#0a0810"; ctx.beginPath(); ctx.ellipse(cx,baseY-2,Wd*0.5*(1.15-depthDark),Wd*0.5*(1.15-depthDark)*0.26,0,0,Math.PI*2); ctx.fill(); ctx.restore(); }
 
   if (t.type==="pine"||t.type==="fir"||t.type==="widepine") {
     // tapered trunk
@@ -177,9 +177,11 @@ export function drawTree(t, cx, baseY, light, dark, depthDark, swayAmp) {
     ctx.lineTo(cx+tw1,baseY-Ht*0.34); ctx.lineTo(cx-tw1,baseY-Ht*0.34); ctx.closePath(); ctx.fill();
     ctx.strokeStyle=withA(trunkHi,0.35); ctx.lineWidth=Math.max(1,tw0*0.28);
     ctx.beginPath(); ctx.moveTo(cx-tw0*0.34,baseY-4); ctx.lineTo(cx-tw1*0.2,baseY-Ht*0.31); ctx.stroke();
+    const skirt = Math.min(18, Ht*0.075);
     for (let i=0;i<t.tiers;i++) {
       const bhf=i/t.tiers, thf=(i+1)/t.tiers;
-      const tw=Wd*(1-bhf*0.78)*0.55, by=baseY-bhf*Ht-Ht*0.05, ty=baseY-thf*Ht;
+      const rootFlare = Math.pow(1-bhf, 1.6);
+      const tw=Wd*(1-bhf*0.78)*0.55, by=baseY-bhf*Ht-Ht*0.02+skirt*rootFlare, ty=baseY-thf*Ht;
       const bx=cx+sw(bhf), tx=cx+sw(thf);
       ctx.fillStyle=withA(dark,1); ctx.beginPath(); ctx.moveTo(bx-tw,by); ctx.lineTo(bx+tw,by); ctx.lineTo(tx,ty); ctx.closePath(); ctx.fill();
       // shaded facet away from the sun
@@ -189,6 +191,11 @@ export function drawTree(t, cx, baseY, light, dark, depthDark, swayAmp) {
       ctx.beginPath(); ctx.moveTo(bx-tw*0.72,by-Ht*0.012); ctx.lineTo(tx,ty+Ht*0.035); ctx.lineTo(bx+tw*0.46,by-Ht*0.01); ctx.stroke();
       if (t.snow) { ctx.fillStyle="rgba(238,244,251,0.92)"; ctx.beginPath(); ctx.moveTo(tx,ty); ctx.lineTo(tx-tw*0.5,by-(by-ty)*0.5); ctx.lineTo(tx+tw*0.5,by-(by-ty)*0.5); ctx.closePath(); ctx.fill(); }
     }
+    ctx.strokeStyle=withA(shade(trunkCol,0.72),0.45); ctx.lineWidth=Math.max(1.5,tw0*0.36); ctx.lineCap="round";
+    ctx.beginPath(); ctx.moveTo(cx,baseY+2); ctx.lineTo(cx+sw(0.82),baseY-Ht*0.82); ctx.stroke();
+    ctx.strokeStyle=withA(trunkHi,0.18); ctx.lineWidth=Math.max(1,tw0*0.14);
+    ctx.beginPath(); ctx.moveTo(cx-tw0*0.2,baseY-2); ctx.lineTo(cx+sw(0.62)-tw0*0.1,baseY-Ht*0.62); ctx.stroke();
+    ctx.lineCap="butt";
   } else if (t.type==="dead") {
     ctx.strokeStyle=withA(trunkCol,1); ctx.lineCap="round"; ctx.lineWidth=Math.max(2,Wd*0.14);
     ctx.beginPath(); ctx.moveTo(cx,baseY); ctx.lineTo(cx+sw(1),baseY-Ht); ctx.stroke();

@@ -4,7 +4,7 @@ import { clamp, dist, rand, pick } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, spawnCoin, floaty } from '../world/SpawnSystem.js';
+import { spawnParticles, spawnCoin, floaty as showFloaty } from '../world/SpawnSystem.js';
 import { shootArrow, killEnemy } from '../combat/Combat.js';
 import { killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js';
 import { wallHeight } from '../../entities/Wall.js';
@@ -12,6 +12,11 @@ import { makeUnit } from '../../entities/Unit.js';
 import { nearestChoppableTree, chopTree, nearestLog, deliverLog } from '../world/ForestSystem.js';
 
 function hasSkill(id) { return state.archerSkills.includes(id); }
+
+function floaty(x, text, color) {
+  if (typeof text === "string" && text.includes("Unders")) return;
+  showFloaty(x, text, color);
+}
 
 function archerShoot(u, x, h, tgt) {
   const skills = state.archerSkills;

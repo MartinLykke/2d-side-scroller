@@ -8,7 +8,27 @@ import { makeTree } from '../../rendering/Effects.js';
 
 const CAMP_SPACING = 600;
 const CAMP_TRIGGER = 120;
-const CAMP_CLEAR_DIST = 140;
+const CAMP_CLEAR_DIST = 48;
+const CAMP_RESPAWN_MIN = 80;
+const CAMP_RESPAWN_MAX = 150;
+const CAMP_RESPAWN_DIST = 1050;
+
+function makeForestCamp(x, r = Math.random) {
+  return {
+    x,
+    vagrants: 1 + Math.floor(r() * 3),
+    triggered: false,
+    respawnTimer: 0,
+    blockedUntilExit: false,
+  };
+}
+
+function pickCampX() {
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const nearForest = CFG.baseX + side * (FOREST.startDist + 450);
+  const deepForest = side < 0 ? 260 : CFG.worldWidth - 260;
+  return side < 0 ? rand(deepForest, nearForest) : rand(nearForest, deepForest);
+}
 
 export function buildForest() {
   const r = mulberry32((Game.treeSeed || 1) + 777);
@@ -28,8 +48,7 @@ export function buildForest() {
   }
 
   for (const cx of campPositions) {
-    const vcount = 1 + Math.floor(r() * 3);
-    camps.push({ x: cx, vagrants: vcount, triggered: false });
+    camps.push(makeForestCamp(cx, r));
   }
 
   for (let x = 100; x < CFG.worldWidth - FOREST.endDist; x += FOREST.spacing) {
@@ -65,16 +84,38 @@ export function updateForestCamps(dt) {
   const { player, forestCamps } = state;
   if (!forestCamps) return;
   for (const camp of forestCamps) {
-    if (camp.triggered) continue;
-    if (dist(player.x, camp.x) < CAMP_TRIGGER) {
-      camp.triggered = true;
-      let spawned = 0;
-      for (let j = 0; j < camp.vagrants; j++) {
-        if (state.vagrants.length + state.units.length >= CFG.popCapByLevel[state.base.level]) break;
-        state.vagrants.push({ x: camp.x + rand(-40, 40), vx: 0, targetX: CFG.baseX + rand(-260, 260), state: "wander", anim: rand(0, 6), speed: 190 });
-        spawned++;
+    const nearCamp = dist(player.x, camp.x) < CAMP_TRIGGER;
+    if (camp.blockedUntilExit && !nearCamp) camp.blockedUntilExit = false;
+
+    if (camp.triggered) {
+      camp.respawnTimer = (camp.respawnTimer || 0) - dt;
+      if (camp.respawnTimer <= 0 && dist(player.x, camp.x) > CAMP_RESPAWN_DIST) {
+        Object.assign(camp, makeForestCamp(pickCampX()));
       }
-      if (spawned > 0) floaty(camp.x, `🙋 ${spawned} overlevende!`, "#cdbfa3");
+      continue;
+    }
+    if (!nearCamp || camp.blockedUntilExit) continue;
+
+    const popCap = CFG.popCapByLevel[state.base.level];
+    const freeSlots = Math.max(0, popCap - (state.vagrants.length + state.units.length));
+    if (freeSlots <= 0) {
+      camp.blockedUntilExit = true;
+      floaty(camp.x, "Ingen plads - kom tilbage senere", "#ff8a6a");
+      continue;
+    }
+
+    const spawned = Math.min(camp.vagrants, freeSlots);
+    for (let j = 0; j < spawned; j++) {
+      state.vagrants.push({ x: camp.x + rand(-40, 40), vx: 0, targetX: CFG.baseX + rand(-260, 260), state: "wander", anim: rand(0, 6), speed: 190 });
+    }
+    camp.vagrants -= spawned;
+    if (spawned > 0) floaty(camp.x, `🙋 ${spawned} overlevende!`, "#cdbfa3");
+
+    if (camp.vagrants <= 0) {
+      camp.triggered = true;
+      camp.respawnTimer = rand(CAMP_RESPAWN_MIN, CAMP_RESPAWN_MAX);
+    } else {
+      camp.blockedUntilExit = true;
     }
   }
 }
@@ -95,7 +136,7 @@ export function updateForestTrees(dt) {
       t.falling = false;
       t.lying = true;
       t.carriedBy = null;
-      floaty(t.x, "🪵 Træ fældet!", "#caa46a");
+      floaty(t.x, "Trae faeldet!", "#caa46a");
     }
   }
 
@@ -110,7 +151,7 @@ export function updateForestTrees(dt) {
   }
   if (nearest) {
     nearest.marked = true;
-    floaty(nearest.x, "🪓 Træ markeret", "#9bd05a");
+    floaty(nearest.x, "Trae markeret", "#9bd05a");
   }
 }
 
@@ -163,6 +204,6 @@ export function deliverLog(log) {
   const camps = (state.buildings || []).filter(b => b.type === "lumber" && b.built).length;
   const coins = 3 + camps * CFG.lumberLogBonus;
   for (let i = 0; i < coins; i++) spawnCoin(CFG.baseX + rand(-24, 24), 1, groundY - 20, rand(-60, 60));
-  floaty(CFG.baseX, "🪵 Træstamme leveret!", "#caa46a");
+  floaty(CFG.baseX, "Traestamme leveret!", "#caa46a");
   Audio.build();
 }

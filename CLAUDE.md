@@ -143,7 +143,7 @@ Buildings in forest require surrounding trees to be felled first.
 ### Weapons & armor
 - 34 weapons across melee (7), ranged (8), magic tomes (9), with 4 rarity tiers
 - 8 armor pieces providing defense (reduces incoming damage)
-- Shop unlocked at base level 2; shop tier scales with base level
+- Shop unlocked at base level 4; shop tier scales with base level
 - Weapons also found in location chests
 
 ### Skill trees (K to open)
@@ -187,7 +187,7 @@ Auto-saves every 5 seconds to localStorage (`kingdom_embers_save_v1`). Saves ful
 | Space | Jump |
 | ↓/S (hold) | Pay/recruit at station |
 | F | Pick up weapon / open chest |
-| B | Open shop (near base, lvl 2+) |
+| B | Open shop (near base, lvl 4) |
 | T | Switch shop tabs |
 | E/Enter | Buy selected item |
 | K | Skill tree |

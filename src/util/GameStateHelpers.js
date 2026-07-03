@@ -23,14 +23,14 @@ export function upgradeBase() {
   Audio.upgrade();
 
   if (base.level === 2) {
-    setTimeout(() => floaty(base.x, "🏪 Marked og butik åbnet!", "#9bd05a"), 900);
+    setTimeout(() => floaty(base.x, "🔨 Byggerbod åbnet!", "#9bd05a"), 900);
     setTimeout(() => floaty(base.x, "🌾 Gårdsstation tilgængelig!", "#9bd05a"), 1800);
   } else if (base.level === 3) {
     setTimeout(() => floaty(base.x, "⚔ Rekrutteringshal åbnet!", "#f2c14e"), 900);
     setTimeout(() => floaty(base.x, "Ansæt guards til forsvar!", "#cdbfa3"), 1800);
   } else if (base.level === 4) {
     setTimeout(() => floaty(base.x, "👑 Kongelig Garde aktiveret!", "#f2c14e"), 900);
-    setTimeout(() => floaty(base.x, "✨ Legendariske våben tilgængelige!", "#c69fff"), 1800);
+    setTimeout(() => floaty(base.x, "🏪 Butik og legendariske våben åbnet!", "#c69fff"), 1800);
     state.player.maxHp++;
     state.player.hp = Math.min(state.player.hp + 1, state.player.maxHp);
     state.player.hasCrown = true;

@@ -522,6 +522,37 @@ export function drawForestCamps(dark) {
     if (camp.triggered) continue;
 
     const x = camp.x;
+    const b = biomeAt(x);
+
+    // tents tucked just behind the campfire
+    const tentShade = rgb(lerpColor([96,78,58],[34,28,24],dark));
+    const tentLight = rgb(lerpColor([154,122,82],[62,48,36],dark));
+    const tentTrim = rgb(lerpColor([72,52,38],[22,18,16],dark));
+    const tentAt = (tx, scale, flip = 1) => {
+      groundShadow(tx, 28 * scale, 0.16);
+      ctx.save();
+      ctx.translate(tx, groundY - 5);
+      ctx.scale(flip * scale, scale);
+      ctx.fillStyle = tentShade;
+      ctx.beginPath(); ctx.moveTo(-34, 0); ctx.lineTo(0, -42); ctx.lineTo(34, 0); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = tentLight;
+      ctx.beginPath(); ctx.moveTo(-28, 0); ctx.lineTo(0, -38); ctx.lineTo(7, 0); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = tentTrim;
+      ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(0, -31); ctx.lineTo(24, 0); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = withA(lerpColor([210,170,105],[80,60,40],dark), 0.8); ctx.lineWidth = 1.3;
+      ctx.beginPath(); ctx.moveTo(0, -42); ctx.lineTo(0, 0); ctx.stroke();
+      ctx.restore();
+    };
+    tentAt(x - 76, 0.82, 1);
+    tentAt(x + 76, 0.72, -1);
+
+    ctx.save();
+    ctx.fillStyle = withA(lerpColor(shade(b.gT, 0.55),[8,12,18],dark), 0.75);
+    for (let i = -3; i <= 3; i++) {
+      const px = x + i * 22 + Math.sin(t + i) * 2;
+      ctx.beginPath(); ctx.ellipse(px, groundY - 3, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
 
     // campfire stone ring
     const stC = rgb(lerpColor([90,84,78],[28,26,24],dark));
@@ -737,9 +768,16 @@ function drawStallEmblem(ex, ey, emblem) {
     ctx.beginPath(); ctx.arc(0,0,4.5,Math.PI*0.6,Math.PI*1.4,true); ctx.stroke();
     ctx.lineWidth=0.9; ctx.beginPath(); ctx.moveTo(-1.5,-4); ctx.lineTo(-1.5,4); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(-1.5,0); ctx.lineTo(5,0); ctx.stroke();
-  } else {
+  } else if (emblem==="hammer") {
     ctx.beginPath(); ctx.moveTo(-1,4.5); ctx.lineTo(1,4.5); ctx.lineTo(1,-2); ctx.lineTo(-1,-2); ctx.closePath(); ctx.fill();
     ctx.fillRect(-4.5,-5,9,3.6);
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(0,-6); ctx.lineTo(6,-3); ctx.lineTo(5,3);
+    ctx.quadraticCurveTo(3,7,0,8);
+    ctx.quadraticCurveTo(-3,7,-5,3);
+    ctx.lineTo(-6,-3); ctx.closePath(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,-4); ctx.lineTo(0,5); ctx.stroke();
   }
   ctx.restore();
 }
@@ -930,6 +968,66 @@ function drawHammerStation(x) {
   ctx.restore();
 }
 
+function drawGuardStation(x) {
+  const t=performance.now()/1000, fl=(FX&&FX.flicker)||1;
+  drawWallStall(x,"#7a2830","#4a1f2a","shield");
+  drawBoothPerson(x-8,"#c89468","#31465f","#223145");
+  drawBoothCounter(x);
+
+  // shield and helm laid out like real stock, so the station reads as a guard post.
+  ctx.save();
+  ctx.translate(x+10,groundY-19);
+  ctx.fillStyle="#4e5f78";
+  ctx.beginPath();
+  ctx.moveTo(0,-9); ctx.lineTo(10,-5); ctx.lineTo(8,4);
+  ctx.quadraticCurveTo(5,11,0,13);
+  ctx.quadraticCurveTo(-5,11,-8,4);
+  ctx.lineTo(-10,-5); ctx.closePath(); ctx.fill();
+  ctx.fillStyle="rgba(255,255,255,0.14)";
+  ctx.beginPath(); ctx.moveTo(-7,-4); ctx.lineTo(0,-7); ctx.lineTo(0,10); ctx.quadraticCurveTo(-4,8,-6,3); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle="#c9b898"; ctx.lineWidth=1.3;
+  ctx.beginPath(); ctx.moveTo(0,-7); ctx.lineTo(0,10); ctx.stroke();
+  ctx.fillStyle="#9a9aaa";
+  ctx.beginPath(); ctx.arc(-16,-1,6,Math.PI,0); ctx.lineTo(-10,4); ctx.lineTo(-22,4); ctx.closePath(); ctx.fill();
+  ctx.fillStyle="#6a6a76"; ctx.fillRect(-20,2,8,3);
+  ctx.restore();
+
+  // spear rack on one side, training dummy on the other.
+  const rackX=x-34;
+  ctx.strokeStyle="#5a4028"; ctx.lineWidth=2.2; ctx.lineCap="round";
+  ctx.beginPath(); ctx.moveTo(rackX-8,groundY); ctx.lineTo(rackX+8,groundY-22); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(rackX+8,groundY); ctx.lineTo(rackX-8,groundY-22); ctx.stroke();
+  ctx.lineWidth=1.8;
+  for (let i=0;i<3;i++) {
+    const sx=rackX-6+i*6;
+    ctx.beginPath(); ctx.moveTo(sx,groundY-3); ctx.lineTo(sx+2,groundY-34-i*2); ctx.stroke();
+    ctx.fillStyle="#b8bcc4";
+    ctx.beginPath(); ctx.moveTo(sx+2,groundY-39-i*2); ctx.lineTo(sx-1,groundY-33-i*2); ctx.lineTo(sx+5,groundY-34-i*2); ctx.closePath(); ctx.fill();
+  }
+  ctx.lineCap="butt";
+
+  const dX=x+38;
+  ctx.fillStyle="#5a3a24"; ctx.fillRect(dX-3,groundY-31,6,31);
+  ctx.fillStyle="#7a5030"; ctx.beginPath(); ctx.arc(dX,groundY-37,7,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle="#6a4428"; ctx.fillRect(dX-11,groundY-31,22,16);
+  ctx.strokeStyle="#4a2e1e"; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(dX-10,groundY-23); ctx.lineTo(dX+10,groundY-23); ctx.stroke();
+  ctx.fillStyle="#c1453b"; ctx.fillRect(dX-8,groundY-30,16,3);
+
+  if (Game.isNight) {
+    const bx=x+29, by=groundY-18;
+    ctx.fillStyle="#3a3a44";
+    ctx.beginPath(); ctx.arc(bx,by,5,0,Math.PI,false); ctx.fill();
+    ctx.save(); ctx.globalCompositeOperation="lighter";
+    const rg=ctx.createRadialGradient(bx,by-4,1,bx,by-4,22*fl);
+    rg.addColorStop(0,"rgba(255,190,90,0.45)"); rg.addColorStop(1,"rgba(255,100,30,0)");
+    ctx.fillStyle=rg; ctx.beginPath(); ctx.arc(bx,by-4,22*fl,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle="rgba(255,160,60,0.95)";
+    ctx.beginPath(); ctx.ellipse(bx,by-5,2.5,5*fl,0,0,Math.PI*2); ctx.fill();
+  }
+}
+
 // Timber-framed general store: plastered walls with dark beams, striped
 // awning over a goods counter, hanging sign, barrels, crates and a lantern.
 function drawShopBuilding(x) {
@@ -1043,7 +1141,7 @@ function drawShopBuilding(x) {
 
 export function drawStations() {
   drawBowStation(STATIONS_X.bow);
-  drawHammerStation(STATIONS_X.hammer);
+  if (state.base && state.base.level >= 2) drawHammerStation(STATIONS_X.hammer);
   const farmLvl = state.farmLevel || 0;
   if (state.base.level >= 2 && farmLvl === 0) drawFlag(STATIONS_X.farm, "#9bd05a");
   if (farmLvl >= 1) {
@@ -1079,16 +1177,8 @@ export function drawStations() {
       ctx.restore();
     }
   }
-  if (state.base && state.base.level >= 2) drawShopBuilding(STATIONS_X.shop);
-  if (state.base && state.base.level >= 3) {
-    ctx.strokeStyle="#6a4a28"; ctx.lineWidth=2;
-    ctx.beginPath(); ctx.moveTo(STATIONS_X.guard-18,groundY-8); ctx.lineTo(STATIONS_X.guard+18,groundY-8); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(STATIONS_X.guard-14,groundY-8); ctx.lineTo(STATIONS_X.guard-14,groundY); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(STATIONS_X.guard+14,groundY-8); ctx.lineTo(STATIONS_X.guard+14,groundY); ctx.stroke();
-    ctx.strokeStyle="#9a9aaa"; ctx.lineWidth=1.5;
-    ctx.beginPath(); ctx.moveTo(STATIONS_X.guard-10,groundY-14); ctx.lineTo(STATIONS_X.guard-2,groundY-8); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(STATIONS_X.guard+10,groundY-14); ctx.lineTo(STATIONS_X.guard+2,groundY-8); ctx.stroke();
-  }
+  if (state.base && state.base.level >= 4) drawShopBuilding(STATIONS_X.shop);
+  if (state.base && state.base.level >= 3) drawGuardStation(STATIONS_X.guard);
 }
 
 // ---------- Unlockable buildings (watchtower, lumber camp, shrine) ----------

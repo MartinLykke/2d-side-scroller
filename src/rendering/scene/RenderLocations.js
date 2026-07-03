@@ -1109,8 +1109,9 @@ export function drawLocations(dark) {
     ctx.restore();
 
     const def = LOC_DEFS[loc.type];
-    if (!loc.triggered && def && def.vagrants > 0) {
-      drawVagrantCamp(loc.x, def.vagrants, dark);
+    const survivorCount = loc.remainingVagrants ?? def?.vagrants ?? 0;
+    if (survivorCount > 0) {
+      drawVagrantCamp(loc.x, survivorCount, dark);
     }
 
     if (loc.preActivated && !loc.cleared && loc.remainingEnemies > 0) {

@@ -239,7 +239,7 @@ export const UI = {
     const vagNear=state.vagrants.find(v=>dist(player.x,v.x)<46&&Math.abs(v.vx)<1);
     const lootNear=state.lootItems&&state.lootItems.find(it=>dist(player.x,it.x)<50);
     const shopSt=stations.find(s=>s.id==="shop");
-    const nearShop=shopSt&&state.base.level>=2&&dist(player.x,shopSt.x())<100;
+    const nearShop=shopSt&&state.base.level>=4&&dist(player.x,shopSt.x())<100;
     if (near) {
       this.prompt.classList.remove("hidden");
       const prog=near.paid>0?` (${near.paid}/${near.cost()})` : "";
@@ -397,7 +397,7 @@ export const DEV = {
   spawnMagmaGolemBoss() {
     if (Game.state!=="play") return;
     const side = pick([-1, 1]);
-    spawnBoss("magmaGolem", { x: state.base.x + side * 1000, side });
+    spawnBoss("magmaGolem", { x: state.base.x + side * 720, side });
   },
 
   killAll() {

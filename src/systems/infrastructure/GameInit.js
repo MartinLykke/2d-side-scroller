@@ -57,12 +57,14 @@ export function buildStations() {
       },
     });
   }
-  state.stations.push({
-    id:"shop", x:()=>STATIONS_X.shop, paid:0,
-    cost:()=>0,
-    label:()=>"🏪 Butik",
-    onPaid:()=>{},
-  });
+  if (state.base.level >= 4) {
+    state.stations.push({
+      id:"shop", x:()=>STATIONS_X.shop, paid:0,
+      cost:()=>0,
+      label:()=>"🏪 Butik",
+      onPaid:()=>{},
+    });
+  }
   if (state.base.level >= 3) {
     state.stations.push({
       id:"guard", x:()=>STATIONS_X.guard, paid:0,
@@ -178,7 +180,7 @@ export function newGame() {
 
   // Seed starting population
   for (let i = 0; i < 2; i++)
-    state.vagrants.push({ x: CFG.baseX + rand(-320, 320), vx: 0, targetX: CFG.baseX + rand(-260, 260), state: "wander", anim: rand(0, 6) });
+    state.units.push(makeUnit("peasant", CFG.baseX + rand(-180, 180)));
   for (let i = 0; i < 10; i++) spawnAnimal();
   planNight();
 }
