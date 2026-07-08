@@ -150,8 +150,8 @@ function drawRabbit(a) {
   const squash = hopAmp > 0 ? (1 - Math.abs(cyc)) * (flee ? 0.3 : 0.18) : 0;
 
   if (dp > 0) {
-    // quick flip onto the side
-    ctx.translate(0, dp * 2);
+    // quick flip onto the side, pivoting at the ground contact point
+    ctx.translate(0, groundY - 4 + dp * 2);
     ctx.rotate(-dp * 1.55);
     ctx.translate(0, -(groundY - 4));
   } else {
@@ -382,11 +382,29 @@ function drawBear(a) {
   }
 }
 
+function drawStuckArrows(a) {
+  if (!a.stuckArrows || !a.stuckArrows.length) return;
+  for (const ar of a.stuckArrows) {
+    ctx.save();
+    ctx.translate(a.x + ar.x, ar.y);
+    ctx.rotate(ar.a || 0);
+    ctx.strokeStyle = "#c9b48a"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-15, 0); ctx.lineTo(5, 0); ctx.stroke();
+    ctx.fillStyle = "#b8bcc4";
+    ctx.beginPath(); ctx.moveTo(5, -1.6); ctx.lineTo(8, 0); ctx.lineTo(5, 1.6); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#8fae4a";
+    ctx.beginPath(); ctx.moveTo(-13, 0); ctx.lineTo(-17, -2.3); ctx.lineTo(-14, -0.3); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-13, 0); ctx.lineTo(-17, 2.3); ctx.lineTo(-14, 0.3); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+}
+
 export function drawAnimals() {
   for (const a of state.animals) {
     if (!a.alive) continue;
     if (a.type === "deer") drawDeer(a);
     else if (a.type === "bear") drawBear(a);
     else drawRabbit(a);
+    drawStuckArrows(a);
   }
 }

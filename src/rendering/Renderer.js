@@ -12,6 +12,7 @@ import { drawVagrants, drawUnits, drawEnemies, drawAnimals } from './scene/Rende
 import { drawCoins, drawArrows, drawLootItems, drawChests, drawGroundBows, drawGroundHammers } from './scene/RenderItems.js';
 import { drawCaltrops, drawPoisonShots, drawFirePools, drawLegendaryEffects, drawParticles, drawFloats, drawSpells, drawCampLight } from './scene/RenderEffects.js';
 import { drawWeaponPickupOverlay, drawInventoryOverlay, drawShopOverlay, drawUpgradeMenu, drawXpBar, drawLegendaryIntro } from './scene/RenderUI.js';
+import { drawMineCutaway } from './scene/RenderMine.js';
 import { drawHeart, drawTomeIcon } from './DrawHelpers.js';
 
 // Helper functions
@@ -46,17 +47,29 @@ function drawWeaponSwingArc(x, player) {
 function drawPlayer(dark) {
   const { player } = state;
   const x=player.x, bob=player.bob, gallop=player.gallop;
-  drawWeaponSwingArc(x, player);
+  const dying = Game.state==="player-death";
+  if (!dying) drawWeaponSwingArc(x, player);
   ctx.save();
-  if (player.invuln>0&&Math.floor(player.invuln*12)%2===0) ctx.globalAlpha=0.45;
+  if (!dying && player.invuln>0&&Math.floor(player.invuln*12)%2===0) ctx.globalAlpha=0.45;
   ctx.translate(x, -bob - player.jumpH);
   if (player.dir<0) ctx.scale(-1,1);
+  if (dying) {
+    // Collapse backwards: knees buckle briefly, then topple around the feet
+    const t = Game.deathTimer || 0;
+    const fall = clamp((t - 0.35) / 0.75, 0, 1);
+    const eased = 1 - (1 - fall) * (1 - fall);
+    const sag = clamp(t / 0.35, 0, 1) * 4;
+    ctx.translate(0, sag);
+    ctx.translate(0, groundY);
+    ctx.rotate(-eased * 1.45 + Math.sin(Math.min(t, 1.1) * 22) * 0.02 * (1 - eased));
+    ctx.translate(0, -groundY);
+  }
 
   // Draw player body using new detailed rendering
   drawPlayerBody(player, player.dir, Math.abs(player.vx) > 1, gallop);
   const px = 0;
 
-  if (player.weapon) {
+  if (player.weapon && !dying) {
     const w=WEAPONS[player.weapon], sw=player.swing||0;
     ctx.save();
     if (w.type==="melee") {
@@ -113,7 +126,7 @@ function drawPlayer(dark) {
     ctx.restore();
   }
   ctx.restore();
-  if (player.hp <= 2 || player.hpShowTimer > 0) {
+  if (!dying && (player.hp <= 2 || player.hpShowTimer > 0)) {
     const n=player.maxHp, gap=9, hy=groundY-86-bob-player.jumpH;
     for (let i=0;i<n;i++) drawHeart(player.x-(n-1)*gap/2+i*gap, hy, 4, i<player.hp?"#e0556a":"rgba(255,255,255,0.18)");
   }
@@ -170,11 +183,12 @@ export function render() {
   const _skx=_sk>0?(Math.random()-0.5)*_sk*12:0, _sky=_sk>0?(Math.random()-0.5)*_sk*7:0;
   ctx.save();
   ctx.translate(W/2+_skx, groundY+_sky); ctx.scale(zoom,zoom); ctx.translate(-W/2-Game.cam,-groundY);
-  drawGroundTexture(dark); drawGroundDeco(dark); drawForestTrees(dark); drawForestCamps(dark);
+  drawGroundTexture(dark); drawGroundDeco(dark); drawMineCutaway(drawPlayer, dark); drawForestCamps(dark); drawForestTrees(dark);
   drawEntityShadows(); drawPortals(dark); drawWalls(dark); drawBuildings(dark); drawBase(dark);
   drawStations(); drawCoins(); drawGroundBows(); drawGroundHammers(); drawLootItems(); drawChests();
   drawAnimals(); drawVagrants(); drawCaltrops(); drawFirePools(); drawUnits(); drawEnemies(dark); drawLegendaryEffects();
-  drawPlayer(dark); drawArrows(); drawPoisonShots(); drawSpells(); drawLevelUpBeams(); drawParticles(); drawCampLight(dark); drawFloats();
+  if (!Game.inMine) drawPlayer(dark);
+  drawArrows(); drawPoisonShots(); drawSpells(); drawLevelUpBeams(); drawParticles(); drawCampLight(dark); drawFloats();
   ctx.restore();
 
   drawLowFog(dark,bi); drawAmbientFront(dark,bi);

@@ -55,16 +55,13 @@ export function killEnemyWithAnimation(e, knockDirection = 0) {
     state.legendaryEffects = [];
     for (const u of state.units) u.rallied = false;
     spawnParticles(e.x, groundY - 80, 80, t.eye, 300, 250);
-    if (window._floaty) window._floaty(e.x, "⚔ " + t.name + " besejret!", "#f2c14e");
   }
 
   if (e.type === "fireDragon") {
     state.lootItems.push({ x: e.x, weaponId: "meteor_tome", dropVy: -350, dropY: groundY - 150 });
-    if (window._floaty) window._floaty(e.x, "⚔ Meteortome droppet!", "#f2c14e");
   }
   if (e.type === "magmaGolem") {
     state.lootItems.push({ x: e.x, weaponId: "sunblade", dropVy: -350, dropY: groundY - 150 });
-    if (window._floaty) window._floaty(e.x, "⚔ Solblade droppet!", "#f2c14e");
   }
 
   // Coins are dropped during the death animation
@@ -88,7 +85,6 @@ export function killEnemy(e) {
     state.legendaryEffects = [];
     for (const u of state.units) u.rallied = false;
     spawnParticles(e.x, groundY - 80, 80, t.eye, 300, 250);
-    if (window._floaty) window._floaty(e.x, "⚔ " + t.name + " besejret!", "#f2c14e");
   }
   const idx = state.enemies.indexOf(e);
   if (idx >= 0) state.enemies.splice(idx, 1);

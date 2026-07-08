@@ -56,6 +56,7 @@ export function shopTierUnlocked() {
 }
 
 export function tryOpenShop() {
+  if (Game.inMine) return;
   const shopSt = state.stations.find(s => s.id === "shop");
   if (shopSt && state.base.level >= 4 && dist(state.player.x, shopSt.x()) < 100) {
     Game.shopOpen = !Game.shopOpen;
@@ -74,10 +75,8 @@ export function tryBuyShopItem(item) {
   state.player.coins -= item.price;
   if (item.armorId) {
     state.player.armor = item.armorId;
-    floaty(state.player.x, "🛡 " + ARMORS[item.armorId].name, "#9bd05a");
   } else if (item.weaponId) {
     if (pickupWeaponFn) pickupWeaponFn(item.weaponId);
-    floaty(state.player.x, "🛒 " + WEAPONS[item.weaponId].name, "#9bd05a");
   }
 }
 

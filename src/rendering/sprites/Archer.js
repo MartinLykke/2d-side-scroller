@@ -1,4 +1,5 @@
 import { ctx, groundY } from '../../core/canvas.js';
+import { Audio } from '../../systems/infrastructure/Audio.js';
 
 // ---------------------------------------------------------------------------
 // Procedural hooded archer: idle / walk / run / shoot, mirrored for east/west.
@@ -40,6 +41,7 @@ export const SHOOT_RELEASE_TIME = SHOOT_PHASES[0][1] + SHOOT_PHASES[1][1];
 export function startArcherShoot(u) {
   u.shootState = "reach";
   u.shootTimer = 0;
+  Audio.bowLoad();
 }
 
 export function updateArcherShoot(u, dt) {
@@ -130,11 +132,15 @@ export function drawArcher(u) {
     else                                { aim = 1 - ease(shoot.p) * 0.7; drawLean = (1 - ease(shoot.p)) * 1.5; }
   }
 
-  const hipY  = groundY - 18 - bob * 0.4;
-  const shX   = lean - drawLean;               // shoulder x offset
-  const shY   = groundY - 31 - bob;
-  const headX = shX + (run ? 1.5 : 0) - drawLean * 0.5;
-  const headY = groundY - 38.5 - bob;
+  // Knælende pose mens en pigfælde lægges (u.placingTrap går 0→1 hen over animationen)
+  const placeP = u.placingTrap > 0 ? Math.min(u.placingTrap, 1) : 0;
+  const kneel = placeP > 0 ? Math.sin(placeP * Math.PI) : 0; // ned og op igen
+
+  const hipY  = groundY - 18 - bob * 0.4 + kneel * 5;
+  const shX   = lean - drawLean + kneel * 3;   // shoulder x offset, læner frem ved knæl
+  const shY   = groundY - 31 - bob + kneel * 8;
+  const headX = shX + (run ? 1.5 : 0) - drawLean * 0.5 + kneel * 2;
+  const headY = groundY - 38.5 - bob + kneel * 8;
 
   // --- Cloak (behind everything) --------------------------------------------
   // Flow: streams back when running, sways when walking, snaps on release
@@ -188,6 +194,8 @@ export function drawArcher(u) {
   const frontKnee = { x: 3 - s * stride, y: groundY };
   // shooting stance: feet planted apart
   if (shoot && !moving) { backKnee.x = -6; frontKnee.x = 5; }
+  // kneeling stance while setting a trap
+  if (kneel > 0.05) { backKnee.x = -7; frontKnee.x = 6; }
   limb(-2.5, hipY, backKnee.x, backKnee.y - 3, C.pants, 3);
   limb(backKnee.x, backKnee.y - 3.5, backKnee.x + 1.5, backKnee.y, C.boots, 3.4);
   limb(2.5, hipY, frontKnee.x, frontKnee.y - 3, C.pants, 3);
@@ -285,6 +293,23 @@ export function drawArcher(u) {
     drawBow(grip.x, grip.y, aim, pull, shoot.phase === "draw" ? drawHand : null);
     // front arm over the bow
     limb(frontSh.x, frontSh.y, grip.x, grip.y, C.skin, 2.6);
+  } else if (kneel > 0.01) {
+    // Lægger pigfælde: bagerste hånd holder buen lavt, forreste hånd fører fælden mod jorden
+    const reach = ease(Math.min(1, kneel));
+    const handX = frontSh.x + 6 + reach * 5;
+    const handY = frontSh.y + 6 + reach * (groundY - 4 - frontSh.y - 6);
+    const grip = { x: backSh.x - 2, y: shY + 10 };
+    limb(backSh.x, backSh.y, grip.x, grip.y, C.skin, 2.5);
+    drawBow(grip.x, grip.y, 0.05, 0, null);
+    limb(frontSh.x, frontSh.y, handX, handY, C.skin, 2.6);
+    // den sammenklappede fælde i hånden, indtil AI'en slipper den
+    if (!u.trapDropped) {
+      ctx.strokeStyle = "#8a8a94"; ctx.lineWidth = 1.4; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(handX - 3, handY + 2.5); ctx.lineTo(handX + 3, handY + 2.5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(handX - 1.5, handY + 2.5); ctx.lineTo(handX - 0.5, handY - 2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(handX + 1.5, handY + 2.5); ctx.lineTo(handX + 0.5, handY - 2); ctx.stroke();
+      ctx.lineCap = "butt";
+    }
   } else {
     // Bow carried in the front hand, held low
     const swing = moving ? Math.sin(anim) * (run ? 4 : 2.5) : 0;

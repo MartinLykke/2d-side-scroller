@@ -5,9 +5,10 @@ import { Game, state } from '../../core/state.js';
 import { windSway } from '../Effects.js';
 import { roundedRect, groundShadow, drawTomeIcon } from '../DrawHelpers.js';
 
-export function drawCoins() {
+export function drawCoins(mineLayer = false) {
   const t=performance.now();
   for (const c of state.coins) {
+    if (!!c.mine !== mineLayer) continue;
     const yy=c.settled?groundY-4-Math.sin(t/300+c.x)*1.5:c.y;
     if (c.settled) groundShadow(c.x,5,0.15);
     ctx.fillStyle="#f2c14e"; ctx.beginPath(); ctx.ellipse(c.x,yy,5,6,0,0,Math.PI*2); ctx.fill();
@@ -20,7 +21,7 @@ export function drawArrows() {
   const t = performance.now() / 1000;
   for (const ar of state.arrows) {
     if (ar.delay > 0) continue; // still nocked on the archer's bow
-    const ang=Math.atan2(ar.vy,ar.vx);
+    const ang = ar.stuck ? (ar.frozenAngle || 0) : Math.atan2(ar.vy,ar.vx);
     ctx.save(); ctx.translate(ar.x,ar.y); ctx.rotate(ang);
     const wid = ar.weaponId;
     if (ar.enemyFireball) {

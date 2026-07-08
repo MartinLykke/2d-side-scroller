@@ -21,7 +21,6 @@ function releaseLocationSurvivors(loc) {
   const freeSlots = Math.max(0, popCap - (state.vagrants.length + state.units.length));
   if (freeSlots <= 0) {
     loc.blockedUntilExit = true;
-    floaty(loc.x, "Ingen plads - kom tilbage senere", "#ff8a6a");
     return;
   }
 
@@ -30,7 +29,6 @@ function releaseLocationSurvivors(loc) {
     state.vagrants.push({ x: loc.x + rand(-60, 60), vx: 0, targetX: CFG.baseX + rand(-260, 260), state: "wander", anim: rand(0, 6), speed: 190 });
   }
   loc.remainingVagrants -= spawned;
-  if (spawned > 0) setTimeout(() => floaty(loc.x, `🙋 ${spawned} overlevende!`, "#cdbfa3"), 400);
   if (loc.remainingVagrants > 0) loc.blockedUntilExit = true;
 }
 
@@ -87,7 +85,6 @@ export function updateLocations(dt) {
     if (!loc.preActivated && loc.x >= screenL && loc.x <= screenR) preActivateLocation(loc, i);
     if (!loc.triggered && nearLoc) {
       loc.triggered = true;
-      floaty(loc.x, def.emoji + " " + def.name + "!", "#ff8a6a");
       if (addXPFn) addXPFn(25 + loc.enemyCount * 5);
       // Empty locations: spawn loot directly (no chest to open)
       if (loc.enemyCount === 0 && !loc.lootSpawned) {

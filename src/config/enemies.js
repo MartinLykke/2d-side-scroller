@@ -1,8 +1,14 @@
 // dmg      = damage dealt to walls/base per hit
 // meleeDmg = damage dealt to the player on a direct melee hit
 export const ENEMY_TYPES = {
-  imp: { hp: 6, speed: 60, w: 22, color: "#8f221c", eye: "#ffd060", reward: 1, dmg: 6, meleeDmg: 1 },
+  imp: { hp: 6, speed: 95, w: 22, color: "#8f221c", eye: "#ffd060", reward: 1, dmg: 6, meleeDmg: 1 },
   fireImp: { name: "Flying Imp", hp: 8, speed: 64, w: 25, color: "#9b2418", eye: "#ffd060", reward: 3, dmg: 9, meleeDmg: 2, flying: true, fireball: true, shootRange: 430, shootInterval: 2.8 },
+  emberBrute: {
+    name: "Emberbryder", hp: 20, speed: 46, w: 50, color: "#5a1a10", eye: "#ff8a30",
+    reward: 5, dmg: 11, meleeDmg: 2,
+    charger: true, chargeMin: 5, chargeMax: 8, chargeRangeMin: 140, chargeRangeMax: 420,
+    stomper: true, stompMin: 4.5, stompMax: 7, stompRadius: 95,
+  },
   fireDragon: { name: "Ilddragen", hp: 320, speed: 88, w: 120, color: "#7a1408", eye: "#ffd060", reward: 70, dmg: 14, meleeDmg: 2, flying: true, boss: true, dragon: true, noKnockback: true, shootInterval: 2.6, attackName: "Ildånde" },
   magmaGolem: {
     name: "Magmakolossen", hp: 650, speed: 40, w: 130, color: "#3a2a26", eye: "#ffb040",

@@ -6,7 +6,7 @@ import { dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, floaty } from '../world/SpawnSystem.js';
+import { spawnCoin, spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js';
 import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js';
 import { shootArrow } from './ProjectileSystem.js';
 import { castSpell } from './SpellSystem.js';
@@ -64,7 +64,7 @@ function meleeWeaponImpact(weaponId, x, y) {
 
 export function meleeHitPlayer(e, t, knockForce) {
   const { player } = state;
-  if (player.invuln > 0 || window._DEV_GOD_MODE) return false;
+  if (Game.inMine || player.invuln > 0 || window._DEV_GOD_MODE) return false;
   const armorDef = player.armor ? (ARMORS[player.armor]?.defense || 0) : 0;
   const dmg = Math.max(1, t.meleeDmg - armorDef);
   player.hp    -= dmg;
@@ -78,18 +78,17 @@ export function meleeHitPlayer(e, t, knockForce) {
   } else {
     floaty(player.x, `−${dmg}❤`, "#ff6a4a");
   }
-  Audio.hit();
+  Audio.playerHit();
   return true;
 }
 
 function triggerIceNova(player) {
   const { enemies } = state;
-  Audio.hit();
+  Audio.spell();
   Game.screenShake = Math.max(Game.screenShake, 0.6);
   spawnParticles(player.x, groundY - 40, 40, "#bfefff", 160, 140);
   spawnParticles(player.x, groundY - 40, 20, "#ffffff", 100, 160);
   spawnParticles(player.x, groundY - 40, 15, "#6abaff", 120, 100);
-  floaty(player.x, "❄ Is-eksplosion!", "#bfefff", 22);
   for (const e of enemies) {
     if (e.fleeing || e.dying) continue;
     if (dist(player.x, e.x) < 320) {
@@ -104,6 +103,7 @@ function triggerIceNova(player) {
 export function updatePlayerAttack(dt) {
   const { player, enemies } = state;
   if (!player.weapon) return;
+  if (Game.inMine) { if (player.swing > 0) player.swing -= dt; player.attackCd -= dt; return; }
   if (player.weapon === "short_bow" && (player.weaponUpgrades || []).some(u => u.id === "is_eksplosion")) {
     player.iceNovaCd = (player.iceNovaCd || 0) - dt;
     if (player.iceNovaCd <= 0) {
@@ -131,9 +131,10 @@ export function updatePlayerAttack(dt) {
   player.swing = 0.32;
   if (wBase.type === "melee") {
     const crit = applyCrit(w.dmg * permanentDamageMultiplier(), CFG.critChance, CFG.critMultiplier);
-    tgt.hp -= crit.damage; tgt.flash = 0.14; Audio.hit();
+    tgt.hp -= crit.damage; tgt.flash = 0.14; Audio.swordSwing(); Audio.hit();
     meleeWeaponImpact(player.weapon, tgt.x, groundY - 28);
-    floaty(tgt.x, (crit.isCrit ? "⭐ " : "") + "-" + crit.damage, wBase.col, crit.isCrit ? 24 : 15);
+    if (crit.isCrit) critFloaty(tgt.x, crit.damage);
+    else floaty(tgt.x, "-" + crit.damage, wBase.col);
     if (tgtIsAnimal) {
       spawnParticles(tgt.x, groundY - 30, 5, "#8a2a2a");
       if (tgt.hp <= 0) {

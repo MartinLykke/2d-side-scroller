@@ -8,6 +8,7 @@ export const Game = {
   spawnTimer: 0,
   nightQuota: 0,
   nightSpawned: 0,
+  nightCleared: false,
   wasNight: false,
   threatLevel: 1,
   autosaveTimer: 0,
@@ -33,6 +34,7 @@ export const Game = {
   hubTransitionT: 0,
   hubTransitionFromX: 0,
   runStartAnim: 0,
+  inMine: false,
 };
 
 // All mutable entity arrays and per-play variables live here so every
@@ -78,4 +80,8 @@ export const state = {
   legendaryEffects: [],
   firePools: [],
   beacon: null,
+  mineBuilt: false,
+  mineVeins: [],
+  mineActiveLeft: 0,
+  mineActiveRight: 0,
 };

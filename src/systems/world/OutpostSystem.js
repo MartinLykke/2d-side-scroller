@@ -46,7 +46,7 @@ export function buildingLabel(b) {
     if (b.level < 3) return `Opgradér vagttårn (lvl ${b.level}→${b.level + 1})`;
     return "Vagttårn (maks niveau)";
   }
-  if (b.type === "lumber") return "Byg skovhuggerlejr (markerer træer, bonusguld pr. stamme)";
+  if (b.type === "lumber") return "Byg skovhuggerlejr (bonusguld pr. stamme)";
   if (b.type === "shrine") return "Byg helligdom (helbreder i nærheden)";
   return "";
 }
@@ -54,15 +54,12 @@ export function buildingLabel(b) {
 export function payBuilding(b) {
   if (b.type === "tower") {
     b.built = true; b.level++;
-    floaty(b.x, b.level === 1 ? "🏹 Vagttårn bygget!" : `⬆ Vagttårn niveau ${b.level}!`, "#f2c14e");
     addXP(b.level === 1 ? 20 : 15);
   } else if (b.type === "lumber") {
     b.built = true; b.level = 1;
-    floaty(b.x, "🪵 Skovhuggerlejr bygget!", "#caa46a");
     addXP(15);
   } else if (b.type === "shrine") {
     b.built = true; b.level = 1;
-    floaty(b.x, "✨ Helligdom rejst!", "#8fd8ff");
     addXP(20);
   }
   spawnParticles(b.x, groundY - 30, 14, "#e8d8a8", 60, 80);
@@ -98,19 +95,6 @@ function updateTower(b, dt) {
   b.timer = [0, 1.8, 1.4, 1.0][b.level] || 1.8;
 }
 
-function updateLumber(b, dt) {
-  b.timer -= dt;
-  if (b.timer > 0) return;
-  b.timer = CFG.lumberMarkInterval;
-  let best = null, bd = 560;
-  for (const t of state.forestTrees || []) {
-    if (t.chopped || t.marked || t.falling || t.lying || t.carriedBy) continue;
-    const d = dist(t.x, b.x);
-    if (d < bd) { bd = d; best = t; }
-  }
-  if (best) { best.marked = true; floaty(best.x, "🪓 Skovhugger markerer", "#9bd05a"); }
-}
-
 function updateShrine(b, dt) {
   if (Math.random() < dt * 5) spawnParticles(b.x + rand(-22, 22), groundY - rand(12, 46), 1, "#8fd8ff", 8, 26);
   b.timer += dt;
@@ -135,7 +119,6 @@ export function updateBuildings(dt) {
   for (const b of state.buildings) {
     if (!b.built) continue;
     if (b.type === "tower") updateTower(b, dt);
-    else if (b.type === "lumber") updateLumber(b, dt);
     else if (b.type === "shrine") updateShrine(b, dt);
   }
 }

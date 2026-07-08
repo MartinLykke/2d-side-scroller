@@ -1,18 +1,19 @@
 import { state, Game } from '../../core/state.js';
-import { CFG, WALL_SLOTS, PORTALS, STATIONS_X } from '../../config/config.js';
+import { CFG, WALL_SLOTS, PORTALS, STATIONS_X, MINE } from '../../config/config.js';
 import { groundY } from '../../core/canvas.js';
 import { rand, randInt, clamp } from '../../util/math.js';
 import { makePlayer } from '../../entities/Player.js';
 import { makeWall } from '../../entities/Wall.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { Audio } from './Audio.js';
-import { floaty, spawnCoin, spawnParticles, spawnAnimal, planNight } from '../world/SpawnSystem.js';
+import { spawnCoin, spawnParticles, spawnAnimal, planNight } from '../world/SpawnSystem.js';
 import { buildForest } from '../world/ForestSystem.js';
 import { makeBuildings, buildingCost, buildingLabel, payBuilding } from '../world/OutpostSystem.js';
 import { upgradeBase } from '../../util/GameStateHelpers.js';
 import { addXP } from '../economy/UpgradeSystem.js';
 import { baseName } from '../../rendering/HUD.js';
 import { applyPermanentUpgrades, applyPermanentWorldUpgrades } from './RoguelikeSystem.js';
+import { initMineVeins } from '../world/MineSystem.js';
 
 export function buildStations() {
 
@@ -29,14 +30,14 @@ export function buildStations() {
     id:"bow", x:()=>STATIONS_X.bow, paid:0,
     cost:()=>CFG.bowCost,
     label:()=>"Køb bue (skab en bueskytte)",
-    onPaid:()=>{ state.groundBows.push({ x:STATIONS_X.bow+rand(-12,12), claimed:false }); floaty(STATIONS_X.bow,"🏹 Bue klar!"); Audio.recruit(); },
+    onPaid:()=>{ state.groundBows.push({ x:STATIONS_X.bow+rand(-12,12), claimed:false }); Audio.recruit(); },
   });
   if (state.base.level >= 2) {
     state.stations.push({
       id:"hammer", x:()=>STATIONS_X.hammer, paid:0,
       cost:()=>CFG.hammerCost,
       label:()=>"Køb hammer (skab en bygger)",
-      onPaid:()=>{ state.groundHammers.push({ x:STATIONS_X.hammer+rand(-12,12), claimed:false }); floaty(STATIONS_X.hammer,"🔨 Hammer klar!"); Audio.recruit(); },
+      onPaid:()=>{ state.groundHammers.push({ x:STATIONS_X.hammer+rand(-12,12), claimed:false }); Audio.recruit(); },
     });
   }
   if (state.base.level >= 2) {
@@ -51,8 +52,7 @@ export function buildStations() {
       onPaid:()=>{
         state.farmLevel++;
         state.farmBuilt = true;
-        if (state.farmLevel===1) { state.pendingFarmers++; floaty(STATIONS_X.farm,"🌾 Gård bygget!"); }
-        else floaty(STATIONS_X.farm,`🌾 Gård niveau ${state.farmLevel}!`,"#9bd05a");
+        if (state.farmLevel===1) { state.pendingFarmers++; }
         Audio.build();
       },
     });
@@ -73,11 +73,40 @@ export function buildStations() {
         ? "Befolkningsgrænse nået"
         : "Rekruttér vagt (8🪙) – nærkampenhed",
       onPaid:()=>{
-        if (state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level]) { floaty(STATIONS_X.guard, "Befolkningsgrænse nået!", "#ff8a6a"); return; }
+        if (state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level]) return;
         const u = makeUnit("guard", STATIONS_X.guard + rand(-20, 20));
         u.hp = u.maxHp = 8; u.transform = 0.55;
         state.units.push(u);
-        floaty(STATIONS_X.guard, "⚔ Garde rekrutteret!", "#f2c14e");
+        Audio.recruit();
+      },
+    });
+  }
+  if (state.base.level >= 3 && !state.mineBuilt) {
+    state.stations.push({
+      id:"mine", x:()=>STATIONS_X.mine, paid:0,
+      cost:()=>CFG.mineCost,
+      label:()=>"Byg mine (grav guld under slottet)",
+      onPaid:()=>{
+        state.mineBuilt = true;
+        initMineVeins();
+        addXP(20);
+        Audio.build();
+        buildStations();
+      },
+    });
+  }
+  if (state.mineBuilt) {
+    state.stations.push({
+      id:"miner", mineLayer:true, x:()=>MINE.stationX, paid:0,
+      cost:()=> state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level] ? 0 : CFG.minerCost,
+      label:()=> state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level]
+        ? "Befolkningsgrænse nået"
+        : `Rekruttér minearbejder (${CFG.minerCost}🪙) – graver guld`,
+      onPaid:()=>{
+        if (state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level]) return;
+        const u = makeUnit("miner", MINE.stationX + rand(-20, 20));
+        u.transform = 0.55;
+        state.units.push(u);
         Audio.recruit();
       },
     });
@@ -100,11 +129,11 @@ export function buildStations() {
       onPaid:()=>{
         if (!w.commissioned) {
           w.commissioned=true; w.level=1; w.maxHp=CFG.wallHp[1]; w.hp=0; w.buildProgress=0;
-          floaty(w.x,"🚧 Mur bestilt"); addXP(15);
+          addXP(15);
         } else if (w.level < 5) {
           w.level++; w.maxHp=CFG.wallHp[w.level];
           w.buildProgress=clamp(w.hp/w.maxHp,0.2,1);
-          floaty(w.x,`⬆ Mur niveau ${w.level}`,"#9bd05a"); addXP(20);
+          addXP(20);
         }
         Audio.build();
       },
@@ -159,6 +188,9 @@ export function newGame() {
   state.lastPaidStation = null;
   state.vagrantTimer    = 1;
   state.animalTimer     = 2;
+  state.mineBuilt       = false;
+  state.mineVeins       = [];
+  Game.inMine           = false;
 
   applyPermanentWorldUpgrades();
 

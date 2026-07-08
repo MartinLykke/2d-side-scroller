@@ -1,7 +1,7 @@
 "use strict";
 
 // ---------- Bootstrap ----------
-import { CFG, WALL_SLOTS, PORTALS, STATIONS_X } from '../config/config.js';
+import { CFG, WALL_SLOTS, PORTALS, STATIONS_X, MINE, FOREST } from '../config/config.js';
 import { clamp, dist, lerp, rand, randInt, pick } from '../util/math.js';
 import { canvas, ctx, W, H, groundY, resize } from './canvas.js';
 import { Game, state } from './state.js';
@@ -12,6 +12,7 @@ import { saveGame, hasSave, loadGame, deleteSave } from '../systems/infrastructu
 import { updateSpawning, floaty, spawnParticles, spawnAnimal, planNight, spawnEnemy } from '../systems/world/SpawnSystem.js';
 import { updatePayment, updateCoins } from '../systems/economy/Economy.js';
 import { updateForestTrees, updateForestCamps } from '../systems/world/ForestSystem.js';
+import { updateMine } from '../systems/world/MineSystem.js';
 import { updateBuildings } from '../systems/world/OutpostSystem.js';
 import { updateUnits, updateAssignments, updateVagrants, updateAnimals, nearestEnemy, updateCaltrops } from '../systems/ai/AI.js';
 import { updateEnemies, updateArrows, updatePlayerAttack, updateSpells } from '../systems/combat/Combat.js';
@@ -53,16 +54,28 @@ window._enterDeathHub = enterDeathHub;
 
 // ---------- Update ----------
 function updateTime(dt) {
-  Game.time += dt / CFG.dayLength;
+  const timeScale = Game.isNight && Game.nightCleared ? (CFG.nightClearTimeScale || 1) : 1;
+  Game.time += (dt / CFG.dayLength) * timeScale;
+  if (Game.isNight && Game.nightCleared && Game.time > CFG.phases.night) {
+    Game.time = CFG.phases.night + 0.0001;
+  }
   if (Game.time >= 1) { Game.time -= 1; Game.day++; planNight(); }
   const t = Game.time;
   const nowNight = t > CFG.phases.dusk && t <= CFG.phases.night;
   if (nowNight && !Game.isNight) {
-    Game.isNight=true; Audio.horn(); Audio.setNight(true);
+    Game.isNight=true; Game.nightCleared=false; Audio.horn(); Audio.portalSpawn(); Audio.setNight(true);
   }
   if (!nowNight && Game.isNight) {
-    Game.isNight=false; Audio.setNight(false); state.enemies.forEach(e=>e.fleeing=true);
+    Game.isNight=false; Game.nightCleared=false; Audio.setNight(false); state.enemies.forEach(e=>e.fleeing=true);
   }
+}
+
+function updateNightClear() {
+  if (!Game.isNight || Game.nightCleared || Game.nightSpawned < Game.nightQuota) return;
+  const waveAlive = state.enemies.some(e => e.nightWave && !e.fleeing && !e.dying && e.hp > 0);
+  if (waveAlive) return;
+  Game.nightCleared = true;
+  floaty(state.base.x, "Bølgen er besejret - daggry nærmer sig", "#ffd27a", 18);
 }
 
 function updatePlayer(dt) {
@@ -71,7 +84,8 @@ function updatePlayer(dt) {
   const speed=sprint?CFG.playerSprint:CFG.playerSpeed;
   let move=0; if (left) move-=1; if (right) move+=1;
   player.vx=move*speed;
-  player.x=clamp(player.x+player.vx*dt, 120, CFG.worldWidth-120);
+  if (Game.inMine) player.x=clamp(player.x+player.vx*dt, state.mineActiveLeft+24, state.mineActiveRight-24);
+  else player.x=clamp(player.x+player.vx*dt, 120, CFG.worldWidth-120);
   if (move!==0) { player.dir=move; player.gallop+=dt*(sprint?16:10); player.bob=Math.abs(Math.sin(player.gallop))*3; }
   else player.bob*=0.9;
   if (player.knock) { player.x=clamp(player.x+player.knock*dt,120,CFG.worldWidth-120); player.knock*=0.86; if (Math.abs(player.knock)<6) player.knock=0; }
@@ -80,6 +94,8 @@ function updatePlayer(dt) {
   }
   player.jumpH += player.jumpVy * dt;
   player.jumpVy -= 1400 * dt;
+  // low tunnel ceiling: cap the jump while underground
+  if (Game.inMine && player.jumpH > 46) { player.jumpH = 46; if (player.jumpVy > 0) player.jumpVy = 0; }
   if (player.jumpH <= 0) { player.jumpH = 0; if (player.jumpVy < 0) player.jumpVy = 0; }
   if (player.invuln>0) player.invuln-=dt;
   if (player.hurt>0) player.hurt-=dt;
@@ -113,6 +129,8 @@ function updateFloats(dt) {
 }
 
 function updateCamera() {
+  // keep the mine floor on screen while the player is underground
+  if (Game.inMine && Game.zoom > 1.25) Game.zoom = 1.25;
   const zoom = Game.zoom;
   const target=clamp(state.player.x-W/2, 0, Math.max(0, CFG.worldWidth - W/zoom));
   Game.cam+=(target-Game.cam)*0.12;
@@ -127,7 +145,6 @@ function updatePortals() {
       p.lastDayActivated = Game.day;
       const count = 2 + (Game.day > 5 ? 1 : 0);
       for (let i=0; i<count; i++) spawnEnemy("imp", p);
-      floaty(p.x, "⚠ Portalvagter!", "#ff8a6a");
     }
   }
 }
@@ -135,6 +152,7 @@ function updatePortals() {
 function checkEndConditions() {
   const { base, player } = state;
   if (base.hp<=0 && Game.state==="play") {
+    Game.inMine=false;
     Game.state="defeat-pan";
     Game.defeatText="Dit slot blev jævnet med jorden. Mørket sluger riget.";
     Game.defeatPanTimer=0;
@@ -144,7 +162,19 @@ function checkEndConditions() {
     Game.screenShake = Math.max(Game.screenShake, 1);
     return;
   }
-  if (player.hp<=0) { endGame("Monarken faldt i kamp, og kronen rullede i mulden. Riget er fortabt."); return; }
+  if (player.hp<=0 && Game.state==="play") {
+    Game.inMine=false;
+    Game.state="player-death";
+    Game.deathTimer=0;
+    Game.defeatText="Monarken faldt i kamp, og kronen rullede i mulden. Riget er fortabt.";
+    player.vx=0; player.swing=0; player.knock=0; player.hurt=0;
+    Audio.death();
+    spawnParticles(player.x, groundY-40, 26, "#a4262b", 190, 210);
+    spawnParticles(player.x, groundY-40, 14, "#e0556a", 130, 170);
+    spawnParticles(player.x, groundY-30, 18, "#d4a838", 110, 150); // the crown's gold scatters
+    Game.screenShake = Math.max(Game.screenShake, 0.8);
+    return;
+  }
 }
 
 function updateAutosave(dt) {
@@ -167,6 +197,7 @@ function update(dt) {
   updatePlayerAttack(dt);
   updatePayment(dt);
   updateForestTrees(dt);
+  updateMine(dt);
   updateBuildings(dt);
   updateVagrants(dt);
   updateAssignments();
@@ -191,8 +222,10 @@ function update(dt) {
   if (Game.screenShake > 0) Game.screenShake = Math.max(0, Game.screenShake - dt * 9);
   updateFloats(dt);
   updateSpawning(dt);
+  updateNightClear();
   checkUpgrade();
   updateCamera();
+  Audio.updateAmbientZones(state.player.x, CFG.baseX, FOREST.startDist);
   checkEndConditions();
   updateAutosave(dt);
 }
@@ -259,6 +292,43 @@ function drawRunStartOverlay(dt) {
   Game.runStartAnim = Math.max(0, Game.runStartAnim - dt);
 }
 
+function drawDeathOverlay() {
+  if (Game.state !== "player-death") return;
+  const t = Game.deathTimer || 0;
+
+  // blood-red vignette closing in
+  const v = clamp(t / 0.6, 0, 1);
+  const rg = ctx.createRadialGradient(W / 2, H / 2, H * 0.28, W / 2, H / 2, H * 0.9);
+  rg.addColorStop(0, "rgba(0,0,0,0)");
+  rg.addColorStop(1, `rgba(80,4,14,${0.6 * v})`);
+  ctx.fillStyle = rg;
+  ctx.fillRect(0, 0, W, H);
+
+  // fade to black before the hub
+  const f = clamp((t - 2.4) / 1.0, 0, 1);
+  if (f > 0) { ctx.fillStyle = `rgba(6,4,10,${f})`; ctx.fillRect(0, 0, W, H); }
+
+  // title
+  if (t > 0.9) {
+    const a = clamp((t - 0.9) / 0.7, 0, 1) * (1 - f);
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.textAlign = "center";
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.font = "600 38px Georgia, serif";
+    ctx.fillText("Monarken er faldet", W / 2 + 2, H * 0.34 + 2);
+    ctx.fillStyle = "#e8d8b8";
+    ctx.fillText("Monarken er faldet", W / 2, H * 0.34);
+    if (t > 1.5) {
+      ctx.globalAlpha = clamp((t - 1.5) / 0.6, 0, 1) * (1 - f) * 0.85;
+      ctx.font = "20px Georgia, serif";
+      ctx.fillStyle = "#c9b89a";
+      ctx.fillText("Sjælegløden bærer dig videre…", W / 2, H * 0.34 + 36);
+    }
+    ctx.restore();
+  }
+}
+
 // ---------- Main loop ----------
 let last = performance.now();
 function loop(now) {
@@ -283,6 +353,19 @@ function loop(now) {
       UI.prompt.classList.add("hidden");
     }
   }
+  if (Game.state === "player-death") {
+    Game.deathTimer += dt;
+    // slow-motion aftermath: only ambient bits keep moving
+    const sdt = gdt * 0.35;
+    updateParticles(sdt);
+    updateFloats(sdt);
+    updateDyingEnemies(sdt);
+    if (Game.screenShake > 0) Game.screenShake = Math.max(0, Game.screenShake - dt * 9);
+    const zoom = Game.zoom;
+    const target = clamp(state.player.x - W / 2, 0, Math.max(0, CFG.worldWidth - W / zoom));
+    Game.cam += (target - Game.cam) * Math.min(1, dt * 3);
+    if (Game.deathTimer > 3.4) endGame(Game.defeatText);
+  }
   if (Game.state === "defeat-pan") {
     Game.defeatPanTimer += dt;
     const zoom = Game.zoom;
@@ -294,6 +377,7 @@ function loop(now) {
   else if (Game.state !== "menu") render();
   else renderMenuBackground();
   drawRunStartOverlay(dt);
+  drawDeathOverlay();
 
   requestAnimationFrame(loop);
 }

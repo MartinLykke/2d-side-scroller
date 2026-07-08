@@ -43,7 +43,7 @@ export const ARCHER_SKILLS = {
   caltrops: {
     id: "caltrops", branch: 3, row: 1,
     name: "Pigfælder",
-    desc: "Bueskytter taber pigfælder der halverer fjendens fart i 2 sek.",
+    desc: "Udenfor basen: bueskytten lægger en pigfælde der klapper sammen om fjenden og halverer farten i 2 sek. Cooldown: 10 sek.",
     cost: 1, requires: [],
   },
   smoke_bomb: {

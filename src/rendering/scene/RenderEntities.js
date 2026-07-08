@@ -1,5 +1,3 @@
-import { clamp } from '../../util/math.js';
-import { WEAPONS } from '../../config/weapons.js';
 import { ENEMY_TYPES } from '../../config/enemies.js';
 import { ctx, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
@@ -66,6 +64,7 @@ export function drawVagrants() {
 
 export function drawUnits() {
   for (const u of state.units) {
+    if (u.mine) continue; // miners are drawn by the mine scene
     let body="#3a3550", head="#caa483", tool=null;
     if (u.role==="archer")  { body="#2f5040"; tool="bow"; }
     else if (u.role==="builder") { body="#6a4a28"; tool="hammer"; }
@@ -393,9 +392,186 @@ function drawImp(e, t, dark, atkF) {
     ctx.beginPath(); ctx.arc(ex, ey, 0.9, 0, Math.PI * 2); ctx.fill();
   }
   ctx.restore();
-  drawStuckImpArrows(e);
   ctx.restore();
   if (pounce >= 0) ctx.restore();
+}
+
+function drawEmberBrute(e, t, dark, atkF) {
+  const T = performance.now() / 1000;
+  const flash = e.flash > 0;
+  const bob = Math.abs(Math.sin(e.anim * 0.9)) * 2;
+  const y = groundY - bob;
+  const body = flash ? "#fff" : "#5a1a10";
+  const bodyDk = flash ? "#fff" : "#2a0a08";
+  const bodyMid = flash ? "#fff" : "#8a3018";
+  const ember = "#ff6a20";
+  const emberHot = "#ffb040";
+  const charging = !!e.charging;
+  const chargeFlash = Math.max(0, e.chargeFlash || 0);
+  const stompFlash = Math.max(0, e.stompFlash || 0);
+  // Real remaining swing time (attackAnim is stretched longer for this enemy), not the
+  // generic atkF ratio, so the big wind-up plays out at its full slower duration.
+  const swingDur = 0.62;
+  const swingRemain = Math.max(0, e.attackAnim || 0);
+  const swingT = charging ? Math.min((e.chargeT || 0) * 1.1, 1) : (swingRemain > 0 ? 1 - Math.min(1, swingRemain / swingDur) : -1);
+  const lunge = charging ? 6 : (swingRemain > 0 ? Math.sin(Math.min(swingT * 1.3, 1) * Math.PI) * 5 : 0);
+  const lean = charging ? 0.28 : 0;
+
+  const SCALE = 2.5;
+  ctx.save();
+  ctx.translate(0, groundY); ctx.scale(SCALE, SCALE); ctx.translate(0, -groundY);
+
+  // ground scorch pulse when it slams down a stomp
+  if (stompFlash > 0) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = stompFlash / 0.35;
+    ctx.strokeStyle = ember; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.ellipse(0, groundY - 2, 30 * (1.4 - stompFlash), 9, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  // fire-charge windup glow
+  if (chargeFlash > 0 || charging) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = charging ? 0.5 : chargeFlash / 0.3 * 0.5;
+    const aura = ctx.createRadialGradient(0, y - 18, 2, 0, y - 18, 26);
+    aura.addColorStop(0, "rgba(255,140,40,0.7)");
+    aura.addColorStop(1, "rgba(120,20,0,0)");
+    ctx.fillStyle = aura; ctx.beginPath(); ctx.ellipse(0, y - 18, 22, 26, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  // constant low fire haze around the whole body
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.16 + 0.08 * Math.sin(T * 4 + e.x);
+  const haze = ctx.createRadialGradient(0, y - 16, 2, 0, y - 16, 30);
+  haze.addColorStop(0, "rgba(255,120,30,0.55)");
+  haze.addColorStop(1, "rgba(120,20,0,0)");
+  ctx.fillStyle = haze; ctx.beginPath(); ctx.ellipse(0, y - 16, 24, 30, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // rising embers drifting off the body
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  for (let k = 0; k < 6; k++) {
+    const wt = (T * 0.55 + k * 0.17) % 1;
+    const ex = -8 + k * 3.2 + Math.sin((T + k) * 1.6) * 3;
+    const ey = y - 8 - wt * 34;
+    ctx.globalAlpha = (1 - wt) * 0.6;
+    ctx.fillStyle = k % 2 ? ember : emberHot;
+    ctx.beginPath(); ctx.arc(ex, ey, 1.3 * (1 - wt) + 0.5, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+
+  // stubby legs, wide stance
+  const s = Math.sin(e.anim * 1.3);
+  ctx.strokeStyle = body; ctx.lineWidth = 3.4; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-6, groundY - 12 - bob); ctx.lineTo(-9 + s * 3, groundY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(6, groundY - 12 - bob); ctx.lineTo(9 - s * 3, groundY); ctx.stroke();
+  ctx.lineCap = "butt";
+
+  ctx.save();
+  ctx.translate(lunge, 0);
+  ctx.rotate(lean);
+
+  // broad hunched torso
+  ctx.fillStyle = body;
+  ctx.beginPath(); ctx.ellipse(0, y - 17, 12, 13, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = bodyMid;
+  ctx.beginPath(); ctx.ellipse(1, y - 15, 6.5, 8.5, -0.15, 0, Math.PI * 2); ctx.fill();
+
+  // glowing ember core in the chest, flares brighter mid-attack/stomp
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = 0.55 + 0.25 * Math.sin(T * 3 + e.x) + atkF * 0.3 + stompFlash;
+  ctx.fillStyle = emberHot;
+  ctx.beginPath(); ctx.arc(1, y - 15, 3.4, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // molten cracks glowing across the torso
+  ctx.strokeStyle = "rgba(255,140,40,0.45)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(-3, y - 20, 6, -0.4, 1.2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(4, y - 22, 5, 1.8, 3.2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-6, y - 12); ctx.lineTo(-2, y - 18); ctx.lineTo(-5, y - 24); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(6, y - 10); ctx.lineTo(3, y - 16); ctx.lineTo(7, y - 21); ctx.stroke();
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.4 + 0.25 * Math.sin(T * 5 + e.x);
+  ctx.strokeStyle = ember; ctx.lineWidth = 0.9;
+  ctx.beginPath(); ctx.moveTo(-6, y - 12); ctx.lineTo(-2, y - 18); ctx.lineTo(-5, y - 24); ctx.stroke();
+  ctx.restore();
+
+  // big heavy brow head, low-slung
+  const hx = 5, hy = y - 28;
+  const headR = 9.5;
+  ctx.fillStyle = body;
+  ctx.beginPath(); ctx.arc(hx, hy, headR, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = bodyDk;
+  ctx.beginPath(); ctx.moveTo(hx - 7, hy - 3.5); ctx.lineTo(hx + 8.5, hy - 6); ctx.lineTo(hx + 7, hy - 0.5); ctx.lineTo(hx - 7, hy + 1); ctx.closePath(); ctx.fill();
+  // stubby horns
+  ctx.fillStyle = bodyDk;
+  ctx.beginPath(); ctx.moveTo(hx - 3, hy - 7); ctx.lineTo(hx - 1.5, hy - 14); ctx.lineTo(hx + 1.5, hy - 7); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(hx + 5.5, hy - 7); ctx.lineTo(hx + 8, hy - 13.5); ctx.lineTo(hx + 9.5, hy - 5.5); ctx.closePath(); ctx.fill();
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.5;
+  ctx.fillStyle = ember;
+  ctx.beginPath(); ctx.arc(hx - 1.5, hy - 13.5, 1, 0, Math.PI * 2); ctx.arc(hx + 8, hy - 13, 0.9, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  // eyes: glowing molten sclera behind a dark iris + pupil that tracks its target
+  const eyeGlow = 0.55 + 0.25 * dark + Math.max(0, swingT) * 0.3 + (charging ? 0.25 : 0);
+  const eL = { x: hx + 2.5, y: hy - 1, r: 2.9 };
+  const eR = { x: hx + 7.6, y: hy - 1, r: 2.4 };
+  for (const eEye of [eL, eR]) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = eyeGlow;
+    ctx.fillStyle = t.eye;
+    ctx.beginPath(); ctx.arc(eEye.x, eEye.y, eEye.r, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    // dark iris + pupil, nudged toward whatever it's facing/attacking
+    const look = charging || swingT >= 0 ? 0.5 : 0.2;
+    ctx.fillStyle = bodyDk;
+    ctx.beginPath(); ctx.arc(eEye.x + look, eEye.y, eEye.r * 0.62, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#0a0304";
+    ctx.beginPath(); ctx.arc(eEye.x + look, eEye.y, eEye.r * 0.34, 0, Math.PI * 2); ctx.fill();
+    // tiny highlight speck so the eye reads as wet/alive
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.85;
+    ctx.fillStyle = "#fff2d8";
+    ctx.beginPath(); ctx.arc(eEye.x + look - eEye.r * 0.2, eEye.y - eEye.r * 0.3, eEye.r * 0.18, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  // snarling mouth with an ember glow when attacking
+  const jaw = swingT >= 0 ? 1.4 * Math.sin(Math.min(swingT * 1.5, 1) * Math.PI) : 0.2;
+  ctx.fillStyle = flash ? "#fff" : "#180404";
+  ctx.beginPath(); ctx.moveTo(hx - 1, hy + 4.5); ctx.quadraticCurveTo(hx + 5, hy + 5.5 + jaw, hx + 9, hy + 4); ctx.quadraticCurveTo(hx + 5, hy + 3.4, hx - 1, hy + 4.5); ctx.fill();
+  if (jaw > 0.6) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.5;
+    ctx.fillStyle = ember; ctx.beginPath(); ctx.ellipse(hx + 4.5, hy + 4.8, 2.6, jaw * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  // huge slamming fists — both arms swing wide together on an attack or charge
+  const shoLX = -4, shoRX = 4, shoY = y - 20;
+  ctx.strokeStyle = body; ctx.lineWidth = 3.4; ctx.lineCap = "round";
+  if (swingT >= 0) {
+    const p = Math.min(swingT * 1.4, 1);
+    const swing = Math.sin(p * Math.PI);
+    // right arm: winds up high behind, then slams down-forward in a big arc
+    const aR = -2.7 + p * 3.6;
+    const rx = shoRX + Math.cos(aR) * 15, ry = shoY + Math.sin(aR) * 15;
+    ctx.beginPath(); ctx.moveTo(shoRX, shoY); ctx.lineTo(rx, ry); ctx.stroke();
+    ctx.fillStyle = bodyDk; ctx.beginPath(); ctx.arc(rx, ry, 3.6, 0, Math.PI * 2); ctx.fill();
+    // left arm mirrors with a slight delay for a double-hammer feel
+    const aL = Math.PI + 2.7 - p * 3.6;
+    const lx = shoLX + Math.cos(aL) * 13, ly = shoY + Math.sin(aL) * 13;
+    ctx.beginPath(); ctx.moveTo(shoLX, shoY); ctx.lineTo(lx, ly); ctx.stroke();
+    ctx.fillStyle = bodyDk; ctx.beginPath(); ctx.arc(lx, ly, 3.2, 0, Math.PI * 2); ctx.fill();
+    // fiery smear trailing the swing
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = swing * 0.75;
+    ctx.strokeStyle = ember; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(shoRX, shoY, 16, -2.8, 0.9); ctx.stroke();
+    ctx.globalAlpha = swing * 0.4; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(shoRX, shoY, 20, -2.6, 0.7); ctx.stroke();
+    ctx.restore();
+  } else {
+    const dangle = Math.sin(e.anim * 2) * 2;
+    ctx.beginPath(); ctx.moveTo(shoRX, shoY); ctx.lineTo(shoRX + 6 + dangle, shoY + 10); ctx.stroke();
+    ctx.fillStyle = bodyDk; ctx.beginPath(); ctx.arc(shoRX + 6 + dangle, shoY + 10, 3.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(shoLX, shoY); ctx.lineTo(shoLX - 6 - dangle, shoY + 10); ctx.stroke();
+    ctx.fillStyle = bodyDk; ctx.beginPath(); ctx.arc(shoLX - 6 - dangle, shoY + 10, 3.2, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.lineCap = "butt";
+  ctx.restore();
+  ctx.restore();
 }
 
 function drawFireImp(e, t, dark, atkF) {
@@ -716,193 +892,486 @@ function drawFireDragon(e, t, dark, atkF) {
   ctx.restore();
 }
 
-// Night-10 boss: towering magma colossus. Obsidian plate armor over a molten
-// interior; the chest core blazes when the shell cycles open (e.coreOpen).
-// Slam windup is driven by e.slamT, the crash-down by e.attackAnim.
+// Night-10 boss: towering magma colossus. It is rendered as layered basalt
+// plates around a molten core, with separate poses for slam and boulder volleys.
 function drawMagmaGolem(e, t, dark, atkF) {
   const T = performance.now() / 1000;
-  const flash = e.flash > 0;
   const w = t.w;
-  const rock   = flash ? "#fff" : "#3a2a26";
-  const rockDk = flash ? "#fff" : "#241a18";
-  const rockLt = flash ? "#fff" : "#4e3a32";
-  const ember  = e.enraged ? "#ff4020" : "#ff6a20";
-  const hot    = "#ffd060";
+  const flash = e.flash > 0;
+  const clamp01 = v => Math.max(0, Math.min(1, v));
+  const smooth = v => {
+    v = clamp01(v);
+    return v * v * (3 - 2 * v);
+  };
+  const mix = (a, b, p) => a + (b - a) * p;
+  const mixPt = (a, b, p) => ({ x: mix(a.x, b.x, p), y: mix(a.y, b.y, p) });
+  const poly = pts => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+  };
+
+  const obsidian = flash ? "#fff" : "#211817";
+  const basalt = flash ? "#fff" : "#332623";
+  const basalt2 = flash ? "#fff" : "#46352f";
+  const basalt3 = flash ? "#fff" : "#594238";
+  const shadow = flash ? "#fff" : "#120d0c";
+  const ember = e.enraged ? "#ff3f20" : "#ff6a20";
+  const hot = "#ffd060";
+  const whiteHot = "#fff3bf";
+
   const coreOpen = !!e.coreOpen;
-  const bob = Math.abs(Math.sin(e.anim * 2.4)) * 3;
-  const lean = Math.sin(e.anim * 2.4) * 0.02;
+  const coreFlare = clamp01(e.coreFlare || 0);
+  const eruptionP = clamp01((e.eruptionAnim || 0) / 1.4);
+  const windupP = e.slamT !== undefined ? clamp01(e.slamT / 0.85) : 0;
+  const slamP = e.attackKind === "slam" && e.attackAnim > 0 ? clamp01(e.attackAnim / 0.42) : 0;
+  const throwAge = e.attackKind === "hurl" && e.hurlAnim > 0 ? clamp01(1 - e.hurlAnim / 0.58) : 0;
+  const hurlHold = e.hurlCount > 0 ? 1 : 0;
+  const hurlActive = hurlHold > 0 || throwAge > 0;
+  const hurlPulse = hurlActive ? (0.75 + 0.18 * Math.sin(T * 10)) : 0;
+  const slamEase = smooth(slamP);
+  const step = Math.sin(e.anim * 2.4);
+  const stride = step * w * 0.05 * (1 - windupP * 0.6 - slamEase * 0.7);
+  const bob = Math.abs(step) * 3 * (1 - slamEase * 0.7) - windupP * w * 0.035 + slamEase * w * 0.025;
+  const bodyShift = -bob;
 
-  const windupP = e.slamT !== undefined ? Math.min(1, e.slamT / 0.85) : 0;
-  const smashP  = e.slamT === undefined && e.attackAnim > 0 ? Math.max(0, e.attackAnim / 0.35) : 0;
+  function rockBlob(cx, cy, rx, ry, rot, fill, stroke = shadow, spikes = 8) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(rot);
+    ctx.beginPath();
+    for (let i = 0; i < spikes; i++) {
+      const a = (i / spikes) * Math.PI * 2;
+      const n = 0.88 + (i % 3) * 0.07 + Math.sin(i * 2.1 + T) * 0.025;
+      const px = Math.cos(a) * rx * n;
+      const py = Math.sin(a) * ry * n;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+    if (stroke) {
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = Math.max(1.1, w * 0.01);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 
-  // heat shimmer aura, stronger when the core is open or it has erupted
-  ctx.save(); ctx.globalCompositeOperation = "lighter";
-  ctx.globalAlpha = (coreOpen ? 0.26 : 0.13) + (e.enraged ? 0.08 : 0) + 0.05 * Math.sin(T * 5);
-  const aura = ctx.createRadialGradient(0, groundY - w * 0.5, 8, 0, groundY - w * 0.5, w * 1.0);
-  aura.addColorStop(0, "rgba(255,140,40,0.6)");
-  aura.addColorStop(1, "rgba(120,10,0,0)");
-  ctx.fillStyle = aura; ctx.beginPath(); ctx.ellipse(0, groundY - w * 0.5, w * 0.95, w * 0.72, 0, 0, Math.PI * 2); ctx.fill();
+  function lavaCrack(points, width = 1.8, alpha = 1) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = ember;
+    ctx.lineWidth = width;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(points[0][0], points[0][1]);
+    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255,224,120,0.55)";
+    ctx.lineWidth = Math.max(0.8, width * 0.42);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Ground mass, molten shadow and slam shock rings.
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,0.34)";
+  ctx.beginPath();
+  ctx.ellipse(0, groundY - 1, w * (0.58 + slamEase * 0.15), 11 + slamEase * 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = 0.18 + (coreOpen ? 0.16 : 0) + coreFlare * 0.18 + eruptionP * 0.22;
+  const floorGlow = ctx.createRadialGradient(0, groundY - 4, 4, 0, groundY - 4, w * 0.86);
+  floorGlow.addColorStop(0, "rgba(255,170,48,0.75)");
+  floorGlow.addColorStop(1, "rgba(120,18,0,0)");
+  ctx.fillStyle = floorGlow;
+  ctx.beginPath();
+  ctx.ellipse(0, groundY - 5, w * 0.86, w * 0.22, 0, 0, Math.PI * 2);
+  ctx.fill();
+  if (slamP > 0.03) {
+    const spread = (1 - slamP) * w * 0.52;
+    for (let k = 0; k < 3; k++) {
+      ctx.globalAlpha = slamP * (0.42 - k * 0.09);
+      ctx.strokeStyle = k === 0 ? hot : ember;
+      ctx.lineWidth = 3 - k * 0.45;
+      ctx.beginPath();
+      ctx.ellipse(0, groundY - 4, w * (0.42 + k * 0.2) + spread, w * (0.12 + k * 0.04) + spread * 0.17, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
   ctx.restore();
 
-  // smoke venting from the shoulder fissures
-  ctx.save(); ctx.globalAlpha = 0.22;
-  ctx.fillStyle = "#1c1210";
-  for (let k = 0; k < 3; k++) {
-    const st = (T * 0.5 + k * 0.37) % 1;
+  // Heat aura and eruption flare.
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = (coreOpen ? 0.28 : 0.14) + coreFlare * 0.22 + eruptionP * 0.22 + (e.enraged ? 0.08 : 0);
+  const aura = ctx.createRadialGradient(0, groundY - w * 0.56, 10, 0, groundY - w * 0.56, w * 1.18);
+  aura.addColorStop(0, "rgba(255,186,64,0.66)");
+  aura.addColorStop(0.52, "rgba(255,88,24,0.24)");
+  aura.addColorStop(1, "rgba(120,10,0,0)");
+  ctx.fillStyle = aura;
+  ctx.beginPath();
+  ctx.ellipse(0, groundY - w * 0.56, w * 1.02, w * 0.84, 0, 0, Math.PI * 2);
+  ctx.fill();
+  if (eruptionP > 0.02) {
+    for (let k = 0; k < 6; k++) {
+      const ex = -w * 0.34 + k * w * 0.13;
+      const h = w * (0.14 + 0.16 * Math.sin(T * 4 + k) + 0.25 * eruptionP);
+      ctx.globalAlpha = eruptionP * (0.2 + k % 2 * 0.08);
+      ctx.fillStyle = k % 2 ? hot : ember;
+      ctx.beginPath();
+      ctx.ellipse(ex, groundY - w * 0.28 - h * 0.5, w * 0.025, h, Math.sin(T + k) * 0.18, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+
+  // Smoke vents from shoulders and back fissures.
+  ctx.save();
+  ctx.fillStyle = "#17100f";
+  for (let k = 0; k < 7; k++) {
+    const st = (T * (0.22 + k * 0.035) + k * 0.17) % 1;
+    ctx.globalAlpha = (0.17 + dark * 0.05) * (1 - st);
+    const sx = -w * 0.28 + k * w * 0.095 + Math.sin(T * 1.8 + k) * 5;
+    const sy = groundY - w * (0.77 + (k % 3) * 0.055) + bodyShift - st * w * 0.34;
     ctx.beginPath();
-    ctx.arc(-w * 0.18 + k * w * 0.08 + Math.sin((T + k * 2) * 2.4) * 4, groundY - w * 0.86 - bob - st * w * 0.3, (1 - st) * 5 + 1.5, 0, Math.PI * 2);
+    ctx.ellipse(sx, sy, w * (0.025 + st * 0.025), w * (0.018 + st * 0.032), Math.sin(T + k), 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();
 
-  // --- legs: two basalt pillars with a slow, grinding stride ---
-  const stride = Math.sin(e.anim * 2.4) * w * 0.06;
-  for (const [sgn, off] of [[-1, -stride], [1, stride]]) {
-    const lx = sgn * w * 0.17 + off * 0.4;
-    ctx.fillStyle = sgn < 0 ? rockDk : rock;
-    roundedRect(lx - w * 0.085, groundY - w * 0.34 - (sgn > 0 ? bob * 0.5 : 0), w * 0.17, w * 0.35 + (sgn > 0 ? bob * 0.5 : 0), 6); ctx.fill();
-    // glowing joint crack at the knee
-    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.4 + 0.2 * Math.sin(T * 4 + sgn);
-    ctx.strokeStyle = ember; ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.moveTo(lx - w * 0.05, groundY - w * 0.18); ctx.lineTo(lx + w * 0.05, groundY - w * 0.16); ctx.stroke();
+  function drawLeg(sgn, front) {
+    const phase = Math.sin(e.anim * 2.4 + (sgn > 0 ? 0 : Math.PI));
+    const lift = Math.max(0, phase) * w * 0.035 * (1 - slamEase);
+    const hipX = sgn * w * 0.13 - stride * 0.18;
+    const kneeX = sgn * w * 0.15 + stride * 0.16;
+    const footX = sgn * w * 0.2 + stride * (front ? 0.3 : -0.2);
+    const hipY = groundY - w * 0.38 + bodyShift * 0.45;
+    const kneeY = groundY - w * 0.2 - lift * 0.35;
+    const footY = groundY - lift + slamEase * 3;
+    ctx.save();
+    ctx.globalAlpha = front ? 1 : 0.82;
+    ctx.fillStyle = front ? basalt2 : basalt;
+    poly([
+      [hipX - w * 0.09, hipY],
+      [hipX + w * 0.08, hipY + w * 0.02],
+      [kneeX + w * 0.075, kneeY],
+      [kneeX - w * 0.07, kneeY + w * 0.02],
+    ]);
+    ctx.fill();
+    ctx.fillStyle = front ? basalt3 : obsidian;
+    poly([
+      [kneeX - w * 0.075, kneeY],
+      [kneeX + w * 0.07, kneeY - w * 0.01],
+      [footX + w * 0.08, footY - w * 0.035],
+      [footX - w * 0.09, footY - w * 0.025],
+    ]);
+    ctx.fill();
+    ctx.fillStyle = front ? obsidian : shadow;
+    roundedRect(footX - w * 0.15, footY - 8, w * 0.31, 9 + slamEase * 2, 3);
+    ctx.fill();
+    rockBlob(kneeX, kneeY + w * 0.005, w * 0.09, w * 0.055, 0.05 * sgn, front ? basalt3 : basalt2, shadow, 7);
+    lavaCrack([[kneeX - w * 0.052, kneeY + w * 0.015], [kneeX + w * 0.005, kneeY - w * 0.01], [kneeX + w * 0.055, kneeY + w * 0.008]], 1.35, 0.35 + 0.18 * Math.sin(T * 5 + sgn));
+    lavaCrack([[footX - w * 0.07, footY - 5], [footX - w * 0.005, footY - 7], [footX + w * 0.06, footY - 4]], 1.2, front ? 0.5 : 0.28);
     ctx.restore();
-    // foot slab
-    ctx.fillStyle = rockDk;
-    roundedRect(lx - w * 0.1, groundY - 8, w * 0.2, 8, 3); ctx.fill();
   }
 
-  // --- back arm (behind the torso) ---
-  const armPose = (frontArm) => {
-    // idle fists hang low; windup raises them overhead; smash plants them down
-    const idle  = { x: (frontArm ? 0.36 : -0.32) * w, y: groundY - w * 0.12 + Math.sin(e.anim * 2.4 + (frontArm ? 0 : 2)) * 2 };
-    const up    = { x: (frontArm ? 0.2 : -0.1) * w,  y: groundY - w * 0.95 - bob };
-    const down  = { x: (frontArm ? 0.42 : -0.34) * w, y: groundY - w * 0.04 };
-    if (windupP > 0) {
-      const p = windupP * windupP;
-      return { x: idle.x + (up.x - idle.x) * p, y: idle.y + (up.y - idle.y) * p };
+  drawLeg(-1, false);
+  drawLeg(1, true);
+
+  function armPose(front) {
+    const idle = {
+      shoulder: { x: (front ? 0.25 : -0.27) * w, y: groundY - w * 0.72 + bodyShift },
+      elbow: { x: (front ? 0.37 : -0.38) * w, y: groundY - w * 0.42 + bodyShift * 0.35 },
+      fist: { x: (front ? 0.46 : -0.42) * w, y: groundY - w * 0.14 + Math.sin(e.anim * 2.4 + (front ? 0.2 : 2.4)) * 2 },
+    };
+    const slamUp = {
+      shoulder: idle.shoulder,
+      elbow: { x: (front ? 0.28 : -0.2) * w, y: groundY - w * 0.98 + bodyShift },
+      fist: { x: (front ? 0.16 : -0.08) * w, y: groundY - w * 1.12 + bodyShift },
+    };
+    const slamDown = {
+      shoulder: idle.shoulder,
+      elbow: { x: (front ? 0.42 : -0.33) * w, y: groundY - w * 0.36 },
+      fist: { x: (front ? 0.5 : -0.37) * w, y: groundY - w * 0.04 },
+    };
+    const hurlLoad = {
+      shoulder: idle.shoulder,
+      elbow: { x: front ? w * 0.17 : -w * 0.43, y: front ? groundY - w * 1.02 + bodyShift : groundY - w * 0.43 },
+      fist: { x: front ? w * 0.04 : -w * 0.48, y: front ? groundY - w * 1.07 + bodyShift : groundY - w * 0.2 },
+    };
+    const hurlRelease = {
+      shoulder: idle.shoulder,
+      elbow: { x: front ? w * 0.47 : -w * 0.38, y: front ? groundY - w * 0.72 : groundY - w * 0.36 },
+      fist: { x: front ? w * 0.63 : -w * 0.43, y: front ? groundY - w * 0.54 : groundY - w * 0.17 },
+    };
+
+    let pose = idle;
+    if (hurlActive && windupP <= 0 && slamP <= 0) {
+      const p = front ? smooth(throwAge) : 0;
+      const held = front ? hurlLoad : hurlRelease;
+      pose = {
+        shoulder: idle.shoulder,
+        elbow: mixPt(held.elbow, hurlRelease.elbow, p),
+        fist: mixPt(held.fist, hurlRelease.fist, p),
+      };
+      if (!front && hurlHold) pose = hurlLoad;
     }
-    if (smashP > 0) return down;
-    return idle;
-  };
-  const drawArmRock = (shX, shY, fist, dk) => {
-    ctx.strokeStyle = dk ? rockDk : rock; ctx.lineWidth = w * 0.11; ctx.lineCap = "round";
-    ctx.beginPath(); ctx.moveTo(shX, shY); ctx.lineTo((shX + fist.x) / 2 - w * 0.02, (shY + fist.y) / 2); ctx.lineTo(fist.x, fist.y - w * 0.05); ctx.stroke();
-    ctx.lineCap = "butt";
-    // boulder fist
-    ctx.fillStyle = dk ? rockDk : rockLt;
-    ctx.beginPath(); ctx.ellipse(fist.x, fist.y - w * 0.04, w * 0.11, w * 0.095, 0.3, 0, Math.PI * 2); ctx.fill();
-    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.5;
-    ctx.strokeStyle = ember; ctx.lineWidth = 1.4;
-    ctx.beginPath(); ctx.moveTo(fist.x - w * 0.07, fist.y - w * 0.05); ctx.lineTo(fist.x + w * 0.02, fist.y - w * 0.08); ctx.lineTo(fist.x + w * 0.07, fist.y - w * 0.02); ctx.stroke();
-    ctx.restore();
-  };
-  drawArmRock(-w * 0.24, groundY - w * 0.72 - bob, armPose(false), true);
-
-  // --- torso: hunched mound of obsidian plates ---
-  ctx.save();
-  ctx.translate(0, -bob); ctx.rotate(lean + windupP * -0.08 + smashP * 0.07);
-  ctx.fillStyle = rock;
-  ctx.beginPath();
-  ctx.moveTo(-w * 0.36, groundY - w * 0.28);
-  ctx.quadraticCurveTo(-w * 0.46, groundY - w * 0.72, -w * 0.14, groundY - w * 0.92);
-  ctx.quadraticCurveTo(w * 0.14, groundY - w * 1.02, w * 0.32, groundY - w * 0.78);
-  ctx.quadraticCurveTo(w * 0.44, groundY - w * 0.52, w * 0.34, groundY - w * 0.28);
-  ctx.quadraticCurveTo(0, groundY - w * 0.2, -w * 0.36, groundY - w * 0.28);
-  ctx.closePath(); ctx.fill();
-  // plate shading
-  ctx.fillStyle = "rgba(255,255,255,0.06)";
-  ctx.beginPath(); ctx.ellipse(-w * 0.16, groundY - w * 0.62, w * 0.16, w * 0.3, -0.3, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "rgba(0,0,0,0.22)";
-  ctx.beginPath(); ctx.ellipse(w * 0.2, groundY - w * 0.52, w * 0.14, w * 0.26, 0.2, 0, Math.PI * 2); ctx.fill();
-  // plate seams
-  ctx.strokeStyle = rockDk; ctx.lineWidth = 2.2;
-  ctx.beginPath(); ctx.moveTo(-w * 0.3, groundY - w * 0.44); ctx.quadraticCurveTo(-w * 0.06, groundY - w * 0.52, w * 0.16, groundY - w * 0.4); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(-w * 0.26, groundY - w * 0.66); ctx.quadraticCurveTo(0, groundY - w * 0.76, w * 0.22, groundY - w * 0.66); ctx.stroke();
-  // molten cracks glowing between the plates
-  ctx.save(); ctx.globalCompositeOperation = "lighter";
-  ctx.globalAlpha = (coreOpen ? 0.85 : 0.4) + 0.15 * Math.sin(T * 6);
-  ctx.strokeStyle = ember; ctx.lineWidth = 1.8;
-  ctx.beginPath(); ctx.moveTo(-w * 0.28, groundY - w * 0.45); ctx.lineTo(-w * 0.16, groundY - w * 0.5); ctx.lineTo(-w * 0.18, groundY - w * 0.6); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(w * 0.14, groundY - w * 0.41); ctx.lineTo(w * 0.2, groundY - w * 0.52); ctx.lineTo(w * 0.14, groundY - w * 0.63); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(-w * 0.05, groundY - w * 0.78); ctx.lineTo(0.03 * w, groundY - w * 0.85); ctx.stroke();
-  ctx.restore();
-
-  // dorsal obsidian spikes
-  ctx.fillStyle = rockDk;
-  for (let k = 0; k < 4; k++) {
-    const sx = -w * 0.3 + k * w * 0.12, sy = groundY - w * (0.74 + k * 0.055);
-    const sh = w * (0.1 + (k % 2) * 0.05);
-    ctx.beginPath(); ctx.moveTo(sx - w * 0.035, sy); ctx.lineTo(sx - w * 0.005, sy - sh); ctx.lineTo(sx + w * 0.035, sy); ctx.closePath(); ctx.fill();
+    if (windupP > 0) {
+      const p = smooth(windupP);
+      pose = {
+        shoulder: idle.shoulder,
+        elbow: mixPt(idle.elbow, slamUp.elbow, p),
+        fist: mixPt(idle.fist, slamUp.fist, p),
+      };
+    }
+    if (slamP > 0) {
+      const p = smooth(slamP);
+      pose = {
+        shoulder: idle.shoulder,
+        elbow: mixPt(idle.elbow, slamDown.elbow, p),
+        fist: mixPt(idle.fist, slamDown.fist, p),
+      };
+    }
+    return pose;
   }
 
-  // --- chest core: armored shutters vs. blazing exposed heart ---
-  const cx = w * 0.08, cy = groundY - w * 0.55, cr = w * 0.115;
-  ctx.fillStyle = rockDk;
-  ctx.beginPath(); ctx.arc(cx, cy, cr + 3, 0, Math.PI * 2); ctx.fill();
-  if (coreOpen) {
-    const pulse = 1 + Math.sin(T * 8) * 0.12;
-    ctx.save(); ctx.globalCompositeOperation = "lighter";
-    const cg = ctx.createRadialGradient(cx, cy, 1, cx, cy, cr * 2.4 * pulse);
-    cg.addColorStop(0, "rgba(255,250,190,1)");
-    cg.addColorStop(0.35, "rgba(255,180,60,0.9)");
-    cg.addColorStop(0.7, "rgba(255,80,20,0.5)");
-    cg.addColorStop(1, "rgba(160,20,0,0)");
-    ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(cx, cy, cr * 2.4 * pulse, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-    ctx.fillStyle = hot;
-    ctx.beginPath(); ctx.arc(cx, cy, cr * 0.85 * pulse, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#fff6d8";
-    ctx.beginPath(); ctx.arc(cx, cy, cr * 0.4 * pulse, 0, Math.PI * 2); ctx.fill();
-  } else {
-    // closed shell: dim glow leaking through crossed plates
-    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.35 + 0.12 * Math.sin(T * 3);
-    ctx.fillStyle = ember;
-    ctx.beginPath(); ctx.arc(cx, cy, cr * 0.8, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-    ctx.fillStyle = rock;
-    ctx.beginPath(); ctx.moveTo(cx - cr, cy - cr * 0.5); ctx.lineTo(cx + cr, cy - cr * 0.1); ctx.lineTo(cx + cr, cy + cr * 0.4); ctx.lineTo(cx - cr, cy); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = rockLt;
-    ctx.beginPath(); ctx.moveTo(cx - cr, cy + cr * 0.3); ctx.lineTo(cx + cr, cy - cr * 0.6); ctx.lineTo(cx + cr, cy - cr * 0.25); ctx.lineTo(cx - cr, cy + cr * 0.7); ctx.closePath(); ctx.fill();
-  }
-
-  // --- head: small angular skull sunk between the shoulders ---
-  const hx = w * 0.24, hy = groundY - w * 0.9 + windupP * w * 0.04;
-  ctx.fillStyle = rockLt;
-  ctx.beginPath();
-  ctx.moveTo(hx - w * 0.11, hy + w * 0.07);
-  ctx.lineTo(hx - w * 0.07, hy - w * 0.08);
-  ctx.lineTo(hx + w * 0.09, hy - w * 0.07);
-  ctx.lineTo(hx + w * 0.13, hy + w * 0.03);
-  ctx.lineTo(hx + w * 0.06, hy + w * 0.09);
-  ctx.closePath(); ctx.fill();
-  // obsidian crest spikes
-  ctx.fillStyle = rockDk;
-  ctx.beginPath(); ctx.moveTo(hx - w * 0.07, hy - w * 0.07); ctx.lineTo(hx - w * 0.05, hy - w * 0.15); ctx.lineTo(hx - w * 0.01, hy - w * 0.075); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(hx + 0.01 * w, hy - w * 0.075); ctx.lineTo(hx + w * 0.045, hy - w * 0.13); ctx.lineTo(hx + w * 0.07, hy - w * 0.07); ctx.closePath(); ctx.fill();
-  // furnace eyes
-  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.8 + 0.2 * dark;
-  ctx.fillStyle = e.enraged ? "#ff5030" : hot;
-  ctx.beginPath(); ctx.arc(hx + w * 0.03, hy - w * 0.01, w * 0.028, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(hx + w * 0.09, hy - w * 0.005, w * 0.024, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-  // jaw seam glowing
-  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.5;
-  ctx.strokeStyle = ember; ctx.lineWidth = 1.4;
-  ctx.beginPath(); ctx.moveTo(hx - w * 0.04, hy + w * 0.05); ctx.lineTo(hx + w * 0.1, hy + w * 0.04); ctx.stroke();
-  ctx.restore();
-
-  ctx.restore(); // torso transform
-
-  // --- front arm (over the torso) ---
-  drawArmRock(w * 0.22, groundY - w * 0.74 - bob, armPose(true), false);
-
-  // lava dripping off the body while it marches
-  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.65;
-  ctx.fillStyle = hot;
-  for (let k = 0; k < 4; k++) {
-    const dt2 = (T * 0.7 + k * 0.26) % 1;
+  function drawMagmaBoulder(x, y, r, charge) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.65 + charge * 0.25;
+    const bg = ctx.createRadialGradient(x, y, 2, x, y, r * (2.2 + charge));
+    bg.addColorStop(0, "rgba(255,245,170,1)");
+    bg.addColorStop(0.35, "rgba(255,126,28,0.88)");
+    bg.addColorStop(1, "rgba(160,18,0,0)");
+    ctx.fillStyle = bg;
     ctx.beginPath();
-    ctx.arc(-w * 0.25 + k * w * 0.16 + Math.sin((T + k * 1.3) * 3) * 3, groundY - w * 0.3 + dt2 * w * 0.26, 1.6 * (1 - dt2) + 0.4, 0, Math.PI * 2);
+    ctx.arc(x, y, r * (2.1 + charge), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    rockBlob(x, y, r * 0.9, r * 0.75, T * 0.8, basalt2, shadow, 9);
+    lavaCrack([[x - r * 0.5, y - r * 0.08], [x, y - r * 0.35], [x + r * 0.5, y - r * 0.03]], 1.7, 0.9);
+    lavaCrack([[x - r * 0.32, y + r * 0.25], [x + r * 0.1, y + r * 0.05], [x + r * 0.43, y + r * 0.32]], 1.4, 0.75);
+  }
+
+  function drawArm(pose, front) {
+    ctx.save();
+    ctx.globalAlpha = front ? 1 : 0.84;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeStyle = front ? basalt2 : obsidian;
+    ctx.lineWidth = w * 0.115;
+    ctx.beginPath();
+    ctx.moveTo(pose.shoulder.x, pose.shoulder.y);
+    ctx.lineTo(pose.elbow.x, pose.elbow.y);
+    ctx.lineTo(pose.fist.x, pose.fist.y - w * 0.035);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,0.07)";
+    ctx.lineWidth = w * 0.04;
+    ctx.beginPath();
+    ctx.moveTo(pose.shoulder.x - w * 0.015, pose.shoulder.y - w * 0.01);
+    ctx.lineTo(pose.elbow.x - w * 0.02, pose.elbow.y - w * 0.02);
+    ctx.stroke();
+    ctx.lineCap = "butt";
+    rockBlob(pose.shoulder.x, pose.shoulder.y, w * 0.085, w * 0.06, 0.25, front ? basalt3 : basalt, shadow, 7);
+    rockBlob(pose.elbow.x, pose.elbow.y, w * 0.075, w * 0.06, -0.2, front ? basalt3 : basalt2, shadow, 7);
+    rockBlob(pose.fist.x, pose.fist.y - w * 0.03, w * 0.13, w * 0.1, front ? 0.22 : -0.12, front ? basalt3 : basalt2, shadow, 10);
+    lavaCrack([[pose.elbow.x - w * 0.04, pose.elbow.y], [pose.elbow.x + w * 0.02, pose.elbow.y - w * 0.025], [pose.elbow.x + w * 0.05, pose.elbow.y + w * 0.02]], 1.25, front ? 0.55 : 0.36);
+    lavaCrack([[pose.fist.x - w * 0.075, pose.fist.y - w * 0.045], [pose.fist.x - w * 0.01, pose.fist.y - w * 0.075], [pose.fist.x + w * 0.07, pose.fist.y - w * 0.02]], 1.45, 0.6 + hurlPulse * 0.3);
+    if (front && hurlActive && (hurlHold || throwAge < 0.72)) {
+      const charge = hurlHold ? 0.8 + Math.sin(T * 9) * 0.1 : 1 - throwAge * 0.6;
+      drawMagmaBoulder(pose.fist.x + w * 0.03, pose.fist.y - w * 0.15, w * 0.075, charge);
+    }
+    ctx.restore();
+  }
+
+  drawArm(armPose(false), false);
+
+  // Torso: layered obsidian plates around the molten heart.
+  ctx.save();
+  const pivotY = groundY - w * 0.56;
+  ctx.translate(0, pivotY + bodyShift + slamEase * w * 0.02);
+  ctx.rotate(step * 0.018 - windupP * 0.085 + slamEase * 0.07 - (hurlActive ? 0.035 : 0));
+  ctx.translate(0, -pivotY);
+
+  ctx.fillStyle = shadow;
+  poly([
+    [-w * 0.39, groundY - w * 0.25],
+    [-w * 0.47, groundY - w * 0.59],
+    [-w * 0.3, groundY - w * 0.86],
+    [-w * 0.04, groundY - w * 1.0],
+    [w * 0.26, groundY - w * 0.87],
+    [w * 0.41, groundY - w * 0.55],
+    [w * 0.35, groundY - w * 0.27],
+    [w * 0.02, groundY - w * 0.2],
+  ]);
+  ctx.fill();
+
+  const bodyGrad = ctx.createLinearGradient(-w * 0.35, groundY - w * 0.9, w * 0.35, groundY - w * 0.25);
+  bodyGrad.addColorStop(0, basalt2);
+  bodyGrad.addColorStop(0.45, basalt);
+  bodyGrad.addColorStop(1, obsidian);
+  ctx.fillStyle = bodyGrad;
+  poly([
+    [-w * 0.34, groundY - w * 0.28],
+    [-w * 0.43, groundY - w * 0.62],
+    [-w * 0.18, groundY - w * 0.91],
+    [w * 0.11, groundY - w * 1.02],
+    [w * 0.32, groundY - w * 0.82],
+    [w * 0.42, groundY - w * 0.5],
+    [w * 0.3, groundY - w * 0.27],
+    [-w * 0.02, groundY - w * 0.22],
+  ]);
+  ctx.fill();
+
+  // Armor plates.
+  const plates = [
+    { c: basalt3, pts: [[-0.31, -0.71], [-0.13, -0.87], [0.02, -0.78], [-0.05, -0.57], [-0.27, -0.52]] },
+    { c: basalt2, pts: [[0.02, -0.82], [0.24, -0.78], [0.32, -0.58], [0.14, -0.5], [0.02, -0.6]] },
+    { c: basalt, pts: [[-0.28, -0.48], [-0.06, -0.54], [0.04, -0.39], [-0.08, -0.3], [-0.31, -0.34]] },
+    { c: obsidian, pts: [[0.09, -0.46], [0.32, -0.42], [0.26, -0.28], [0.07, -0.27], [0.01, -0.36]] },
+    { c: basalt2, pts: [[-0.1, -0.97], [0.13, -1.0], [0.23, -0.86], [0.05, -0.78], [-0.17, -0.83]] },
+  ];
+  for (const p of plates) {
+    ctx.fillStyle = p.c;
+    poly(p.pts.map(([x, y]) => [x * w, groundY + y * w]));
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.28)";
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = "rgba(255,255,255,0.07)";
+  ctx.beginPath();
+  ctx.ellipse(-w * 0.18, groundY - w * 0.68, w * 0.12, w * 0.24, -0.38, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,0.26)";
+  ctx.beginPath();
+  ctx.ellipse(w * 0.22, groundY - w * 0.52, w * 0.12, w * 0.25, 0.25, 0, Math.PI * 2);
+  ctx.fill();
+
+  const crackAlpha = (coreOpen ? 0.85 : 0.4) + coreFlare * 0.35 + Math.sin(T * 7) * 0.08;
+  lavaCrack([[-w * 0.27, groundY - w * 0.42], [-w * 0.16, groundY - w * 0.5], [-w * 0.2, groundY - w * 0.61], [-w * 0.08, groundY - w * 0.69]], 1.8, crackAlpha);
+  lavaCrack([[w * 0.13, groundY - w * 0.39], [w * 0.22, groundY - w * 0.52], [w * 0.16, groundY - w * 0.67]], 1.8, crackAlpha);
+  lavaCrack([[-w * 0.02, groundY - w * 0.79], [w * 0.04, groundY - w * 0.88], [w * 0.15, groundY - w * 0.83]], 1.4, crackAlpha * 0.8);
+
+  // Back and shoulder spikes.
+  ctx.fillStyle = obsidian;
+  for (let k = 0; k < 7; k++) {
+    const sx = -w * 0.36 + k * w * 0.11;
+    const sy = groundY - w * (0.69 + Math.sin(k * 1.3) * 0.035 + k * 0.035);
+    const sh = w * (0.085 + (k % 3) * 0.028);
+    poly([[sx - w * 0.035, sy], [sx + w * 0.002, sy - sh], [sx + w * 0.04, sy + w * 0.006]]);
+    ctx.fill();
+  }
+
+  // Chest core with sliding basalt shutters.
+  const cx = w * 0.075;
+  const cy = groundY - w * 0.555;
+  const cr = w * 0.12;
+  const openAmt = coreOpen ? 1 : coreFlare * 0.45;
+  ctx.fillStyle = shadow;
+  ctx.beginPath();
+  ctx.arc(cx, cy, cr * 1.18, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = 0.32 + openAmt * 0.65 + coreFlare * 0.3;
+  const coreGlow = ctx.createRadialGradient(cx, cy, 2, cx, cy, cr * (2.1 + openAmt * 1.5 + coreFlare));
+  coreGlow.addColorStop(0, "rgba(255,248,190,1)");
+  coreGlow.addColorStop(0.35, "rgba(255,168,44,0.9)");
+  coreGlow.addColorStop(0.75, "rgba(255,70,18,0.34)");
+  coreGlow.addColorStop(1, "rgba(140,16,0,0)");
+  ctx.fillStyle = coreGlow;
+  ctx.beginPath();
+  ctx.arc(cx, cy, cr * (2.1 + openAmt * 1.5 + coreFlare), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  const pulse = 1 + Math.sin(T * (coreOpen ? 9 : 4)) * 0.1 + coreFlare * 0.14;
+  ctx.fillStyle = hot;
+  ctx.beginPath();
+  ctx.arc(cx, cy, cr * (0.55 + openAmt * 0.34) * pulse, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = whiteHot;
+  ctx.beginPath();
+  ctx.arc(cx, cy, cr * (0.2 + openAmt * 0.17) * pulse, 0, Math.PI * 2);
+  ctx.fill();
+
+  const shutter = (ang, ox, oy, sx, sy) => {
+    ctx.save();
+    ctx.translate(cx + ox * openAmt, cy + oy * openAmt);
+    ctx.rotate(ang * openAmt);
+    ctx.fillStyle = basalt2;
+    poly([[-cr * sx, -cr * sy], [cr * 0.95, -cr * 0.38], [cr * 0.82, cr * 0.32], [-cr * 0.75, cr * 0.48]]);
+    ctx.fill();
+    ctx.strokeStyle = shadow;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.restore();
+  };
+  shutter(-0.55, -cr * 0.9, -cr * 0.16, 1.05, 0.45);
+  shutter(0.48, cr * 0.82, cr * 0.18, 0.95, 0.5);
+  shutter(0.15, -cr * 0.12, cr * 0.72, 0.7, 0.35);
+
+  // Head: furnace mask, jaw and crown shards.
+  const hx = w * 0.24 + (hurlActive ? w * 0.02 : 0);
+  const hy = groundY - w * 0.91 + bodyShift * 0.55 + windupP * w * 0.04 + slamEase * w * 0.025;
+  ctx.fillStyle = obsidian;
+  poly([[hx - w * 0.09, hy + w * 0.09], [hx - w * 0.04, hy + w * 0.16], [hx + w * 0.11, hy + w * 0.13], [hx + w * 0.15, hy + w * 0.04], [hx + w * 0.08, hy - w * 0.01], [hx - w * 0.07, hy]]);
+  ctx.fill();
+  ctx.fillStyle = basalt3;
+  poly([[hx - w * 0.12, hy + w * 0.06], [hx - w * 0.08, hy - w * 0.09], [hx + w * 0.09, hy - w * 0.075], [hx + w * 0.15, hy + w * 0.025], [hx + w * 0.07, hy + w * 0.1], [hx - w * 0.06, hy + w * 0.095]]);
+  ctx.fill();
+  ctx.fillStyle = shadow;
+  poly([[hx - w * 0.08, hy - w * 0.075], [hx - w * 0.055, hy - w * 0.18], [hx - w * 0.005, hy - w * 0.08]]);
+  ctx.fill();
+  poly([[hx + w * 0.02, hy - w * 0.08], [hx + w * 0.06, hy - w * 0.165], [hx + w * 0.095, hy - w * 0.07]]);
+  ctx.fill();
+  poly([[hx + w * 0.09, hy - w * 0.055], [hx + w * 0.145, hy - w * 0.12], [hx + w * 0.14, hy - w * 0.015]]);
+  ctx.fill();
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = 0.72 + dark * 0.22 + coreFlare * 0.25;
+  ctx.fillStyle = e.enraged ? "#ff4d2d" : hot;
+  ctx.beginPath();
+  ctx.ellipse(hx + w * 0.025, hy - w * 0.008, w * 0.033, w * 0.021, -0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(hx + w * 0.094, hy - w * 0.003, w * 0.027, w * 0.018, 0.1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  lavaCrack([[hx - w * 0.05, hy + w * 0.055], [hx + w * 0.015, hy + w * 0.075], [hx + w * 0.105, hy + w * 0.045]], 1.35, 0.6);
+  lavaCrack([[hx + w * 0.115, hy + w * 0.015], [hx + w * 0.145, hy + w * 0.045], [hx + w * 0.11, hy + w * 0.075]], 1.1, 0.5);
+
+  ctx.restore();
+
+  drawArm(armPose(true), true);
+
+  // Falling lava, cinders and orbiting stone flakes.
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (let k = 0; k < 8; k++) {
+    const dripT = (T * (0.48 + k * 0.035) + k * 0.19) % 1;
+    const dx = -w * 0.3 + k * w * 0.086 + Math.sin(T * 2.2 + k) * 3;
+    const dy = groundY - w * (0.42 + (k % 3) * 0.08) + dripT * w * 0.34;
+    ctx.globalAlpha = (0.45 + coreOpen * 0.25 + e.enraged * 0.15) * (1 - dripT * 0.75);
+    ctx.fillStyle = k % 2 ? hot : ember;
+    ctx.beginPath();
+    ctx.ellipse(dx, dy, 1.2 + (k % 3) * 0.45, 3.8 * (1 - dripT) + 1.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (let k = 0; k < 10; k++) {
+    const a = T * (0.5 + k * 0.03) + k * 1.7;
+    const r = w * (0.42 + (k % 3) * 0.08);
+    const px = Math.cos(a) * r * 0.35;
+    const py = groundY - w * 0.62 + Math.sin(a * 1.3) * w * 0.16;
+    ctx.globalAlpha = 0.25 + (k % 2) * 0.12;
+    ctx.fillStyle = k % 3 ? ember : hot;
+    ctx.beginPath();
+    ctx.arc(px, py, 1.1 + (k % 3) * 0.35, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.restore();
@@ -918,7 +1387,7 @@ export function drawEnemies(dark) {
     const w=t.w, bob=Math.abs(Math.sin(e.anim*2))*2;
     const isBoss = !!t.boss;
     const atkF = Math.max(0, e.attackAnim || 0) / 0.25;
-    const custom = e.type === "imp" ? drawImp : e.type === "fireImp" ? drawFireImp : e.type === "fireDragon" ? drawFireDragon : e.type === "magmaGolem" ? drawMagmaGolem : null;
+    const custom = e.type === "imp" ? drawImp : e.type === "fireImp" ? drawFireImp : e.type === "emberBrute" ? drawEmberBrute : e.type === "fireDragon" ? drawFireDragon : e.type === "magmaGolem" ? drawMagmaGolem : null;
     ctx.save(); ctx.translate(e.x, drawYOff);
     if (atkF > 0 && !custom) ctx.scale(1 + atkF * 0.18, 1 - atkF * 0.12);
     if (e.dir<0) ctx.scale(-1,1);
@@ -977,6 +1446,7 @@ export function drawEnemies(dark) {
         ctx.beginPath(); ctx.moveTo(w*0.5,groundY-w*0.5-bob); ctx.lineTo(w*1.8,groundY-w*0.5-bob+wingFlap); ctx.lineTo(w*0.5,groundY-w*0.1-bob); ctx.fill();
       }
     }
+    drawStuckImpArrows(e);
     ctx.restore();
 
     // Bosses get a big always-on health bar with a name plate

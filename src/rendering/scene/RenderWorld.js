@@ -1,8 +1,8 @@
-import { clamp, lerp, lerpColor, rgb, withA, shade, atmo, hazeColor } from '../../util/math.js';
+import { clamp, lerp, lerpColor, rgb, withA, shade, atmo, hazeColor, mulberry32 } from '../../util/math.js';
 import { CFG, STATIONS_X } from '../../config/config.js';
 import { ctx, W, H, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
-import { FX, biomeAt, getGroundTex, getDeco, windGust, windSway, drawTree } from '../Effects.js';
+import { FX, biomeAt, getGroundTex, getDeco, windGust, windSway, drawTree, makeTree } from '../Effects.js';
 import { wallHeight } from '../../entities/Wall.js';
 import { groundShadow, roundedRect, stoneCol, stoneLt, woodCol, litWindow, drawHpBar } from '../DrawHelpers.js';
 import { ENEMY_TYPES } from '../../config/enemies.js';
@@ -406,22 +406,200 @@ function drawFlag(x, color) {
 
 export function drawEntityShadows() {
   const { player, units, vagrants, enemies, animals } = state;
-  if (player) groundShadow(player.x,22,0.24);
-  for (const u of units)   groundShadow(u.x,11,0.2);
+  if (player && !Game.inMine) groundShadow(player.x,22,0.24);
+  for (const u of units)   { if (!u.mine) groundShadow(u.x,11,0.2); }
   for (const v of vagrants) groundShadow(v.x,11,0.2);
   for (const e of enemies)  groundShadow(e.x,ENEMY_TYPES[e.type].w*0.7,0.22);
   for (const a of animals)  if (a.alive) groundShadow(a.x,10,0.18);
 }
 
 export function drawPortals(dark) {
+  const T = performance.now() / 1000;
   for (const p of state.portals) {
-    const x=p.x; ctx.save();
-    ctx.fillStyle="#140f1e"; ctx.beginPath(); ctx.moveTo(x-70,groundY); ctx.quadraticCurveTo(x,groundY-130,x+70,groundY); ctx.fill();
-    const glow=Game.isNight?1:0.35;
-    const rg=ctx.createRadialGradient(x,groundY-50,4,x,groundY-50,46);
-    rg.addColorStop(0,`rgba(255,60,90,${0.9*glow})`); rg.addColorStop(1,"rgba(120,10,40,0)");
-    ctx.fillStyle=rg; ctx.beginPath(); ctx.ellipse(x,groundY-50,30,48,0,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle="rgba(20,4,10,1)"; ctx.beginPath(); ctx.ellipse(x,groundY-46,14,30,0,0,Math.PI*2); ctx.fill();
+    const x = p.x;
+    const glow = Game.isNight ? 1 : 0.4;
+    const gateW = 52, gateH = 140, archH = 34;
+    const pillarW = 14;
+    const baseY = groundY;
+
+    ctx.save();
+
+    // --- ground scorch mark ---
+    const sg = ctx.createRadialGradient(x, baseY, 8, x, baseY, 90);
+    sg.addColorStop(0, `rgba(80,10,0,${0.7 * glow})`);
+    sg.addColorStop(0.5, `rgba(40,4,0,${0.3 * glow})`);
+    sg.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = sg;
+    ctx.beginPath(); ctx.ellipse(x, baseY + 4, 90, 14, 0, 0, Math.PI * 2); ctx.fill();
+
+    // --- outer hellfire glow ---
+    ctx.globalCompositeOperation = "lighter";
+    const og = ctx.createRadialGradient(x, baseY - gateH * 0.45, 10, x, baseY - gateH * 0.45, gateW + 60);
+    og.addColorStop(0, `rgba(255,80,20,${0.25 * glow})`);
+    og.addColorStop(0.6, `rgba(200,30,0,${0.1 * glow})`);
+    og.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = og;
+    ctx.beginPath(); ctx.ellipse(x, baseY - gateH * 0.45, gateW + 60, gateH * 0.8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalCompositeOperation = "source-over";
+
+    // --- stone pillars ---
+    const stoneBase = "#2a1a12", stoneMid = "#3d2518", stoneHi = "#55301c";
+    for (const side of [-1, 1]) {
+      const px = x + side * gateW;
+      // main pillar body
+      ctx.fillStyle = stoneMid;
+      ctx.fillRect(px - pillarW / 2, baseY - gateH, pillarW, gateH);
+      // inner edge highlight
+      ctx.fillStyle = stoneHi;
+      ctx.fillRect(px - side * pillarW / 2, baseY - gateH, 3, gateH);
+      // outer edge shadow
+      ctx.fillStyle = stoneBase;
+      ctx.fillRect(px + side * pillarW / 2 - 3, baseY - gateH, 3, gateH);
+
+      // skull ornament at top of each pillar
+      const sy = baseY - gateH - 6;
+      ctx.fillStyle = "#3a2a1e";
+      ctx.beginPath(); ctx.arc(px, sy, 9, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#1a0a04";
+      ctx.beginPath(); ctx.arc(px - 3, sy - 1, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(px + 3, sy - 1, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#0e0604";
+      ctx.fillRect(px - 2, sy + 2, 4, 3);
+
+      // cracks / runes glowing on pillar
+      ctx.strokeStyle = `rgba(255,90,20,${0.4 + 0.3 * Math.sin(T * 2 + side)})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(px - 2, baseY - gateH + 20);
+      ctx.lineTo(px + 1, baseY - gateH + 38);
+      ctx.lineTo(px - 3, baseY - gateH + 56);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(px + 2, baseY - gateH + 70);
+      ctx.lineTo(px - 1, baseY - gateH + 88);
+      ctx.stroke();
+
+      // ember particles floating up from pillar tops
+      ctx.globalCompositeOperation = "lighter";
+      for (let k = 0; k < 3; k++) {
+        const et = (T * 0.8 + k * 1.3 + side * 2) % 3;
+        const ey = sy - et * 26;
+        const ea = (1 - et / 3) * 0.8 * glow;
+        ctx.fillStyle = `rgba(255,${140 + k * 30},20,${ea})`;
+        ctx.beginPath();
+        ctx.arc(px + Math.sin(T * 3 + k * 4 + side) * 6, ey, 1.5 + (1 - et / 3), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    // --- archway (pointed gothic arch) ---
+    ctx.fillStyle = stoneBase;
+    ctx.beginPath();
+    ctx.moveTo(x - gateW - pillarW / 2, baseY - gateH);
+    ctx.quadraticCurveTo(x - gateW * 0.4, baseY - gateH - archH * 1.3, x, baseY - gateH - archH);
+    ctx.quadraticCurveTo(x + gateW * 0.4, baseY - gateH - archH * 1.3, x + gateW + pillarW / 2, baseY - gateH);
+    ctx.lineTo(x + gateW - pillarW / 2, baseY - gateH);
+    ctx.quadraticCurveTo(x + gateW * 0.3, baseY - gateH - archH * 0.9, x, baseY - gateH - archH + 6);
+    ctx.quadraticCurveTo(x - gateW * 0.3, baseY - gateH - archH * 0.9, x - gateW + pillarW / 2, baseY - gateH);
+    ctx.closePath();
+    ctx.fill();
+
+    // glowing rune at arch apex
+    ctx.fillStyle = `rgba(255,60,10,${0.6 + 0.4 * Math.sin(T * 3)})`;
+    ctx.beginPath(); ctx.arc(x, baseY - gateH - archH + 2, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = `rgba(255,120,30,${0.3 + 0.2 * Math.sin(T * 3)})`;
+    ctx.beginPath(); ctx.arc(x, baseY - gateH - archH + 2, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.globalCompositeOperation = "source-over";
+
+    // --- inner void (the portal opening) ---
+    ctx.beginPath();
+    ctx.moveTo(x - gateW + pillarW / 2 + 2, baseY);
+    ctx.lineTo(x - gateW + pillarW / 2 + 2, baseY - gateH);
+    ctx.quadraticCurveTo(x - gateW * 0.3, baseY - gateH - archH * 0.85, x, baseY - gateH - archH + 8);
+    ctx.quadraticCurveTo(x + gateW * 0.3, baseY - gateH - archH * 0.85, x + gateW - pillarW / 2 - 2, baseY - gateH);
+    ctx.lineTo(x + gateW - pillarW / 2 - 2, baseY);
+    ctx.closePath();
+
+    // deep hellish interior gradient
+    const ig = ctx.createLinearGradient(x, baseY, x, baseY - gateH - archH);
+    ig.addColorStop(0, `rgba(200,50,10,${0.85 * glow})`);
+    ig.addColorStop(0.3, `rgba(140,20,5,${0.7 * glow})`);
+    ig.addColorStop(0.6, `rgba(60,5,0,${0.9 * glow})`);
+    ig.addColorStop(1, "rgba(10,0,0,1)");
+    ctx.fillStyle = ig; ctx.fill();
+
+    // swirling inner fire
+    ctx.save(); ctx.clip();
+    ctx.globalCompositeOperation = "lighter";
+    for (let k = 0; k < 7; k++) {
+      const phase = T * 1.2 + k * 0.9;
+      const fy = baseY - 10 - ((phase * 40) % (gateH + archH));
+      const fx = x + Math.sin(phase * 2.1 + k) * (gateW * 0.5);
+      const fr = 12 + Math.sin(phase * 3) * 6;
+      const fa = (0.25 + 0.15 * Math.sin(phase * 4)) * glow;
+      const fg = ctx.createRadialGradient(fx, fy, 0, fx, fy, fr);
+      fg.addColorStop(0, `rgba(255,200,60,${fa})`);
+      fg.addColorStop(0.4, `rgba(255,80,10,${fa * 0.6})`);
+      fg.addColorStop(1, "rgba(120,10,0,0)");
+      ctx.fillStyle = fg;
+      ctx.beginPath(); ctx.arc(fx, fy, fr, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+
+    // --- fire flames licking out of the gate ---
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (let k = 0; k < 10; k++) {
+      const phase = T * 1.6 + k * 0.63;
+      const t = (phase % 1.5) / 1.5;
+      const fx = x + (k - 4.5) * (gateW * 0.18);
+      const flameH = (30 + Math.sin(phase * 5) * 14) * (1 - t * 0.3);
+      const fy = baseY - t * flameH;
+      const fa = (1 - t) * 0.55 * glow;
+      const fw = 5 + Math.sin(phase * 3.7) * 2;
+
+      ctx.fillStyle = `rgba(255,${180 - t * 120},${40 - t * 30},${fa})`;
+      ctx.beginPath();
+      ctx.moveTo(fx - fw, baseY);
+      ctx.quadraticCurveTo(fx - fw * 0.5, fy + flameH * 0.3, fx + Math.sin(phase) * 3, fy);
+      ctx.quadraticCurveTo(fx + fw * 0.5, fy + flameH * 0.3, fx + fw, baseY);
+      ctx.fill();
+    }
+
+    // bigger flame tongues on the sides
+    for (let side = -1; side <= 1; side += 2) {
+      for (let k = 0; k < 3; k++) {
+        const phase = T * 1.3 + k * 1.1 + side * 0.7;
+        const t = (phase % 2) / 2;
+        const fx = x + side * (gateW - 4) + Math.sin(phase * 2) * 4;
+        const flameH = 40 + Math.sin(phase * 4.2) * 18;
+        const fy = baseY - gateH * 0.15 - t * flameH;
+        const fa = (1 - t) * 0.4 * glow;
+        ctx.fillStyle = `rgba(255,${100 + k * 30},10,${fa})`;
+        ctx.beginPath();
+        ctx.moveTo(fx, baseY - gateH * 0.1);
+        ctx.quadraticCurveTo(fx + side * 8, fy + flameH * 0.4, fx + side * 3 + Math.sin(phase) * 4, fy);
+        ctx.quadraticCurveTo(fx - side * 3, fy + flameH * 0.5, fx, baseY - gateH * 0.1);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+
+    // --- heat distortion shimmer above gate ---
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    for (let k = 0; k < 5; k++) {
+      const ht = (T * 0.6 + k * 0.5) % 2.5;
+      const hy = baseY - gateH - archH - ht * 40;
+      const ha = (1 - ht / 2.5) * 0.18 * glow;
+      const hx = x + Math.sin(T * 2 + k * 1.8) * 16;
+      ctx.fillStyle = `rgba(255,100,20,${ha})`;
+      ctx.beginPath(); ctx.ellipse(hx, hy, 8 + k * 2, 3, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+
     ctx.restore();
   }
 }
@@ -493,7 +671,7 @@ export function drawForestTrees(dark) {
       ctx.stroke();
     }
     ctx.restore();
-    if (ft.marked) {
+    if (ft.marked || ft.beingChopped || ft.chopProgress > 0) {
       const bob = Math.sin(performance.now() / 300 + ft.x) * 3;
       ctx.save(); ctx.font = "16px serif"; ctx.textAlign = "center"; ctx.globalAlpha = 0.9;
       ctx.fillText(ft.beingChopped ? "🪓" : "🔖", ft.x, groundY - ft.tree.h - 14 + bob);
@@ -519,10 +697,32 @@ export function drawForestCamps(dark) {
 
   for (const camp of (state.forestCamps || [])) {
     if (camp.x < camL || camp.x > camR) continue;
-    if (camp.triggered) continue;
 
     const x = camp.x;
     const b = biomeAt(x);
+
+    // backdrop trees so the camp sits nestled into the forest instead of a
+    // bare clearing (real trees are removed within CAMP_CLEAR_DIST so tents
+    // don't overlap them); matched to the surrounding forest's look
+    if (!camp._bgTrees || camp._bgX !== x) {
+      const r = mulberry32((Math.floor(x) * 31 + 7) >>> 0);
+      const trees = [];
+      const n = 4 + ((r() * 3) | 0);
+      for (let i = 0; i < n; i++) {
+        const tx = x + (i / (n - 1) - 0.5) * 230 + (r() - 0.5) * 50;
+        trees.push({
+          x: tx,
+          tree: makeTree(tx, 170 + r() * 80, r, { harvestable: true }),
+          depth: 0.05 + (Math.abs(Math.floor(tx / 60)) % 3) * 0.07,
+        });
+      }
+      camp._bgTrees = trees;
+      camp._bgX = x;
+    }
+    const haze = hazeColor(dark);
+    for (const bt of camp._bgTrees) {
+      drawTree(bt.tree, bt.x, groundY + 4, atmo(b.treeL, haze, bt.depth), atmo(b.treeD, haze, bt.depth), bt.depth, 16);
+    }
 
     // tents tucked just behind the campfire
     const tentShade = rgb(lerpColor([96,78,58],[34,28,24],dark));
@@ -546,14 +746,6 @@ export function drawForestCamps(dark) {
     tentAt(x - 76, 0.82, 1);
     tentAt(x + 76, 0.72, -1);
 
-    ctx.save();
-    ctx.fillStyle = withA(lerpColor(shade(b.gT, 0.55),[8,12,18],dark), 0.75);
-    for (let i = -3; i <= 3; i++) {
-      const px = x + i * 22 + Math.sin(t + i) * 2;
-      ctx.beginPath(); ctx.ellipse(px, groundY - 3, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.restore();
-
     // campfire stone ring
     const stC = rgb(lerpColor([90,84,78],[28,26,24],dark));
     for (let i = 0; i < 6; i++) {
@@ -565,6 +757,17 @@ export function drawForestCamps(dark) {
     // embers
     ctx.fillStyle = rgb(lerpColor([60,40,30],[20,14,10],dark));
     ctx.beginPath(); ctx.ellipse(x, groundY - 1, 6, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+
+    // emptied camp: tents and a cold fire pit remain until it respawns elsewhere
+    if (camp.triggered) continue;
+
+    ctx.save();
+    ctx.fillStyle = withA(lerpColor(shade(b.gT, 0.55),[8,12,18],dark), 0.75);
+    for (let i = -3; i <= 3; i++) {
+      const px = x + i * 22 + Math.sin(t + i) * 2;
+      ctx.beginPath(); ctx.ellipse(px, groundY - 3, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
 
     // fire glow
     ctx.save(); ctx.globalCompositeOperation = "lighter";
@@ -1179,6 +1382,34 @@ export function drawStations() {
   }
   if (state.base && state.base.level >= 4) drawShopBuilding(STATIONS_X.shop);
   if (state.base && state.base.level >= 3) drawGuardStation(STATIONS_X.guard);
+  if (state.base && state.base.level >= 3 && !state.mineBuilt) drawFlag(STATIONS_X.mine, "#d8b46a");
+  if (state.mineBuilt) drawMineEntrance(STATIONS_X.mine);
+}
+
+function drawMineEntrance(x) {
+  ctx.save();
+  // earth mound with a dark, framed opening
+  ctx.fillStyle="#4a4038";
+  ctx.beginPath(); ctx.moveTo(x-46,groundY); ctx.quadraticCurveTo(x,groundY-70,x+46,groundY); ctx.closePath(); ctx.fill();
+  ctx.fillStyle="#3a322c";
+  ctx.beginPath(); ctx.moveTo(x-32,groundY); ctx.quadraticCurveTo(x,groundY-54,x+32,groundY); ctx.closePath(); ctx.fill();
+  ctx.fillStyle="#0c0a10";
+  ctx.beginPath(); ctx.moveTo(x-15,groundY); ctx.lineTo(x-15,groundY-24); ctx.quadraticCurveTo(x,groundY-40,x+15,groundY-24); ctx.lineTo(x+15,groundY); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle="#6a4a28"; ctx.lineWidth=4; ctx.lineCap="round";
+  ctx.beginPath(); ctx.moveTo(x-18,groundY); ctx.lineTo(x-18,groundY-27); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x+18,groundY); ctx.lineTo(x+18,groundY-27); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x-22,groundY-27); ctx.lineTo(x+22,groundY-27); ctx.stroke();
+  // ladder disappearing into the dark
+  ctx.strokeStyle="#8a6a3a"; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(x-5,groundY-18); ctx.lineTo(x-5,groundY); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x+5,groundY-18); ctx.lineTo(x+5,groundY); ctx.stroke();
+  for (let r=0;r<3;r++) { ctx.beginPath(); ctx.moveTo(x-5,groundY-15+r*6); ctx.lineTo(x+5,groundY-15+r*6); ctx.stroke(); }
+  // warm lantern glow rising from below
+  const g=ctx.createRadialGradient(x,groundY-8,2,x,groundY-8,26);
+  g.addColorStop(0,"rgba(255,180,80,0.35)"); g.addColorStop(1,"rgba(255,140,40,0)");
+  ctx.fillStyle=g; ctx.fillRect(x-26,groundY-40,52,40);
+  ctx.restore();
+  drawStationIcon(x, "⛏");
 }
 
 // ---------- Unlockable buildings (watchtower, lumber camp, shrine) ----------

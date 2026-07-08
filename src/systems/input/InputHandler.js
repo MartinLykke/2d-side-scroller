@@ -4,6 +4,7 @@ import { UI, closeSkillTree, openSkillTree } from '../../rendering/HUD.js';
 import { tryOpenShop, handleShopKeys, currentShopList, tryBuyShopItem } from '../economy/ShopSystem.js';
 import { applyUpgrade } from '../economy/UpgradeSystem.js';
 import { triggerBarrage } from '../ai/AI.js';
+import { tryToggleMine } from '../world/MineSystem.js';
 
 export function setupInputHandlers() {
   // UI buttons
@@ -57,6 +58,12 @@ function handleKeydown(e) {
     e.preventDefault(); return;
   }
   if (k === "q") { triggerBarrage(); e.preventDefault(); return; }
+  if (k === "f" && !Game.inventoryOpen && !Game.shopOpen) {
+    if (tryToggleMine()) { e.preventDefault(); return; }
+  }
+  if ((k === "arrowdown" || k === "s") && !e.repeat && !Game.inventoryOpen && !Game.shopOpen) {
+    if (tryToggleMine()) { e.preventDefault(); return; }
+  }
   if (k === "i") { Game.inventoryOpen = !Game.inventoryOpen; Game.shopOpen = false; }
   if (k === "b" && !Game.inventoryOpen) tryOpenShop();
   if (Game.shopOpen) handleShopKeys(k, e);

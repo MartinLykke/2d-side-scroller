@@ -10,6 +10,7 @@ import { killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js'
 import { wallHeight } from '../../entities/Wall.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { nearestChoppableTree, chopTree, nearestLog, deliverLog } from '../world/ForestSystem.js';
+import { minerAI } from '../world/MineSystem.js';
 
 function hasSkill(id) { return state.archerSkills.includes(id); }
 
@@ -61,19 +62,63 @@ function archerShoot(u, x, h, tgt) {
       bouncing: skills.includes("bouncing_volley"),
     });
   }
+}
 
-  // Caltrops: drop when retreating
-  if (skills.includes("caltrops") && Math.random() < 0.06) {
-    state.caltrops.push({ x: u.x, life: 14 });
-  }
+// ── Pigfælder ────────────────────────────────────────────────────────────
+// Lægges kun i felten (udenfor basens mure), med cooldown pr. bueskytte.
+const CALTROP_COOLDOWN    = 10;  // sek. mellem hver fælde pr. bueskytte
+const CALTROP_HOME_RADIUS = 700; // murene ender ved baseX±620 — herudenfor er "i felten"
+const CALTROP_PLACE_TIME  = 0.7; // sek. læggeanimation
+const CALTROP_DROP_AT     = 0.5; // hvor langt inde i animationen fælden slippes
+const ARCHER_DAY_SIGHT = 720;
+const ARCHER_NIGHT_SIGHT = 820;
+const ARCHER_HUNT_SIGHT = 820;
+const ARCHER_HUNT_SHOOT_RANGE = 760;
+
+function tryPlaceCaltrop(u, foe) {
+  if (!hasSkill("caltrops") || (u.caltropCd || 0) > 0) return false;
+  if (dist(u.x, CFG.baseX) < CALTROP_HOME_RADIUS) return false; // aldrig hjemme ved basen
+  if (u.onWall || !foe) return false;
+  const t = ENEMY_TYPES[foe.type];
+  if (t && t.flying) return false; // flyvende fjender træder ikke i fælder
+  if (dist(u.x, foe.x) > 240) return false;
+  u.caltropCd = CALTROP_COOLDOWN;
+  u.placingTrap = 0.0001; // animationsfremdrift 0→1
+  u.trapDropped = false;
+  u.shootState = null;
+  u.dir = Math.sign(foe.x - u.x) || u.dir;
+  return true;
 }
 
 export function nearestEnemy(x, range, includeFleeing = false) {
   let best = null, bd = range;
   for (const e of state.enemies) {
     if (!includeFleeing && e.fleeing) continue;
+    if (e.dying || e.hp <= 0) continue;
     const d = dist(x, e.x);
     if (d < bd) { bd = d; best = e; }
+  }
+  for (const a of state.animals) {
+    if (a.type !== "bear" || !a.alive || a.dying || a.hp <= 0) continue;
+    const d = dist(x, a.x);
+    if (d < bd) { bd = d; best = a; }
+  }
+  return best;
+}
+
+function nearestThreatOnSide(x, range, side, includeFleeing = false) {
+  let best = null, bd = range;
+  for (const e of state.enemies) {
+    if (!includeFleeing && e.fleeing) continue;
+    if (e.dying || e.hp <= 0 || Math.sign(e.x - CFG.baseX) !== side) continue;
+    const d = dist(x, e.x);
+    if (d < bd) { bd = d; best = e; }
+  }
+  for (const a of state.animals) {
+    if (a.type !== "bear" || !a.alive || a.dying || a.hp <= 0) continue;
+    if (Math.sign(a.x - CFG.baseX) !== side) continue;
+    const d = dist(x, a.x);
+    if (d < bd) { bd = d; best = a; }
   }
   return best;
 }
@@ -148,7 +193,21 @@ function assignArcherPost(u, preferredSide, dt) {
 }
 
 function sunsetApproaching() {
-  return Game.time > 0.56 && Game.time < 0.65 && !Game.isNight;
+  return Game.time > 0.48 && Game.time < 0.65 && !Game.isNight;
+}
+
+function dropArcherGoldToPlayer(u) {
+  const gold = Math.floor(u.gold || 0);
+  if (gold <= 0 || !state.player) return;
+
+  const dx = state.player.x - u.x;
+  const dir = Math.sign(dx) || u.dir || 1;
+  for (let g = 0; g < gold; g++) {
+    const vx = clamp(dx * 2 + dir * rand(35, 85) + rand(-25, 25), -360, 360);
+    spawnCoin(u.x + rand(-10, 10), 1, groundY - 28, vx, rand(-250, -170));
+  }
+  floaty(u.x, "+" + gold + " guld", "#f2c14e");
+  u.gold = 0;
 }
 
 function peasantAI(u, dt) {
@@ -161,6 +220,26 @@ function peasantAI(u, dt) {
 }
 
 function archerAI(u, dt) {
+  if ((u.gold || 0) > 0 && dist(u.x, state.player.x) < 120) {
+    dropArcherGoldToPlayer(u);
+  }
+
+  // Læggeanimation for pigfælde: skytten knæler og sætter fælden
+  if (u.placingTrap > 0) {
+    u.placingTrap += dt / CALTROP_PLACE_TIME;
+    if (!u.trapDropped && u.placingTrap >= CALTROP_DROP_AT) {
+      u.trapDropped = true;
+      state.caltrops.push({
+        x: u.x + u.dir * 9, y: groundY - 13,
+        vx: u.dir * 30, vy: -30,
+        state: "fall", rot: 0, spin: u.dir * 7,
+        life: 14, settle: 0, snapT: 0,
+      });
+    }
+    if (u.placingTrap >= 1) u.placingTrap = 0;
+    return; // står stille mens fælden lægges
+  }
+
   // Nulstil den faste side, når det bliver dag igen
   if (!Game.isNight && !sunsetApproaching()) {
     u.fixedSide = null;
@@ -213,19 +292,7 @@ function archerAI(u, dt) {
     return;
   }
 
-  // Drop gold when near player
-  if ((u.gold||0) > 0 && dist(u.x, state.player.x) < 90) {
-    for (let g=0; g<u.gold; g++) spawnCoin(u.x+rand(-20,20), 1, groundY-20, rand(-50,50), rand(-200,-100));
-    floaty(u.x, "+"+u.gold+"🪙", "#f2c14e");
-    u.gold = 0;
-  }
-  // Drop gold when returning to base area
-  if ((u.gold||0) > 0 && dist(u.x, CFG.baseX) < 80 && !nearestEnemy(u.x, 600)) {
-    for (let g=0; g<u.gold; g++) spawnCoin(u.x+rand(-20,20), 1, groundY-20, rand(-40,40), rand(-180,-80));
-    u.gold = 0;
-  }
-
-  const closeFoe = nearestEnemy(u.x, Game.isNight ? 620 : 500);
+  const closeFoe = nearestEnemy(u.x, Game.isNight ? ARCHER_NIGHT_SIGHT : ARCHER_DAY_SIGHT);
 
   // Smoke bomb: update smoked timer
   if (u.smoked > 0) u.smoked -= dt;
@@ -251,7 +318,7 @@ function archerAI(u, dt) {
     const post = assignArcherPost(u, side, dt);
 
     // Find kun fjender på skyttens EGEN tildelte side for at undgå at kigge mod den anden mur
-    const sideFoe = state.enemies.find(e => !e.fleeing && Math.sign(e.x - CFG.baseX) === side && dist(u.x, e.x) < 520);
+    const sideFoe = nearestThreatOnSide(u.x, ARCHER_NIGHT_SIGHT, side);
 
     // Bevægelse til posten
     if (!sideFoe || dist(u.x, sideFoe.x) > 150) {
@@ -277,6 +344,7 @@ function archerAI(u, dt) {
     const tooClose = nearestEnemy(u.x, 90);
     if (tooClose) {
       u.onWall = false; u.wall = null;
+      if (tryPlaceCaltrop(u, tooClose)) return;
       u.dir = Math.sign(u.x - tooClose.x) || u.dir;
       u.x += u.dir * 100 * dt;
       if (u.cooldown <= 0) {
@@ -289,19 +357,29 @@ function archerAI(u, dt) {
 
     // No enemies about: hunt forest game for coin
     if (!closeFoe) {
-      const prey = nearestAnimal(u.x, 460);
+      const prey = nearestAnimal(u.x, ARCHER_HUNT_SIGHT);
       if (prey) {
         u.onWall = false; u.wall = null;
         const d = dist(u.x, prey.x);
-        if (d > 290) {
-          moveToward(u, prey.x, 58, dt);
+        if (prey.type === "bear") {
+          // Kite the bear: face it, back off when it closes, shoot on the
+          // move, and fan out so the party isn't mauled in one spot
+          u.dir = Math.sign(prey.x - u.x) || u.dir;
+          if (d < 250) u.x += Math.sign(u.x - prey.x) * 110 * dt;
+          else if (d > 380) moveToward(u, prey.x, 58, dt);
+          if (d < 430 && u.cooldown <= 0) {
+            shootArrow(u.x, groundY - 36, prey, u);
+            u.cooldown = 1.6;
+          }
         } else {
           u.dir = Math.sign(prey.x - u.x) || u.dir;
-          if (u.cooldown <= 0) {
+          if (d > 330) moveToward(u, prey.x, 58, dt);
+          if (d < ARCHER_HUNT_SHOOT_RANGE && u.cooldown <= 0) {
             shootArrow(u.x, groundY - 36, prey, u);
             u.cooldown = 1.6;
           }
         }
+        separateFromArchers(u, dt);
         return;
       }
     }
@@ -309,8 +387,15 @@ function archerAI(u, dt) {
     if (closeFoe) {
       u.onWall = false; u.wall = null;
       const d = dist(u.x, closeFoe.x);
-      if (d > 240) moveToward(u, closeFoe.x, 64, dt);
-      else {
+      if (d > 240) {
+        moveToward(u, closeFoe.x, 64, dt);
+        if (u.cooldown <= 0) {
+          archerShoot(u, u.x, groundY-36, closeFoe);
+          u.cooldown = hasSkill("heavy_ballista") ? 2.2 : 1.2;
+          u.smokeReveal = 0.5;
+        }
+      } else {
+        if (d < 200 && tryPlaceCaltrop(u, closeFoe)) return;
         u.dir = Math.sign(closeFoe.x - u.x) || u.dir;
         if (u.cooldown <= 0) {
           archerShoot(u, u.x, groundY-36, closeFoe);
@@ -328,6 +413,16 @@ function archerAI(u, dt) {
       
       if (hasSkill("powershot") && !u.moving) u.powerTimer = (u.powerTimer||0) + dt;
     }
+  }
+}
+
+// Ground archers shoulder apart so a hunting party fans out instead of
+// stacking on a single pixel
+function separateFromArchers(u, dt) {
+  for (const o of state.units) {
+    if (o === u || o.role !== "archer" || o.onWall || o.mine) continue;
+    const d = o.x - u.x;
+    if (Math.abs(d) < 46) u.x -= (Math.sign(d) || (state.units.indexOf(u) > state.units.indexOf(o) ? 1 : -1)) * 42 * dt;
   }
 }
 
@@ -411,7 +506,7 @@ function builderAI(u, dt) {
   const freeLog = nearestLog(u.x);
   if (freeLog) { freeLog.claimedBy = u; u.pendingLog = freeLog; return; }
 
-  // No logs waiting either: fell a marked forest tree, if any, while it's safe.
+  // No logs waiting either: fell the nearest available forest tree while it's safe.
   const tree = nearestChoppableTree(u.x);
   if (Game.isNight && tree) {
     if (nearestEnemy(tree.x, 220)) u.panic = 0.6;
@@ -450,234 +545,6 @@ function farmerAI(u, dt) {
       spawnParticles(fx, groundY - 20, 4 + lvl, "#9bd05a", 20, 30);
     }
   }
-}
-
-function legacyGuardAI(u, dt) {
-  // --- WALL PATROL: Go to furthest wall on own side (day and night) ---
-  const guardSide = u.x < CFG.baseX ? -1 : 1;
-  let furthestWall = null;
-  let maxDist = -1;
-  for (const w of state.walls) {
-    if (!w.commissioned || w.hp <= 0 || w.buildProgress < 1) continue;
-    // Check if wall is on guard's side
-    const wallSide = w.x < CFG.baseX ? -1 : 1;
-    if (wallSide !== guardSide) continue;
-    const d = Math.abs(w.x - CFG.baseX);
-    if (d > maxDist) { maxDist = d; furthestWall = w; }
-  }
-  if (furthestWall) {
-    // Find position along wall - spread out guards by counting only gardes
-    const allGardes = state.units.filter(gu => gu.role === "guard");
-    const gardeIndex = allGardes.indexOf(u);
-    const wallW = 40 + furthestWall.level * 10;
-    const spacing = wallW / 2.5;
-    const offset = (gardeIndex % 5) * spacing - wallW / 2; // Spread across 5 positions
-    const targetX = furthestWall.x + offset;
-
-    if (dist(u.x, targetX) > 25) {
-      moveToward(u, targetX, 100, dt);
-      return;
-    }
-    if (!u.onWall || u.wall !== furthestWall) {
-      u.onWall = true;
-      u.wall = furthestWall;
-      return;
-    }
-    // Only attack enemies on the wall or very close to it
-    const enemiesNear = state.enemies.filter(e => {
-      if (e.fleeing) return false;
-      if (dist(e.x, furthestWall.x) > 40) return false;
-      // Only attack if enemy has stackPos (on wall) or is very close
-      return e.stackPos !== undefined || dist(e.x, u.x) < 25;
-    });
-    for (const foe of enemiesNear) {
-      if (u.cooldown <= 0) {
-        foe.hp -= 1; foe.flash = 0.14;
-        u.cooldown = 1.2; u.strike = 0.25;
-        Audio.hit();
-        spawnParticles(foe.x, groundY - 24, 4, "#8a2a4a", 40, 60);
-        if (foe.hp <= 0) {
-          if (u.role === "guard") {
-            u.xp = (u.xp || 0) + 1;
-            const xpNeeded = (u.level || 1) * 3;
-            if (u.xp >= xpNeeded) {
-              u.xp -= xpNeeded;
-              u.level = (u.level || 1) + 1;
-              state.guardSkillPoints = (state.guardSkillPoints || 0) + 1;
-              floaty(u.x, `⬆ Niv.${u.level}! (+1ep 🛡️)`, "#f2c14e");
-              spawnParticles(u.x, groundY - 30, 8, "#f2c14e", 50, 80);
-            }
-          }
-          killEnemy(foe);
-        }
-        break;
-      }
-    }
-    return;
-  }
-
-  // --- WALL DEFENSE: Climb walls to defend against enemies ---
-  let needsWallDefense = null;
-  for (const w of state.walls) {
-    if (!w.commissioned || w.hp <= 0 || w.buildProgress < 1) continue;
-    // Check if enemies are attacking this wall
-    const enemiesNear = state.enemies.filter(e => dist(e.x, w.x) < 40 && !e.fleeing);
-    if (enemiesNear.length > 0) {
-      const wallD = dist(u.x, w.x);
-      if (!needsWallDefense || wallD < dist(u.x, needsWallDefense.x)) {
-        needsWallDefense = w;
-      }
-    }
-  }
-
-  if (needsWallDefense) {
-    // Move toward the wall that needs defense
-    if (dist(u.x, needsWallDefense.x) > 20) {
-      moveToward(u, needsWallDefense.x, 100, dt);
-      return;
-    }
-    // Try to climb the wall
-    const onWall = u.onWall && u.wall === needsWallDefense;
-    if (!onWall) {
-      u.onWall = true;
-      u.wall = needsWallDefense;
-      u.wallClimbTimer = 0.5; // Small delay before defending
-      return;
-    }
-    // While on wall, attack enemies below
-    const enemiesNear = state.enemies.filter(e => dist(e.x, needsWallDefense.x) < 50 && !e.fleeing);
-
-    // Check for impale opportunity (skill: impale_wall_climber)
-    if (state.guardSkills.includes("impale_wall_climber")) {
-      const climbingFoe = enemiesNear.find(e => e.type === "imp" && e.climbHeight && e.climbHeight > 0);
-      if (climbingFoe && u.cooldown <= 0) {
-        // Impale and throw the climbing imp far away
-        climbingFoe.hp -= 5; // Extra damage from the impale
-        climbingFoe.flash = 0.2;
-        climbingFoe.knock = 280 * (Math.random() < 0.5 ? 1 : -1); // Throw it far in a random direction
-        climbingFoe.climbHeight = 0; // Knock it off the wall
-        u.cooldown = 1.2; u.strike = 0.35;
-        Audio.hit();
-        spawnParticles(climbingFoe.x, groundY - 24, 8, "#ff6a4a", 60, 100);
-        if (climbingFoe.hp <= 0) {
-          const et = ENEMY_TYPES[climbingFoe.type];
-          u.xp = (u.xp || 0) + 1;
-          const xpNeeded = (u.level || 1) * 3;
-          if (u.xp >= xpNeeded) {
-            u.xp -= xpNeeded;
-            u.level = (u.level || 1) + 1;
-            state.guardSkillPoints = (state.guardSkillPoints || 0) + 1;
-            floaty(u.x, `⬆ Niv.${u.level}! (+1ep 🛡️)`, "#f2c14e");
-            spawnParticles(u.x, groundY - 30, 8, "#f2c14e", 50, 80);
-          }
-          killEnemy(climbingFoe);
-        }
-        return;
-      }
-    }
-
-    for (const foe of enemiesNear) {
-      if (u.cooldown <= 0) {
-        foe.hp -= 3; foe.flash = 0.14;
-        u.cooldown = 0.7; u.strike = 0.25;
-        Audio.hit();
-        spawnParticles(foe.x, groundY - 24, 4, "#8a2a4a", 40, 60);
-        if (foe.hp <= 0) {
-          const et = ENEMY_TYPES[foe.type];
-          u.xp = (u.xp || 0) + 1;
-          const xpNeeded = (u.level || 1) * 3;
-          if (u.xp >= xpNeeded) {
-            u.xp -= xpNeeded;
-            u.level = (u.level || 1) + 1;
-            state.guardSkillPoints = (state.guardSkillPoints || 0) + 1;
-            floaty(u.x, `⬆ Niv.${u.level}! (+1ep 🛡️)`, "#f2c14e");
-            spawnParticles(u.x, groundY - 30, 8, "#f2c14e", 50, 80);
-          }
-          killEnemy(foe);
-        }
-        break;
-      }
-    }
-    return;
-  }
-
-  // Come down from walls if no enemies attacking
-  if (u.onWall) {
-    u.onWall = false;
-    u.wall = null;
-  }
-
-  // --- FORBEDRET GUARD BOSS LOGIK ---
-  const lb = state.legendaryBoss;
-  if (lb && !lb.fleeing) {
-    const d = dist(u.x, lb.x);
-    u.dir = Math.sign(lb.x - u.x) || u.dir;
-
-    // Find den nærmeste mur på bossens side
-    let frontlineWall = null;
-    let bestWD = 1e9;
-    for (const w of state.walls) {
-      if (w.commissioned && w.hp > 0 && w.buildProgress >= 1) {
-        const wd = dist(w.x, lb.x);
-        if (wd < bestWD) { bestWD = wd; frontlineWall = w; }
-      }
-    }
-
-    if (frontlineWall && dist(u.x, frontlineWall.x) > 150) {
-      // Hvis vagten er langt væk fra frontlinje-muren, så ryk hen til den (lige foran den)
-      const standX = frontlineWall.x + Math.sign(lb.x - frontlineWall.x) * 30; // Stå 30px foran muren
-      moveToward(u, standX, 120, dt);
-    } else {
-      // Hvis bossen er inden for angrebsrækkevidde, eller vi ikke har flere mure: Angrib!
-      if (d > 34) {
-        u.x += u.dir * 120 * dt; // Gå kontrolleret mod bossen
-      } else if (u.cooldown <= 0) {
-        // Angrib bossen
-        lb.hp -= 4; lb.flash = 0.12;
-        u.cooldown = 0.6; u.strike = 0.25;
-        Audio.hit();
-        spawnParticles(lb.x, groundY - 30, 5, "#8a2a4a", 50, 70);
-        if (lb.hp <= 0) killEnemy(lb);
-      }
-    }
-    return;
-  }
-
-  // --- STANDARD MODSTANDER AI ---
-  const foe = nearestEnemy(u.x, 300);
-  if (foe) {
-    const d = dist(u.x, foe.x);
-    u.dir = Math.sign(foe.x - u.x) || u.dir;
-    if (d > 34) {
-      u.x += u.dir * 100 * dt;
-    } else if (u.cooldown <= 0) {
-      foe.hp -= 2; foe.flash = 0.14;
-      u.cooldown = 0.85; u.strike = 0.25;
-      Audio.hit();
-      spawnParticles(foe.x, groundY - 24, 4, "#8a2a4a", 40, 60);
-      if (foe.hp <= 0) {
-        if (u.role === "guard") {
-          u.xp = (u.xp || 0) + 1;
-          const xpNeeded = (u.level || 1) * 3;
-          if (u.xp >= xpNeeded) {
-            u.xp -= xpNeeded;
-            u.level = (u.level || 1) + 1;
-            state.guardSkillPoints = (state.guardSkillPoints || 0) + 1;
-            floaty(u.x, `⬆ Niv.${u.level}! (+1ep 🛡️)`, "#f2c14e");
-            spawnParticles(u.x, groundY - 30, 8, "#f2c14e", 50, 80);
-          }
-        }
-        killEnemy(foe);
-      }
-    }
-    return;
-  }
-
-  // --- STANDARD PATRULJE (Hvis der ikke er fjender) ---
-  const patrolL = CFG.baseX - 550, patrolR = CFG.baseX + 550;
-  if (!u.patrolTarget || dist(u.x, u.patrolTarget) < 20)
-    u.patrolTarget = clamp(CFG.baseX + (Math.random() < 0.5 ? -1 : 1) * rand(60, 450), patrolL, patrolR);
-  moveToward(u, u.patrolTarget, 62, dt);
 }
 
 function grantGuardXP(u) {
@@ -1085,6 +952,7 @@ const AI_HANDLERS = {
   farmer:  farmerAI,
   peasant: peasantAI,
   guard:   guardAI,
+  miner:   minerAI,
 };
 
 export function updateUnits(dt) {
@@ -1096,6 +964,7 @@ export function updateUnits(dt) {
     const px0 = u.x;
     u.cooldown -= dt;
     if (u.impaleCd > 0) u.impaleCd -= dt;
+    if (u.caltropCd > 0) u.caltropCd -= dt;
     if (u.panic > 0) u.panic -= dt;
     if (u.strike > 0) u.strike -= dt;
     if (u.dying) {
@@ -1122,21 +991,53 @@ export function triggerBarrage() {
   for (const u of state.units) {
     if (u.role === "archer") { u.barrageCount = 5; u.cooldown = 0; }
   }
-  floaty(CFG.baseX, "🏹 Pilsregn!", "#f2c14e");
   Audio.bow();
 }
 
 export function updateCaltrops(dt) {
   const { caltrops, enemies } = state;
   for (let i = caltrops.length - 1; i >= 0; i--) {
-    caltrops[i].life -= dt;
-    if (caltrops[i].life <= 0) { caltrops.splice(i, 1); continue; }
+    const c = caltrops[i];
+
+    // Kastet fælde falder i en lille bue før den lander og spændes
+    if (c.state === "fall") {
+      c.vy += 760 * dt;
+      c.x += c.vx * dt;
+      c.y += c.vy * dt;
+      c.rot += c.spin * dt;
+      if (c.y >= groundY - 3) {
+        c.y = groundY - 3;
+        c.state = "armed";
+        c.settle = 0.3;
+        spawnParticles(c.x, groundY - 4, 5, "#9a8a6a", 30, 14);
+      }
+      continue;
+    }
+
+    if (c.settle > 0) c.settle -= dt;
+
+    // Udløst fælde: kæberne er klappet sammen, holder et øjeblik, og er så brugt
+    if (c.state === "snap") {
+      c.snapT += dt;
+      if (c.snapT >= 1.2) caltrops.splice(i, 1);
+      continue;
+    }
+
+    c.life -= dt;
+    if (c.life <= 0) { caltrops.splice(i, 1); continue; }
+
     for (const e of enemies) {
-      if (!e.fleeing && Math.abs(e.x - caltrops[i].x) < 16) {
-        if (!e.slow || e.slow <= 0) {
-          e.slow = 2;
-          spawnParticles(e.x, groundY - 4, 3, "#888888", 20, 10);
-        }
+      if (e.fleeing || e.dying || e.hp <= 0) continue;
+      const t = ENEMY_TYPES[e.type];
+      if (t && t.flying) continue;
+      if (Math.abs(e.x - c.x) < 15) {
+        c.state = "snap";
+        c.snapT = 0;
+        e.slow = 2;
+        Audio.hit();
+        spawnParticles(c.x, groundY - 8, 8, "#c9c9c9", 70, 30);
+        spawnParticles(c.x, groundY - 6, 4, "#8a1c10", 50, 22);
+        break;
       }
     }
   }
@@ -1145,12 +1046,50 @@ export function updateCaltrops(dt) {
 export function updateAssignments() {
   if (state.pendingHammers > 0) {
     const p = freePeasant();
-    if (p) { p.role = "builder"; p.hp = p.maxHp = 5; state.pendingHammers--; floaty(p.x, "🔨"); }
+    if (p) { p.role = "builder"; p.hp = p.maxHp = 5; state.pendingHammers--; }
   }
   if (state.pendingFarmers > 0) {
     const p = freePeasant();
-    if (p) { p.role = "farmer"; p.workTimer = 0; state.pendingFarmers--; floaty(p.x, "🌾"); }
+    if (p) { p.role = "farmer"; p.workTimer = 0; state.pendingFarmers--; }
   }
+}
+
+function claimNearest(entity, items, targetKey) {
+  if (entity[targetKey]) return;
+  let best = null, bd = 9999;
+  for (const item of items) {
+    if (item.claimed) continue;
+    const d = dist(entity.x, item.x);
+    if (d < bd) { bd = d; best = item; }
+  }
+  if (best) { best.claimed = true; entity[targetKey] = best; }
+}
+
+const PICKUP_ROLES = {
+  bowTarget:    { arr: "groundBows",    role: "archer",  hp: 6 },
+  hammerTarget: { arr: "groundHammers", role: "builder", hp: 5 },
+};
+
+function walkToPickup(entity, targetKey, speed, dt) {
+  const target = entity[targetKey];
+  if (!target) return false;
+  if (dist(entity.x, target.x) > 6) {
+    entity.vx = Math.sign(target.x - entity.x) * speed;
+    entity.x += entity.vx * dt;
+    entity.anim += dt * (speed > 80 ? 9 : 4);
+    return true;
+  }
+  const cfg = PICKUP_ROLES[targetKey];
+  const arr = state[cfg.arr];
+  const idx = arr.indexOf(target);
+  if (idx !== -1) arr.splice(idx, 1);
+  const u = makeUnit(cfg.role, entity.x);
+  u.hp = u.maxHp = cfg.hp;
+  u.transform = 0.55;
+  u.dir = entity.vx >= 0 ? 1 : -1;
+  spawnParticles(entity.x, groundY - 30, 14, "#9bd05a");
+  Audio.upgrade();
+  return u;
 }
 
 export function updateVagrants(dt) {
@@ -1159,64 +1098,19 @@ export function updateVagrants(dt) {
     const v = vagrants[i];
 
     if (!v.bowTarget && !v.hammerTarget) {
-      let bestBow = null, bestD = 9999;
-      for (const b of groundBows) {
-        if (b.claimed) continue;
-        const d = dist(v.x, b.x);
-        if (d < bestD) { bestD = d; bestBow = b; }
-      }
-      if (bestBow) { bestBow.claimed = true; v.bowTarget = bestBow; }
+      claimNearest(v, groundBows, "bowTarget");
+      if (!v.bowTarget) claimNearest(v, groundHammers, "hammerTarget");
     }
 
-    if (v.bowTarget) {
-      const bx = v.bowTarget.x;
-      if (dist(v.x, bx) > 6) {
-        v.vx = Math.sign(bx - v.x) * 58; v.x += v.vx * dt; v.anim += dt * 4;
-      } else {
-        const idx = groundBows.indexOf(v.bowTarget);
-        if (idx !== -1) groundBows.splice(idx, 1);
-        const u = makeUnit("archer", v.x);
-        u.hp = u.maxHp = 6;
-        u.transform = 0.55;
-        u.dir = v.vx >= 0 ? 1 : -1;
-        units.push(u);
-        vagrants.splice(i, 1);
-        floaty(v.x, "🏹 Bueskytte!");
-        spawnParticles(v.x, groundY - 30, 14, "#9bd05a");
-        Audio.upgrade();
-      }
-      continue;
+    for (const key of ["bowTarget", "hammerTarget"]) {
+      if (!v[key]) continue;
+      const result = walkToPickup(v, key, 58, dt);
+      if (result === true) break;
+      if (result) { units.push(result); vagrants.splice(i, 1); }
+      break;
     }
-
-    if (!v.hammerTarget) {
-      let bestHammer = null, bestD = 9999;
-      for (const h of groundHammers) {
-        if (h.claimed) continue;
-        const d = dist(v.x, h.x);
-        if (d < bestD) { bestD = d; bestHammer = h; }
-      }
-      if (bestHammer) { bestHammer.claimed = true; v.hammerTarget = bestHammer; }
-    }
-
-    if (v.hammerTarget) {
-      const hx = v.hammerTarget.x;
-      if (dist(v.x, hx) > 6) {
-        v.vx = Math.sign(hx - v.x) * 58; v.x += v.vx * dt; v.anim += dt * 4;
-      } else {
-        const idx = groundHammers.indexOf(v.hammerTarget);
-        if (idx !== -1) groundHammers.splice(idx, 1);
-        const u = makeUnit("builder", v.x);
-        u.hp = u.maxHp = 5;
-        u.transform = 0.55;
-        u.dir = v.vx >= 0 ? 1 : -1;
-        units.push(u);
-        vagrants.splice(i, 1);
-        floaty(v.x, "🔨 Bygger!");
-        spawnParticles(v.x, groundY - 30, 14, "#9bd05a");
-        Audio.upgrade();
-      }
-      continue;
-    }
+    if (vagrants[i] !== v) continue;
+    if (v.bowTarget || v.hammerTarget) continue;
 
     const target = v.targetX;
     const spd = v.speed || 38;
@@ -1226,10 +1120,28 @@ export function updateVagrants(dt) {
       if (dist(v.x, CFG.baseX) < 400) {
         units.push(makeUnit("peasant", v.x));
         vagrants.splice(i, 1);
-        floaty(v.x, "🙋 Undersåt!");
         spawnParticles(v.x, groundY - 30, 8, "#cdbfa3");
         Audio.recruit();
       }
+    }
+  }
+
+  // Idle peasants at base also walk to any unclaimed bow/hammer to become an archer/builder.
+  for (const p of units) {
+    if (p.role !== "peasant" || p.bowTarget || p.hammerTarget) continue;
+    claimNearest(p, groundBows, "bowTarget");
+    if (!p.bowTarget) claimNearest(p, groundHammers, "hammerTarget");
+  }
+
+  for (let i = units.length - 1; i >= 0; i--) {
+    const p = units[i];
+    if (p.role !== "peasant") continue;
+    for (const key of ["bowTarget", "hammerTarget"]) {
+      if (!p[key]) continue;
+      const result = walkToPickup(p, key, 130, dt);
+      if (result === true) break;
+      if (result) units[i] = result;
+      break;
     }
   }
 }
@@ -1247,6 +1159,81 @@ export function nearestAnimal(x, range) {
 // Bear: territorial predator. Chases and mauls any friendly character
 // (player, units, vagrants) in sight. Ignores enemies entirely — and they
 // ignore it, since it lives in the animals array, not the enemies array.
+const BEAR_WALL_STOP = 34;
+
+function activeBearWall(w) {
+  return w.commissioned && w.hp > 0 && w.buildProgress >= 1;
+}
+
+function wallBetweenBearAndTarget(fromX, toX) {
+  let best = null, bd = 1e9;
+  for (const w of state.walls) {
+    if (!activeBearWall(w)) continue;
+    if (!((fromX < w.x && w.x <= toX) || (fromX > w.x && w.x >= toX))) continue;
+    const d = Math.abs(w.x - fromX);
+    if (d < bd) { bd = d; best = w; }
+  }
+  return best;
+}
+
+function wallBlockingBearStep(fromX, toX) {
+  let best = null, bd = 1e9;
+  for (const w of state.walls) {
+    if (!activeBearWall(w)) continue;
+    const leftStop = w.x - BEAR_WALL_STOP;
+    const rightStop = w.x + BEAR_WALL_STOP;
+    const blockedFromLeft = fromX <= leftStop && toX >= leftStop;
+    const blockedFromRight = fromX >= rightStop && toX <= rightStop;
+    if (!blockedFromLeft && !blockedFromRight) continue;
+    const d = Math.abs(w.x - fromX);
+    if (d < bd) { bd = d; best = w; }
+  }
+  return best;
+}
+
+function bearWallStopX(w, fromX) {
+  return w.x + (fromX < w.x ? -BEAR_WALL_STOP : BEAR_WALL_STOP);
+}
+
+function moveBear(a, dx) {
+  const fromX = a.x;
+  const toX = clamp(fromX + dx, 800, CFG.worldWidth - 800);
+  const wall = wallBlockingBearStep(fromX, toX);
+  if (!wall) {
+    a.x = toX;
+    return null;
+  }
+  a.x = bearWallStopX(wall, fromX);
+  a.charging = 0;
+  return wall;
+}
+
+function collapseBearWall(w) {
+  w.hp = 0;
+  w.level = 0;
+  w.commissioned = false;
+  w.buildProgress = 0;
+  spawnParticles(w.x, groundY - 30, 16, "#caa46a", 80, 80);
+}
+
+function bearAttackWall(a, wall, dt) {
+  a.state = "chase";
+  a.dir = Math.sign(wall.x - a.x) || a.dir;
+  a.anim += dt * 9;
+  if (dist(a.x, bearWallStopX(wall, a.x)) > 5) moveBear(a, a.dir * 130 * dt);
+  if (dist(a.x, wall.x) > BEAR_WALL_STOP + 10 || a.attackCd > 0) return;
+
+  a.charging = 0;
+  a.attackCd = 1.4;
+  a.attackAnim = 0.4;
+  wall.hp -= 2;
+  wall.flash = 0.15;
+  spawnParticles(wall.x, groundY - 30, 5, "#caa46a", 38, 42);
+  floaty(wall.x, "-2", "#caa46a");
+  Audio.hit();
+  if (wall.hp <= 0) collapseBearWall(wall);
+}
+
 function updateBear(a, dt) {
   const { player, units, vagrants } = state;
   a.attackCd -= dt;
@@ -1256,16 +1243,41 @@ function updateBear(a, dt) {
   // Sight: wider once already aggroed so victims can't juke it easily
   const sight = a.state === "chase" ? 430 : 320;
   let target = null, td = sight;
-  if (player && player.hp > 0) { const d = dist(player.x, a.x); if (d < td) { td = d; target = player; } }
-  for (const u of units) { const d = dist(u.x, a.x); if (d < td) { td = d; target = u; } }
+  if (player && player.hp > 0 && !Game.inMine) { const d = dist(player.x, a.x); if (d < td) { td = d; target = player; } }
+  for (const u of units) {
+    if (u.mine || (u.onWall && u.wall && activeBearWall(u.wall))) continue;
+    const d = dist(u.x, a.x);
+    if (d < td) { td = d; target = u; }
+  }
   for (const v of vagrants) { const d = dist(v.x, a.x); if (d < td) { td = d; target = v; } }
 
+  a.chargeCd = (a.chargeCd || 0) - dt;
   if (target) {
+    const blockingWall = wallBetweenBearAndTarget(a.x, target.x);
+    if (blockingWall) {
+      bearAttackWall(a, blockingWall, dt);
+      return;
+    }
+
     a.state = "chase";
     a.dir = Math.sign(target.x - a.x) || a.dir;
-    a.anim += dt * 9;
-    if (td > 30) a.x += a.dir * 96 * dt;
+    if (a.charging > 0) {
+      // Burst of speed that runs down kiting archers
+      a.charging -= dt;
+      a.anim += dt * 16;
+      moveBear(a, a.dir * 330 * dt);
+      spawnParticles(a.x - a.dir * 20, groundY - 8, 1, "#8a7a5c");
+    } else {
+      a.anim += dt * 9;
+      if (td > 30) moveBear(a, a.dir * 130 * dt);
+      // Wind up a charge when prey is near but out of paw reach
+      if (td > 70 && td < 260 && a.chargeCd <= 0) {
+        a.charging = 0.6;
+        a.chargeCd = 4.5;
+      }
+    }
     if (td < 36 && a.attackCd <= 0) {
+      a.charging = 0;
       a.attackCd = 1.4;
       a.attackAnim = 0.4;
       Audio.hit();
@@ -1281,15 +1293,19 @@ function updateBear(a, dt) {
       } else {
         // Vagrants have no hp — one swipe scares them off for good
         const idx = vagrants.indexOf(target);
-        if (idx !== -1) { vagrants.splice(idx, 1); spawnParticles(target.x, groundY - 40, 8, "#c1453b"); floaty(target.x, "😱", "#cdbfa3"); }
+        if (idx !== -1) { vagrants.splice(idx, 1); spawnParticles(target.x, groundY - 40, 8, "#c1453b"); }
       }
     }
   } else if (a.state === "chase") {
-    a.state = "graze"; a.stateT = rand(2, 4);
+    a.state = "graze"; a.stateT = rand(2, 4); a.charging = 0;
   } else if (a.state === "walk") {
     a.stateT -= dt;
     a.anim += dt * 5;
-    a.x += a.dir * 26 * dt;
+    if (moveBear(a, a.dir * 26 * dt)) {
+      a.dir *= -1;
+      a.state = "graze";
+      a.stateT = rand(2, 4);
+    }
     if (a.stateT <= 0) { a.state = "graze"; a.stateT = rand(3, 6); }
   } else { // graze / sniff around
     a.stateT -= dt;

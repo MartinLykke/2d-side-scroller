@@ -3,6 +3,8 @@ import { CFG } from '../../config/config.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { spawnVagrant, planNight } from '../world/SpawnSystem.js';
 import { buildForest } from '../world/ForestSystem.js';
+import { initMineVeins } from '../world/MineSystem.js';
+import { buildStations } from './GameInit.js';
 
 const SAVE_KEY = "kingdom_embers_save_v1";
 
@@ -22,6 +24,10 @@ export function saveGame() {
       vagrants: vagrants.length,
       farm: state.farmBuilt,
       farmLevel: state.farmLevel,
+      mineBuilt: state.mineBuilt,
+      mineActiveLeft: state.mineActiveLeft,
+      mineActiveRight: state.mineActiveRight,
+      mineVeins: (state.mineVeins || []).map(v => ({ x: v.x, ore: v.ore, respawnT: v.respawnT })),
       archerSkillPoints: state.archerSkillPoints || 0,
       archerSkills: state.archerSkills || [],
       guardSkillPoints: state.guardSkillPoints || 0,
@@ -64,11 +70,20 @@ export function loadGame() {
     for (let i = 0; i < (snap.vagrants || 0); i++) spawnVagrant();
     state.farmBuilt = snap.farm;
     state.farmLevel = snap.farmLevel || (snap.farm ? 1 : 0);
+    state.mineBuilt = !!snap.mineBuilt;
+    Game.inMine = false; // always resurface on load
+    if (state.mineBuilt) {
+      initMineVeins();
+      if (snap.mineActiveLeft) state.mineActiveLeft = snap.mineActiveLeft;
+      if (snap.mineActiveRight) state.mineActiveRight = snap.mineActiveRight;
+      if (snap.mineVeins) snap.mineVeins.forEach((s, i) => { if (state.mineVeins[i]) Object.assign(state.mineVeins[i], s); });
+    }
     state.archerSkillPoints = snap.archerSkillPoints || 0;
     state.archerSkills = snap.archerSkills || [];
     state.guardSkillPoints = snap.guardSkillPoints || 0;
     state.guardSkills = snap.guardSkills || [];
     Game.threatLevel = Math.max(1, snap.day || 1);
+    buildStations(); // stations depend on base level / mine, which were just restored
     planNight();
     return true;
   } catch (e) { return false; }

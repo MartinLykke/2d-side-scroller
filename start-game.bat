@@ -1,6 +1,6 @@
 @echo off
 REM ============================================================
-REM  Kingdom — Crown of Embers : local launcher
+REM  Ashen reigns : local launcher
 REM  Starts a small web server and opens the game in Chrome.
 REM ============================================================
 cd /d "%~dp0"

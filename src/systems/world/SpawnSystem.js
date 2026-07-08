@@ -7,11 +7,20 @@ import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 
 export function spawnCoin(x, value = 1, fromY = -40, vx = 0, vy = -180) {
-  state.coins.push({ x, y: fromY, vy, value, settled: false, life: 60, magnet: false, vx });
+  const c = { x, y: fromY, vy, value, settled: false, life: 60, magnet: false, vx };
+  state.coins.push(c);
+  return c;
 }
 
 export function floaty(x, text, color = "#f2c14e", size = 15) {
   state.floatTexts.push({ x, y: groundY - 90, text, color, life: 1.4, vy: -34, size });
+}
+
+export function critFloaty(x, dmg) {
+  state.floatTexts.push({
+    x, y: groundY - 100, text: String(dmg), color: "#ffd23e",
+    life: 1.1, maxLife: 1.1, vy: -150, size: 32, crit: true,
+  });
 }
 
 export function spawnParticles(x, y, n, color, spread = 60, up = 80) {
@@ -32,7 +41,7 @@ export function spawnVagrant() {
 }
 
 export function spawnAnimal() {
-  if (state.animals.length > 6) return;
+  if (state.animals.length > 16) return;
   const bears = state.animals.filter(a => a.type === "bear").length;
   if (bears < 2 && Math.random() < 0.15) return spawnBear();
   // Deer and rabbits spawn across the entire forest-covered map
@@ -40,7 +49,7 @@ export function spawnAnimal() {
   state.animals.push({
     x, vx: 0, dir: pick([-1, 1]),
     state: "graze", stateT: rand(2, 5), alive: true, anim: rand(0, 6),
-    flee: 0, fleeT: 0, type: pick(["rabbit","rabbit","deer"]),
+    flee: 0, fleeT: 0, type: pick(["rabbit","rabbit","deer","deer"]),
     eatDown: 0, headT: rand(1, 3), scan: 0, earFlick: 0,
     dying: false, deathT: 0,
   });
@@ -55,6 +64,7 @@ export function spawnBear() {
     state: "graze", stateT: rand(2, 5), alive: true, anim: rand(0, 6),
     flee: 0, fleeT: 0, type: "bear",
     hp: 12, maxHp: 12, attackCd: 0, attackAnim: 0, flash: 0,
+    chargeCd: 0, charging: 0,
     eatDown: 0, headT: rand(1, 3), scan: 0, earFlick: 0,
     dying: false, deathT: 0,
   });
@@ -63,7 +73,7 @@ export function spawnBear() {
 export function spawnEnemy(type, portal) {
   if (!ENEMY_TYPES[type]) type = "imp";
   const t = ENEMY_TYPES[type];
-  state.enemies.push({
+  const enemy = {
     x: portal.x, vx: 0, type, tag: type === "imp" || type === "fireImp" ? "Imp" : "Enemy",
     hp: t.hp, maxHp: t.hp,
     dir: portal.side > 0 ? -1 : 1,
@@ -72,7 +82,10 @@ export function spawnEnemy(type, portal) {
     fy: t.flying ? -(t.fireball ? rand(105, 145) : 80 + rand(0, 30)) : 0,
     shootCd: t.flying ? rand(0.5, t.fireball ? 1.4 : 2) : 0,
     poisonCd: t.rangedShoot ? rand(1, t.shootInterval || 5) : undefined,
-  });
+    nightWave: Game.isNight,
+  };
+  state.enemies.push(enemy);
+  return enemy;
 }
 
 // Per-boss entrance rigging, run right after the boss entity is spawned.
@@ -80,18 +93,15 @@ const BOSS_RIGGERS = {
   fireDragon(drg, portal) {
     drg.patrolDir = portal.side > 0 ? -1 : 1;
     drg.dropCd = rand(3, 5);
-    floaty(CFG.baseX, "🐉 Ilddragen nærmer sig!", "#ff6a20");
     // Imps ride on the dragon's back and drop off over the base
     for (let k = 0; k < 4; k++) {
-      spawnEnemy("imp", portal);
-      const r = state.enemies[state.enemies.length - 1];
+      const r = spawnEnemy("imp", portal);
       r.ridingDragon = drg;
       r.riderSeat = k;
       r.fy = (drg.fy || -110) - 52;
     }
   },
   magmaGolem(golem, portal) {
-    floaty(CFG.baseX, "🌋 Jorden skælver – Magmakolossen vandrer!", "#ff6a20");
     Game.screenShake = Math.max(Game.screenShake || 0, 0.4);
     spawnParticles(portal.x, groundY - 20, 30, "#ff6a20", 160, 180);
     spawnParticles(portal.x, groundY - 10, 18, "#6b5a45", 200, 120);
@@ -117,6 +127,7 @@ export function planNight() {
   Game.nightQuota   = Math.round((3 + d * 3.5 + Math.pow(d * 0.7, 1.6) + Math.max(0, d - 8) * 2.25) * quotaMult);
   Game.nightSpawned = 0;
   Game.spawnTimer   = 0;
+  Game.nightCleared = false;
 }
 
 function nightEnemyType() {
@@ -124,12 +135,15 @@ function nightEnemyType() {
   const hardMult = Game.diffMult > 1.5 ? 1.3 : 1;
   if (Game.nightSpawned === 0 && BOSS_SCHEDULE[d]) return BOSS_SCHEDULE[d];
   const flyingImpChance = Math.min(0.45, Math.max(0, d - 2) * 0.055 * hardMult);
-  return r < flyingImpChance ? "fireImp" : "imp";
+  const emberBruteChance = d >= 2 ? Math.min(0.25, (d - 1) * 0.035 * hardMult) : 0;
+  if (r < emberBruteChance) return "emberBrute";
+  if (r < emberBruteChance + flyingImpChance) return "fireImp";
+  return "imp";
 }
 
 export function updateSpawning(dt) {
   state.animalTimer -= dt;
-  if (state.animalTimer <= 0) { state.animalTimer = rand(8, 14); if (!Game.isNight) spawnAnimal(); }
+  if (state.animalTimer <= 0) { state.animalTimer = rand(3, 6); if (!Game.isNight) spawnAnimal(); }
 
   if (Game.isNight && Game.nightSpawned < Game.nightQuota) {
     Game.spawnTimer -= dt;
@@ -158,7 +172,6 @@ export function updateSpawning(dt) {
         Game.legendaryIntro = { timer: 5.5, maxTimer: 5.5, bossType: type };
         // Rally all fighters
         for (const u of state.units) u.rallied = true;
-        floaty(CFG.baseX, `☠ ${ENEMY_TYPES[type].name} nærmer sig!`, "#ff2020");
         for (let k = 0; k < 30; k++)
           state.particles.push({ x: CFG.baseX + rand(-120,120), y: groundY - rand(40,160), vx: rand(-60,60), vy: rand(-80,-20), life: rand(0.6,1.2), color:"#ff2020", size: rand(2,5) });
       }

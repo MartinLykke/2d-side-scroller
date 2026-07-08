@@ -1,7 +1,7 @@
-import { CFG } from '../config/config.js';
+import { CFG, MINE } from '../config/config.js';
 import { WEAPONS, RARITY_COL, RARITY_NAME } from '../config/weapons.js';
 import { ARMORS, ARMOR_RARITY_COL, ARMOR_RARITY_NAME } from '../config/armor.js';
-import { dist, clamp } from '../util/math.js';
+import { dist, clamp, rand } from '../util/math.js';
 import { Game, state } from '../core/state.js';
 import { Audio } from '../systems/infrastructure/Audio.js';
 import { spawnEnemy, spawnFireDragon, spawnBoss, planNight, floaty, spawnParticles } from '../systems/world/SpawnSystem.js';
@@ -117,11 +117,9 @@ function makeSkillNode(sk) {
       if (type === "guard") {
         state.guardSkillPoints -= sk.cost;
         state.guardSkills.push(sk.id);
-        floaty(state.base.x, `🛡️ ${sk.name} låst op!`, "#f2c14e");
       } else {
         state.archerSkillPoints -= sk.cost;
         state.archerSkills.push(sk.id);
-        floaty(state.base.x, `🏹 ${sk.name} låst op!`, "#f2c14e");
       }
       Audio.upgrade();
       renderSkillTree();
@@ -235,15 +233,21 @@ export const UI = {
     if (spEl) spEl.style.display = "none";
 
     let near=null, nd=CFG.payRange;
-    for (const s of stations) { const c=s.cost(); if (c<=0) continue; const d=dist(player.x,s.x()); if (d<nd) { nd=d; near=s; } }
-    const vagNear=state.vagrants.find(v=>dist(player.x,v.x)<46&&Math.abs(v.vx)<1);
-    const lootNear=state.lootItems&&state.lootItems.find(it=>dist(player.x,it.x)<50);
+    for (const s of stations) { if (!!s.mineLayer!==Game.inMine) continue; const c=s.cost(); if (c<=0) continue; const d=dist(player.x,s.x()); if (d<nd) { nd=d; near=s; } }
+    const vagNear=!Game.inMine&&state.vagrants.find(v=>dist(player.x,v.x)<46&&Math.abs(v.vx)<1);
+    const lootNear=!Game.inMine&&state.lootItems&&state.lootItems.find(it=>dist(player.x,it.x)<50);
     const shopSt=stations.find(s=>s.id==="shop");
-    const nearShop=shopSt&&state.base.level>=4&&dist(player.x,shopSt.x())<100;
+    const nearShop=!Game.inMine&&shopSt&&state.base.level>=4&&dist(player.x,shopSt.x())<100;
+    const mineLadderNear=state.mineBuilt&&dist(player.x,MINE.entranceX)<70;
     if (near) {
       this.prompt.classList.remove("hidden");
       const prog=near.paid>0?` (${near.paid}/${near.cost()})` : "";
       this.prompt.innerHTML=`${near.label()} &nbsp;<span class="cost">${near.cost()}🪙</span>${prog} &nbsp;<span class="hold">hold ↓/S</span>`;
+    } else if (mineLadderNear) {
+      this.prompt.classList.remove("hidden");
+      this.prompt.innerHTML=Game.inMine
+        ? `Gå op af minen &nbsp;<span class="hold">tryk F</span>`
+        : `⛏ Gå ned i minen &nbsp;<span class="hold">tryk F</span>`;
     } else if (vagNear) {
       this.prompt.classList.remove("hidden");
       this.prompt.innerHTML=`Rekruttér undersåt &nbsp;<span class="cost">1🪙</span> &nbsp;<span class="hold">hold ↓/S</span>`;
@@ -400,6 +404,20 @@ export const DEV = {
     spawnBoss("magmaGolem", { x: state.base.x + side * 720, side });
   },
 
+  spawnAnimalNearBase(type) {
+    if (Game.state!=="play") return;
+    const x = state.base.x + pick([-1, 1]) * rand(200, 400);
+    state.animals.push({
+      x, vx: 0, dir: pick([-1, 1]),
+      state: "graze", stateT: rand(2, 5), alive: true, anim: rand(0, 6),
+      flee: 0, fleeT: 0, type,
+      eatDown: 0, headT: rand(1, 3), scan: 0, earFlick: 0,
+      dying: false, deathT: 0,
+    });
+    const names = { deer: "🦌 Hjort", rabbit: "🐇 Kanin" };
+    floaty(state.base.x, (names[type]||type) + "!", "#9bd05a");
+  },
+
   killAll() {
     if (Game.state!=="play") return;
     const n=state.enemies.length; state.enemies.length=0;
@@ -437,31 +455,56 @@ export const DEV = {
 
   spawnUnit(role) {
     if (Game.state!=="play") return;
+    if (role === "miner" && !state.mineBuilt) {
+      floaty(state.base.x, "Byg minen først (base lvl 3)", "#ff8a6a");
+      return;
+    }
     const popCap = CFG.popCapByLevel[state.base.level];
     if (state.units.length + state.vagrants.length >= popCap) {
       floaty(state.base.x,"Befolkningsloft nået","#ff8a6a");
       return;
     }
-    const u = makeUnit(role, state.base.x + pick([-1, 1]) * 120);
+    const x = role === "miner" ? MINE.stationX + pick([-1, 1]) * 30 : state.base.x + pick([-1, 1]) * 120;
+    const u = makeUnit(role, x);
     state.units.push(u);
-    const roleNames = { archer: "🏹 Bueskytter", builder: "🔨 Bygmand", farmer: "🌾 Landmand", guard: "🛡 Vagt" };
+    const roleNames = { archer: "🏹 Bueskytter", builder: "🔨 Bygmand", farmer: "🌾 Landmand", guard: "🛡 Vagt", miner: "⛏ Minearbejder" };
     floaty(state.base.x, roleNames[role] + " født!", "#9bd05a");
+  },
+
+  levelUpUnits(role, levels = 1) {
+    if (Game.state!=="play") return;
+    const targets = state.units.filter(u => u.role === role);
+    if (!targets.length) {
+      floaty(state.base.x, "Ingen " + (role === "archer" ? "bueskytter" : "vagter"), "#ff8a6a");
+      return;
+    }
+    for (const u of targets) {
+      u.level = (u.level || 1) + levels;
+      u.xp = 0;
+      floaty(u.x, "⬆ Niv." + u.level + "!", "#f2c14e");
+      spawnParticles(u.x, groundY - 30, 8, "#f2c14e", 50, 80);
+    }
+    const pts = targets.length * levels;
+    if (role === "archer") state.archerSkillPoints = (state.archerSkillPoints || 0) + pts;
+    else state.guardSkillPoints = (state.guardSkillPoints || 0) + pts;
+    floaty(state.base.x, "+" + pts + " evnepoint", "#9bd05a");
   },
 
   updateStats(dt) {
     this._fps+=(1/Math.max(dt,0.001)-this._fps)*0.08;
     const el=document.getElementById("dev-stats");
     if (!el||document.getElementById("dev-panel").classList.contains("hidden")) return;
-    let arch = 0, build = 0, farm = 0;
+    let arch = 0, build = 0, farm = 0, mine = 0;
     if (state.units) for (let i = 0; i < state.units.length; i++) {
       const r = state.units[i].role;
       if (r === "archer") arch++;
       else if (r === "builder") build++;
       else if (r === "farmer") farm++;
+      else if (r === "miner") mine++;
     }
     el.innerHTML=
       `FPS: <b>${Math.round(this._fps)}</b> &nbsp;|&nbsp; Dag: <b>${Game.day}</b> &nbsp;t: <b>${Game.time.toFixed(3)}</b><br>`+
-      `Fjender: <b>${state.enemies?.length||0}</b> &nbsp;|&nbsp; Enheder: <b>${state.units?.length||0}</b> (🏹${arch} 🔨${build} 🌾${farm})<br>`+
+      `Fjender: <b>${state.enemies?.length||0}</b> &nbsp;|&nbsp; Enheder: <b>${state.units?.length||0}</b> (🏹${arch} 🔨${build} 🌾${farm} ⛏${mine})<br>`+
       `Mønter (jord): <b>${state.coins?.length||0}</b> &nbsp;|&nbsp; Partikler: <b>${state.particles?.length||0}</b><br>`+
       `Spiller X: <b>${state.player?Math.round(state.player.x):"-"}</b> &nbsp;|&nbsp; Kamera: <b>${Math.round(Game.cam)}</b>`;
   },

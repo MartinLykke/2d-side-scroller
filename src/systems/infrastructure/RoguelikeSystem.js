@@ -13,6 +13,21 @@ const HUB = {
   portalX: 2640,
 };
 const HUB_TRANSITION_TIME = 1.15;
+const HUB_UPGRADE_LABELS = {
+  heart: "Max liv",
+  blade: "Skade",
+  purse: "Startguld",
+  ember: "Mere glød",
+  regen: "Regen",
+  wanderer_lantern: "Vagabond",
+  grave_bow: "Startbue",
+  oath_sparks: "Evnepoint",
+  moon_cache: "Guld-cache",
+  old_crew: "Start crew",
+  stone_oath: "Startmure",
+  crowned_camp: "Base lvl 2",
+  ghost_bow: "Kortbue",
+};
 
 export const META_UPGRADES = [
   {
@@ -21,7 +36,7 @@ export const META_UPGRADES = [
     name: "Blodets Segl",
     desc: "+1 max liv per rang",
     max: 5,
-    x: 720,
+    x: 640,
     color: "#d95b72",
     icon: "HP",
     cost: lvl => 8 + lvl * 7,
@@ -32,7 +47,7 @@ export const META_UPGRADES = [
     name: "Askeslebet Våben",
     desc: "+8% skade per rang",
     max: 6,
-    x: 840,
+    x: 750,
     color: "#f2c14e",
     icon: "DMG",
     cost: lvl => 10 + lvl * 9,
@@ -43,7 +58,7 @@ export const META_UPGRADES = [
     name: "Gravkongens Pung",
     desc: "+3 startguld per rang",
     max: 5,
-    x: 960,
+    x: 860,
     color: "#e6b64a",
     icon: "GOLD",
     cost: lvl => 7 + lvl * 6,
@@ -54,7 +69,7 @@ export const META_UPGRADES = [
     name: "Glødende Krone",
     desc: "+10% ekstra run-belønning per rang",
     max: 4,
-    x: 1080,
+    x: 970,
     color: "#8fd8ff",
     icon: "SOUL",
     cost: lvl => 14 + lvl * 12,
@@ -65,7 +80,7 @@ export const META_UPGRADES = [
     name: "Månebrønd",
     desc: "hurtigere heling udenfor kamp",
     max: 4,
-    x: 1200,
+    x: 1080,
     color: "#9bd05a",
     icon: "REGEN",
     cost: lvl => 9 + lvl * 8,
@@ -76,7 +91,7 @@ export const META_UPGRADES = [
     name: "Vildfaren Lygte",
     desc: "+1 ekstra vagabond ved run-start",
     max: 2,
-    x: 1450,
+    x: 1330,
     color: "#b9a7ff",
     icon: "VAG",
     cost: lvl => 24 + lvl * 18,
@@ -87,7 +102,7 @@ export const META_UPGRADES = [
     name: "Gravbue",
     desc: "+1 løs bue ved lejrens start",
     max: 2,
-    x: 1570,
+    x: 1440,
     color: "#7fd6a4",
     icon: "BOW",
     cost: lvl => 26 + lvl * 20,
@@ -98,7 +113,7 @@ export const META_UPGRADES = [
     name: "Edsflammer",
     desc: "+1 bue- og vagt-evnepoint",
     max: 2,
-    x: 1690,
+    x: 1550,
     color: "#ff9bd2",
     icon: "EP",
     cost: lvl => 30 + lvl * 24,
@@ -109,7 +124,7 @@ export const META_UPGRADES = [
     name: "Månecache",
     desc: "+12 startguld og et lille gnistregn",
     max: 1,
-    x: 1810,
+    x: 1660,
     color: "#d9e8ff",
     icon: "CACHE",
     cost: () => 42,
@@ -120,7 +135,7 @@ export const META_UPGRADES = [
     name: "Den Første Ed",
     desc: "start med 1 bueskytte og 1 bygger",
     max: 1,
-    x: 2060,
+    x: 1950,
     color: "#ffcf5a",
     icon: "CREW",
     cost: () => 90,
@@ -131,7 +146,7 @@ export const META_UPGRADES = [
     name: "Steneden",
     desc: "start med 2 niveau 1 mure",
     max: 1,
-    x: 2180,
+    x: 2060,
     color: "#c6c6d8",
     icon: "WALL",
     cost: () => 100,
@@ -142,7 +157,7 @@ export const META_UPGRADES = [
     name: "Kronet Lejr",
     desc: "start hvert run med base niveau 2",
     max: 1,
-    x: 2300,
+    x: 2170,
     color: "#f2c14e",
     icon: "BASE",
     cost: () => 125,
@@ -153,7 +168,7 @@ export const META_UPGRADES = [
     name: "Spøgelsespil",
     desc: "start selv med en kortbue",
     max: 1,
-    x: 2420,
+    x: 2280,
     color: "#8fd8ff",
     icon: "HERO",
     cost: () => 115,
@@ -344,6 +359,30 @@ function updateHubPlayer(dt) {
   p.jumpH += p.jumpVy * dt;
   p.jumpVy -= 1400 * dt;
   if (p.jumpH <= 0) { p.jumpH = 0; if (p.jumpVy < 0) p.jumpVy = 0; }
+
+  p.ghostTrail = p.ghostTrail || [];
+  if (move !== 0) {
+    p.trailTimer = (p.trailTimer || 0) - dt;
+    if (p.trailTimer <= 0) {
+      p.ghostTrail.push({ x: p.x, h: p.jumpH || 0, dir: p.dir, life: 0.32 });
+      p.trailTimer = 0.055;
+    }
+    if (Math.random() < dt * 16) {
+      state.particles.push({
+        x: p.x - p.dir * 8 + (Math.random() - 0.5) * 12,
+        y: groundY - 26 - (p.jumpH || 0) - Math.random() * 14,
+        vx: -p.dir * (18 + Math.random() * 34),
+        vy: -(8 + Math.random() * 28),
+        life: 0.4 + Math.random() * 0.35, maxLife: 0.75, float: true,
+        color: Math.random() < 0.6 ? "#aee8ff" : "#d8f6ff",
+        size: 1.4 + Math.random() * 2,
+      });
+    }
+  }
+  for (let i = p.ghostTrail.length - 1; i >= 0; i--) {
+    p.ghostTrail[i].life -= dt;
+    if (p.ghostTrail[i].life <= 0) p.ghostTrail.splice(i, 1);
+  }
 }
 
 function nearestHubStation() {
@@ -353,6 +392,15 @@ function nearestHubStation() {
     if (c <= 0) continue;
     const d = dist(state.player.x, s.x());
     if (d < nd) { nd = d; near = s; }
+  }
+  return near;
+}
+
+function nearestHubUpgrade(range = 115) {
+  let near = null, nd = range;
+  for (const upg of META_UPGRADES) {
+    const d = dist(state.player.x, upg.x);
+    if (d < nd) { nd = d; near = upg; }
   }
   return near;
 }
@@ -409,6 +457,13 @@ function updateHubParticles(dt) {
       if (p.t >= 1) state.particles.splice(i, 1);
       continue;
     }
+    if (p.float) {
+      p.life -= dt;
+      p.x += p.vx * dt + Math.sin(p.life * 3.2 + i) * 12 * dt;
+      p.y += p.vy * dt;
+      if (p.life <= 0) state.particles.splice(i, 1);
+      continue;
+    }
     p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 240 * dt;
     if (p.life <= 0) state.particles.splice(i, 1);
   }
@@ -425,6 +480,17 @@ export function updateHub(dt, startNewRun) {
   updateHubPlayer(dt);
   updateHubPayment(dt);
   Game.meta.embers = state.player.coins;
+  if (Math.random() < dt * 7) {
+    state.particles.push({
+      x: state.player.x + (Math.random() - 0.5) * 1500,
+      y: groundY - 10 - Math.random() * 280,
+      vx: (Math.random() - 0.5) * 8,
+      vy: -(6 + Math.random() * 15),
+      life: 2.2 + Math.random() * 2.2, maxLife: 4.4, float: true,
+      color: Math.random() < 0.55 ? "#8fd8ff" : (Math.random() < 0.5 ? "#f2c14e" : "#d8f6ff"),
+      size: 1 + Math.random() * 1.8,
+    });
+  }
   updateHubParticles(dt);
   const zoom = Game.zoom || 1.2;
   Game.cam += (clamp(state.player.x - W / 2, 0, Math.max(0, HUB.width - W / zoom)) - Game.cam) * 0.12;
@@ -477,39 +543,168 @@ export function updateHubTransition(dt, startNewRun) {
   }
 }
 
+function upgradeLabel(upg) {
+  return HUB_UPGRADE_LABELS[upg.id] || upg.icon || upg.name;
+}
+
+function ghostBodyPath(t, sway = 1) {
+  const w1 = Math.sin(t * 5.5) * 3.2 * sway;
+  const w2 = Math.sin(t * 5.5 + 2.1) * 3.2 * sway;
+  const w3 = Math.sin(t * 5.5 + 4.2) * 3.2 * sway;
+  ctx.beginPath();
+  ctx.moveTo(-17, 2);
+  ctx.quadraticCurveTo(-20, -32, -9, -46);
+  ctx.quadraticCurveTo(0, -55, 9, -46);
+  ctx.quadraticCurveTo(20, -32, 17, 2);
+  ctx.quadraticCurveTo(13, 12 + w1, 8, 3);
+  ctx.quadraticCurveTo(4, 14 + w2, 0, 4);
+  ctx.quadraticCurveTo(-4, 14 + w3, -8, 3);
+  ctx.quadraticCurveTo(-13, 11 + w1, -17, 2);
+  ctx.closePath();
+}
+
 function drawHubPlayer() {
   const p = state.player;
   const t = Game.hubT || 0;
-  const y = groundY - 34 - (p.jumpH || 0) + Math.sin(t * 3 + p.x * 0.02) * 5;
+  const hover = Math.sin(t * 2.6 + p.x * 0.02) * 4.5;
+  const y = groundY - 40 - (p.jumpH || 0) + hover;
+  const moving = Math.abs(p.vx) > 10;
+
+  // ground glow beneath the ghost
+  ctx.save();
+  ctx.fillStyle = "rgba(120,200,255,0.16)";
+  ctx.beginPath(); ctx.ellipse(p.x, groundY + 2, 22, 5.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  const gg = ctx.createRadialGradient(p.x, groundY, 2, p.x, groundY, 34);
+  gg.addColorStop(0, "rgba(140,215,255,0.22)");
+  gg.addColorStop(1, "rgba(60,130,255,0)");
+  ctx.fillStyle = gg; ctx.beginPath(); ctx.ellipse(p.x, groundY, 34, 10, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.restore();
+
+  // afterimages while moving
+  if (p.ghostTrail) {
+    for (const g of p.ghostTrail) {
+      const a = clamp(g.life / 0.32, 0, 1) * 0.16;
+      ctx.save();
+      ctx.translate(g.x, groundY - 40 - g.h + hover);
+      if (g.dir < 0) ctx.scale(-1, 1);
+      ctx.globalAlpha = a;
+      ctx.fillStyle = "#8fd8ff";
+      ghostBodyPath(t, 0);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
   ctx.save();
   ctx.translate(p.x, y);
   if (p.dir < 0) ctx.scale(-1, 1);
-  ctx.fillStyle = "rgba(120,200,255,0.18)";
-  ctx.beginPath(); ctx.ellipse(0, 42 + (p.jumpH || 0), 20, 5, 0, 0, Math.PI * 2); ctx.fill();
+  if (moving) ctx.rotate(clamp(Math.abs(p.vx) / 430, 0, 1) * 0.14);
+
+  // spirit aura
   ctx.save(); ctx.globalCompositeOperation = "lighter";
-  const aura = ctx.createRadialGradient(0, -20, 4, 0, -20, 46);
-  aura.addColorStop(0, "rgba(210,248,255,0.38)");
+  const aura = ctx.createRadialGradient(0, -22, 4, 0, -22, 52);
+  aura.addColorStop(0, `rgba(210,248,255,${0.32 + Math.sin(t * 3.4) * 0.07})`);
   aura.addColorStop(1, "rgba(90,170,255,0)");
-  ctx.fillStyle = aura; ctx.beginPath(); ctx.arc(0, -20, 46, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = aura; ctx.beginPath(); ctx.arc(0, -22, 52, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
-  ctx.fillStyle = "rgba(205,242,255,0.76)";
+
+  // trailing spirit tail behind the body
+  ctx.save();
+  ctx.globalAlpha = moving ? 0.4 : 0.24;
+  ctx.strokeStyle = "#aee8ff";
+  ctx.lineWidth = 5;
+  ctx.lineCap = "round";
+  const tl = moving ? 30 : 16;
   ctx.beginPath();
-  ctx.moveTo(-16, -4);
-  ctx.quadraticCurveTo(-15, -38, 0, -52);
-  ctx.quadraticCurveTo(15, -38, 16, -4);
-  ctx.quadraticCurveTo(10, 7, 5, -1);
-  ctx.quadraticCurveTo(0, 12, -5, -1);
-  ctx.quadraticCurveTo(-10, 7, -16, -4);
+  ctx.moveTo(-12, -8);
+  ctx.quadraticCurveTo(-16 - tl * 0.5, -2 + Math.sin(t * 6) * 5, -14 - tl, 6 + Math.sin(t * 6 + 1.4) * 6);
+  ctx.stroke();
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-10, -22);
+  ctx.quadraticCurveTo(-14 - tl * 0.4, -20 + Math.sin(t * 6 + 0.8) * 4, -12 - tl * 0.8, -12 + Math.sin(t * 6 + 2.2) * 5);
+  ctx.stroke();
+  ctx.restore();
+
+  // main cloak
+  ctx.fillStyle = "rgba(196,238,255,0.62)";
+  ghostBodyPath(t, 1);
   ctx.fill();
-  ctx.fillStyle = "rgba(35,55,78,0.8)";
-  ctx.beginPath(); ctx.arc(-5, -31, 2.4, 0, Math.PI * 2); ctx.arc(5, -31, 2.4, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = "rgba(35,55,78,0.55)"; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.arc(0, -22, 4, 0.1, Math.PI - 0.1); ctx.stroke();
+
+  // inner luminous core
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const core = ctx.createRadialGradient(2, -26, 2, 2, -26, 26);
+  core.addColorStop(0, "rgba(240,252,255,0.5)");
+  core.addColorStop(1, "rgba(140,215,255,0)");
+  ctx.fillStyle = core;
+  ghostBodyPath(t, 1);
+  ctx.fill();
+  ctx.restore();
+
+  // edge highlight
+  ctx.strokeStyle = "rgba(226,248,255,0.5)";
+  ctx.lineWidth = 1.4;
+  ghostBodyPath(t, 1);
+  ctx.stroke();
+
+  // hood hollow + face
+  ctx.fillStyle = "rgba(10,22,40,0.82)";
+  ctx.beginPath(); ctx.ellipse(3, -35, 9.5, 10.5, 0.1, 0, Math.PI * 2); ctx.fill();
+  const blink = Math.sin(t * 0.9 + 1.3) > 0.985 ? 0.15 : 1;
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  const eg = ctx.createRadialGradient(3, -36, 1, 3, -36, 12);
+  eg.addColorStop(0, "rgba(160,230,255,0.55)");
+  eg.addColorStop(1, "rgba(80,170,255,0)");
+  ctx.fillStyle = eg; ctx.beginPath(); ctx.arc(3, -36, 12, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#d8f6ff";
+  ctx.beginPath();
+  ctx.ellipse(-0.5, -37, 2, 2.6 * blink, 0, 0, Math.PI * 2);
+  ctx.ellipse(7, -37, 2, 2.6 * blink, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // wisp arms
+  ctx.strokeStyle = "rgba(210,248,255,0.42)";
+  ctx.lineWidth = 3; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(14, -26); ctx.quadraticCurveTo(24, -18 + Math.sin(t * 4) * 3, 21, -8); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-14, -26); ctx.quadraticCurveTo(-24, -18 + Math.sin(t * 4 + 1) * 3, -21, -8); ctx.stroke();
+
+  // small soul flame hovering by the front hand
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  const fx = 24, fy = -12 + Math.sin(t * 5) * 2.5;
+  const fg = ctx.createRadialGradient(fx, fy, 1, fx, fy, 10);
+  fg.addColorStop(0, "rgba(220,250,255,0.9)");
+  fg.addColorStop(0.5, "rgba(120,205,255,0.45)");
+  fg.addColorStop(1, "rgba(60,140,255,0)");
+  ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(fx, fy, 10, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#eafcff";
+  ctx.beginPath(); ctx.arc(fx, fy, 2.6 + Math.sin(t * 8) * 0.6, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // floating ember crown
+  const cy = -56 - Math.sin(t * 3.1) * 2.5;
+  ctx.save();
+  ctx.translate(0, cy);
+  ctx.rotate(Math.sin(t * 1.7) * 0.06);
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  const cg = ctx.createRadialGradient(0, 0, 2, 0, 0, 20);
+  cg.addColorStop(0, "rgba(255,214,110,0.5)");
+  cg.addColorStop(1, "rgba(255,160,50,0)");
+  ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
   ctx.fillStyle = "#f2c14e";
-  ctx.beginPath(); ctx.moveTo(-9, -48); ctx.lineTo(-4, -58); ctx.lineTo(0, -49); ctx.lineTo(4, -58); ctx.lineTo(9, -48); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = "rgba(210,248,255,0.45)"; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(-20, -24); ctx.quadraticCurveTo(-32, -14, -20, -5); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(20, -24); ctx.quadraticCurveTo(32, -14, 20, -5); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(-10, 4); ctx.lineTo(-10, -3); ctx.lineTo(-5, -10); ctx.lineTo(-2, -3);
+  ctx.lineTo(0, -12); ctx.lineTo(2, -3); ctx.lineTo(5, -10); ctx.lineTo(10, -3); ctx.lineTo(10, 4);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#ffe9a3"; ctx.fillRect(-10, 2, 20, 2.4);
+  ctx.fillStyle = "#8fd8ff";
+  ctx.beginPath(); ctx.arc(0, 0, 1.8, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
   ctx.restore();
 }
 
@@ -536,53 +731,207 @@ function drawNpc(x) {
 function drawAltar(upg) {
   const lvl = metaLevel(upg.id);
   const maxed = lvl >= upg.max;
-  const pulse = 0.75 + Math.sin((Game.hubT || 0) * 3 + upg.x) * 0.12;
+  const t = Game.hubT || 0;
+  const cost = maxed ? 0 : upg.cost(lvl);
+  const affordable = !maxed && (state.player?.coins || 0) >= cost;
+  const near = state.player && dist(state.player.x, upg.x) < 95;
+  const pulse = 0.62 + Math.sin(t * 3 + upg.x) * 0.14;
   ctx.save();
   ctx.translate(upg.x, groundY);
-  ctx.fillStyle = "rgba(0,0,0,0.32)"; ctx.beginPath(); ctx.ellipse(0, 0, 42, 8, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#3a3646"; ctx.fillRect(-28, -22, 56, 22);
-  ctx.fillStyle = "#555064"; ctx.fillRect(-22, -34, 44, 12);
-  ctx.fillStyle = "rgba(255,255,255,0.08)"; ctx.fillRect(-22, -34, 14, 34);
-  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = maxed ? 0.25 : pulse;
-  const rg = ctx.createRadialGradient(0, -58, 3, 0, -58, 38);
+  ctx.textAlign = "center";
+
+  // shadow
+  ctx.fillStyle = "rgba(0,0,0,0.34)";
+  ctx.beginPath(); ctx.ellipse(0, 1, 40, 7, 0, 0, Math.PI * 2); ctx.fill();
+
+  // stepped stone base
+  ctx.fillStyle = "#28243a"; ctx.fillRect(-32, -9, 64, 9);
+  ctx.fillStyle = "#353048"; ctx.fillRect(-25, -18, 50, 9);
+  ctx.fillStyle = "#413b56"; ctx.fillRect(-18, -27, 36, 9);
+  ctx.fillStyle = "rgba(255,255,255,0.07)";
+  ctx.fillRect(-32, -9, 64, 1.6); ctx.fillRect(-25, -18, 50, 1.6); ctx.fillRect(-18, -27, 36, 1.6);
+
+  // pillar with carved rune line
+  ctx.fillStyle = "#4c455f"; ctx.fillRect(-8, -54, 16, 27);
+  ctx.fillStyle = "rgba(255,255,255,0.08)"; ctx.fillRect(-8, -54, 4, 27);
+  ctx.fillStyle = "#575070"; ctx.fillRect(-11, -58, 22, 5);
+  ctx.strokeStyle = upg.color + (maxed ? "55" : "88");
+  ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(0, -50); ctx.lineTo(0, -31); ctx.moveTo(-4, -44); ctx.lineTo(4, -44); ctx.moveTo(-3, -37); ctx.lineTo(3, -37); ctx.stroke();
+
+  // rank pips on the top step
+  for (let i = 0; i < upg.max; i++) {
+    const px = (i - (upg.max - 1) / 2) * 8.5;
+    ctx.fillStyle = i < lvl ? upg.color : "rgba(255,255,255,0.14)";
+    ctx.beginPath(); ctx.moveTo(px, -25.5); ctx.lineTo(px + 2.6, -22.5); ctx.lineTo(px, -19.5); ctx.lineTo(px - 2.6, -22.5); ctx.closePath(); ctx.fill();
+  }
+
+  // gem glow
+  const gy = -76 + Math.sin(t * 2 + upg.x * 0.6) * 3;
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = maxed ? 0.2 : (affordable ? pulse + 0.18 : pulse * 0.55);
+  const rg = ctx.createRadialGradient(0, gy, 3, 0, gy, 40);
   rg.addColorStop(0, upg.color); rg.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(0, -58, 38, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(0, gy, 40, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
-  ctx.fillStyle = maxed ? "#d8e8ea" : upg.color;
-  ctx.beginPath(); ctx.moveTo(0, -82); ctx.lineTo(18, -58); ctx.lineTo(0, -42); ctx.lineTo(-18, -58); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = "#161620"; ctx.font = "bold 10px sans-serif"; ctx.textAlign = "center";
-  ctx.fillText(upg.icon, 0, -55);
-  ctx.fillStyle = "#d8caa8"; ctx.font = "12px sans-serif";
-  ctx.fillText(`${lvl}/${upg.max}`, 0, -95);
+
+  // floating gem, spinning on its axis
+  const spin = Math.sin(t * 1.9 + upg.x * 0.3);
+  ctx.save();
+  ctx.translate(0, gy);
+  ctx.scale(Math.max(0.18, Math.abs(spin)), 1);
+  ctx.fillStyle = maxed ? "#e9ddb1" : upg.color;
+  ctx.beginPath(); ctx.moveTo(0, -17); ctx.lineTo(13, 0); ctx.lineTo(0, 17); ctx.lineTo(-13, 0); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.45)";
+  ctx.beginPath(); ctx.moveTo(0, -17); ctx.lineTo(13, 0); ctx.lineTo(0, 0); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.6)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, -17); ctx.lineTo(13, 0); ctx.lineTo(0, 17); ctx.lineTo(-13, 0); ctx.closePath(); ctx.stroke();
+  ctx.restore();
+
+  if (maxed) {
+    // golden halo ring for fully awakened seals
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = "rgba(255,222,140,0.7)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(0, gy, 20 + Math.sin(t * 2.4) * 1.5, 7, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  } else {
+    // orbiting sparks
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 2; i++) {
+      const a = t * 1.6 + i * Math.PI + upg.x;
+      ctx.fillStyle = "rgba(255,255,255,0.85)";
+      ctx.beginPath(); ctx.arc(Math.cos(a) * 21, gy + Math.sin(a) * 8, 1.6, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // rank text
+  ctx.fillStyle = maxed ? "#ffe9a3" : "#cfc6b0";
+  ctx.font = "11px sans-serif";
+  ctx.fillText(`${lvl}/${upg.max}`, 0, gy - 26);
+
+  // readable upgrade plaque
+  const plaqueLabel = upgradeLabel(upg);
+  const costText = maxed ? "MAX" : `${cost} glød`;
+  ctx.fillStyle = near ? "rgba(12,10,20,0.86)" : "rgba(12,10,20,0.68)";
+  ctx.fillRect(-44, 8, 88, 35);
+  ctx.strokeStyle = upg.color + (near ? "cc" : "66");
+  ctx.lineWidth = near ? 1.6 : 1;
+  ctx.strokeRect(-44, 8, 88, 35);
+  ctx.fillStyle = near ? "#f7eed4" : "#d8d1bf";
+  ctx.font = "bold 11px sans-serif";
+  ctx.fillText(plaqueLabel, 0, 22);
+  ctx.fillStyle = maxed ? "#ffe9a3" : (affordable ? "#bff5c8" : "#cfc6b0");
+  ctx.font = "10px sans-serif";
+  ctx.fillText(`${lvl}/${upg.max} - ${costText}`, 0, 37);
+
+  // name + cost tag when the player is near
+  if (near) {
+    ctx.fillStyle = "rgba(10,9,18,0.82)";
+    const label = maxed ? upg.name : `${upg.name} · ${cost}`;
+    ctx.font = "bold 12px sans-serif";
+    const tw = ctx.measureText(label).width + 18;
+    ctx.fillRect(-tw / 2, gy - 58, tw, 20);
+    ctx.strokeStyle = upg.color + "aa"; ctx.lineWidth = 1;
+    ctx.strokeRect(-tw / 2, gy - 58, tw, 20);
+    ctx.fillStyle = maxed ? "#ffe9a3" : (affordable ? "#eafcd8" : "#ff9d84");
+    ctx.fillText(label, 0, gy - 44);
+  }
+
   ctx.restore();
 }
 
-function drawTierLabels() {
-  const labels = [
-    { text: "BASIC", x: 960, color: "#9bd05a" },
-    { text: "EPIC", x: 1630, color: "#b9a7ff" },
-    { text: "LEGENDARY", x: 2240, color: "#f2c14e" },
-  ];
+const HUB_TIERS = [
+  { text: "GRUND", hint: "Stats og glød", x0: 575, x1: 1145, cx: 860, color: "#9bd05a" },
+  { text: "EPISK", hint: "Run-start bonusser", x0: 1265, x1: 1725, cx: 1495, color: "#b9a7ff" },
+  { text: "LEGENDARISK", hint: "Store startfordele", x0: 1885, x1: 2345, cx: 2115, color: "#f2c14e" },
+];
+
+function drawBrazier(x, color, t) {
+  ctx.save();
+  ctx.translate(x, groundY);
+  ctx.fillStyle = "rgba(0,0,0,0.3)"; ctx.beginPath(); ctx.ellipse(0, 1, 14, 4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#332e44"; ctx.fillRect(-5, -30, 10, 30);
+  ctx.fillStyle = "#443e58"; ctx.fillRect(-9, -36, 18, 7);
+  ctx.fillStyle = "rgba(255,255,255,0.07)"; ctx.fillRect(-5, -30, 2.4, 30);
+  const flick = Math.sin(t * 7.3 + x) * 0.5 + Math.sin(t * 11.7 + x * 2) * 0.3;
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  const fg = ctx.createRadialGradient(0, -44, 2, 0, -44, 26 + flick * 4);
+  fg.addColorStop(0, color + "cc");
+  fg.addColorStop(0.45, color + "44");
+  fg.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(0, -44, 26 + flick * 4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  ctx.beginPath();
+  ctx.moveTo(-4, -37);
+  ctx.quadraticCurveTo(-5 + flick, -46, 0, -52 - flick * 3);
+  ctx.quadraticCurveTo(5 + flick, -46, 4, -37);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+  ctx.restore();
+}
+
+function drawTierPlazas() {
+  const t = Game.hubT || 0;
   ctx.save();
   ctx.textAlign = "center";
-  for (const l of labels) {
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    const rg = ctx.createRadialGradient(l.x, groundY - 130, 4, l.x, groundY - 130, 90);
-    rg.addColorStop(0, l.color + "55");
-    rg.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = rg;
-    ctx.beginPath(); ctx.arc(l.x, groundY - 130, 90, 0, Math.PI * 2); ctx.fill();
+  for (const tier of HUB_TIERS) {
+    // raised stone platform
+    ctx.fillStyle = "#221e30";
+    ctx.fillRect(tier.x0 - 28, groundY - 4, tier.x1 - tier.x0 + 56, 26);
+    ctx.fillStyle = "#2b2640";
+    ctx.fillRect(tier.x0 - 22, groundY - 4, tier.x1 - tier.x0 + 44, 4);
+    ctx.strokeStyle = tier.color + "40"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(tier.x0 - 22, groundY - 3); ctx.lineTo(tier.x1 + 22, groundY - 3); ctx.stroke();
+    // paving joints
+    ctx.strokeStyle = "rgba(255,255,255,0.05)"; ctx.lineWidth = 1;
+    for (let x = tier.x0; x < tier.x1; x += 56) {
+      ctx.beginPath(); ctx.moveTo(x, groundY); ctx.lineTo(x - 5, groundY + 20); ctx.stroke();
+    }
+
+    // ambient light shaft over the plaza
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    const sg = ctx.createRadialGradient(tier.cx, groundY - 120, 10, tier.cx, groundY - 120, 260);
+    sg.addColorStop(0, tier.color + "16");
+    sg.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = sg;
+    ctx.beginPath(); ctx.arc(tier.cx, groundY - 120, 260, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
 
-    ctx.fillStyle = "rgba(10,9,16,0.72)";
-    ctx.fillRect(l.x - 72, groundY - 158, 144, 25);
-    ctx.strokeStyle = l.color + "aa";
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(l.x - 72, groundY - 158, 144, 25);
-    ctx.fillStyle = l.color;
-    ctx.font = "bold 13px sans-serif";
-    ctx.fillText(l.text, l.x, groundY - 140);
+    drawBrazier(tier.x0 - 46, tier.color, t);
+    drawBrazier(tier.x1 + 46, tier.color, t);
+
+    // hanging banner sign
+    const by = groundY - 196 + Math.sin(t * 1.4 + tier.cx) * 2;
+    ctx.strokeStyle = "rgba(255,255,255,0.16)"; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(tier.cx - 90, by - 16); ctx.lineTo(tier.cx - 66, by + 2);
+    ctx.moveTo(tier.cx + 90, by - 16); ctx.lineTo(tier.cx + 66, by + 2);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(12,10,20,0.85)";
+    ctx.fillRect(tier.cx - 92, by, 184, 42);
+    ctx.beginPath();
+    ctx.moveTo(tier.cx - 92, by + 42); ctx.lineTo(tier.cx - 70, by + 42); ctx.lineTo(tier.cx - 92, by + 54); ctx.closePath();
+    ctx.moveTo(tier.cx + 92, by + 42); ctx.lineTo(tier.cx + 70, by + 42); ctx.lineTo(tier.cx + 92, by + 54); ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = tier.color + "88"; ctx.lineWidth = 1.5;
+    ctx.strokeRect(tier.cx - 92, by, 184, 42);
+    ctx.strokeStyle = tier.color + "33";
+    ctx.strokeRect(tier.cx - 86, by + 4, 172, 34);
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = tier.color;
+    ctx.font = "bold 14px sans-serif";
+    ctx.fillText(tier.text, tier.cx, by + 18);
+    ctx.restore();
+    ctx.fillStyle = "#d8d1bf";
+    ctx.font = "10px sans-serif";
+    ctx.fillText(tier.hint, tier.cx, by + 33);
+    // side ornaments
+    ctx.fillStyle = tier.color;
+    for (const s of [-1, 1]) {
+      const ox = tier.cx + s * 104;
+      ctx.beginPath(); ctx.moveTo(ox, by + 13); ctx.lineTo(ox + 4, by + 20); ctx.lineTo(ox, by + 27); ctx.lineTo(ox - 4, by + 20); ctx.closePath(); ctx.fill();
+    }
   }
   ctx.restore();
 }
@@ -624,17 +973,54 @@ function drawHubText() {
 
 function drawHubPrompt() {
   if (Game.state === "hub-transition") return;
-  const near = nearestHubStation();
+  const nearUpgrade = nearestHubUpgrade();
   const portalNear = dist(state.player.x, HUB.portalX) < 120;
   const npcNear = dist(state.player.x, 430) < 110;
   ctx.save();
   ctx.textAlign = "center";
   ctx.font = "14px sans-serif";
-  if (near) {
-    ctx.fillStyle = "rgba(12,10,18,0.72)";
-    ctx.fillRect(W / 2 - 340, H - 70, 680, 38);
+  if (nearUpgrade) {
+    const lvl = metaLevel(nearUpgrade.id);
+    const maxed = lvl >= nearUpgrade.max;
+    const cost = maxed ? 0 : nearUpgrade.cost(lvl);
+    const coins = state.player?.coins || 0;
+    const affordable = !maxed && coins >= cost;
+    const panelW = Math.min(790, W - 48);
+    const panelH = 74;
+    const x = W / 2 - panelW / 2;
+    const y = H - panelH - 20;
+    const progressW = 170;
+    const progress = nearUpgrade.max > 0 ? lvl / nearUpgrade.max : 1;
+
+    ctx.fillStyle = "rgba(10,9,18,0.88)";
+    ctx.fillRect(x, y, panelW, panelH);
+    ctx.strokeStyle = nearUpgrade.color + "cc";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x, y, panelW, panelH);
+
+    ctx.textAlign = "left";
+    ctx.fillStyle = nearUpgrade.color;
+    ctx.font = "bold 15px sans-serif";
+    ctx.fillText(`${upgradeLabel(nearUpgrade)} - ${nearUpgrade.name}`, x + 18, y + 24);
     ctx.fillStyle = "#f3dfb5";
-    ctx.fillText(`${near.label()} - ${near.cost()} glød - hold ned/S`, W / 2, H - 46);
+    ctx.font = "13px sans-serif";
+    ctx.fillText(`Effekt: ${nearUpgrade.desc}`, x + 18, y + 46);
+
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.fillRect(x + 18, y + 56, progressW, 8);
+    ctx.fillStyle = nearUpgrade.color;
+    ctx.fillRect(x + 18, y + 56, progressW * progress, 8);
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.strokeRect(x + 18, y + 56, progressW, 8);
+
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#d8d1bf";
+    ctx.font = "12px sans-serif";
+    ctx.fillText(`Rang ${lvl}/${nearUpgrade.max}`, x + panelW - 18, y + 24);
+    ctx.fillStyle = maxed ? "#ffe9a3" : (affordable ? "#bff5c8" : "#ff9d84");
+    ctx.font = "bold 13px sans-serif";
+    const buyText = maxed ? "Fuldt opgraderet" : affordable ? `Pris: ${cost} glød - hold ned/S` : `Pris: ${cost} glød - mangler ${cost - coins}`;
+    ctx.fillText(buyText, x + panelW - 18, y + 50);
   } else if (portalNear) {
     ctx.fillStyle = "#bfefff";
     ctx.fillText("Gå ind i portalen for at starte et nyt run", W / 2, H - 46);
@@ -692,7 +1078,7 @@ export function renderHub() {
     ctx.beginPath(); ctx.moveTo(x, groundY + 8); ctx.lineTo(x + 70, groundY + 22); ctx.stroke();
   }
   drawNpc(430);
-  drawTierLabels();
+  drawTierPlazas();
   for (const upg of META_UPGRADES) drawAltar(upg);
   drawBluePortal(HUB.portalX);
   for (const p of state.particles) {

@@ -10,6 +10,7 @@ function flyingCoin(fromX, toX) {
     x: fromX, y: groundY - 60, vx: 0, vy: 0, life: 0.32,
     color: "#f2c14e", size: 3,
     toX, fromX, fromY: groundY - 60, toY: groundY - 50, t: 0, fly: true,
+    mine: Game.inMine,
   });
 }
 
@@ -29,6 +30,7 @@ export function updatePayment(dt) {
 
   let near = null, nd = CFG.payRange;
   for (const s of stations) {
+    if (!!s.mineLayer !== Game.inMine) continue; // stations only reachable on the player's layer
     const c = s.cost();
     if (c <= 0) continue;
     const d = dist(player.x, s.x());
@@ -36,8 +38,10 @@ export function updatePayment(dt) {
   }
 
   if (state.lastPaidStation && state.lastPaidStation !== near && state.lastPaidStation.paid > 0) {
-    for (let i = 0; i < state.lastPaidStation.paid; i++)
-      spawnCoin(state.lastPaidStation.x() + rand(-20, 20), 1, groundY - 20, rand(-30, 30), rand(-160, -80));
+    for (let i = 0; i < state.lastPaidStation.paid; i++) {
+      const c = spawnCoin(state.lastPaidStation.x() + rand(-20, 20), 1, groundY - 20, rand(-30, 30), rand(-160, -80));
+      c.mine = !!state.lastPaidStation.mineLayer;
+    }
     state.lastPaidStation.paid = 0;
   }
 
@@ -76,6 +80,7 @@ export function updateCoins(dt) {
       c.x  += (c.vx || 0) * dt;
       if (c.y >= groundY) { c.y = groundY; c.vy = 0; c.vx = 0; c.settled = true; }
     }
+    if (!!c.mine !== Game.inMine) continue; // only pick up coins on the player's layer
     const d = dist(c.x, player.x);
     if (c.settled && d < 90 && player.coins < CFG.maxCoinsCarry) {
       c.x += Math.sign(player.x - c.x) * 320 * dt;

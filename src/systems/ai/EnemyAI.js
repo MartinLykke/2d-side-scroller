@@ -1,10 +1,10 @@
 import { CFG } from '../../config/config.js';
 import { ENEMY_TYPES } from '../../config/enemies.js';
-import { dist, rand, applyCrit } from '../../util/math.js';
+import { clamp, lerp, dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, floaty } from '../world/SpawnSystem.js';
+import { spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js';
 import { meleeHitPlayer } from '../combat/PlayerCombat.js';
 import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js';
 import { wallHeight } from '../../entities/Wall.js';
@@ -19,7 +19,7 @@ const WALL_DUEL_GAP = 22;
 let impStackSequence = 1;
 
 function mix(a, b, t) {
-  return a + (b - a) * Math.max(0, Math.min(1, t));
+  return lerp(a, b, clamp(t, 0, 1));
 }
 
 const APPROACH_SLOW_RANGE = 260;
@@ -28,6 +28,32 @@ const APPROACH_NEAR_MULT = 0.55;
 function approachSpeedMult(distToBase) {
   if (distToBase >= APPROACH_SLOW_RANGE) return APPROACH_FAR_MULT;
   return mix(APPROACH_NEAR_MULT, APPROACH_FAR_MULT, distToBase / APPROACH_SLOW_RANGE);
+}
+
+const IMP_UNOPPOSED_RANGE = 260;
+const IMP_SPRINT_MULT = 2.4;
+function impSprintMult(e) {
+  const { player, units } = state;
+  if (!Game.inMine && dist(e.x, player.x) < IMP_UNOPPOSED_RANGE) return 1;
+  for (const u of units) {
+    if (u.hp <= 0 || u.dying || u.mine) continue;
+    if (dist(e.x, u.x) < IMP_UNOPPOSED_RANGE) return 1;
+  }
+  return IMP_SPRINT_MULT;
+}
+
+function fleeToPortal(e, t, dt) {
+  const tx = e.portal ? e.portal.x : (e.x < CFG.baseX ? 0 : CFG.worldWidth);
+  e.dir = Math.sign(tx - e.x);
+  e.x += e.dir * t.speed * 1.6 * dt;
+  return dist(e.x, tx) < 40;
+}
+
+function debuffSpeedMult(e) {
+  if (e.rooted > 0) return 0.02;
+  if (e.frost > 0) return 0.3;
+  if (e.slow > 0) return 0.45;
+  return 1;
 }
 
 function wallAt(side, x) {
@@ -64,6 +90,12 @@ function breakImpStack(e) {
   e.stackPos = undefined;
   e.climbProgress = undefined;
   e.impStackY = 0;
+}
+
+// Heavier enemies (ember brute) get a slower, more telegraphed swing so their
+// bulk reads clearly instead of flashing through the generic attack pose.
+function swingMult(e) {
+  return e.type === "emberBrute" ? 2.6 : 1;
 }
 
 function setImpState(e, next) {
@@ -147,7 +179,7 @@ function nearestGuardForImp(e, range = 220) {
   let best = null, bd = range;
   let bestOther = null, bod = range;
   for (const u of state.units) {
-    if (u.hp <= 0 || u.dying) continue;
+    if (u.hp <= 0 || u.dying || u.mine) continue;
     const d = dist(e.x, u.x);
     if (u.role === "guard") { if (d < bd) { bd = d; best = u; } }
     else if (!u.onWall) { if (d < bod) { bod = d; bestOther = u; } }
@@ -204,7 +236,6 @@ function startImpVault(e, w) {
 
 function killWall(w) {
   w.hp = 0; w.level = 0; w.commissioned = false; w.buildProgress = 0;
-  floaty(w.x, "💥 Mur faldet!", "#ff6a4a");
   spawnParticles(w.x, groundY - 30, 16, "#caa46a", 80, 80);
 }
 
@@ -214,7 +245,7 @@ function damageWall(wall, baseDmg, particleCount = 3) {
   wall.hp -= crit.damage;
   wall.flash = 0.15;
   spawnParticles(wall.x, groundY - 30, particleCount, "#caa46a", 30, 30);
-  if (crit.isCrit) floaty(wall.x, "⭐ CRIT", "#ffff00", 24);
+  if (crit.isCrit) critFloaty(wall.x, crit.damage);
   Audio.hit();
   if (wall.hp <= 0) killWall(wall);
 }
@@ -247,12 +278,12 @@ function shootEnemyFireball(e, t, target) {
 function fireImpTarget(e, range) {
   let best = null, bd = range;
   const player = state.player;
-  if (player && player.hp > 0) {
+  if (player && player.hp > 0 && !Game.inMine) {
     const d = dist(e.x, player.x);
     if (d < bd) { bd = d; best = player; }
   }
   for (const u of state.units) {
-    if (u.hp <= 0 || u.dying) continue;
+    if (u.hp <= 0 || u.dying || u.mine) continue;
     const d = dist(e.x, u.x);
     if (d < bd) { bd = d; best = u; }
   }
@@ -271,7 +302,8 @@ function impAttackGuard(e, t, guard) {
   guard.combatTarget = e;
   guard.strike = Math.max(guard.strike || 0, 0.12);
   spawnParticles(guard.x, groundY - 30, 3, "#7a1f1f");
-  floaty(guard.x, (crit.isCrit ? "⭐ " : "") + "-" + crit.damage, crit.isCrit ? "#ffff00" : "#7a1f1f", crit.isCrit ? 24 : 15);
+  if (crit.isCrit) critFloaty(guard.x, crit.damage);
+  else floaty(guard.x, "-" + crit.damage, "#7a1f1f");
   Audio.hit();
 }
 
@@ -311,7 +343,8 @@ function hitImpAttackTarget(e, t, target, kind) {
     target.panic = 0.35;
     target.knock = (target.knock || 0) + Math.sign(target.x - e.x) * (kind === "pounce" ? 120 : 55);
     spawnParticles(target.x, groundY - 30, kind === "pounce" ? 5 : 3, "#7a1f1f");
-    floaty(target.x, (crit.isCrit ? "⭐ " : "") + "-" + crit.damage, crit.isCrit ? "#ffff00" : "#7a1f1f", crit.isCrit ? 24 : 15);
+    if (crit.isCrit) critFloaty(target.x, crit.damage);
+    else floaty(target.x, "-" + crit.damage, "#7a1f1f");
     Audio.hit();
   }
 }
@@ -387,7 +420,7 @@ function updateImpAttack(e, t, dt) {
 
 function updateImpPlayerCombat(e, t, dt) {
   const player = state.player;
-  if (!player || player.hp <= 0 || e.wallTopWall || e.aiState === "climbOver" || e.aiState === "stacking" || e.aiState === "stackQueue") return false;
+  if (!player || player.hp <= 0 || Game.inMine || e.wallTopWall || e.aiState === "climbOver" || e.aiState === "stacking" || e.aiState === "stackQueue") return false;
   const d = dist(e.x, player.x);
   const near = d < 130 && e.carry === 0;
   if (!near && e.aiState !== "attackPlayer") return false;
@@ -503,7 +536,7 @@ function updateImp(e, t, dt) {
   if ((e.aiState === "advance" || !e.aiState) && e.carry === 0) {
     let b = null, bd = 150;
     for (const u of state.units) {
-      if (u.hp <= 0 || u.dying || u.onWall) continue;
+      if (u.hp <= 0 || u.dying || u.onWall || u.mine) continue;
       const d = dist(e.x, u.x);
       if (d < bd) { bd = d; b = u; }
     }
@@ -586,14 +619,14 @@ function updateImp(e, t, dt) {
     breakImpStack(e);
     setImpState(e, "advance");
     e.dir = Math.sign(attachX - e.x) || e.dir;
-    e.x += e.dir * t.speed * dt;
+    e.x += e.dir * t.speed * impSprintMult(e) * dt;
     return true;
   }
 
   if (!reachedWall && incomingStack) {
     setImpState(e, "advance");
     e.dir = Math.sign(attachX - e.x) || e.dir;
-    e.x += e.dir * t.speed * 1.05 * dt;
+    e.x += e.dir * t.speed * 1.05 * impSprintMult(e) * dt;
     return true;
   }
 
@@ -697,9 +730,7 @@ export function updateEnemies(dt) {
       if (e.frost > 0) e.frost -= dt;
       if (e.rooted > 0) e.rooted -= dt;
       if (e.fleeing) {
-        const tx = e.portal ? e.portal.x : (e.x < CFG.baseX ? 0 : CFG.worldWidth);
-        e.dir = Math.sign(tx - e.x); e.x += e.dir * t.speed * 1.6 * dt;
-        if (dist(e.x, tx) < 40) enemies.splice(i, 1);
+        if (fleeToPortal(e, t, dt)) enemies.splice(i, 1);
         continue;
       }
       updateBoss(e, t, dt);
@@ -713,9 +744,7 @@ export function updateEnemies(dt) {
       e.attackCd -= dt;
       if (e.shootCd !== undefined) e.shootCd -= dt;
       if (e.fleeing) {
-        const tx = e.portal ? e.portal.x : (e.x < CFG.baseX ? 0 : CFG.worldWidth);
-        e.dir = Math.sign(tx - e.x); e.x += e.dir * t.speed * 1.6 * dt;
-        if (dist(e.x, tx) < 40) enemies.splice(i, 1);
+        if (fleeToPortal(e, t, dt)) enemies.splice(i, 1);
         continue;
       }
       if (t.fireball) {
@@ -737,13 +766,13 @@ export function updateEnemies(dt) {
       }
       e.dir = Math.sign(base.x - e.x) || e.dir;
       e.x += e.dir * t.speed * approachSpeedMult(Math.abs(base.x - e.x)) * dt;
-      if (e.shootCd !== undefined && e.shootCd <= 0 && dist(e.x, player.x) < 380) {
+      if (!Game.inMine && e.shootCd !== undefined && e.shootCd <= 0 && dist(e.x, player.x) < 380) {
         const arrowY = groundY + (e.fy || -80);
         state.arrows.push({ x: e.x, y: arrowY, vx: Math.sign(player.x - e.x) * 320, vy: 180, target: {x: player.x}, life: 1.5, hitKind: "player" });
         e.shootCd = 2.2;
         Audio.bow();
       }
-      if (dist(e.x, player.x) < 28 && e.attackCd <= 0 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
+      if (!Game.inMine && dist(e.x, player.x) < 28 && e.attackCd <= 0 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
         player.hp -= 1; player.invuln = CFG.playerInvuln; player.hurt = 0.35; player.hpShowTimer = 3;
         spawnParticles(player.x, groundY - 50, 5, "#c1453b");
         Audio.hit();
@@ -819,11 +848,81 @@ export function updateEnemies(dt) {
     // Update state timers
     if (e.stateTimer > 0) e.stateTimer -= dt;
 
+    // Ember brute: heavy ground brawler with two signature fire attacks —
+    // a shoulder charge that closes distance fast, and a ground stomp AOE.
+    if (t.charger || t.stomper) {
+      if (e.chargeCd === undefined) e.chargeCd = rand(t.chargeMin, t.chargeMax);
+      if (e.stompCd === undefined) e.stompCd = rand(t.stompMin, t.stompMax);
+      if (e.chargeFlash > 0) e.chargeFlash -= dt;
+      if (e.stompFlash > 0) e.stompFlash -= dt;
+
+      if (e.charging) {
+        e.chargeT = (e.chargeT || 0) + dt;
+        e.x += e.chargeDir * t.speed * 3.2 * dt;
+        if (Math.random() < 0.6) spawnParticles(e.x - e.chargeDir * 10, groundY - 6, 2, "#ff6a20", 40, 40);
+        const hitPlayer = !Game.inMine && dist(e.x, player.x) < 34 && player.invuln <= 0 && !window._DEV_GOD_MODE;
+        if (hitPlayer) {
+          meleeHitPlayer(e, { ...t, meleeDmg: (t.meleeDmg || 1) + 1 }, 340);
+          e.charging = false;
+          e.attackCd = 0.9;
+          changeState(e, "recovery", 0.5);
+        } else if (e.chargeT >= 0.9) {
+          e.charging = false;
+          changeState(e, "recovery", 0.3);
+        }
+      } else if (t.charger && !Game.inMine && !e.fleeing && e.chargeCd <= 0 && e.aiState !== "recovery") {
+        const d = dist(e.x, player.x);
+        if (d > t.chargeRangeMin && d < t.chargeRangeMax) {
+          e.charging = true;
+          e.chargeT = 0;
+          e.chargeDir = Math.sign(player.x - e.x) || e.dir;
+          e.chargeCd = rand(t.chargeMin, t.chargeMax);
+          e.attackAnim = 0.3;
+          e.chargeFlash = 0.3;
+          spawnParticles(e.x, groundY - 10, 10, "#ff6a20", 50, 40);
+          Audio.hit();
+        }
+      }
+
+      if (t.stomper && !e.charging && e.stompCd <= 0) {
+        e.stompCd = rand(t.stompMin, t.stompMax);
+        const radius = t.stompRadius || 90;
+        let hitSomething = false;
+        if (!Game.inMine && player.hp > 0 && dist(e.x, player.x) < radius && player.invuln <= 0 && !window._DEV_GOD_MODE) {
+          player.hp -= Math.max(1, (t.meleeDmg || 1));
+          player.invuln = CFG.playerInvuln; player.hurt = 0.35; player.hpShowTimer = 3;
+          player.knock = Math.sign(player.x - e.x || 1) * 260;
+          spawnParticles(player.x, groundY - 50, 6, "#c1453b");
+          hitSomething = true;
+        }
+        for (const u of units) {
+          if (u.hp <= 0 || u.dying || u.mine || u.onWall) continue;
+          if (dist(e.x, u.x) < radius) {
+            const crit = applyCrit(2, CFG.critChance, CFG.critMultiplier);
+            u.hp -= crit.damage; u.panic = 1;
+            u.knock = (u.knock || 0) + Math.sign(u.x - e.x || 1) * 180;
+            spawnParticles(u.x, groundY - 30, 3, "#7a1f1f");
+            if (crit.isCrit) critFloaty(u.x, crit.damage); else floaty(u.x, "-" + crit.damage, "#7a1f1f");
+            hitSomething = true;
+          }
+        }
+        for (const w of state.walls) {
+          if (!w.commissioned || w.hp <= 0) continue;
+          if (dist(e.x, w.x) < radius) { damageWall(w, t.dmg * 0.35, 4); hitSomething = true; }
+        }
+        if (hitSomething || dist(e.x, base.x) < radius) {
+          e.stompFlash = 0.35;
+          Game.screenShake = Math.max(Game.screenShake || 0, 0.35);
+          spawnParticles(e.x, groundY - 6, 20, "#ff6a20", 140, 90);
+          spawnParticles(e.x, groundY - 8, 10, "#6b5a45", 100, 70);
+          Audio.hit();
+        }
+      }
+    }
+    if (e.charging) continue;
+
     if (e.fleeing) {
-      const tx = e.portal ? e.portal.x : (e.x < CFG.baseX ? 0 : CFG.worldWidth);
-      e.dir = Math.sign(tx - e.x);
-      e.x += e.dir * t.speed * 1.6 * dt;
-      if (dist(e.x, tx) < 40) enemies.splice(i, 1);
+      if (fleeToPortal(e, t, dt)) enemies.splice(i, 1);
       continue;
     }
 
@@ -892,7 +991,8 @@ export function updateEnemies(dt) {
                   const crit = applyCrit(t.dmg, CFG.critChance, CFG.critMultiplier);
                   u.hp -= crit.damage; u.panic = 1;
                   spawnParticles(u.x, groundY - 30, 3, "#7a1f1f");
-                  floaty(u.x, (crit.isCrit ? "⭐ " : "") + "-" + crit.damage, crit.isCrit ? "#ffff00" : "#7a1f1f", crit.isCrit ? 24 : 15);
+                  if (crit.isCrit) critFloaty(u.x, crit.damage);
+                  else floaty(u.x, "-" + crit.damage, "#7a1f1f");
                 }
                 Audio.hit();
               }
@@ -914,7 +1014,7 @@ export function updateEnemies(dt) {
         // Non-imp wall behavior
         if (e.attackCd <= 0 && e.aiState !== "recovery") {
           changeState(e, "attacking", 0.5);
-          e.attackCd = 0.7; e.attackAnim = 0.22;
+          e.attackCd = 0.7; e.attackAnim = 0.22 * swingMult(e);
           damageWall(wall, t.dmg);
         }
       }
@@ -925,10 +1025,11 @@ export function updateEnemies(dt) {
       e.aggroUnit = null;
     }
 
-    if (dist(e.x, player.x) < 280 && e.carry === 0) {
+    if (!Game.inMine && dist(e.x, player.x) < 280 && e.carry === 0) {
       e.aggroPlayer = true;
       e.aggroTimer = 6;
     }
+    if (Game.inMine) e.aggroPlayer = false;
 
     if (e.aggroTimer > 0)
       e.aggroTimer -= dt;
@@ -954,14 +1055,14 @@ export function updateEnemies(dt) {
             if (meleeHitPlayer(e, t, 230) && hadCoins) e.carry++;
             changeState(e, "recovery", 0.4);
             e.attackCd = 1;
-            e.attackAnim = 0.25;
+            e.attackAnim = 0.25 * swingMult(e);
           } else {
             changeState(e, "chasing", 0);
           }
         }
       } else {
         // Chasing phase: move towards player
-        const chaseMult = e.rooted > 0 ? 0.02 : (e.frost > 0 ? 0.3 : 1);
+        const chaseMult = debuffSpeedMult(e);
         if (d > 24) e.x += e.dir * t.speed * 1.4 * chaseMult * dt;
 
         // Transition to attacking when close enough
@@ -978,7 +1079,7 @@ export function updateEnemies(dt) {
     if (e.type === "imp") e.aggroUnit = null;
     if (!e.aggroUnit && e.type !== "imp") {
       let best = null, bd = 200;
-      for (const u of units) { const d = dist(e.x, u.x); if (d < bd) { bd = d; best = u; } }
+      for (const u of units) { if (u.mine) continue; const d = dist(e.x, u.x); if (d < bd) { bd = d; best = u; } }
       if (best) e.aggroUnit = best;
     }
     if (e.aggroUnit) {
@@ -995,22 +1096,22 @@ export function updateEnemies(dt) {
           } else if (target.role === "archer" && target.smoked <= 0 && state.archerSkills.includes("smoke_bomb")) {
             target.smoked = 2.0;
             spawnParticles(target.x, groundY - 30, 20, "#aaaaaa", 70, 60);
-            floaty(target.x, "💨 Røg!", "#cccccc");
             changeState(e, "recovery", 0.4);
             e.attackCd = 1.2; e.aggroUnit = null;
             Audio.hit();
           } else {
             changeState(e, "recovery", 0.4);
-            e.attackCd = 0.8; e.attackAnim = 0.22;
+            e.attackCd = 0.8; e.attackAnim = 0.22 * swingMult(e);
             const crit = applyCrit(2, CFG.critChance, CFG.critMultiplier);
             e.aggroUnit.hp -= crit.damage; e.aggroUnit.panic = 1;
             spawnParticles(e.aggroUnit.x, groundY - 30, 3, "#7a1f1f");
-            floaty(e.aggroUnit.x, (crit.isCrit ? "⭐ " : "") + "-" + crit.damage, crit.isCrit ? "#ffff00" : "#7a1f1f", crit.isCrit ? 24 : 15);
+            if (crit.isCrit) critFloaty(e.aggroUnit.x, crit.damage);
+            else floaty(e.aggroUnit.x, "-" + crit.damage, "#7a1f1f");
             Audio.hit();
           }
         }
       } else {
-        const unitChaseMult = e.rooted > 0 ? 0.02 : (e.frost > 0 ? 0.3 : 1);
+        const unitChaseMult = debuffSpeedMult(e);
         if (d > 32) e.x += e.dir * t.speed * 1.3 * unitChaseMult * dt;
         if (d < 40 && e.attackCd <= 0) {
           changeState(e, "attacking", 0.4 + Math.random() * 0.2);
@@ -1023,18 +1124,19 @@ export function updateEnemies(dt) {
       e.dir = Math.sign(base.x - e.x) || e.dir;
       if (e.attackCd <= 0 && e.aiState !== "recovery") {
         changeState(e, "attacking", 0.4);
-        e.attackCd = 0.9; e.attackAnim = 0.22;
+        e.attackCd = 0.9; e.attackAnim = 0.22 * swingMult(e);
         const crit = applyCrit(t.dmg, CFG.critChance, CFG.critMultiplier);
         base.hp -= crit.damage; base.flash = 0.2;
         spawnParticles(base.x + rand(-30, 30), groundY - 30, 4, "#ff6a4a");
-        floaty(base.x, (crit.isCrit ? "⭐ " : "") + "-" + crit.damage, crit.isCrit ? "#ffff00" : "#ff6a4a", crit.isCrit ? 24 : 15);
+        if (crit.isCrit) critFloaty(base.x, crit.damage);
+        else floaty(base.x, "-" + crit.damage, "#ff6a4a");
         Audio.hit();
       }
       continue;
     }
 
 
-    if (t.rangedShoot && e.poisonCd <= 0 && dist(e.x, player.x) < t.shootRange && e.aiState !== "recovery") {
+    if (!Game.inMine && t.rangedShoot && e.poisonCd <= 0 && dist(e.x, player.x) < t.shootRange && e.aiState !== "recovery") {
       const launchY = groundY - t.w * 0.7;
       const dx = player.x - e.x;
       const flightT = 1.4;
@@ -1050,8 +1152,9 @@ export function updateEnemies(dt) {
     // Default movement: walk towards base if not in a special state
     if (e.aiState !== "attacking" && e.aiState !== "recovery") {
       e.dir = Math.sign(base.x - e.x) || e.dir;
-      const slowMult = e.rooted > 0 ? 0.02 : (e.frost > 0 ? 0.3 : (e.slow > 0 ? 0.45 : 1));
-      e.x += e.dir * t.speed * slowMult * approachSpeedMult(Math.abs(base.x - e.x)) * dt;
+      const slowMult = debuffSpeedMult(e);
+      const sprintMult = e.type === "imp" ? impSprintMult(e) : 1;
+      e.x += e.dir * t.speed * slowMult * sprintMult * approachSpeedMult(Math.abs(base.x - e.x)) * dt;
     }
   }
 }
@@ -1074,7 +1177,7 @@ function updateLocEnemy(e, t, dt) {
   const prevX = e.x;
   const dp = dist(e.x, player.x);
 
-  if (dp < 300) {
+  if (dp < 300 && !Game.inMine) {
     const dir = Math.sign(player.x - e.x);
     e.dir = dir || e.dir;
 

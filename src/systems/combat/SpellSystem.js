@@ -4,7 +4,7 @@ import { dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, floaty } from '../world/SpawnSystem.js';
+import { spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js';
 import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js';
 import { ENEMY_TYPES } from '../../config/enemies.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
@@ -15,7 +15,8 @@ function dealAoE(x, dmg, radius, col) {
       const crit = applyCrit(dmg, CFG.critChance, CFG.critMultiplier);
       e.hp -= crit.damage; e.flash = 0.14;
       spawnImpBlood(e, 0.9 + crit.damage * 0.08);
-      floaty(e.x, (crit.isCrit ? "⭐ " : "") + "-" + crit.damage, crit.isCrit ? "#ffff00" : col, crit.isCrit ? 24 : 15);
+      if (crit.isCrit) critFloaty(e.x, crit.damage);
+      else floaty(e.x, "-" + crit.damage, col);
       if (e.hp <= 0) killEnemy(e);
     }
   }
@@ -66,7 +67,8 @@ function chainLightning(x, dmg, bounces) {
   Audio.hit();
   spawnParticles(nearest.x, enemyDrawY, 10, "#ccccff", 60, 80);
   spawnImpBlood(nearest, 1 + crit.damage * 0.05, enemyDrawY);
-  floaty(nearest.x, (crit.isCrit ? "⭐ " : "") + "-" + crit.damage, crit.isCrit ? "#ffff00" : "#ccccff", crit.isCrit ? 24 : 15);
+  if (crit.isCrit) critFloaty(nearest.x, crit.damage);
+  else floaty(nearest.x, "-" + crit.damage, "#ccccff");
 
   if (nearest.hp <= 0) {
     killEnemy(nearest);
@@ -84,7 +86,7 @@ export function castSpell(player, wBase, tgt) {
     const crit = applyCrit(ew.dmg * dmgMult, CFG.critChance, CFG.critMultiplier);
     tgt.hp -= crit.damage;
     tgt.flash = 0.14;
-    Audio.hit();
+    Audio.spell();
 
     const enemyY = groundY - 24;
     spawnImpBlood(tgt, 1 + ew.dmg * 0.07, enemyY);
@@ -121,7 +123,7 @@ export function castSpell(player, wBase, tgt) {
     if (tgt.hp <= 0) killEnemy(tgt);
 
     spawnParticles(player.x, groundY - 72, 10, wBase.col, 50, 70);
-    Audio.bow();
+    Audio.spell();
     return;
   }
 
@@ -157,7 +159,7 @@ export function castSpell(player, wBase, tgt) {
   });
 
   spawnParticles(player.x, groundY - 72, 10, wBase.col, 50, 70);
-  Audio.bow();
+  Audio.spell();
 }
 
 export function updateSpells(dt) {
@@ -179,6 +181,7 @@ export function updateSpells(dt) {
       if (sp.aoeRadius > 0 && hitGround) {
         spellGroundImpact(sp);
         dealAoE(sp.x, sp.dmg, sp.aoeRadius, sp.col);
+        Audio.explosion();
       }
       spells.splice(i, 1);
       continue;

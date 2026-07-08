@@ -144,14 +144,12 @@ export function makeTree(x, baseH, r, opts = {}) {
   let clusters=null, branches=null;
   if (type==="oak"||type==="bush"||type==="crooked"||type==="birch") {
     clusters=[];
-    const n=type==="bush"?5:type==="birch"?5:9+((r()*5)|0), cy=type==="bush"?0.46:type==="birch"?0.82:0.74;
+    const n=type==="bush"?8:type==="birch"?8:9+((r()*5)|0), cy=type==="bush"?0.34:type==="birch"?0.84:0.74;
     for (let i=0;i<n;i++) {
       const ring = i / Math.max(1, n - 1);
-      clusters.push({
-        dx:(r()-0.5)*w*(0.55+ring*0.45),
-        dy:cy-r()*0.42 + Math.sin(i*2.1)*0.035,
-        r:(0.20+r()*0.20)*w*(type==="birch"?0.82:1),
-      });
+      const clr = (0.20+r()*0.20)*w*(type==="birch"?0.95:1);
+      const dy = Math.max(cy-r()*(type==="birch"?0.22:0.42) + Math.sin(i*2.1)*0.035, clr/h);
+      clusters.push({ dx:(r()-0.5)*w*(0.55+ring*0.45), dy, r:clr });
     }
   }
   if (type==="dead") {
@@ -160,6 +158,50 @@ export function makeTree(x, baseH, r, opts = {}) {
     for (let i=0;i<n;i++) branches.push({ hf:0.38+r()*0.56, side:r()<0.5?-1:1, len:(0.18+r()*0.22)*h, up:0.3+r()*0.5, broken:r()<0.3 });
   }
   return { x, type, h, w, phase:r()*6, tiers, lean, trunkW:0.08+r()*0.035, broken:r()<0.16, snow:b.snow&&r()<0.85, moss:b.moss&&r()<0.6, clusters, branches };
+}
+
+// Offscreen cache for cluster canopies (oak/bush/crooked/birch). Keyed on a
+// quantized lighting bucket so sprites re-bake as day/night shifts, not per frame.
+const canopySpriteCache = new WeakMap();
+function drawCanopySprite(t, cx, baseY, light, dark, Ht, sw) {
+  let minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9,avgDy=0;
+  for (const cl of t.clusters) {
+    minX=Math.min(minX,cl.dx-cl.r); maxX=Math.max(maxX,cl.dx+cl.r);
+    minY=Math.min(minY,-cl.dy*Ht-cl.r); maxY=Math.max(maxY,-cl.dy*Ht+cl.r);
+    avgDy+=cl.dy;
+  }
+  avgDy/=t.clusters.length;
+  const key=`${light[0]>>3},${light[1]>>3},${light[2]>>3},${dark[0]>>3},${dark[1]>>3},${dark[2]>>3},${t.snow?1:0}`;
+  let c=canopySpriteCache.get(t);
+  if (!c || c.key!==key) {
+    const S=2, pad=3; // 2x supersampling so zoomed-in trees stay crisp
+    const cv=c?c.cv:document.createElement("canvas");
+    cv.width=Math.ceil((maxX-minX+pad*2)*S); cv.height=Math.ceil((maxY-minY+pad*2)*S);
+    const g=cv.getContext("2d");
+    g.scale(S,S); g.translate(pad-minX,pad-minY);
+    const path=()=>{ g.beginPath(); for (const cl of t.clusters){ const ox=cl.dx, oy=-cl.dy*Ht; g.moveTo(ox+cl.r,oy); g.arc(ox,oy,cl.r,0,Math.PI*2); } };
+    path(); g.fillStyle=withA(dark,1); g.fill();
+    path(); g.clip();
+    // deep shade on the underside of the canopy
+    g.fillStyle=withA(shade(dark,0.72),0.45); g.beginPath();
+    for (const cl of t.clusters){ const ox=cl.dx+cl.r*0.26, oy=-cl.dy*Ht+cl.r*0.34; g.moveTo(ox+cl.r*0.85,oy); g.arc(ox,oy,cl.r*0.85,0,Math.PI*2); }
+    g.fill();
+    // lit side toward the sun
+    g.fillStyle=withA(light,0.45); g.beginPath();
+    for (const cl of t.clusters){ const ox=cl.dx-cl.r*0.3, oy=-cl.dy*Ht-cl.r*0.34; g.moveTo(ox+cl.r*0.78,oy); g.arc(ox,oy,cl.r*0.78,0,Math.PI*2); }
+    g.fill();
+    // dappled sun spots on the crown
+    g.fillStyle=withA(shade(light,1.18),0.25); g.beginPath();
+    for (const cl of t.clusters){ const ox=cl.dx-cl.r*0.42, oy=-cl.dy*Ht-cl.r*0.46; g.moveTo(ox+cl.r*0.34,oy); g.arc(ox,oy,cl.r*0.34,0,Math.PI*2); }
+    g.fill();
+    if (t.snow) { g.fillStyle="rgba(238,244,251,0.85)"; g.beginPath();
+      for (const cl of t.clusters){ const ox=cl.dx-cl.r*0.18, oy=-cl.dy*Ht-cl.r*0.46; g.moveTo(ox+cl.r*0.5,oy); g.arc(ox,oy,cl.r*0.5,0,Math.PI*2); }
+      g.fill(); }
+    c={key,cv,ox:minX-pad,oy:minY-pad};
+    canopySpriteCache.set(t,c);
+  }
+  // whole canopy sways as one; per-cluster sway differences aren't visible
+  ctx.drawImage(c.cv, cx+sw(avgDy)+c.ox, baseY+c.oy, c.cv.width/2, c.cv.height/2);
 }
 
 export function drawTree(t, cx, baseY, light, dark, depthDark, swayAmp) {
@@ -181,7 +223,8 @@ export function drawTree(t, cx, baseY, light, dark, depthDark, swayAmp) {
     for (let i=0;i<t.tiers;i++) {
       const bhf=i/t.tiers, thf=(i+1)/t.tiers;
       const rootFlare = Math.pow(1-bhf, 1.6);
-      const tw=Wd*(1-bhf*0.78)*0.55, by=baseY-bhf*Ht-Ht*0.02+skirt*rootFlare, ty=baseY-thf*Ht;
+      // drop each tier's base into the one below so the silhouette stays connected
+      const tw=Wd*(1-bhf*0.72)*0.55, by=Math.min(baseY-Ht*0.07, baseY-bhf*Ht+Ht*0.085+skirt*rootFlare), ty=baseY-thf*Ht;
       const bx=cx+sw(bhf), tx=cx+sw(thf);
       ctx.fillStyle=withA(dark,1); ctx.beginPath(); ctx.moveTo(bx-tw,by); ctx.lineTo(bx+tw,by); ctx.lineTo(tx,ty); ctx.closePath(); ctx.fill();
       // shaded facet away from the sun
@@ -227,13 +270,9 @@ export function drawTree(t, cx, baseY, light, dark, depthDark, swayAmp) {
       }
       ctx.lineCap="butt";
     }
-    for (const cl of t.clusters) { const ox=cx+sw(cl.dy)+cl.dx, oy=baseY-cl.dy*Ht; ctx.fillStyle=withA(dark,1); ctx.beginPath(); ctx.arc(ox,oy,cl.r,0,Math.PI*2); ctx.fill(); }
-    // deep shade on the underside of the canopy
-    for (const cl of t.clusters) { const ox=cx+sw(cl.dy)+cl.dx, oy=baseY-cl.dy*Ht; ctx.fillStyle=withA(shade(dark,0.72),0.4); ctx.beginPath(); ctx.arc(ox+cl.r*0.24,oy+cl.r*0.3,cl.r*0.6,0,Math.PI*2); ctx.fill(); }
-    for (const cl of t.clusters) { const ox=cx+sw(cl.dy)+cl.dx, oy=baseY-cl.dy*Ht; ctx.fillStyle=withA(light,0.42); ctx.beginPath(); ctx.arc(ox-cl.r*0.3,oy-cl.r*0.32,cl.r*0.62,0,Math.PI*2); ctx.fill(); }
-    // dappled sun spots on the crown
-    for (const cl of t.clusters) { const ox=cx+sw(cl.dy)+cl.dx, oy=baseY-cl.dy*Ht; ctx.fillStyle=withA(shade(light,1.18),0.22); ctx.beginPath(); ctx.arc(ox-cl.r*0.42,oy-cl.r*0.46,cl.r*0.32,0,Math.PI*2); ctx.fill(); }
-    if (t.snow) for (const cl of t.clusters) { const ox=cx+sw(cl.dy)+cl.dx, oy=baseY-cl.dy*Ht; ctx.fillStyle="rgba(238,244,251,0.85)"; ctx.beginPath(); ctx.arc(ox-cl.r*0.18,oy-cl.r*0.46,cl.r*0.5,0,Math.PI*2); ctx.fill(); }
+    // canopy silhouette + clipped shading is expensive (clip per tree per frame),
+    // so it's baked to an offscreen sprite and re-baked only when lighting shifts
+    drawCanopySprite(t, cx, baseY, light, dark, Ht, sw);
   }
   if (t.broken&&t.type!=="dead") { ctx.strokeStyle=withA(trunkCol,1); ctx.lineWidth=Math.max(1.5,Wd*0.07); ctx.beginPath(); ctx.moveTo(cx,baseY-Ht*0.34); ctx.lineTo(cx+Wd*0.4,baseY-Ht*0.28); ctx.stroke(); }
   if (t.moss) { ctx.fillStyle="rgba(74,116,84,0.55)"; ctx.beginPath(); ctx.ellipse(cx,baseY-Ht*0.04,Wd*0.12,Ht*0.05,0,0,Math.PI*2); ctx.fill(); }
@@ -365,16 +404,47 @@ export function drawFogBand(y, h, dark, intensity) {
   ctx.fillStyle=grad; ctx.fillRect(0,y-h,W,h*2);
 }
 
+function fogHash(n){ const s=Math.sin(n*127.1)*43758.5453; return s-Math.floor(s); }
+
 export function drawLowFog(dark, bi) {
+  return; // TEMP: fog disabled for FPS testing
   const inten=bi.deco==="swamp"?0.5:bi.snow?0.4:bi.deco==="dark"?0.32:0.2;
   const a=inten*(0.5+0.2*Math.sin(Game.windT*0.3));
   const col=lerpColor(bi.fog,[18,20,36],dark);
+  // uniform ground haze (screen-space band; no visible anchor, so camera-following is fine)
   const grad=ctx.createLinearGradient(0,groundY-70,0,groundY+30);
   grad.addColorStop(0,withA(col,0)); grad.addColorStop(0.7,withA(col,a*0.7)); grad.addColorStop(1,withA(col,a));
   ctx.fillStyle=grad; ctx.fillRect(0,groundY-70,W,100);
-  ctx.save(); ctx.globalAlpha=a*0.7; ctx.fillStyle=rgb(col);
-  for (let i=0;i<4;i++) { const wx=((Game.windT*12+i*W/4)%(W+260))-130; ctx.beginPath(); ctx.ellipse(wx,groundY-18-i*6,120,17,0,0,Math.PI*2); ctx.fill(); }
-  ctx.restore();
+
+  // world-anchored fog wisps: soft radial puffs pinned to world positions,
+  // drifting slowly with the wind instead of riding along with the camera
+  const zoom=Game.zoom||1;
+  const layers=[
+    { seg:360, drift:7,  rx:190, ry:24, lift:16, aMul:0.5, salt:0 },
+    { seg:230, drift:13, rx:120, ry:15, lift:5,  aMul:0.75, salt:57 },
+  ];
+  for (const L of layers) {
+    const off=Game.windT*L.drift;
+    const worldL=Game.cam+W/2-(W/2+L.rx*2)/zoom, worldR=Game.cam+W/2+(W/2+L.rx*2)/zoom;
+    const i0=Math.floor((worldL-off)/L.seg)-1, i1=Math.ceil((worldR-off)/L.seg)+1;
+    for (let i=i0;i<=i1;i++) {
+      const h1=fogHash(i*3.7+L.salt), h2=fogHash(i*9.1+L.salt+11), h3=fogHash(i*5.3+L.salt+29);
+      const wob=Math.sin(Game.windT*(0.15+0.2*h2)+h1*6.28)*26;
+      const wx=i*L.seg+h1*L.seg+off+wob;
+      const sx=W/2+(wx-W/2-Game.cam)*zoom;
+      const rx=L.rx*(0.7+0.7*h2)*zoom, ry=L.ry*(0.7+0.6*h3)*zoom;
+      if (sx<-rx||sx>W+rx) continue;
+      const pa=a*L.aMul*(0.55+0.45*Math.sin(Game.windT*(0.2+0.3*h3)+h2*6.28));
+      if (pa<=0.01) continue;
+      const cy=groundY-(L.lift+h3*20)*zoom;
+      const pcol=lerpColor(biomeAt(wx).fog,[18,20,36],dark);
+      const g=ctx.createRadialGradient(sx,cy,0,sx,cy,rx);
+      g.addColorStop(0,withA(pcol,pa)); g.addColorStop(0.55,withA(pcol,pa*0.55)); g.addColorStop(1,withA(pcol,0));
+      ctx.save(); ctx.translate(sx,cy); ctx.scale(1,ry/rx); ctx.translate(-sx,-cy);
+      ctx.fillStyle=g; ctx.fillRect(sx-rx,cy-rx,rx*2,rx*2);
+      ctx.restore();
+    }
+  }
 }
 
 export function drawAmbientFront(dark, bi) {

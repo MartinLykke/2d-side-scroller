@@ -3,16 +3,84 @@ import { ctx, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { FX } from '../Effects.js';
 
+// Pigfælde tegnet som en lille rovsaks: to takkede kæber på en bundplade.
+// open: 1 = spændt/åben (kæber ligger fladt ud), 0 = klappet sammen.
+function drawTrapJaws(x, y, open, rot) {
+  ctx.save();
+  ctx.translate(x, y);
+  if (rot) ctx.rotate(rot);
+
+  // bundplade + fjederled i midten
+  ctx.fillStyle = "#3a3a40";
+  ctx.beginPath(); ctx.ellipse(0, 0.5, 7.5, 2, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#55555e";
+  ctx.fillRect(-1.5, -2, 3, 2.5);
+
+  const jawAngle = 0.12 + open * 1.28; // næsten lodret → lagt fladt ud
+  for (const s of [-1, 1]) {
+    ctx.save();
+    ctx.translate(s * 2, -0.5);
+    ctx.rotate(s * jawAngle);
+    // kæbebue
+    ctx.strokeStyle = "#8a8a94"; ctx.lineWidth = 1.8; ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(-s * 3.2, -5, -s * 1.2, -9);
+    ctx.stroke();
+    // tænder på indersiden af kæben
+    ctx.fillStyle = "#b8b8c2";
+    for (let k = 0; k < 3; k++) {
+      const p = 0.25 + k * 0.3;
+      const tx = -s * 3.2 * 2 * p * (1 - p) - s * 1.2 * p * p;
+      const ty = -5 * 2 * p * (1 - p) - 9 * p * p;
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.lineTo(tx - s * 2.4, ty - 1);
+      ctx.lineTo(tx - s * 0.4, ty - 2.2);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.lineCap = "butt";
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 export function drawCaltrops() {
   if (!state.caltrops || !state.caltrops.length) return;
+  const T = performance.now() / 1000;
   ctx.save();
   for (const c of state.caltrops) {
-    const alpha = Math.min(1, c.life / 3);
-    ctx.globalAlpha = alpha * 0.75;
-    ctx.strokeStyle = "#888888"; ctx.lineWidth = 1.5;
-    for (let s = 0; s < 4; s++) {
-      const a = s * Math.PI / 2;
-      ctx.beginPath(); ctx.moveTo(c.x, groundY - 2); ctx.lineTo(c.x + Math.cos(a)*5, groundY - 2 + Math.sin(a)*5); ctx.stroke();
+    let open = 1, alpha = 1, y = groundY - 3, rot = 0;
+
+    if (c.state === "fall") {
+      // kastet fælde snurrer halvåben gennem luften
+      open = 0.4; y = c.y; rot = c.rot;
+    } else if (c.state === "snap") {
+      // klapper sammen på et øjeblik, jolt opad, og fader så ud
+      const shut = Math.min(1, c.snapT / 0.09);
+      open = 1 - shut;
+      y -= Math.sin(shut * Math.PI) * 2.5;
+      alpha = Math.min(1, (1.2 - c.snapT) / 0.45);
+    } else {
+      // spændt: lille sætte-hop efter landing + fade når levetiden rinder ud
+      alpha = Math.min(1, c.life / 2);
+      if (c.settle > 0) {
+        const b = c.settle / 0.3;
+        y -= Math.abs(Math.sin(b * Math.PI * 2)) * b * 2;
+        open = 0.4 + (1 - b) * 0.6;
+      }
+    }
+
+    ctx.globalAlpha = alpha * 0.9;
+    drawTrapJaws(c.x, y, open, rot);
+
+    // svagt advarselsglimt på tandspidserne mens fælden står spændt
+    if (c.state === "armed" && !(c.settle > 0)) {
+      const blink = Math.max(0, Math.sin(T * 3 + c.x * 0.05));
+      ctx.globalAlpha = alpha * blink * 0.5;
+      ctx.fillStyle = "#e8e8f0";
+      ctx.beginPath(); ctx.arc(c.x - 6.5, groundY - 6, 0.9, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(c.x + 6.5, groundY - 6, 0.9, 0, Math.PI * 2); ctx.fill();
     }
   }
   ctx.restore();
@@ -101,20 +169,33 @@ export function drawLegendaryEffects() {
   }
 }
 
-export function drawParticles() {
+export function drawParticles(mineLayer = false) {
   for (const p of state.particles) {
+    if (!!p.mine !== mineLayer) continue;
     ctx.globalAlpha=p.fly?1:clamp(p.life*1.5,0,1);
     ctx.fillStyle=p.color; ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);
   }
   ctx.globalAlpha=1;
 }
 
-export function drawFloats() {
+export function drawFloats(mineLayer = false) {
   ctx.textAlign="center";
   let lastSz = 0;
   for (const f of state.floatTexts) {
+    if (!!f.mine !== mineLayer) continue;
     const sz = f.size || 15;
     ctx.globalAlpha=clamp(f.life,0,1);
+    if (f.crit) {
+      // Pop in oversized during the first 0.2s, then settle and fade while rising
+      const pop = 1 + Math.max(0, f.life - (f.maxLife - 0.2)) * 4;
+      ctx.font = `italic 900 ${Math.round(sz * pop)}px Georgia, 'Times New Roman', serif`;
+      ctx.lineWidth = 4; ctx.lineJoin = "round";
+      ctx.strokeStyle = "rgba(70,25,0,0.85)";
+      ctx.strokeText(f.text, f.x, f.y);
+      ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y);
+      lastSz = 0;
+      continue;
+    }
     if (sz !== lastSz) { ctx.font=`bold ${sz}px Trebuchet MS`; lastSz = sz; }
     ctx.fillStyle="rgba(0,0,0,0.5)"; ctx.fillText(f.text,f.x+1,f.y+1);
     ctx.fillStyle=f.color; ctx.fillText(f.text,f.x,f.y);

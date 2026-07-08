@@ -30,6 +30,10 @@ export function makeUnit(role, x) {
     u.shootState = null; // null, "anticipation", "pull", "release", "follow-through"
     u.shootTimer = 0;
   }
+  if (role === "miner") {
+    u.mine = true;        // lives on the mine layer, never surfaces
+    u.veinTarget = null;
+  }
   if (role === "guard") {
     u.strike = 0;
     u.aiState = "patrol";

@@ -4,9 +4,50 @@
     {
       "name": "http-server",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server"],
-      "port": 8000,
-      "autoPort": true
+      "runtimeArgs": ["-m", "http.server", "8014"],
+      "port": 8014
+    },
+    {
+      "name": "http-server-2",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8047"],
+      "port": 8047
+    },
+    {
+      "name": "http-server-3",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8061"],
+      "port": 8061
+    },
+    {
+      "name": "http-server-4",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8073"],
+      "port": 8073
+    },
+    {
+      "name": "http-server-5",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8085"],
+      "port": 8085
+    },
+    {
+      "name": "game-server",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8099"],
+      "port": 8099
+    },
+    {
+      "name": "game-server-2",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8123"],
+      "port": 8123
+    },
+    {
+      "name": "game-server-3",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8137"],
+      "port": 8137
     }
   ]
 }

@@ -17,7 +17,7 @@ export function addXP(amount) {
     player.level = (player.level || 1) + 1;
     player.pendingUpgrade = true;
     floaty(player.x, "⬆ Niveau " + player.level + "!", "#f2c14e");
-    Audio.upgrade();
+    Audio.levelUp();
   }
 }
 
@@ -45,7 +45,7 @@ export function checkUpgrade() {
     ...(WEAPON_UPGRADES[player.weapon] || []),
   ];
   const available = pool.filter(u => !applied.includes(u.id));
-  if (available.length === 0) { floaty(player.x, "Våben fuldt opgraderet!", "#f2c14e"); return; }
+  if (available.length === 0) return;
   const shuffled = available.slice().sort(() => Math.random() - 0.5);
   Game.upgradeOptions = shuffled.slice(0, Math.min(3, shuffled.length));
   Game.upgradeMenuOpen = true;
@@ -59,6 +59,5 @@ export function applyUpgrade(idx) {
   if (!player.weaponUpgrades) player.weaponUpgrades = [];
   player.weaponUpgrades.push(opt);
   Game.upgradeMenuOpen = false;
-  floaty(player.x, "⬆ " + opt.name + "!", "#f2c14e");
   Audio.upgrade();
 }

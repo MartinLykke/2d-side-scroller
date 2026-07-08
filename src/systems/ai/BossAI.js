@@ -65,7 +65,7 @@ function updateFireDragon(e, t, dt) {
     spawnParticles(mouthX, mouthY, 14, "#ff6a20", 60, 50);
     spawnParticles(mouthX, mouthY, 7, "#ffd060", 34, 60);
     Game.screenShake = Math.max(Game.screenShake || 0, 0.12);
-    Audio.bow();
+    Audio.fireball();
   }
 
   // Periodically drop a rider imp over the defenses
@@ -75,7 +75,6 @@ function updateFireDragon(e, t, dt) {
       const riders = state.enemies.filter(r => r.ridingDragon === e && !r.dying);
       if (riders.length) {
         dropRiderFromDragon(riders[riders.length - 1]);
-        floaty(e.x, "Imp hopper af!", "#ff8a50");
       }
       e.dropCd = rand(3, 5);
     } else {
@@ -110,7 +109,7 @@ function golemShockwave(e, t) {
   spawnParticles(e.x, groundY - 8, 8, "#ffd060", 90, 130);
   Audio.hit();
 
-  if (player && player.hp > 0 && dist(e.x, player.x) < GOLEM_SHOCK_RANGE
+  if (player && player.hp > 0 && !Game.inMine && dist(e.x, player.x) < GOLEM_SHOCK_RANGE
       && player.jumpH <= 30 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
     player.hp -= t.meleeDmg || 2;
     player.invuln = CFG.playerInvuln;
@@ -120,7 +119,7 @@ function golemShockwave(e, t) {
     spawnParticles(player.x, groundY - 50, 8, "#c1453b");
   }
   for (const u of state.units) {
-    if (u.hp <= 0 || u.dying || u.onWall) continue;
+    if (u.hp <= 0 || u.dying || u.onWall || u.mine) continue;
     if (dist(e.x, u.x) < GOLEM_SHOCK_RANGE) {
       u.hp -= 2;
       u.panic = 1;
@@ -135,7 +134,7 @@ function golemSlamTarget(e) {
     if (w.commissioned && w.hp > 0 && dist(e.x, w.x) < GOLEM_SLAM_RANGE) return { kind: "wall", obj: w };
   }
   if (dist(e.x, base.x) < GOLEM_SLAM_RANGE + 20) return { kind: "base", obj: base };
-  if (player && player.hp > 0 && dist(e.x, player.x) < GOLEM_SLAM_RANGE - 14) return { kind: "player", obj: player };
+  if (player && player.hp > 0 && !Game.inMine && dist(e.x, player.x) < GOLEM_SLAM_RANGE - 14) return { kind: "player", obj: player };
   return null;
 }
 
@@ -153,9 +152,11 @@ function golemHurlBoulder(e, t) {
     hitKind: "base", enemyFireball: true, magma: true,
     dmg: 7, radius: 70,
   });
-  e.attackAnim = 0.4;
+  e.attackAnim = 0.45;
+  e.attackKind = "hurl";
+  e.hurlAnim = 0.58;
   spawnParticles(e.x + e.dir * 26, launchY, 10, "#ff6a20", 50, 45);
-  Audio.bow();
+  Audio.fireball();
 }
 
 function updateMagmaGolem(e, t, dt) {
@@ -173,7 +174,15 @@ function updateMagmaGolem(e, t, dt) {
     e.slamCd = 1.5;
     e.volleyCd = 3;
     e.hurlCount = 0;
+    e.hurlAnim = 0;
+    e.coreFlare = 0;
+    e.eruptionAnim = 0;
+    e.attackKind = "";
   }
+  if (e.hurlAnim > 0) e.hurlAnim = Math.max(0, e.hurlAnim - dt);
+  if (e.coreFlare > 0) e.coreFlare = Math.max(0, e.coreFlare - dt);
+  if (e.eruptionAnim > 0) e.eruptionAnim = Math.max(0, e.eruptionAnim - dt);
+
   const taken = e.lastHp - e.hp;
   if (taken > 0) {
     if (e.coreOpen) {
@@ -182,7 +191,6 @@ function updateMagmaGolem(e, t, dt) {
     } else {
       e.hp += taken * 0.65; // obsidian shell: 35% damage
       spawnParticles(e.x, groundY - t.w * 0.55, 3, "#8a8a96", 40, 40);
-      if (Math.random() < 0.25) floaty(e.x, "Skallen absorberer!", "#8a8a96", 12);
     }
   }
   if (e.hp <= 0) {
@@ -197,11 +205,12 @@ function updateMagmaGolem(e, t, dt) {
     e.coreOpen = !e.coreOpen;
     if (e.coreOpen) {
       e.coreTimer = e.enraged ? GOLEM_CORE_TIME + 0.8 : GOLEM_CORE_TIME;
-      floaty(e.x, "🔥 Kernen gløder – slå til!", "#ffd060", 18);
+      e.coreFlare = 0.85;
       spawnParticles(e.x, groundY - t.w * 0.55, 18, "#ffd060", 90, 110);
       Audio.upgrade();
     } else {
       e.coreTimer = e.enraged ? GOLEM_ARMOR_TIME * 0.55 : GOLEM_ARMOR_TIME;
+      e.coreFlare = 0.28;
       spawnParticles(e.x, groundY - t.w * 0.55, 10, "#5a5260", 70, 60);
     }
   }
@@ -209,14 +218,15 @@ function updateMagmaGolem(e, t, dt) {
   // --- one-time eruption enrage ---
   if (!e.enraged && e.hp < e.maxHp * 0.35) {
     e.enraged = true;
-    floaty(e.x, "💢 Kolossen går i udbrud!", "#ff4020", 22);
+    e.eruptionAnim = 1.4;
+    e.coreFlare = 1.0;
     Game.screenShake = Math.max(Game.screenShake || 0, 0.7);
     spawnParticles(e.x, groundY - t.w * 0.6, 40, "#ff6a20", 220, 260);
     spawnParticles(e.x, groundY - t.w * 0.6, 20, "#ffd060", 140, 300);
     for (let k = 0; k < 3; k++) {
       spawnEnemy("fireImp", { x: e.x + rand(-40, 40), side: e.x < base.x ? -1 : 1 });
     }
-    Audio.horn();
+    Audio.dragonRoar();
   }
 
   e.slamCd -= dt;
@@ -226,7 +236,8 @@ function updateMagmaGolem(e, t, dt) {
   if (e.slamT !== undefined) {
     e.slamT += dt;
     if (e.slamT >= GOLEM_SLAM_WINDUP) {
-      e.attackAnim = 0.35; // renderer: arms crashing down
+      e.attackAnim = 0.42; // renderer: arms crashing down
+      e.attackKind = "slam";
       const tgt = golemSlamTarget(e);
       if (tgt) {
         if (tgt.kind === "wall") {
@@ -253,7 +264,7 @@ function updateMagmaGolem(e, t, dt) {
   // --- start a slam? ---
   if (e.slamCd <= 0 && golemSlamTarget(e)) {
     e.slamT = 0;
-    floaty(e.x, "⚠ Nedslag!", "#ff8a50", 14);
+    e.attackKind = "slam";
     return;
   }
 
@@ -270,8 +281,9 @@ function updateMagmaGolem(e, t, dt) {
   if (e.volleyCd <= 0 && Math.abs(e.x - base.x) < 950) {
     e.hurlCount = e.enraged ? 4 : 3;
     e.hurlT = 0.1;
+    e.attackKind = "hurl";
+    e.hurlAnim = 0.35;
     e.volleyCd = (t.shootInterval || 7) * (e.enraged ? 0.62 : 1) + rand(-0.6, 0.8);
-    floaty(e.x, "🌋 Magmabyge!", "#ff6a20", 15);
     return;
   }
 
@@ -293,7 +305,6 @@ function updateMagmaGolem(e, t, dt) {
 
 function killWallByBoss(w) {
   w.hp = 0; w.level = 0; w.commissioned = false; w.buildProgress = 0;
-  floaty(w.x, "💥 Mur knust!", "#ff6a4a");
   spawnParticles(w.x, groundY - 30, 20, "#caa46a", 100, 100);
 }
 
@@ -316,7 +327,7 @@ export function updateFirePools(dt) {
     p.tick -= dt;
     if (p.tick <= 0) {
       p.tick = 0.85;
-      if (player && player.hp > 0 && dist(p.x, player.x) < p.r
+      if (player && player.hp > 0 && !Game.inMine && dist(p.x, player.x) < p.r
           && player.jumpH <= 20 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
         player.hp -= 1;
         player.invuln = CFG.playerInvuln;
@@ -326,7 +337,7 @@ export function updateFirePools(dt) {
         Audio.hit();
       }
       for (const u of state.units) {
-        if (u.hp <= 0 || u.dying || u.onWall) continue;
+        if (u.hp <= 0 || u.dying || u.onWall || u.mine) continue;
         if (dist(p.x, u.x) < p.r) {
           u.hp -= 1;
           u.panic = 1;
