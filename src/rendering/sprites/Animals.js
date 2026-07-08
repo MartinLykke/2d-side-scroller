@@ -10,9 +10,14 @@ import { state } from '../../core/state.js';
 // ---------------------------------------------------------------------------
 
 const ease = p => p * p * (3 - 2 * p);
+const STUCK_ARROW_FADE_TIME = 0.55;
 
 function fadeAlpha(a) {
   return a.deathT > 3.5 ? clamp(1 - (a.deathT - 3.5) / 1.5, 0, 1) : 1;
+}
+
+function stuckArrowAlpha(ar) {
+  return clamp(ar.t / Math.min(STUCK_ARROW_FADE_TIME, ar.maxT || STUCK_ARROW_FADE_TIME), 0, 1);
 }
 
 // ---------------- Deer ----------------
@@ -385,7 +390,10 @@ function drawBear(a) {
 function drawStuckArrows(a) {
   if (!a.stuckArrows || !a.stuckArrows.length) return;
   for (const ar of a.stuckArrows) {
+    const alpha = stuckArrowAlpha(ar);
+    if (alpha <= 0) continue;
     ctx.save();
+    ctx.globalAlpha = alpha;
     ctx.translate(a.x + ar.x, ar.y);
     ctx.rotate(ar.a || 0);
     ctx.strokeStyle = "#c9b48a"; ctx.lineWidth = 1.5;

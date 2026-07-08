@@ -5,6 +5,25 @@ import { Game, state } from '../../core/state.js';
 import { windSway } from '../Effects.js';
 import { roundedRect, groundShadow, drawTomeIcon } from '../DrawHelpers.js';
 
+const STUCK_ARROW_FADE_TIME = 0.55;
+
+function stuckArrowAlpha(ar) {
+  return clamp(ar.stuckTimer / Math.min(STUCK_ARROW_FADE_TIME, ar.stuckMaxTimer || STUCK_ARROW_FADE_TIME), 0, 1);
+}
+
+function drawStuckArrowShaft(wid, alpha) {
+  ctx.globalAlpha = alpha;
+  const magic = wid === "void_bow" || wid === "dark_bow" || wid === "dragons_bow";
+  ctx.strokeStyle = magic ? "#e8d8ff" : "#c9b48a";
+  ctx.lineWidth = magic ? 1.7 : 1.4;
+  ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(5,0); ctx.stroke();
+  ctx.fillStyle = "#b8bcc4";
+  ctx.beginPath(); ctx.moveTo(5,-1.6); ctx.lineTo(8.5,0); ctx.lineTo(5,1.6); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = magic ? "#c69fff" : "#8fae4a";
+  ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(-13,-2.6); ctx.lineTo(-8.5,-0.6); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(-13,2.6); ctx.lineTo(-8.5,0.6); ctx.closePath(); ctx.fill();
+}
+
 export function drawCoins(mineLayer = false) {
   const t=performance.now();
   for (const c of state.coins) {
@@ -24,6 +43,11 @@ export function drawArrows() {
     const ang = ar.stuck ? (ar.frozenAngle || 0) : Math.atan2(ar.vy,ar.vx);
     ctx.save(); ctx.translate(ar.x,ar.y); ctx.rotate(ang);
     const wid = ar.weaponId;
+    if (ar.stuck) {
+      drawStuckArrowShaft(wid, stuckArrowAlpha(ar));
+      ctx.restore();
+      continue;
+    }
     if (ar.enemyFireball) {
       const sc = ar.big ? 2.1 : 1;
       ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.scale(sc, sc);

@@ -8,6 +8,13 @@ import { drawBuilder } from '../sprites/Builder.js';
 import { drawVillager } from '../sprites/Villager.js';
 import { drawGuard } from '../sprites/Guard.js';
 
+const STUCK_ARROW_FADE_TIME = 0.55;
+
+function stuckArrowAlpha(ar) {
+  const fadeTime = Math.min(STUCK_ARROW_FADE_TIME, ar.maxT || STUCK_ARROW_FADE_TIME);
+  return Math.max(0, Math.min(1, ar.t / fadeTime));
+}
+
 function drawHumanoid(x, anim, bodyCol, headCol, tool, dir, moving) {
   ctx.save(); ctx.translate(x,0); if (dir<0) ctx.scale(-1,1);
   const bob=moving?Math.abs(Math.sin(anim))*1.2:0;
@@ -150,12 +157,15 @@ function drawStuckImpArrows(e) {
   if (!e.stuckArrows || !e.stuckArrows.length) return;
   ctx.save();
   for (const ar of e.stuckArrows) {
+    const alpha = stuckArrowAlpha(ar);
+    if (alpha <= 0) continue;
     ctx.save();
+    ctx.globalAlpha = alpha;
     ctx.translate(ar.x, ar.y);
     ctx.rotate(ar.a || 0);
     const magic = ar.weaponId === "void_bow" || ar.weaponId === "dark_bow" || ar.weaponId === "dragons_bow";
     if (magic) {
-      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.28;
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.28 * alpha;
       ctx.strokeStyle = ar.weaponId === "dragons_bow" ? "#ff8840" : "#b060ff";
       ctx.lineWidth = 4;
       ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(3, 0); ctx.stroke();
