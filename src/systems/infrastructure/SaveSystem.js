@@ -1,5 +1,5 @@
 import { Game, state } from '../../core/state.js';
-import { CFG } from '../../config/config.js';
+import { CFG, FOREST } from '../../config/config.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { spawnVagrant, planNight } from '../world/SpawnSystem.js';
 import { buildForest } from '../world/ForestSystem.js';
@@ -19,7 +19,7 @@ export function saveGame() {
       base: { level: base.level, hp: base.hp, maxHp: base.maxHp },
       walls: walls.map(w => ({ commissioned: w.commissioned, level: w.level, hp: w.hp, maxHp: w.maxHp, buildProgress: w.buildProgress })),
       buildings: (state.buildings || []).map(b => ({ built: b.built, level: b.level })),
-      forestTrees: forestTrees.map(t => ({ marked: t.marked, chopped: t.chopped, chopProgress: t.chopProgress, lying: t.lying || !!t.carriedBy })),
+      forestTrees: forestTrees.map(t => ({ marked: t.marked, chopped: t.chopped, chopProgress: t.chopProgress, lying: t.lying || !!t.carriedBy, regrowTimer: t.regrowTimer || 0 })),
       units: units.map(u => ({ role: u.role, x: u.x, archerName: u.archerName, level: u.level, xp: u.xp })),
       vagrants: vagrants.length,
       farm: state.farmBuilt,
@@ -51,7 +51,13 @@ export function loadGame() {
     Game.day = snap.day; Game.time = snap.time; Game.treeSeed = snap.treeSeed;
     buildForest();
     const { player, base, walls, forestTrees } = state;
-    if (snap.forestTrees) snap.forestTrees.forEach((s, i) => { if (forestTrees[i]) Object.assign(forestTrees[i], s); });
+    if (snap.forestTrees) snap.forestTrees.forEach((s, i) => {
+      if (!forestTrees[i]) return;
+      Object.assign(forestTrees[i], s);
+      if (s.chopped && !s.lying && !Object.prototype.hasOwnProperty.call(s, "regrowTimer")) {
+        forestTrees[i].regrowTimer = FOREST.regrowMin + Math.random() * (FOREST.regrowMax - FOREST.regrowMin);
+      }
+    });
     player.coins = snap.coins; player.x = snap.px; player.hasCrown = snap.hasCrown;
     player.hp = snap.hp || CFG.playerMaxHp;
     player.weapon = snap.weapon || null;

@@ -34,6 +34,18 @@ function pickCampX() {
   return CFG.baseX + (Math.random() < 0.5 ? -1 : 1) * (FOREST.startDist + 600);
 }
 
+function makeForestTree(x, r = Math.random) {
+  return {
+    x,
+    tree: makeTree(x, 170 + r() * 80, r, { harvestable: true }),
+    marked: false, chopped: false, beingChopped: false,
+    chopProgress: 0,
+    falling: false, fallDir: r() < 0.5 ? -1 : 1, fallAngle: 0, fallT: 0,
+    lying: false, claimedBy: null, carriedBy: null,
+    regrowTimer: 0,
+  };
+}
+
 // ---------------- Ponds ----------------
 // Small forest lakes of varied size. Purely shallow — everyone wades through;
 // only ducks treat them as home. Regenerated deterministically from the tree
@@ -114,14 +126,7 @@ export function buildForest() {
     if (nearCamp) continue;
     if (nearPond(offsetX, POND_TREE_MARGIN)) continue;
 
-    const tree = makeTree(offsetX, 170 + r() * 80, r, { harvestable: true });
-    trees.push({
-      x: offsetX, tree,
-      marked: false, chopped: false, beingChopped: false,
-      chopProgress: 0,
-      falling: false, fallDir: Math.random() < 0.5 ? -1 : 1, fallAngle: 0, fallT: 0,
-      lying: false, claimedBy: null, carriedBy: null,
-    });
+    trees.push(makeForestTree(offsetX, r));
   }
 
   state.forestTrees = trees;
@@ -133,13 +138,7 @@ export function buildForest() {
 function plantTreesAtCamp(x, r = Math.random) {
   for (let tx = x - CAMP_CLEAR_DIST + 15; tx < x + CAMP_CLEAR_DIST - 10; tx += FOREST.spacing * (0.85 + r() * 0.4)) {
     if (r() < 0.15) continue;
-    state.forestTrees.push({
-      x: tx, tree: makeTree(tx, 170 + r() * 80, r, { harvestable: true }),
-      marked: false, chopped: false, beingChopped: false,
-      chopProgress: 0,
-      falling: false, fallDir: Math.random() < 0.5 ? -1 : 1, fallAngle: 0, fallT: 0,
-      lying: false, claimedBy: null, carriedBy: null,
-    });
+    state.forestTrees.push(makeForestTree(tx, r));
   }
 }
 
@@ -152,6 +151,27 @@ function clearTreesNearCamp(x) {
 }
 
 const FALL_TIME = 0.85; // seconds for a felled tree to hit the ground
+
+function regrowthBlocked(x) {
+  for (const b of (state.buildings || [])) {
+    if (!b.needsClearing) continue;
+    if ((b.built || b.cleared) && Math.abs(b.x - x) < CFG.clearRadius + 18) return true;
+  }
+  for (const camp of (state.forestCamps || [])) {
+    if (!camp.triggered && Math.abs(camp.x - x) < CAMP_CLEAR_DIST) return true;
+  }
+  return false;
+}
+
+function scheduleTreeRegrowth(tree) {
+  tree.regrowTimer = rand(FOREST.regrowMin, FOREST.regrowMax);
+}
+
+function regrowTree(tree) {
+  const fresh = makeForestTree(tree.x);
+  Object.assign(tree, fresh);
+  spawnParticles(tree.x, groundY - 10, 8, "#7fb45a", 22, 46);
+}
 
 export function updateForestCamps(dt) {
   const { player, forestCamps } = state;
@@ -198,8 +218,20 @@ export function updateForestTrees(dt) {
   const { forestTrees } = state;
   if (!forestTrees || !forestTrees.length) return;
 
-  // Progress any trees currently falling over; once down they become a log.
+  // Progress falling trees and regrow harvested ones after a randomized delay.
   for (const t of forestTrees) {
+    if (t.chopped && !t.lying && !t.carriedBy && (t.regrowTimer || 0) > 0) {
+      t.regrowTimer = Math.max(0, t.regrowTimer - dt);
+      if (t.regrowTimer <= 0) {
+        if (regrowthBlocked(t.x)) {
+          scheduleTreeRegrowth(t);
+        } else {
+          regrowTree(t);
+        }
+      }
+      continue;
+    }
+
     if (!t.falling) continue;
     t.fallT = Math.min(1, (t.fallT || 0) + dt / FALL_TIME);
     const eased = t.fallT < 0.7
@@ -263,6 +295,7 @@ export function deliverLog(log) {
   log.lying = false;
   log.claimedBy = null;
   log.carriedBy = null;
+  scheduleTreeRegrowth(log);
   const camps = (state.buildings || []).filter(b => b.type === "lumber" && b.built).length;
   const coins = 3 + camps * CFG.lumberLogBonus;
   spawnGoldReward(CFG.baseX, coins, "lumber", { spreadX: 24, fromY: groundY - 20, vx: 60 });

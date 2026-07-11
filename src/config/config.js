@@ -103,4 +103,6 @@ export const FOREST = {
   spacing: 46,
   interactRange: 70,
   chopWork: 1.6,    // seconds of builder work to fell a tree
+  regrowMin: 90,    // seconds after a delivered log before the tree returns
+  regrowMax: 190,
 };
