@@ -1,3 +1,5 @@
+export const ARROW_RAIN_COOLDOWN = 12;
+
 export const ARCHER_SKILLS = {
   // ── Branch 1: The Arrow ──
   fire_arrows: {
@@ -29,7 +31,7 @@ export const ARCHER_SKILLS = {
   barrage: {
     id: "barrage", branch: 2, row: 2,
     name: "Arrow Rain",
-    desc: "Press Q — all archers fire 5 arrows at once at the nearest enemy.",
+    desc: "Press Q — all archers fire 5 arrows at once at the nearest enemy. Cooldown: 12 sec.",
     cost: 2, requires: ["double_shot"],
   },
   powershot: {

@@ -72,6 +72,7 @@ export const state = {
   caltrops: [],
   archerSkillPoints: 0,
   archerSkills: [],
+  arrowRainCd: 0,
   guardSkillPoints: 0,
   guardSkills: [],
   payCooldown: 0,

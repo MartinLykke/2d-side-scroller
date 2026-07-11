@@ -57,7 +57,10 @@ function handleKeydown(e) {
     else openSkillTree();
     e.preventDefault(); return;
   }
-  if (k === "q") { triggerBarrage(); e.preventDefault(); return; }
+  if (k === "q") {
+    if (!e.repeat) triggerBarrage();
+    e.preventDefault(); return;
+  }
   if (k === "f" && !Game.inventoryOpen && !Game.shopOpen) {
     if (tryToggleMine()) { e.preventDefault(); return; }
   }

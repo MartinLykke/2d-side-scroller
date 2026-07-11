@@ -1,5 +1,6 @@
 import { CFG, STATIONS_X } from '../../config/config.js';
 import { ENEMY_TYPES } from '../../config/enemies.js';
+import { ARROW_RAIN_COOLDOWN } from '../../config/archerSkills.js';
 import { clamp, dist, rand, pick } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
@@ -1092,6 +1093,7 @@ const AI_HANDLERS = {
 
 export function updateUnits(dt) {
   const { units } = state;
+  if (state.arrowRainCd > 0) state.arrowRainCd = Math.max(0, state.arrowRainCd - dt);
   // Reset per-frame wall slot counter so archerAI can stagger archers across wall positions.
   Game.wallSlots = {};
   for (let i = units.length - 1; i >= 0; i--) {
@@ -1125,9 +1127,25 @@ function freePeasant() { return state.units.find(u => u.role === "peasant"); }
 
 export function triggerBarrage() {
   if (!state.archerSkills.includes("barrage")) return;
-  for (const u of state.units) {
-    if (u.role === "archer") { u.barrageCount = 5; u.cooldown = 0; }
+  if ((state.arrowRainCd || 0) > 0) {
+    const x = state.player?.x ?? state.base?.x ?? CFG.baseX;
+    floaty(x, "Arrow Rain ready in " + Math.ceil(state.arrowRainCd) + "s", "#cfe6f2");
+    return;
   }
+  let triggered = false;
+  for (const u of state.units) {
+    if (u.role === "archer" && u.hp > 0 && !u.dying) {
+      u.barrageCount = 5;
+      u.cooldown = 0;
+      triggered = true;
+    }
+  }
+  if (!triggered) {
+    const x = state.player?.x ?? state.base?.x ?? CFG.baseX;
+    floaty(x, "No archers", "#ff8a6a");
+    return;
+  }
+  state.arrowRainCd = ARROW_RAIN_COOLDOWN;
   Audio.bow();
 }
 

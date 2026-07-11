@@ -30,6 +30,7 @@ export function saveGame() {
       mineVeins: (state.mineVeins || []).map(v => ({ x: v.x, ore: v.ore, respawnT: v.respawnT })),
       archerSkillPoints: state.archerSkillPoints || 0,
       archerSkills: state.archerSkills || [],
+      arrowRainCd: state.arrowRainCd || 0,
       guardSkillPoints: state.guardSkillPoints || 0,
       guardSkills: state.guardSkills || [],
     };
@@ -87,6 +88,7 @@ export function loadGame() {
     state.archerSkillPoints = snap.archerSkillPoints || 0;
     // smoke_bomb was replaced by hunters_mark; migrate old saves
     state.archerSkills = (snap.archerSkills || []).map(id => id === "smoke_bomb" ? "hunters_mark" : id);
+    state.arrowRainCd = snap.arrowRainCd || 0;
     state.guardSkillPoints = snap.guardSkillPoints || 0;
     state.guardSkills = snap.guardSkills || [];
     Game.threatLevel = Math.max(1, snap.day || 1);

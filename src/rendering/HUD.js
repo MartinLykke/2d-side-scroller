@@ -7,7 +7,7 @@ import { Audio } from '../systems/infrastructure/Audio.js';
 import { spawnEnemy, spawnFireDragon, spawnBoss, planNight, floaty, spawnParticles } from '../systems/world/SpawnSystem.js';
 import { pick } from '../util/math.js';
 import { groundY } from '../core/canvas.js';
-import { ARCHER_SKILLS } from '../config/archerSkills.js';
+import { ARCHER_SKILLS, ARROW_RAIN_COOLDOWN } from '../config/archerSkills.js';
 import { GUARD_SKILLS } from '../config/guardSkills.js';
 import { makeUnit } from '../entities/Unit.js';
 import { saveMeta } from '../systems/infrastructure/RoguelikeSystem.js';
@@ -249,6 +249,20 @@ export const UI = {
     document.getElementById("hud-pop").classList.add("hidden");
     const spEl = document.getElementById("hud-skillpts");
     if (spEl) spEl.style.display = "none";
+    const rainEl = document.getElementById("hud-arrow-rain");
+    if (rainEl) {
+      const unlocked = state.archerSkills.includes("barrage");
+      rainEl.classList.toggle("hidden", !unlocked);
+      if (unlocked) {
+        const cd = Math.max(0, state.arrowRainCd || 0);
+        const ready = cd <= 0;
+        const cdEl = document.getElementById("hud-arrow-rain-cd");
+        const fillEl = document.getElementById("hud-arrow-rain-fill");
+        rainEl.classList.toggle("ready", ready);
+        if (cdEl) cdEl.textContent = ready ? "Ready" : Math.ceil(cd) + "s";
+        if (fillEl) fillEl.style.width = (ready ? 100 : (1 - cd / ARROW_RAIN_COOLDOWN) * 100) + "%";
+      }
+    }
 
     let near=null, nd=CFG.payRange;
     for (const s of stations) { if (!!s.mineLayer!==Game.inMine) continue; const c=s.cost(); if (c<=0) continue; const d=dist(player.x,s.x()); if (d<nd) { nd=d; near=s; } }

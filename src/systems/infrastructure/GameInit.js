@@ -256,6 +256,7 @@ export function newGame() {
   state.caltrops        = [];
   state.archerSkillPoints = 0;
   state.archerSkills    = [];
+  state.arrowRainCd     = 0;
   state.groundBows      = [];
   state.groundHammers   = [];
   state.lootItems       = [];
