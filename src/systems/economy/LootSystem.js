@@ -21,7 +21,7 @@ export function updateLootItems(dt) {
     }
     if (!Game.inMine && dist(it.x,player.x)<50) {
       if (!player.weapon || keys["f"]) {
-        if (pickupWeaponFn) pickupWeaponFn(it.weaponId);
+        if (pickupWeaponFn) pickupWeaponFn(it.weaponId, it.upgrades);
         lootItems.splice(i,1);
         break;
       }

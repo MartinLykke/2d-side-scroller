@@ -11,6 +11,8 @@ import { startArcherShoot, SHOOT_RELEASE_TIME } from '../../rendering/sprites/Ar
 import { entityWallLift } from '../../entities/Wall.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { spawnFirePool } from '../ai/BossAI.js';
+import { damagePlayer } from './PlayerCombat.js';
+import { addSkillPoints } from '../economy/SkillSystem.js';
 
 function arrowTrail(ar) {
   if (ar.enemyFireball) {
@@ -298,7 +300,7 @@ export function updateArrows(dt) {
               if (ar.sourceUnit.xp >= xpNeeded) {
                 ar.sourceUnit.xp -= xpNeeded;
                 ar.sourceUnit.level = (ar.sourceUnit.level || 1) + 1;
-                state.archerSkillPoints = (state.archerSkillPoints || 0) + 1;
+                addSkillPoints("archer", 1);
                 spawnLevelUpBeam(ar.sourceUnit.x);
               }
               const knockDir = Math.sign(e.x - ar.x) || 1;
@@ -338,17 +340,10 @@ export function updateArrows(dt) {
       const playerLift = entityWallLift(player) + (player.jumpH || 0);
       const playerY = groundY - 50 - playerLift;
       if (dist(ar.x, player.x) < 18 && Math.abs(ar.y - playerY) < 50) {
-        if (player.invuln <= 0 && !window._DEV_GOD_MODE) {
-          player.hp -= ar.dmg || 1; player.invuln = CFG.playerInvuln; player.hurt = 0.35; player.hpShowTimer = 3;
-          player.knock = (player.x < ar.x ? -1 : 1) * -120;
-          if (ar.enemyFireball) {
-            spawnParticles(player.x, playerY, 16, "#ff6a20", 85, 95);
-            spawnParticles(player.x, playerY, 8, "#ffd060", 50, 90);
-            Game.screenShake = Math.max(Game.screenShake, 0.22);
-          } else {
-            spawnParticles(player.x, playerY, 4, "#c1453b");
-          }
-          Audio.hit();
+        if (damagePlayer(ar.dmg || 1, { knock: (player.x < ar.x ? -1 : 1) * -120 }) !== null && ar.enemyFireball) {
+          spawnParticles(player.x, playerY, 16, "#ff6a20", 85, 95);
+          spawnParticles(player.x, playerY, 8, "#ffd060", 50, 90);
+          Game.screenShake = Math.max(Game.screenShake, 0.22);
         }
         hit = true;
       }
@@ -387,9 +382,8 @@ export function updateArrows(dt) {
           u.knock = (u.knock || 0) + Math.sign(u.x - ar.x || 1) * 130;
         }
       }
-      if (!Game.inMine && dist(ar.x, player.x) < r * 0.6 && (player.jumpH || 0) + entityWallLift(player) <= 20 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
-        player.hp -= 1; player.invuln = CFG.playerInvuln; player.hurt = 0.35; player.hpShowTimer = 3;
-        player.knock = (player.x < ar.x ? -1 : 1) * 160;
+      if (dist(ar.x, player.x) < r * 0.6 && (player.jumpH || 0) + entityWallLift(player) <= 20) {
+        damagePlayer(1, { knock: (player.x < ar.x ? -1 : 1) * 160 });
       }
       spawnParticles(ar.x, groundY - 14, 26, "#ff6a20", 140, 120);
       spawnParticles(ar.x, groundY - 14, 12, "#ffd060", 85, 130);

@@ -1,9 +1,21 @@
 import { ENEMY_TYPES } from '../config/enemies.js';
+import { WEAPONS } from '../config/weapons.js';
 import { groundY } from '../core/canvas.js';
 import { Game, state } from '../core/state.js';
 import { spawnGoldReward, spawnParticles } from '../systems/world/SpawnSystem.js';
 import { Audio } from '../systems/infrastructure/Audio.js';
 import { registerEnemyKill } from '../systems/infrastructure/RoguelikeSystem.js';
+
+const PORTAL_GUARDIAN_WEAPON_DROP_CHANCE = 0.25;
+const PORTAL_GUARDIAN_WEAPON_RARITIES = [1, 2, 3];
+
+function rollPortalGuardianWeaponDrop(e) {
+  if (Math.random() > PORTAL_GUARDIAN_WEAPON_DROP_CHANCE) return;
+  const candidates = Object.keys(WEAPONS).filter(id => PORTAL_GUARDIAN_WEAPON_RARITIES.includes(WEAPONS[id].rarity));
+  if (!candidates.length) return;
+  const weaponId = candidates[Math.floor(Math.random() * candidates.length)];
+  state.lootItems.push({ x: e.x, weaponId, dropVy: -350, dropY: groundY - 150 });
+}
 
 export function spawnImpBlood(e, intensity = 1, y = null) {
   if (!e || e.type !== "imp") return;
@@ -63,6 +75,7 @@ export function killEnemyWithAnimation(e, knockDirection = 0) {
     spawnParticles(e.x, groundY - 80, 80, t.eye, 300, 250);
   }
 
+  if (e.portalGuardian) rollPortalGuardianWeaponDrop(e);
   if (e.type === "fireDragon") {
     state.lootItems.push({ x: e.x, weaponId: "meteor_tome", dropVy: -350, dropY: groundY - 150 });
   }

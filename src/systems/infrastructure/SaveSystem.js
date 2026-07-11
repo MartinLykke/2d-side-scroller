@@ -5,6 +5,7 @@ import { spawnVagrant, planNight } from '../world/SpawnSystem.js';
 import { buildForest } from '../world/ForestSystem.js';
 import { initMineVeins } from '../world/MineSystem.js';
 import { buildStations } from './GameInit.js';
+import { autoSpendSkillPoints } from '../economy/SkillSystem.js';
 
 const SAVE_KEY = "kingdom_embers_save_v1";
 
@@ -16,6 +17,9 @@ export function saveGame() {
       day: Game.day, time: Game.time, treeSeed: Game.treeSeed,
       coins: player.coins, px: player.x, hasCrown: player.hasCrown,
       hp: player.hp, weapon: player.weapon, armor: player.armor,
+      weaponUpgrades: player.weaponUpgrades || [],
+      inventory: player.inventory || [],
+      level: player.level || 1, xp: player.xp || 0,
       base: { level: base.level, hp: base.hp, maxHp: base.maxHp },
       walls: walls.map(w => ({ commissioned: w.commissioned, level: w.level, hp: w.hp, maxHp: w.maxHp, buildProgress: w.buildProgress })),
       buildings: (state.buildings || []).map(b => ({ built: b.built, level: b.level })),
@@ -63,6 +67,10 @@ export function loadGame() {
     player.hp = snap.hp || CFG.playerMaxHp;
     player.weapon = snap.weapon || null;
     player.armor  = snap.armor  || null;
+    player.weaponUpgrades = snap.weaponUpgrades || [];
+    player.inventory = snap.inventory || [];
+    player.level = snap.level || 1;
+    player.xp = snap.xp || 0;
     base.level = snap.base.level; base.hp = snap.base.hp; base.maxHp = snap.base.maxHp;
     walls.forEach((w, i) => { const s = snap.walls[i]; if (s) Object.assign(w, s); });
     if (snap.buildings) snap.buildings.forEach((s, i) => { if (state.buildings[i]) Object.assign(state.buildings[i], s); });
@@ -91,6 +99,7 @@ export function loadGame() {
     state.arrowRainCd = snap.arrowRainCd || 0;
     state.guardSkillPoints = snap.guardSkillPoints || 0;
     state.guardSkills = snap.guardSkills || [];
+    autoSpendSkillPoints();
     Game.threatLevel = Math.max(1, snap.day || 1);
     buildStations(); // stations depend on base level / mine, which were just restored
     planNight();

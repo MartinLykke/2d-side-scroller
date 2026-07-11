@@ -5,6 +5,7 @@ import { Game, state } from '../../core/state.js';
 import { keys } from '../input/Input.js';
 import { Audio } from './Audio.js';
 import { makeUnit } from '../../entities/Unit.js';
+import { addSkillPoints } from '../economy/SkillSystem.js';
 
 const META_KEY = "kingdom_embers_meta_v1";
 const HUB = {
@@ -248,8 +249,8 @@ export function applyPermanentWorldUpgrades() {
   }
 
   const skillPoints = metaLevel("oath_sparks");
-  state.archerSkillPoints = (state.archerSkillPoints || 0) + skillPoints;
-  state.guardSkillPoints = (state.guardSkillPoints || 0) + skillPoints;
+  addSkillPoints("archer", skillPoints);
+  addSkillPoints("guard", skillPoints);
 
   if (metaLevel("old_crew") > 0) {
     const archer = makeUnit("archer", CFG.baseX - 90);

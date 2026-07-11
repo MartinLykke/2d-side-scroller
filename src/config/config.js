@@ -92,8 +92,8 @@ export const BUILDING_SLOTS = [
 ];
 
 export const PORTALS = [
-  { x: 80, side: -1 },
-  { x: CFG.worldWidth - 80, side:  1 },
+  { x: 180, side: -1 },
+  { x: CFG.worldWidth - 180, side:  1 },
 ];
 
 // Dense forest: spawns only beyond the outermost wall slots, harvestable by builders.

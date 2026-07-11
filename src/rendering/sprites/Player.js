@@ -1,24 +1,32 @@
 import { ctx, groundY } from '../../core/canvas.js';
 import { drawBoot } from '../DrawHelpers.js';
 import { drawClimbPose, isClimbingEntity } from './FriendlyClimb.js';
+import { armorCapeColors, drawTorsoArmor, drawHeadArmor } from '../ItemRender.js';
 
 const C = {
   skin: "#d3ac82",
-  hair: "#342414",
+  hair: "#3c2c1c",
   beard: "#5a3d24",
-  boots: "#2f2419",
-  leather: "#3a2a1a",
-  pants: "#352b24",
+  boots: "#3a2c1e",
+  leather: "#5a3a24",
+  pants: "#443c30",
   armor: "#596878",
   armorDk: "#2a3440",
   armorLt: "#8794a2",
   gold: "#d4a838",
   goldDk: "#8a6a2a",
-  tabard: "#8f2031",
-  tabardDk: "#5c1420",
-  cape: "#b91c32",
-  capeDk: "#74131f",
-  capeLt: "#e85a5a",
+  tunic: "#65594e",
+  tunicLt: "#776a5e",
+  patch: "#4b4035",
+  rope: "#a08a58",
+  playerRed: "#8f2031",
+  playerRedDk: "#5c1420",
+  playerRedLt: "#d45555",
+  tabard: "#65594e",
+  tabardDk: "#4b4035",
+  cape: "#8f2031",
+  capeDk: "#5c1420",
+  capeLt: "#d45555",
   jewel: "#ff6a9a",
 };
 
@@ -49,87 +57,87 @@ function plate(x, y, w, h, color, trim = true) {
   }
 }
 
-function drawCape(shX, shY, hipY, moving, run, airborne, gallop) {
+function drawCape(shX, shY, hipY, moving, run, airborne, gallop, capeCols = null) {
   const t = performance.now() / 1000;
   const strideWave = Math.sin(gallop * 1.4);
-  const flow = airborne ? -15 : run ? -13 - strideWave * 2.5 : moving ? -7 + strideWave * 2 : Math.sin(t * 1.3) * 2;
+  const flow = airborne ? -12 : run ? -10 - strideWave * 2 : moving ? -6 + strideWave * 1.5 : Math.sin(t * 1.3) * 1.5;
   const lift = airborne ? -4 : 0;
+  const capeDk = capeCols?.capeDk || C.capeDk;
+  const cape   = capeCols?.cape   || C.cape;
+  const capeLt = capeCols?.capeLt || C.capeLt;
+  const longCloak = !!capeCols;
 
-  ctx.fillStyle = C.capeDk;
+  ctx.fillStyle = capeDk;
   ctx.beginPath();
-  ctx.moveTo(shX - 5, shY - 3);
-  ctx.lineTo(shX + 3, shY - 2);
-  ctx.bezierCurveTo(shX + flow * 0.1, shY + 8, shX + flow * 0.65, hipY + 3, shX + flow, groundY - 1 + lift);
-  ctx.lineTo(shX + flow * 0.55, groundY - 4 + lift);
-  ctx.lineTo(shX + flow * 0.25 - 7, groundY - 1 + lift);
-  ctx.bezierCurveTo(shX - 10 + flow * 0.25, hipY + 1, shX - 10, shY + 6, shX - 5, shY - 3);
+  ctx.moveTo(shX - 5.5, shY - 1.5);
+  ctx.lineTo(shX + 3.5, shY - 1);
+  if (longCloak) {
+    ctx.bezierCurveTo(shX + flow * 0.1, shY + 8, shX + flow * 0.65, hipY + 3, shX + flow, groundY - 1 + lift);
+    ctx.lineTo(shX + flow * 0.55, groundY - 4 + lift);
+    ctx.lineTo(shX + flow * 0.25 - 7, groundY - 1 + lift);
+    ctx.bezierCurveTo(shX - 10 + flow * 0.25, hipY + 1, shX - 10, shY + 6, shX - 5.5, shY - 1.5);
+  } else {
+    ctx.bezierCurveTo(shX + flow * 0.18, shY + 5, shX + flow * 0.45, hipY + 1, shX + flow * 0.62, hipY + 8 + lift);
+    ctx.lineTo(shX + flow * 0.28 - 3, hipY + 5 + lift);
+    ctx.bezierCurveTo(shX - 7, hipY + 2, shX - 8, shY + 5, shX - 5.5, shY - 1.5);
+  }
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = C.cape;
+  ctx.fillStyle = cape;
   ctx.beginPath();
-  ctx.moveTo(shX - 3, shY - 2);
-  ctx.bezierCurveTo(shX + flow * 0.08, shY + 7, shX + flow * 0.42, hipY + 5, shX + flow * 0.66, groundY - 6 + lift);
-  ctx.lineTo(shX + flow * 0.35 - 3, groundY - 5 + lift);
-  ctx.bezierCurveTo(shX - 7 + flow * 0.12, hipY + 2, shX - 7, shY + 7, shX - 3, shY - 2);
+  ctx.moveTo(shX - 3.2, shY - 0.8);
+  if (longCloak) {
+    ctx.bezierCurveTo(shX + flow * 0.08, shY + 7, shX + flow * 0.42, hipY + 5, shX + flow * 0.66, groundY - 6 + lift);
+    ctx.lineTo(shX + flow * 0.35 - 3, groundY - 5 + lift);
+    ctx.bezierCurveTo(shX - 7 + flow * 0.12, hipY + 2, shX - 7, shY + 7, shX - 3.2, shY - 0.8);
+  } else {
+    ctx.bezierCurveTo(shX + flow * 0.08, shY + 5, shX + flow * 0.26, hipY + 2, shX + flow * 0.42, hipY + 5 + lift);
+    ctx.lineTo(shX + flow * 0.18 - 1.5, hipY + 4 + lift);
+    ctx.bezierCurveTo(shX - 5.5, hipY + 1, shX - 5.5, shY + 5, shX - 3.2, shY - 0.8);
+  }
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = C.capeLt;
+  ctx.fillStyle = capeLt;
   ctx.globalAlpha = 0.55;
   ctx.beginPath();
-  ctx.moveTo(shX - 2, shY);
-  ctx.quadraticCurveTo(shX - 5 + flow * 0.18, shY + 8, shX - 5 + flow * 0.25, hipY + 8);
-  ctx.lineTo(shX - 1 + flow * 0.18, hipY + 4);
-  ctx.quadraticCurveTo(shX + 1 + flow * 0.08, shY + 6, shX, shY);
+  ctx.moveTo(shX - 2, shY + 0.5);
+  ctx.quadraticCurveTo(shX - 4 + flow * 0.12, shY + 6, shX - 4 + flow * 0.18, longCloak ? hipY + 8 : hipY + 4);
+  ctx.lineTo(shX - 1 + flow * 0.14, longCloak ? hipY + 4 : hipY + 2);
+  ctx.quadraticCurveTo(shX + 1 + flow * 0.06, shY + 4, shX, shY + 0.5);
   ctx.closePath();
   ctx.fill();
   ctx.globalAlpha = 1;
 }
 
-function drawHead(headX, headY, hurt) {
+function drawHead(headX, headY, hurt, armorId = null) {
   ctx.fillStyle = C.skin;
-  ctx.beginPath(); ctx.arc(headX, headY, 5.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(headX, headY, 4.8, 0, Math.PI * 2); ctx.fill();
 
   ctx.fillStyle = C.hair;
-  ctx.beginPath(); ctx.arc(headX - 0.5, headY - 1.8, 5.1, Math.PI * 0.92, Math.PI * 2.08); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(headX - 3.9, headY - 0.2, 1.7, 2.8, 0.25, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(headX + 3.5, headY - 0.5, 1.2, 2.2, -0.2, 0, Math.PI * 2); ctx.fill();
-
-  ctx.fillStyle = C.beard;
-  ctx.beginPath();
-  ctx.arc(headX + 0.3, headY + 2.5, 3.7, -0.15, Math.PI + 0.15);
-  ctx.fill();
+  ctx.beginPath(); ctx.arc(headX - 0.4, headY - 1.6, 4.7, Math.PI * 0.95, Math.PI * 2.04); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(headX - 3.5, headY - 0.4, 1.5, 2.5, 0.28, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "rgba(255,240,200,0.12)";
+  ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.arc(headX - 1.2, headY - 2.4, 3.1, Math.PI * 1.08, Math.PI * 1.68); ctx.stroke();
 
   ctx.fillStyle = "#2d2116";
   ctx.beginPath(); ctx.arc(headX + 1.8, headY - 0.6, 0.75, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = "rgba(80,44,28,0.55)";
-  ctx.lineWidth = 0.7;
-  ctx.beginPath(); ctx.arc(headX + 3.2, headY + 1.3, 0.8, 0.1, Math.PI * 0.8); ctx.stroke();
   ctx.strokeStyle = "rgba(90,50,30,0.55)";
   ctx.lineWidth = 0.7;
   ctx.beginPath(); ctx.moveTo(headX + 0.7, headY + 0.2); ctx.lineTo(headX + 1.5, headY + 1.7); ctx.stroke();
 
-  // Crown band and points.
-  const crownY = headY - 6.1;
-  ctx.fillStyle = C.goldDk;
-  ctx.beginPath(); ctx.ellipse(headX, crownY + 0.5, 6.8, 2.2, 0, 0, Math.PI * 2); ctx.fill();
+  if (armorId) drawHeadArmor(armorId, headX, headY);
+
+  // Tiny ember-crown mark: enough to find the player, not enough to break the vagrant silhouette.
+  const crownY = headY - 6;
   ctx.fillStyle = C.gold;
-  ctx.fillRect(headX - 6.2, crownY - 0.6, 12.4, 2.6);
-  for (let i = -2; i <= 2; i++) {
-    const peak = i === 0 ? 8.5 : 6.2;
-    const x = headX + i * 3.1;
-    ctx.beginPath();
-    ctx.moveTo(x - 1.25, crownY - 0.4);
-    ctx.lineTo(x, crownY - peak);
-    ctx.lineTo(x + 1.25, crownY - 0.4);
-    ctx.closePath();
-    ctx.fill();
-  }
+  ctx.fillRect(headX - 3.4, crownY, 6.8, 1.5);
+  ctx.beginPath(); ctx.moveTo(headX - 2.4, crownY); ctx.lineTo(headX - 1.2, crownY - 3); ctx.lineTo(headX, crownY); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(headX, crownY); ctx.lineTo(headX + 1.2, crownY - 4); ctx.lineTo(headX + 2.4, crownY); ctx.closePath(); ctx.fill();
   ctx.fillStyle = C.jewel;
-  for (let i = -1; i <= 1; i++) {
-    ctx.beginPath(); ctx.arc(headX + i * 3.3, crownY + 0.55, 0.75 + (i === 0 ? 0.25 : 0), 0, Math.PI * 2); ctx.fill();
-  }
+  ctx.beginPath(); ctx.arc(headX + 0.7, crownY + 0.6, 0.55, 0, Math.PI * 2); ctx.fill();
 
   if (hurt > 0) {
     ctx.save();
@@ -142,11 +150,12 @@ function drawHead(headX, headY, hurt) {
 }
 
 export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop || 0) {
+  const capeCols = armorCapeColors(p.armor);
   if (isClimbingEntity(p)) {
     drawClimbPose(p, {
       skin: C.skin,
       tunic: C.tabard,
-      tunicLt: C.capeLt,
+      tunicLt: capeCols?.capeLt || C.capeLt,
       pants: C.pants,
       boots: C.boots,
       belt: C.leather,
@@ -154,9 +163,9 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
       steelDk: C.armorDk,
       buckle: C.gold,
       hair: C.hair,
-      cloak: C.cape,
-      cloakDk: C.capeDk,
-      accent: C.capeLt,
+      cloak: capeCols?.cape || C.cape,
+      cloakDk: capeCols?.capeDk || C.capeDk,
+      accent: capeCols?.capeLt || C.capeLt,
       gold: C.gold,
     }, { armor: true, cape: true, crown: true, scale: 1.06 });
     return;
@@ -186,7 +195,7 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
   const headX = shX + (run ? 1.5 : 0) + attack * 0.6;
   const headY = groundY - 39 - bob;
 
-  drawCape(shX, shY, hipY, moving, run, airborne, gallop);
+  drawCape(shX, shY, hipY, moving, run, airborne, gallop, capeCols);
 
   // Legs with animated run, jump tuck, knee plates and boot cuffs.
   const strideAmt = airborne ? 0 : moving ? (run ? 8 : 5.4) : 0;
@@ -276,6 +285,9 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
   ctx.lineWidth = 0.8;
   ctx.strokeRect(-2.2, hipY - 2.3, 4.4, 3.6);
 
+  // Equipped armor is drawn over the cuirass/tabard (arms render on top).
+  if (p.armor) drawTorsoArmor(p.armor, shX, shY, hipY);
+
   // Pauldrons and arms with bracers. The weapon overlay adds the weapon hand,
   // but these base arms give idle/run/jump poses weight.
   const armSwing = airborne ? -3 : moving ? Math.sin(gallop * 2) * (run ? 4 : 2.6) : breathe * 0.7;
@@ -304,6 +316,6 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
   ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(shX - 3.4, shY - 1.2); ctx.quadraticCurveTo(shX, shY + 2.4, shX + 3.4, shY - 1.2); ctx.stroke();
 
-  drawHead(headX, headY, hurt);
+  drawHead(headX, headY, hurt, p.armor);
   ctx.restore();
 }

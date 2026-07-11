@@ -1,6 +1,6 @@
 import { CFG } from '../../config/config.js';
 import { WEAPONS, effectiveWeapon } from '../../config/weapons.js';
-import { ARMORS } from '../../config/armor.js';
+import { ARMORS, ARMOR_RARITY_COL, armorBlockChance } from '../../config/armor.js';
 import { ENEMY_TYPES } from '../../config/enemies.js';
 import { dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
@@ -63,25 +63,47 @@ function meleeWeaponImpact(weaponId, x, y) {
   }
 }
 
+// Central player-damage entry point: applies armor (block chance + heavy-hit
+// shaving), i-frames, hurt flash, knockback and feedback. Returns the damage
+// actually dealt (0 = the armor blocked the hit), or null when the player
+// can't be hit right now (mine, i-frames, god mode, already dead).
+export function damagePlayer(rawDmg, opts = {}) {
+  const { player } = state;
+  if (Game.inMine || player.hp <= 0 || player.invuln > 0 || window._DEV_GOD_MODE) return null;
+  const armor = player.armor ? ARMORS[player.armor] : null;
+  const def = armor ? (armor.defense || 0) : 0;
+  let dmg = Math.max(1, Math.round(rawDmg - def / 3));
+  const blocked = def > 0 && Math.random() < armorBlockChance(def);
+  player.invuln = CFG.playerInvuln;
+  player.hpShowTimer = 3;
+  if (opts.knock) player.knock = opts.knock;
+  const lift = entityWallLift(player) + (player.jumpH || 0);
+  if (blocked) {
+    floaty(player.x, "🛡 Blocked!", ARMOR_RARITY_COL[armor.rarity]);
+    spawnParticles(player.x, groundY - 45 - lift, 8, "#cfd3d9", 90, 90);
+    spawnParticles(player.x, groundY - 45 - lift, 4, armor.col, 60, 70);
+    Audio.hit();
+    return 0;
+  }
+  player.hp -= dmg;
+  player.hurt = 0.35;
+  floaty(player.x, `−${dmg}❤`, "#ff6a4a");
+  spawnParticles(player.x, groundY - 50 - lift, 6, "#c1453b");
+  Audio.playerHit();
+  return dmg;
+}
+
 export function meleeHitPlayer(e, t, knockForce) {
   const { player } = state;
-  if (Game.inMine || player.invuln > 0 || window._DEV_GOD_MODE) return false;
   const lift = entityWallLift(player);
   if (lift > 20 && !e.wallTopWall && e.aiState !== "climbOver" && e.aiState !== "vaulting") return false;
-  const armorDef = player.armor ? (ARMORS[player.armor]?.defense || 0) : 0;
-  const dmg = Math.max(1, t.meleeDmg - armorDef);
-  player.hp    -= dmg;
-  player.invuln = CFG.playerInvuln;
-  player.hurt   = 0.35; player.hpShowTimer = 3;
-  player.knock  = Math.sign(player.x - e.x) * knockForce;
-  spawnParticles(player.x, groundY - 50 - lift, 6, "#c1453b");
-  if (player.coins > 0) {
+  const dealt = damagePlayer(t.meleeDmg, { knock: Math.sign(player.x - e.x) * knockForce });
+  if (dealt === null) return false;
+  // Imps snatch a coin when their hit actually lands — a block protects the purse too.
+  if (dealt > 0 && player.coins > 0) {
     player.coins--;
-    floaty(player.x, "−1🪙", "#ff6a4a");
-  } else {
-    floaty(player.x, `−${dmg}❤`, "#ff6a4a");
+    floaty(player.x + 16, "−1🪙", "#ff6a4a");
   }
-  Audio.playerHit();
   return true;
 }
 
@@ -105,6 +127,7 @@ function triggerIceNova(player) {
 
 export function updatePlayerAttack(dt) {
   const { player, enemies } = state;
+  if (player.castAnim > 0) player.castAnim -= dt;
   if (!player.weapon) return;
   if (Game.inMine) { if (player.swing > 0) player.swing -= dt; player.attackCd -= dt; return; }
   if (player.weapon === "short_bow" && (player.weaponUpgrades || []).some(u => u.id === "ice_explosion")) {
@@ -160,6 +183,7 @@ export function updatePlayerAttack(dt) {
     startArcherShoot(player);
     shootArrow(player.x, groundY - 30 - playerLift, tgt, player, player.weapon);
   } else {
+    player.castAnim = 0.55;
     castSpell(player, wBase, tgt);
   }
 

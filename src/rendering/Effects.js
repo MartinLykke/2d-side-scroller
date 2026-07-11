@@ -155,10 +155,11 @@ export function makeTree(x, baseH, r, opts = {}) {
   if (type==="oak"||type==="bush"||type==="crooked"||type==="birch") {
     clusters=[];
     const n=type==="bush"?8:type==="birch"?8:9+((r()*5)|0), cy=type==="bush"?0.34:type==="birch"?0.84:0.74;
+    const bottomClearance=type==="bush"?0.04:type==="birch"?0.24:0.20;
     for (let i=0;i<n;i++) {
       const ring = i / Math.max(1, n - 1);
       const clr = (0.20+r()*0.20)*w*(type==="birch"?0.95:1);
-      const dy = Math.max(cy-r()*(type==="birch"?0.22:0.42) + Math.sin(i*2.1)*0.035, clr/h);
+      const dy = Math.max(cy-r()*(type==="birch"?0.22:0.42) + Math.sin(i*2.1)*0.035, clr/h + bottomClearance);
       clusters.push({ dx:(r()-0.5)*w*(0.55+ring*0.45), dy, r:clr });
     }
   }

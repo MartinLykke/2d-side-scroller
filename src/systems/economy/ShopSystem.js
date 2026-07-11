@@ -2,6 +2,13 @@ import { state, Game } from '../../core/state.js';
 import { WEAPONS } from '../../config/weapons.js';
 import { ARMORS } from '../../config/armor.js';
 import { dist } from '../../util/math.js';
+import { Audio } from '../infrastructure/Audio.js';
+import { equipArmor, playerOwnsWeapon, playerOwnsArmor } from './InventorySystem.js';
+
+// Grid width shared with the shop overlay renderer.
+export const SHOP_COLS = 5;
+// Walk this far from the shopkeeper and the shop closes on its own.
+const SHOP_CLOSE_RANGE = 150;
 
 export const WEAPON_SHOP = [
   { weaponId: 'rusty_sword',   price: 5,  tier: 1 },
@@ -62,26 +69,55 @@ export function tryOpenShop() {
   }
 }
 
+// Called every tick: the shop closes itself when the player walks away.
+export function updateShop() {
+  if (!Game.shopOpen) return;
+  const shopSt = state.stations.find(s => s.id === "shop");
+  if (!shopSt || Game.inMine || state.base.level < 4 ||
+      dist(state.player.x, shopSt.x()) > SHOP_CLOSE_RANGE) {
+    Game.shopOpen = false;
+  }
+}
+
 export function currentShopList() {
   const tier = shopTierUnlocked();
   const list = Game.shopTab === 1 ? ARMOR_SHOP : WEAPON_SHOP;
   return list.filter(item => (item.tier || 1) <= tier);
 }
 
+export function isShopItemOwned(item) {
+  if (!item) return false;
+  return item.armorId ? playerOwnsArmor(item.armorId) : playerOwnsWeapon(item.weaponId);
+}
+
 export function tryBuyShopItem(item) {
-  if (!item || state.player.coins < item.price) return;
+  if (!item) return;
+  const floaty = window._floaty;
+  if (isShopItemOwned(item)) {
+    if (floaty) floaty(state.player.x, "Already owned", "#c8c8c8");
+    return;
+  }
+  if (state.player.coins < item.price) {
+    if (floaty) floaty(state.player.x, "Not enough gold", "#ff6a4a");
+    return;
+  }
   state.player.coins -= item.price;
   if (item.armorId) {
-    state.player.armor = item.armorId;
+    equipArmor(item.armorId);
+    if (floaty) floaty(state.player.x, ARMORS[item.armorId].name + " equipped 🛡", "#9bd05a");
   } else if (item.weaponId) {
     if (pickupWeaponFn) pickupWeaponFn(item.weaponId);
   }
+  Audio.upgrade();
 }
 
 export function handleShopKeys(k, e) {
   const list = currentShopList();
+  const last = Math.max(0, list.length - 1);
   if (k === "arrowleft")  { Game.shopIdx = Math.max(0, Game.shopIdx - 1); e.preventDefault(); }
-  if (k === "arrowright") { Game.shopIdx = Math.min(list.length - 1, Game.shopIdx + 1); e.preventDefault(); }
+  if (k === "arrowright") { Game.shopIdx = Math.min(last, Game.shopIdx + 1); e.preventDefault(); }
+  if (k === "arrowup")    { Game.shopIdx = Math.max(0, Game.shopIdx - SHOP_COLS); e.preventDefault(); }
+  if (k === "arrowdown")  { Game.shopIdx = Math.min(last, Game.shopIdx + SHOP_COLS); e.preventDefault(); }
   if (k === "t") { Game.shopTab = Game.shopTab === 0 ? 1 : 0; Game.shopIdx = 0; }
   if (k === "e" || k === "enter") tryBuyShopItem(list[Game.shopIdx]);
 }

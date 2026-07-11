@@ -2,6 +2,7 @@ import { state, Game } from '../../core/state.js';
 import { canvas, W, H } from '../../core/canvas.js';
 import { UI, closeSkillTree, openSkillTree } from '../../rendering/HUD.js';
 import { tryOpenShop, handleShopKeys, currentShopList, tryBuyShopItem } from '../economy/ShopSystem.js';
+import { equipFromInventory, unequipWeapon, unequipArmor, ensureInventory } from '../economy/InventorySystem.js';
 import { applyUpgrade } from '../economy/UpgradeSystem.js';
 import { triggerBarrage } from '../ai/AI.js';
 import { tryToggleMine } from '../world/MineSystem.js';
@@ -26,7 +27,16 @@ export function setupInputHandlers() {
   // Mouse wheel zoom
   canvas.addEventListener("wheel", handleWheel, { passive: false });
 
-  // Shop item clicks
+  // Mouse position for canvas-drawn UI (inventory/shop hover + tooltips)
+  window._mouse = { x: -9999, y: -9999 };
+  canvas.addEventListener("mousemove", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    window._mouse.x = (e.clientX - rect.left) * (W / rect.width);
+    window._mouse.y = (e.clientY - rect.top) * (H / rect.height);
+  });
+  canvas.addEventListener("mouseleave", () => { window._mouse.x = -9999; window._mouse.y = -9999; });
+
+  // Inventory + shop item clicks
   canvas.addEventListener("mousedown", handleCanvasClick);
 }
 
@@ -78,34 +88,52 @@ function handleKeydown(e) {
 
 function handleWheel(e) {
   e.preventDefault();
+  if (Game.shopOpen || Game.inventoryOpen) return; // don't zoom the world behind menus
   Game.zoom = Math.max(0.35, Math.min(2.5, Game.zoom - e.deltaY * 0.0012));
 }
 
-function handleCanvasClick(e) {
-  if (!Game.shopOpen) return;
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = W / rect.width;
-  const scaleY = H / rect.height;
-  const mx = (e.clientX - rect.left) * scaleX;
-  const my = (e.clientY - rect.top)  * scaleY;
+function hitRect(mx, my, r) {
+  return r && mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h;
+}
 
-  // Check tab header clicks
-  if (window._shopTabRects) {
-    for (const tr of window._shopTabRects) {
-      if (mx >= tr.x && mx <= tr.x+tr.w && my >= tr.y && my <= tr.y+tr.h) {
-        Game.shopTab = tr.tab; Game.shopIdx = 0; return;
-      }
+function handleCanvasClick(e) {
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (W / rect.width);
+  const my = (e.clientY - rect.top)  * (H / rect.height);
+  if (Game.inventoryOpen) { handleInventoryClick(mx, my); return; }
+  if (Game.shopOpen)      { handleShopClick(mx, my); return; }
+}
+
+function handleInventoryClick(mx, my) {
+  const R = window._invRects;
+  if (!R || !state.player) return;
+  if (hitRect(mx, my, R.weapon) && state.player.weapon) { unequipWeapon(); return; }
+  if (hitRect(mx, my, R.armor) && state.player.armor)   { unequipArmor(); return; }
+  const inv = ensureInventory(state.player);
+  for (const cell of R.cells || []) {
+    if (hitRect(mx, my, cell) && cell.idx < inv.length) {
+      equipFromInventory(cell.idx);
+      return;
     }
   }
+}
 
-  // Check item cell clicks
-  if (window._shopCells) {
-    for (const cell of window._shopCells) {
-      if (mx >= cell.x && mx <= cell.x+cell.w && my >= cell.y && my <= cell.y+cell.h) {
-        Game.shopIdx = cell.idx;
-        tryBuyShopItem(currentShopList()[cell.idx]);
-        return;
-      }
+function handleShopClick(mx, my) {
+  const R = window._shopRects;
+  if (!R) return;
+  for (const tr of R.tabs || []) {
+    if (hitRect(mx, my, tr)) { Game.shopTab = tr.tab; Game.shopIdx = 0; return; }
+  }
+  if (hitRect(mx, my, R.buy)) {
+    tryBuyShopItem(currentShopList()[Game.shopIdx]);
+    return;
+  }
+  for (const cell of R.cells || []) {
+    if (hitRect(mx, my, cell)) {
+      // first click selects; clicking the selected item buys it
+      if (Game.shopIdx === cell.idx) tryBuyShopItem(currentShopList()[cell.idx]);
+      else Game.shopIdx = cell.idx;
+      return;
     }
   }
 }

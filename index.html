@@ -118,8 +118,6 @@
     <!-- Dev Tools Panel (toggle with P) -->
     <div id="dev-panel" class="hidden">
       <div class="dev-header">🛠 Dev Tools &nbsp;<kbd>P</kbd></div>
-      <div id="dev-stats" class="dev-stats"></div>
-
       <div class="dev-section">
         <div class="dev-label">Gold &amp; Embers</div>
         <div class="dev-row">
@@ -210,11 +208,12 @@
           <button class="dev-btn" id="dev-god-btn" onclick="DEV.toggleGodMode()">God mode: ⚫ OFF</button>
           <button class="dev-btn dev-danger" onclick="window._enterDeathHub&&window._enterDeathHub('Dev test: the crown fell between worlds.')">Death hub</button>
         </div>
-        <div class="dev-row">
-          <button class="dev-btn" onclick="DEV.giveWeapon('short_bow')">Short Bow</button>
-          <button class="dev-btn" onclick="DEV.giveWeapon('lightning_tome')" style="color:#f0e060">Lightning Tome</button>
-          <button class="dev-btn" onclick="DEV.giveWeapon('meteor_tome')" style="color:#ff8840">Meteor Tome</button>
+        <div class="dev-row" id="dev-weapon-buttons">
           <button class="dev-btn dev-danger" onclick="DEV.dropWeapon()">Drop</button>
+        </div>
+        <div class="dev-label" style="margin-top:6px;">Armor grants</div>
+        <div class="dev-row" id="dev-armor-buttons">
+          <button class="dev-btn dev-danger" onclick="DEV.removeArmor()">Remove armor</button>
         </div>
       </div>
 

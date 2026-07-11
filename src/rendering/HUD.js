@@ -11,7 +11,9 @@ import { ARCHER_SKILLS, ARROW_RAIN_COOLDOWN } from '../config/archerSkills.js';
 import { GUARD_SKILLS } from '../config/guardSkills.js';
 import { makeUnit } from '../entities/Unit.js';
 import { saveMeta } from '../systems/infrastructure/RoguelikeSystem.js';
+import { equipArmor, unequipArmor } from '../systems/economy/InventorySystem.js';
 import { expectedGoldForDay, goldRewardAmount } from '../systems/economy/EconomyBalance.js';
+import { addSkillPoints, autoSpendSkillPoints } from '../systems/economy/SkillSystem.js';
 
 // ── Skill Tree ────────────────────────────────────────────────
 const BRANCH_NAMES = {
@@ -122,6 +124,7 @@ function makeSkillNode(sk) {
         state.archerSkillPoints -= sk.cost;
         state.archerSkills.push(sk.id);
       }
+      autoSpendSkillPoints(type);
       Audio.upgrade();
       renderSkillTree();
     };
@@ -225,7 +228,7 @@ export const UI = {
     if (player.weapon) {
       const w=WEAPONS[player.weapon];
       const upgs=(player.weaponUpgrades||[]).length;
-      wEl.textContent=w.name+" ("+RARITY_NAME[w.rarity]+")"+(upgs>0?" ×"+upgs:"");
+      wEl.textContent=w.name+" · Lvl "+(1+upgs)+" ("+RARITY_NAME[w.rarity]+")";
       wPill.style.borderColor=RARITY_COL[w.rarity]+"99";
       wPill.style.color=RARITY_COL[w.rarity];
     } else { wEl.textContent=""; wPill.style.borderColor=""; wPill.style.color=""; }
@@ -286,7 +289,8 @@ export const UI = {
     } else if (lootNear) {
       this.prompt.classList.remove("hidden");
       const w=WEAPONS[lootNear.weaponId];
-      this.prompt.innerHTML=`Pick up: ${w.name} &nbsp;<span class="hold">press F</span>`;
+      const lootLvl=(lootNear.upgrades&&lootNear.upgrades.length)?` · Lvl ${1+lootNear.upgrades.length}`:"";
+      this.prompt.innerHTML=`Pick up: ${w.name}${lootLvl} &nbsp;<span class="hold">press F</span>`;
     } else if (nearShop && !Game.shopOpen) {
       this.prompt.classList.remove("hidden");
       this.prompt.innerHTML=`B - Open shop 🏪`;
@@ -295,6 +299,42 @@ export const UI = {
     }
   },
 };
+
+function renderDevWeaponButtons() {
+  const row = document.getElementById("dev-weapon-buttons");
+  if (!row) return;
+  const dropButton = row.querySelector(".dev-danger");
+  row.innerHTML = "";
+  for (const [weaponId, weapon] of Object.entries(WEAPONS)) {
+    const btn = document.createElement("button");
+    btn.className = "dev-btn";
+    btn.textContent = weapon.name;
+    btn.title = RARITY_NAME[weapon.rarity] + " " + weapon.type;
+    btn.style.color = RARITY_COL[weapon.rarity];
+    btn.style.borderColor = RARITY_COL[weapon.rarity] + "80";
+    btn.onclick = () => DEV.giveWeapon(weaponId);
+    row.appendChild(btn);
+  }
+  if (dropButton) row.appendChild(dropButton);
+}
+
+function renderDevArmorButtons() {
+  const row = document.getElementById("dev-armor-buttons");
+  if (!row) return;
+  const removeButton = row.querySelector(".dev-danger");
+  row.innerHTML = "";
+  for (const [armorId, armor] of Object.entries(ARMORS)) {
+    const btn = document.createElement("button");
+    btn.className = "dev-btn";
+    btn.textContent = armor.name;
+    btn.title = ARMOR_RARITY_NAME[armor.rarity] + " · +" + armor.defense + " defense";
+    btn.style.color = ARMOR_RARITY_COL[armor.rarity];
+    btn.style.borderColor = ARMOR_RARITY_COL[armor.rarity] + "80";
+    btn.onclick = () => DEV.giveArmor(armorId);
+    row.appendChild(btn);
+  }
+  if (removeButton) row.appendChild(removeButton);
+}
 
 // ---- Dev tools (exposed on window so inline onclick= buttons work) ----
 export const DEV = {
@@ -479,11 +519,23 @@ export const DEV = {
     window._pickupWeapon?.(weaponId);
   },
 
+  giveArmor(armorId) {
+    if (Game.state!=="play"||!state.player||!ARMORS[armorId]) return;
+    equipArmor(armorId);
+    floaty(state.player.x, ARMORS[armorId].name + " equipped 🛡", "#9bd05a");
+  },
+
+  removeArmor() {
+    if (Game.state!=="play"||!state.player) return;
+    if (unequipArmor()) floaty(state.player.x, "Armor stored in inventory", "#c8c8c8");
+  },
+
   dropWeapon() {
     if (Game.state!=="play"||!state.player) return;
     if (state.player.weapon) {
-      state.lootItems.push({ x:state.player.x+20, weaponId:state.player.weapon });
+      state.lootItems.push({ x:state.player.x+20, weaponId:state.player.weapon, upgrades:state.player.weaponUpgrades||[] });
       state.player.weapon=null;
+      state.player.weaponUpgrades=[];
       floaty(state.player.x,"Weapon dropped","#c8c8c8");
     }
   },
@@ -520,8 +572,7 @@ export const DEV = {
       spawnParticles(u.x, groundY - 30, 8, "#f2c14e", 50, 80);
     }
     const pts = targets.length * levels;
-    if (role === "archer") state.archerSkillPoints = (state.archerSkillPoints || 0) + pts;
-    else state.guardSkillPoints = (state.guardSkillPoints || 0) + pts;
+    addSkillPoints(role, pts);
     floaty(state.base.x, "+" + pts + " skill points", "#9bd05a");
   },
 
@@ -534,30 +585,14 @@ export const DEV = {
 
   addSkillPoints(n) {
     if (Game.state!=="play") return;
-    state.archerSkillPoints = (state.archerSkillPoints || 0) + n;
-    state.guardSkillPoints = (state.guardSkillPoints || 0) + n;
+    addSkillPoints("archer", n);
+    addSkillPoints("guard", n);
     floaty(state.base.x, "+" + n + " skill points", "#9bd05a");
   },
 
-  updateStats(dt) {
-    this._fps+=(1/Math.max(dt,0.001)-this._fps)*0.08;
-    const el=document.getElementById("dev-stats");
-    if (!el||document.getElementById("dev-panel").classList.contains("hidden")) return;
-    let arch = 0, build = 0, farm = 0, mine = 0;
-    if (state.units) for (let i = 0; i < state.units.length; i++) {
-      const r = state.units[i].role;
-      if (r === "archer") arch++;
-      else if (r === "builder") build++;
-      else if (r === "farmer") farm++;
-      else if (r === "miner") mine++;
-    }
-    el.innerHTML=
-      `FPS: <b>${Math.round(this._fps)}</b> &nbsp;|&nbsp; Day: <b>${Game.day}</b> &nbsp;t: <b>${Game.time.toFixed(3)}</b><br>`+
-      `Enemies: <b>${state.enemies?.length||0}</b> &nbsp;|&nbsp; Units: <b>${state.units?.length||0}</b> (🏹${arch} 🔨${build} 🌾${farm} ⛏${mine})<br>`+
-      `Coins (ground): <b>${state.coins?.length||0}</b> &nbsp;|&nbsp; Particles: <b>${state.particles?.length||0}</b><br>`+
-      `Player X: <b>${state.player?Math.round(state.player.x):"-"}</b> &nbsp;|&nbsp; Camera: <b>${Math.round(Game.cam)}</b>`;
-  },
 };
 
 // Expose DEV globally so index.html onclick= attributes still work
 window.DEV = DEV;
+renderDevWeaponButtons();
+renderDevArmorButtons();

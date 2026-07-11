@@ -2,8 +2,8 @@ import { clamp, dist } from '../../util/math.js';
 import { WEAPONS, RARITY_COL } from '../../config/weapons.js';
 import { ctx, W, H, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
-import { windSway } from '../Effects.js';
-import { roundedRect, groundShadow, drawTomeIcon } from '../DrawHelpers.js';
+import { groundShadow } from '../DrawHelpers.js';
+import { drawWeaponModel } from '../ItemRender.js';
 
 const STUCK_ARROW_FADE_TIME = 0.55;
 
@@ -220,21 +220,15 @@ export function drawLootItems() {
     ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=(stillFalling?0.08:0.2)+0.12*Math.sin(t*3+it.x*0.004);
     ctx.fillStyle=rc; ctx.beginPath(); ctx.arc(it.x,yy,14,0,Math.PI*2); ctx.fill(); ctx.restore();
     if (!stillFalling) groundShadow(it.x,9,0.22);
-    const spinAng = stillFalling ? (t*8 % (Math.PI*2)) : (-0.35+Math.sin(t*1.2+it.x*0.005)*0.07);
+    const spinAng = stillFalling ? (t*8 % (Math.PI*2)) : (-0.1+Math.sin(t*1.2+it.x*0.005)*0.07);
     ctx.save(); ctx.translate(it.x,yy); ctx.rotate(spinAng);
-    ctx.strokeStyle=w.col; ctx.lineWidth=3; ctx.lineCap="round";
-    if (w.type==="melee") {
-      const len=clamp(w.range*0.28,12,26);
-      ctx.beginPath(); ctx.moveTo(-len/2,0); ctx.lineTo(len/2,0); ctx.stroke();
-      ctx.lineWidth=5; ctx.beginPath(); ctx.moveTo(-len*0.3,-5); ctx.lineTo(-len*0.3,5); ctx.stroke();
-    } else if (w.type==="ranged") {
-      ctx.beginPath(); ctx.arc(0,0,9,-1.3,1.3); ctx.stroke();
-      ctx.strokeStyle="#e8d8a8"; ctx.lineWidth=1;
-      ctx.beginPath(); ctx.moveTo(9*Math.cos(-1.3),9*Math.sin(-1.3)); ctx.lineTo(9*Math.cos(1.3),9*Math.sin(1.3)); ctx.stroke();
-    } else {
-      drawTomeIcon(w.col, 1);
-    }
+    drawWeaponModel(it.weaponId, 0.66, { glow: stillFalling ? 0.05 : 0.1 });
     ctx.restore();
+    if (!stillFalling && it.upgrades && it.upgrades.length > 0) {
+      ctx.font="bold 9px Trebuchet MS"; ctx.textAlign="center";
+      ctx.fillStyle="rgba(0,0,0,0.55)"; ctx.fillText("Lvl "+(1+it.upgrades.length), it.x+1, yy-19);
+      ctx.fillStyle=rc; ctx.fillText("Lvl "+(1+it.upgrades.length), it.x, yy-20);
+    }
     ctx.restore();
   }
 }

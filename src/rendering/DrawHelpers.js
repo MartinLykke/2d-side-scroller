@@ -61,6 +61,130 @@ export function drawTomeIcon(col, s) {
   ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, -18*s, 2.5*s, 0, Math.PI*2); ctx.fill();
 }
 
+const TOME_LOOKS = {
+  fire_tome:      { cover:"#4a1810", spine:"#7b2416", page:"#f3d8a8", trim:"#ff9a3a", rune:"flame" },
+  hydro_tome:     { cover:"#12384d", spine:"#1d6b85", page:"#d7f4ff", trim:"#74d8ff", rune:"wave" },
+  lightning_tome: { cover:"#4c430c", spine:"#806c16", page:"#fff3b8", trim:"#fff06a", rune:"bolt" },
+  meteor_tome:    { cover:"#2d1a10", spine:"#6a2b16", page:"#e6c49a", trim:"#ff8840", rune:"crack" },
+  arcane_tome:    { cover:"#2c1b5c", spine:"#533090", page:"#eadfff", trim:"#d19aff", rune:"star" },
+  shadow_tome:    { cover:"#17111f", spine:"#35154a", page:"#c4bad6", trim:"#9b4bd6", rune:"eye" },
+  void_tome:      { cover:"#07050d", spine:"#241033", page:"#ddd7eb", trim:"#e0a0ff", rune:"void" },
+};
+
+function drawTomeRune(kind, trim) {
+  ctx.strokeStyle = trim;
+  ctx.fillStyle = trim;
+  ctx.lineWidth = 1.2;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  switch (kind) {
+    case "flame":
+      ctx.beginPath();
+      ctx.moveTo(0, -5.2); ctx.bezierCurveTo(3, -2.6, 0.8, -0.7, 2.8, 2.8);
+      ctx.bezierCurveTo(0.6, 1.4, -0.8, 3.9, -0.1, 5.1);
+      ctx.bezierCurveTo(-3.8, 2.9, -2.4, -1.4, 0, -5.2);
+      ctx.stroke();
+      break;
+    case "wave":
+      ctx.beginPath();
+      ctx.moveTo(-5, 1.5); ctx.quadraticCurveTo(-2.5, -2.5, 0, 1.5);
+      ctx.quadraticCurveTo(2.5, 5, 5, 1.5);
+      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-4, 4.5); ctx.quadraticCurveTo(-1, 2, 2, 4.4); ctx.stroke();
+      break;
+    case "bolt":
+      ctx.beginPath();
+      ctx.moveTo(1, -6); ctx.lineTo(-3, 0); ctx.lineTo(0.5, 0); ctx.lineTo(-1.2, 6); ctx.lineTo(4, -1.6); ctx.lineTo(0.5, -1.6);
+      ctx.stroke();
+      break;
+    case "crack":
+      ctx.beginPath();
+      ctx.moveTo(-2.5, -6); ctx.lineTo(1.5, -2); ctx.lineTo(-1, 1); ctx.lineTo(3, 5.5);
+      ctx.stroke();
+      ctx.beginPath(); ctx.arc(-4, 3, 1.3, 0, Math.PI * 2); ctx.fill();
+      break;
+    case "star":
+      ctx.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const a = -Math.PI / 2 + i * Math.PI * 0.8;
+        const x = Math.cos(a) * 5;
+        const y = Math.sin(a) * 5;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.closePath(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, 1.3, 0, Math.PI * 2); ctx.fill();
+      break;
+    case "eye":
+      ctx.beginPath(); ctx.ellipse(0, 0, 5, 2.6, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, 1.6, 0, Math.PI * 2); ctx.fill();
+      break;
+    case "void":
+      ctx.beginPath(); ctx.arc(0, 0, 4.2, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, 1.6, 0, Math.PI * 2); ctx.fillStyle = "#06040a"; ctx.fill();
+      break;
+  }
+  ctx.lineCap = "butt";
+  ctx.lineJoin = "miter";
+}
+
+export function drawTomeModel(weaponId, col, s = 1, opts = {}) {
+  const look = TOME_LOOKS[weaponId] || { cover:"#23172e", spine:"#3a2448", page:"#eadfff", trim:col || "#d0a0ff", rune:"star" };
+  const open = opts.open ?? 0.25;
+  const glow = opts.glow ?? 0;
+  const trim = look.trim || col || "#d0a0ff";
+  ctx.save();
+  ctx.scale(s, s);
+  if (glow > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.18 + glow * 0.26;
+    const g = ctx.createRadialGradient(0, 0, 2, 0, 0, 24 + glow * 14);
+    g.addColorStop(0, trim);
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, 26 + glow * 12, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  const spread = 2 + open * 4.5;
+  const pageAlpha = Math.min(1, 0.25 + open * 1.2);
+  ctx.save();
+  ctx.rotate(-0.1 * open);
+  roundedRect(-13 - spread, -10, 13, 18, 2.2);
+  ctx.fillStyle = look.cover; ctx.fill();
+  ctx.strokeStyle = trim; ctx.lineWidth = 1.1; ctx.stroke();
+  ctx.globalAlpha = pageAlpha;
+  roundedRect(-11 - spread, -8, 10, 14, 1.5);
+  ctx.fillStyle = look.page; ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = "rgba(0,0,0,0.24)"; ctx.lineWidth = 0.7;
+  ctx.beginPath(); ctx.moveTo(-8 - spread, -5); ctx.lineTo(-3 - spread, -5); ctx.moveTo(-9 - spread, -1); ctx.lineTo(-3 - spread, -1); ctx.stroke();
+  ctx.restore();
+
+  ctx.save();
+  ctx.rotate(0.1 * open);
+  roundedRect(spread, -10, 13, 18, 2.2);
+  ctx.fillStyle = look.cover; ctx.fill();
+  ctx.strokeStyle = trim; ctx.lineWidth = 1.1; ctx.stroke();
+  ctx.globalAlpha = pageAlpha;
+  roundedRect(spread + 1, -8, 10, 14, 1.5);
+  ctx.fillStyle = look.page; ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.translate(spread + 7, -0.5);
+  drawTomeRune(look.rune, trim);
+  ctx.restore();
+
+  ctx.fillStyle = look.spine;
+  roundedRect(-2.2, -11, 4.4, 20, 1.4);
+  ctx.fill();
+  ctx.strokeStyle = trim; ctx.lineWidth = 0.9;
+  ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(0, 7); ctx.stroke();
+  ctx.fillStyle = trim;
+  ctx.beginPath(); ctx.arc(0, -7.2, 1.3, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(0, 5.6, 1.1, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
 export function drawHpBar(x, y, w, frac, color) {
   frac=clamp(frac,0,1); if (frac>=0.999) return;
   ctx.fillStyle="rgba(0,0,0,0.55)"; ctx.fillRect(x-w/2-1,y-1,w+2,5);

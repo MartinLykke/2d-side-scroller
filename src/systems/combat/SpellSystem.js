@@ -4,15 +4,36 @@ import { dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js';
+import { spawnParticles, floaty, critFloaty, spawnGoldReward } from '../world/SpawnSystem.js';
 import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js';
 import { ENEMY_TYPES } from '../../config/enemies.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { entityWallLift } from '../../entities/Wall.js';
 
+// Spell damage against a bear (bears live in state.animals, not enemies).
+function damageBear(a, dmg, col) {
+  const crit = applyCrit(dmg, CFG.critChance, CFG.critMultiplier);
+  a.hp -= crit.damage; a.flash = 0.14;
+  spawnParticles(a.x, groundY - 30, 5, "#8a2a2a");
+  if (crit.isCrit) critFloaty(a.x, crit.damage);
+  else floaty(a.x, "-" + crit.damage, col);
+  if (a.hp <= 0 && !a.dying) {
+    a.dying = true; a.deathT = 0;
+    spawnParticles(a.x, groundY - 20, 8, "#7a4a2a");
+    const reward = spawnGoldReward(a.x, 8, "hunt", { spreadX: 15, fromY: groundY - 20, vx: 50, vyMin: 120, vyMax: 220 });
+    if (reward > 0) floaty(a.x, "+" + reward + "🪙", "#f2c14e");
+  }
+  return crit.damage;
+}
+
 function dealAoE(x, dmg, radius, col) {
+  for (const a of state.animals) {
+    if (a.type === "bear" && a.alive && !a.dying && dist(a.x, x) < radius) {
+      damageBear(a, dmg, col);
+    }
+  }
   for (const e of state.enemies) {
-    if (!e.fleeing && dist(e.x, x) < radius) {
+    if (!e.fleeing && !e.dying && dist(e.x, x) < radius) {
       const crit = applyCrit(dmg, CFG.critChance, CFG.critMultiplier);
       e.hp -= crit.damage; e.flash = 0.14;
       spawnImpBlood(e, 0.9 + crit.damage * 0.08);
@@ -22,6 +43,24 @@ function dealAoE(x, dmg, radius, col) {
     }
   }
   spawnParticles(x, groundY - 10, 14, col, 100, 90);
+}
+
+function meteorCrashImpact(sp, x, y = groundY - 8) {
+  const impactY = Math.min(y, groundY - 8);
+  const crash = { ...sp, x };
+  spellGroundImpact(crash);
+  spellEnemyImpact({ ...sp, spellType: "meteor" }, x, impactY);
+  spawnParticles(x, impactY, 34, "#ff8840", 180, 180);
+  spawnParticles(x, impactY + 6, 26, "#3a2418", 210, 120);
+  spawnParticles(x, groundY - 5, 20, "#1d1510", 240, 45);
+  spawnParticles(x, groundY - 18, 12, "#ffd060", 150, 170);
+  for (let k = -1; k <= 1; k += 2) {
+    spawnParticles(x + k * 18, groundY - 6, 10, "#5b3a22", 190, 38);
+    spawnParticles(x + k * 34, groundY - 4, 6, "#ff6a20", 170, 30);
+  }
+  if (!state.firePools) state.firePools = [];
+  state.firePools.push({ x, r: Math.max(24, (sp.aoeRadius || 70) * 0.45), life: 2.2, maxLife: 2.2, tick: rand(0.3, 0.7), ph: rand(0, 6) });
+  Game.screenShake = Math.max(Game.screenShake, 0.95);
 }
 
 function chainLightning(x, dmg, bounces) {
@@ -85,14 +124,20 @@ export function castSpell(player, wBase, tgt) {
   const casterLift = entityWallLift(player) + (player.jumpH || 0);
   const casterY = groundY - 72 - casterLift;
 
-  if (wBase.spellType === "lightning") {
-    const crit = applyCrit(ew.dmg * dmgMult, CFG.critChance, CFG.critMultiplier);
-    tgt.hp -= crit.damage;
-    tgt.flash = 0.14;
-    Audio.spell();
+  const tgtIsBear = tgt.type === "bear" && state.animals.includes(tgt);
 
+  if (wBase.spellType === "lightning") {
     const enemyY = groundY - 24;
-    spawnImpBlood(tgt, 1 + ew.dmg * 0.07, enemyY);
+    if (tgtIsBear) {
+      damageBear(tgt, ew.dmg * dmgMult, wBase.col);
+      Audio.spell();
+    } else {
+      const crit = applyCrit(ew.dmg * dmgMult, CFG.critChance, CFG.critMultiplier);
+      tgt.hp -= crit.damage;
+      tgt.flash = 0.14;
+      Audio.spell();
+      spawnImpBlood(tgt, 1 + ew.dmg * 0.07, enemyY);
+    }
     spellEnemyImpact({ spellType: "lightning" }, tgt.x, enemyY);
 
     let currentX = tgt.x + rand(-20, 20);
@@ -123,7 +168,7 @@ export function castSpell(player, wBase, tgt) {
 
     chainLightning(tgt.x, ew.dmg * dmgMult, 1);
 
-    if (tgt.hp <= 0) killEnemy(tgt);
+    if (!tgtIsBear && tgt.hp <= 0) killEnemy(tgt);
 
     spawnParticles(player.x, casterY, 10, wBase.col, 50, 70);
     Audio.spell();
@@ -182,7 +227,8 @@ export function updateSpells(dt) {
     const hitGround = sp.y > groundY - 8;
     if (sp.life <= 0 || hitGround) {
       if (sp.aoeRadius > 0 && hitGround) {
-        spellGroundImpact(sp);
+        if (sp.spellType === "meteor") meteorCrashImpact(sp, sp.x, groundY - 8);
+        else spellGroundImpact(sp);
         dealAoE(sp.x, sp.dmg, sp.aoeRadius, sp.col);
         Audio.explosion();
       }
@@ -196,13 +242,39 @@ export function updateSpells(dt) {
       const ey = groundY + (e.fy || 0) - 24;
       if (dist(sp.x, e.x) < et.w * 0.75 && Math.abs(sp.y - ey) < 44) {
         e.hp -= sp.dmg; e.flash = 0.14; Audio.hit();
-        spellEnemyImpact(sp, e.x, ey);
+        if (sp.spellType === "meteor") {
+          meteorCrashImpact(sp, e.x, ey);
+          if (sp.aoeRadius > 0) {
+            dealAoE(e.x, sp.dmg, sp.aoeRadius, sp.col);
+            Audio.explosion();
+          }
+        } else {
+          spellEnemyImpact(sp, e.x, ey);
+        }
         spawnImpBlood(e, 1 + sp.dmg * 0.08, ey);
         if (!et.noKnockback) e.knock = (e.knock || 0) + Math.sign(e.x - sp.vx) * 140;
-        if (e.hp <= 0) killEnemy(e);
-        else if (sp.aoeRadius > 0) dealAoE(sp.x, Math.max(1, Math.floor(sp.dmg * 0.65)), sp.aoeRadius, sp.col);
+        if (e.hp <= 0 && !e.dying) killEnemy(e);
+        else if (sp.aoeRadius > 0 && sp.spellType !== "meteor") dealAoE(sp.x, Math.max(1, Math.floor(sp.dmg * 0.65)), sp.aoeRadius, sp.col);
         if (sp.spellType === "lightning") chainLightning(sp.x, sp.dmg, 1);
         hit = true; break;
+      }
+    }
+    if (!hit) {
+      for (const a of state.animals) {
+        if (a.type !== "bear" || !a.alive || a.dying) continue;
+        const ay = groundY + (a.fy || 0) - 24;
+        if (dist(sp.x, a.x) < 30 && Math.abs(sp.y - ay) < 44) {
+          Audio.hit();
+          if (sp.spellType === "meteor") {
+            meteorCrashImpact(sp, a.x, ay);
+            if (sp.aoeRadius > 0) { dealAoE(a.x, sp.dmg, sp.aoeRadius, sp.col); Audio.explosion(); }
+          } else {
+            spellEnemyImpact(sp, a.x, ay);
+            damageBear(a, sp.dmg, sp.col);
+            if (sp.aoeRadius > 0) dealAoE(sp.x, Math.max(1, Math.floor(sp.dmg * 0.65)), sp.aoeRadius, sp.col);
+          }
+          hit = true; break;
+        }
       }
     }
     if (hit) spells.splice(i, 1);

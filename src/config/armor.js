@@ -16,3 +16,9 @@ export const ARMORS = {
 };
 export const ARMOR_RARITY_COL  = ["#c8c8c8","#4aff4a","#4a9fff","#c87aff","#ffaa00"];
 export const ARMOR_RARITY_NAME = ["Common","Uncommon","Rare","Epic","Legendary"];
+
+// Each defense point gives a 6% chance to fully block a hit (capped at 55%),
+// and heavy hits are shaved down by ~1 damage per 3 defense in PlayerCombat.
+export function armorBlockChance(defense) {
+  return Math.min(0.55, (defense || 0) * 0.06);
+}

@@ -1,10 +1,9 @@
 import { clamp, lerpColor, rgb, lerp, withA, shade } from '../util/math.js';
 import { ctx, W, H, groundY } from '../core/canvas.js';
 import { Game, state } from '../core/state.js';
-import { WEAPONS } from '../config/weapons.js';
 import { entityWallLift } from '../entities/Wall.js';
 import { drawPlayer as drawPlayerBody } from './sprites/Player.js';
-import { shootPose, ease, drawBow, limb } from './sprites/Archer.js';
+import { drawHeldWeapon } from './ItemRender.js';
 import { darkness, skyColors, drawStars, drawClouds, drawCelestials, drawBirds, getTrees, drawHills, drawTreeLayer, drawLowFog, drawAmbientFront, drawLevelUpBeams, biomeAt, FX, windSway } from './Effects.js';
 
 // Import all render modules
@@ -14,7 +13,7 @@ import { drawCoins, drawArrows, drawLootItems, drawChests, drawGroundBows, drawG
 import { drawCaltrops, drawPoisonShots, drawFirePools, drawLegendaryEffects, drawParticles, drawFloats, drawSpells, drawCampLight } from './scene/RenderEffects.js';
 import { drawWeaponPickupOverlay, drawInventoryOverlay, drawShopOverlay, drawUpgradeMenu, drawXpBar, drawLegendaryIntro } from './scene/RenderUI.js';
 import { drawMineCutaway } from './scene/RenderMine.js';
-import { drawHeart, drawTomeIcon } from './DrawHelpers.js';
+import { drawHeart } from './DrawHelpers.js';
 
 // Helper functions
 function drawWeaponSwingArc(x, player) {
@@ -70,64 +69,8 @@ function drawPlayer(dark) {
 
   // Draw player body using new detailed rendering
   drawPlayerBody(player, player.dir, Math.abs(player.vx) > 1, gallop);
-  const px = 0;
 
-  if (player.weapon && !dying) {
-    const w=WEAPONS[player.weapon], sw=player.swing||0;
-    ctx.save();
-    if (w.type==="melee") {
-      const baseAng=-0.22, swingOff=sw>0?-0.9*(sw/0.32):0;
-      ctx.translate(px+8,groundY-22); ctx.rotate(baseAng+swingOff);
-      const len=clamp(w.range*0.42,18,40);
-      ctx.strokeStyle=w.col; ctx.lineWidth=2.5; ctx.lineCap="round";
-      ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(len,0); ctx.stroke();
-      ctx.strokeStyle="rgba(0,0,0,0.5)"; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(-4,-3); ctx.lineTo(-4,3); ctx.stroke();
-      if (w.rarity>=2) {
-        ctx.save(); ctx.globalAlpha=0.18+sw*0.25;
-        ctx.strokeStyle=w.col; ctx.lineWidth=5; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(len,0); ctx.stroke(); ctx.restore();
-      }
-    } else if (w.type==="ranged") {
-      const shoot=shootPose(player);
-      const frontSh={x:px+5,y:groundY-28}, backSh={x:px-5,y:groundY-28};
-      let aim=0.1, pull=0;
-      if (shoot) {
-        if (shoot.phase==="reach")        aim=ease(shoot.p)*0.4;
-        else if (shoot.phase==="draw")    { aim=0.4+ease(shoot.p)*0.6; pull=ease(shoot.p); }
-        else if (shoot.phase==="release") { aim=1; pull=1-shoot.p; }
-        else                              aim=1-ease(shoot.p)*0.7;
-      }
-      const grip={x:frontSh.x+4+aim*7,y:frontSh.y+7-aim*8};
-      let drawHand=null;
-      if (shoot) {
-        if (shoot.phase==="reach") { const p=ease(shoot.p); drawHand={x:backSh.x+2-p*6,y:backSh.y+8-p*14}; }
-        else if (shoot.phase==="draw") { const p=ease(shoot.p); drawHand={x:(1-p)*(grip.x+4)+p*(px+1),y:(1-p)*(backSh.y-6)+p*(groundY-37+3)}; }
-        else if (shoot.phase==="release") drawHand={x:px-1-shoot.p*3,y:groundY-37+3+shoot.p*2};
-        else { const p=ease(shoot.p); drawHand={x:px-4-p*3,y:groundY-37+5+p*9}; }
-        limb(backSh.x,backSh.y,drawHand.x,drawHand.y,"#d3ac82",2.5);
-        if ((shoot.phase==="draw" && shoot.p>0.3) || shoot.phase==="release") {
-          const nockX = shoot.phase==="draw" ? drawHand.x : grip.x+5;
-          ctx.strokeStyle=w.col; ctx.lineWidth=1.4;
-          ctx.beginPath(); ctx.moveTo(nockX,drawHand.y); ctx.lineTo(grip.x+9,grip.y); ctx.stroke();
-          ctx.fillStyle="#b8bcc4";
-          ctx.beginPath(); ctx.moveTo(grip.x+9,grip.y-1.6); ctx.lineTo(grip.x+12.5,grip.y); ctx.lineTo(grip.x+9,grip.y+1.6); ctx.closePath(); ctx.fill();
-        }
-      } else {
-        limb(backSh.x,backSh.y,backSh.x-2,backSh.y+11,"#d3ac82",2.5);
-      }
-      drawBow(grip.x, grip.y, aim, pull, shoot && shoot.phase==="draw" ? drawHand : null);
-      limb(frontSh.x,frontSh.y,grip.x,grip.y,"#d3ac82",2.6);
-    } else {
-      const upgCount=(player.weaponUpgrades||[]).length;
-      ctx.save(); ctx.translate(px+9,groundY-22);
-      if (sw>0||upgCount>0) {
-        ctx.save(); ctx.globalAlpha=(sw>0?0.32*sw/0.32:0.12)+(upgCount*0.06);
-        ctx.fillStyle=w.col; ctx.beginPath(); ctx.arc(0,0,14,0,Math.PI*2); ctx.fill(); ctx.restore();
-      }
-      drawTomeIcon(w.col, 1.15);
-      ctx.restore();
-    }
-    ctx.restore();
-  }
+  if (player.weapon && !dying) drawHeldWeapon(player);
   ctx.restore();
   if (!dying && (player.hp <= 2 || player.hpShowTimer > 0)) {
     const n=player.maxHp, gap=9, hy=groundY-86-bob-player.jumpH-wallLift;

@@ -10,6 +10,14 @@ export const ENEMY_TYPES = {
     charger: true, chargeMin: 5, chargeMax: 8, chargeRangeMin: 140, chargeRangeMax: 420,
     stomper: true, stompMin: 4.5, stompMax: 7, stompRadius: 95,
   },
+  ashPriest: {
+    name: "Ash Priest", hp: 14, speed: 52, w: 34, color: "#412225", eye: "#ffc060",
+    reward: 4, dmg: 8, baseDmg: 3, meleeDmg: 2,
+    caster: true, shootRange: 520, shootInterval: 3.4,
+    scorchRange: 265, scorchInterval: 4.8,
+    wardRange: 285, wardInterval: 7.2,
+    burstRadius: 112, burstInterval: 5.8,
+  },
   fireDragon: { name: "Fire Dragon", hp: 320, speed: 88, w: 120, color: "#7a1408", eye: "#ffd060", reward: 70, dmg: 14, meleeDmg: 2, flying: true, boss: true, dragon: true, noKnockback: true, shootInterval: 2.6, attackName: "Fire Breath" },
   magmaGolem: {
     name: "Magma Colossus", hp: 650, speed: 40, w: 130, color: "#3a2a26", eye: "#ffb040",

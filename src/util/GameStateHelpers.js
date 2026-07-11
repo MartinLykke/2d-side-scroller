@@ -1,9 +1,9 @@
 import { state, Game } from '../core/state.js';
 import { CFG } from '../config/config.js';
 import { groundY } from '../core/canvas.js';
-import { rand } from './math.js';
 import { Audio } from '../systems/infrastructure/Audio.js';
 import { floaty, spawnParticles } from '../systems/world/SpawnSystem.js';
+import { storeWeapon } from '../systems/economy/InventorySystem.js';
 import { baseName } from '../rendering/HUD.js';
 
 let buildStationsFn = null;
@@ -30,11 +30,12 @@ export function upgradeBase() {
   if (buildStationsFn) buildStationsFn();
 }
 
-export function pickupWeapon(weaponId) {
-  const { player, lootItems } = state;
-  if (player.weapon) lootItems.push({ x: player.x + rand(-60, 60), weaponId: player.weapon });
+export function pickupWeapon(weaponId, upgrades) {
+  const { player } = state;
+  // The swapped-out weapon keeps its upgrades and goes into the inventory.
+  if (player.weapon) storeWeapon(player.weapon, player.weaponUpgrades || []);
   player.weapon = weaponId;
-  player.weaponUpgrades = [];
+  player.weaponUpgrades = upgrades || [];
   state.weaponPickup = { weaponId, timer: 3.8 };
   Audio.pickup();
 }

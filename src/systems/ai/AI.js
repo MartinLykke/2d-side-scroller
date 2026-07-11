@@ -6,13 +6,14 @@ import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
 import { spawnParticles, spawnGoldCoins, spawnGoldReward, floaty as showFloaty } from '../world/SpawnSystem.js';
-import { shootArrow, killEnemy } from '../combat/Combat.js';
+import { shootArrow, killEnemy, damagePlayer } from '../combat/Combat.js';
 import { killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js';
 import { wallHeight, wallStandX, wallBackDir, wallRenderWidth, wallPlatformDepth, overWallPlatform, entityWallLift } from '../../entities/Wall.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { nearestChoppableTree, chopTree, nearestLog, deliverLog, pondAt, nearestPond } from '../world/ForestSystem.js';
 import { minerAI } from '../world/MineSystem.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
+import { addSkillPoints } from '../economy/SkillSystem.js';
 
 function hasSkill(id) { return state.archerSkills.includes(id); }
 
@@ -65,6 +66,70 @@ function archerShoot(u, x, h, tgt) {
       bouncing: skills.includes("bouncing_volley"),
     });
   }
+}
+
+function grantArcherXP(u) {
+  u.xp = (u.xp || 0) + 1;
+  const xpNeeded = (u.level || 1) * 3;
+  if (u.xp < xpNeeded) return;
+  u.xp -= xpNeeded;
+  u.level = (u.level || 1) + 1;
+  addSkillPoints("archer", 1);
+  floaty(u.x, `Niv.${u.level}! (+1ep)`, "#f2c14e");
+  spawnParticles(u.x, groundY - 30, 8, "#f2c14e", 50, 80);
+}
+
+function archerDaggerDamageEnemy(u, foe, dmg = 1, cooldown = 0.58) {
+  if (!foe || foe.hp <= 0 || u.cooldown > 0) return false;
+  foe.hp -= dmg * permanentDamageMultiplier();
+  foe.flash = 0.12;
+  foe.combatTarget = u;
+  if (foe.type === "imp" && (foe.wallTopWall || foe.aiState === "climbOver")) foe.aiState = "combat";
+  u.cooldown = cooldown;
+  u.strike = 0.22;
+  u.meleeMode = 0.32;
+  u.shootState = null;
+  u.shootTimer = 0;
+  u.charged = false;
+  u.powerTimer = 0;
+  spawnImpBlood(foe, 0.75 + dmg * 0.25, groundY + (foe.fy || 0) - 18);
+  spawnParticles(foe.x, groundY + (foe.fy || 0) - 18, 4, "#8a2a4a", 36, 52);
+  Audio.hit();
+  if (foe.hp <= 0) {
+    grantArcherXP(u);
+    killEnemy(foe);
+  }
+  return true;
+}
+
+function clearArcherMelee(u) {
+  if (u.combatTarget && u.combatTarget.combatTarget === u) u.combatTarget.combatTarget = null;
+  u.combatTarget = null;
+  u.guardDuelCenterX = null;
+  u.guardDuelX = null;
+  if (u.aiState === "combat") u.aiState = null;
+}
+
+function updateArcherWallMelee(u, dt) {
+  const foe = u.combatTarget;
+  if (!u.onWall || !u.wall || !foe || foe.type !== "imp" || foe.hp <= 0 || foe.dying || foe.fleeing || foe.wallTopWall !== u.wall) {
+    if (u.combatTarget && (!foe || foe.hp <= 0 || foe.dying || foe.wallTopWall !== u.wall)) clearArcherMelee(u);
+    return false;
+  }
+
+  u.aiState = "combat";
+  u.meleeMode = Math.max(u.meleeMode || 0, 0.08);
+  u.shootState = null;
+  u.shootTimer = 0;
+  u.placingTrap = 0;
+  u.barrageCount = 0;
+  u.dir = Math.sign(foe.x - u.x) || u.dir;
+  foe.combatTarget = u;
+
+  const targetX = u.guardDuelX ?? (u.guardDuelCenterX != null ? u.guardDuelCenterX - u.wall.side * 11 : u.x);
+  if (dist(u.x, targetX) > 2) moveToward(u, targetX, 44, dt);
+  if (dist(u.x, foe.x) < 32) archerDaggerDamageEnemy(u, foe, 1, 0.58);
+  return true;
 }
 
 // ── Caltrops ─────────────────────────────────────────────────────────────
@@ -238,6 +303,7 @@ function assignArcherPost(u, preferredSide, dt) {
   const postX = wantOnWall
     ? wallStandX(wall, slot)
     : wall.x + wallBackDir(wall) * (wallRenderWidth(wall) / 2 + wallPlatformDepth(wall) + 30 + (slot - archerWallCapacity(wall)) * 26);
+  u.archerPostX = postX;
 
   // Archers must first reach the platform (stairs/ladder zone) behind the
   // wall before they can start climbing up onto it
@@ -290,6 +356,8 @@ function archerAI(u, dt) {
 
   // Mid-grapple: the flight owns the archer until landing
   if (u.grapple) { updateGrapple(u, dt); return; }
+
+  if (updateArcherWallMelee(u, dt)) return;
 
   // Powershot: charge while standing still, lose the charge when moving
   if (hasSkill("powershot") && !hasSkill("heavy_ballista")) {
@@ -674,7 +742,7 @@ function grantGuardXP(u) {
   if (u.xp < xpNeeded) return;
   u.xp -= xpNeeded;
   u.level = (u.level || 1) + 1;
-  state.guardSkillPoints = (state.guardSkillPoints || 0) + 1;
+  addSkillPoints("guard", 1);
   floaty(u.x, `Niv.${u.level}! (+1ep)`, "#f2c14e");
   spawnParticles(u.x, groundY - 30, 8, "#f2c14e", 50, 80);
 }
@@ -1104,6 +1172,7 @@ export function updateUnits(dt) {
     if (u.caltropCd > 0) u.caltropCd -= dt;
     if (u.grappleCd > 0) u.grappleCd -= dt;
     if (u.powerFlash > 0) u.powerFlash -= dt;
+    if (u.meleeMode > 0) u.meleeMode -= dt;
     if (u.panic > 0) u.panic -= dt;
     if (u.strike > 0) u.strike -= dt;
     if (u.dying) {
@@ -1302,12 +1371,16 @@ export function updateVagrants(dt) {
 }
 
 // Nearest settled ground coin an archer could walk to. Coins inside the
-// player's magnet range (90 px) are left for the player to hoover up.
+// player's magnet range (90 px) are left for the player to hoover up, and
+// coins inside the base perimeter (behind the outermost wall slots) belong
+// to the player too.
+const BASE_COIN_ZONE = 640; // outermost wall slot is baseX ± 620
 function nearestGroundCoin(x, range) {
   let best = null, bd = range;
   for (const c of state.coins) {
     if (!c.settled || c.mine) continue;
     if (state.player && dist(c.x, state.player.x) < 90) continue;
+    if (Math.abs(c.x - CFG.baseX) < BASE_COIN_ZONE) continue;
     const d = dist(x, c.x);
     if (d < bd) { bd = d; best = c; }
   }
@@ -1450,11 +1523,7 @@ function updateBear(a, dt) {
       a.attackAnim = 0.4;
       Audio.hit();
       if (target === player) {
-        if (player.invuln <= 0 && !window._DEV_GOD_MODE) {
-          player.hp -= 1; player.invuln = CFG.playerInvuln; player.hurt = 0.35; player.hpShowTimer = 3;
-          player.knock = Math.sign(player.x - a.x) * 160;
-          spawnParticles(player.x, groundY - 50 - entityWallLift(player), 6, "#c1453b");
-        }
+        damagePlayer(1, { knock: Math.sign(player.x - a.x) * 160 });
       } else if (target.hp !== undefined) {
         target.hp -= 2; target.panic = 1;
         spawnParticles(target.x, groundY - 40, 6, "#c1453b");

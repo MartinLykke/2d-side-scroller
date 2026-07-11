@@ -128,7 +128,7 @@ export function spawnEnemy(type, portal) {
     state: "advance", aiState: type === "imp" ? "advance" : undefined, target: null, attackCd: 0,
     carry: 0, anim: rand(0, 6), flash: 0, attackAnim: 0, fleeing: false, portal,
     fy: t.flying ? -(t.fireball ? rand(105, 145) : 80 + rand(0, 30)) : 0,
-    shootCd: t.flying ? rand(0.5, t.fireball ? 1.4 : 2) : 0,
+    shootCd: (t.flying || t.caster) ? rand(0.5, t.fireball ? 1.4 : (t.shootInterval || 3)) : 0,
     poisonCd: t.rangedShoot ? rand(1, t.shootInterval || 5) : undefined,
     nightWave: Game.isNight,
   };
@@ -186,8 +186,10 @@ function nightEnemyType() {
   if (Game.nightSpawned === 0 && BOSS_SCHEDULE[d]) return BOSS_SCHEDULE[d];
   const flyingImpChance = Math.min(0.45, Math.max(0, d - 2) * 0.055 * hardMult);
   const emberBruteChance = d >= 2 ? Math.min(0.25, (d - 1) * 0.035 * hardMult) : 0;
+  const ashPriestChance = d >= 4 ? Math.min(0.18, (d - 3) * 0.028 * hardMult) : 0;
   if (r < emberBruteChance) return "emberBrute";
-  if (r < emberBruteChance + flyingImpChance) return "fireImp";
+  if (r < emberBruteChance + ashPriestChance) return "ashPriest";
+  if (r < emberBruteChance + ashPriestChance + flyingImpChance) return "fireImp";
   return "imp";
 }
 

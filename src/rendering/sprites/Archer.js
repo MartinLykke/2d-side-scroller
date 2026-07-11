@@ -102,38 +102,85 @@ export function limb(x1, y1, x2, y2, col, w) {
 
 // Recurve bow centered on the grip hand. `aim`: 0 = held low at side,
 // 1 = raised level. `pull`: 0..1 string draw amount toward `pullPt`.
-export function drawBow(hx, hy, aim, pull, pullPt) {
+export function drawBow(hx, hy, aim, pull, pullPt, look = {}) {
   const rot = (1 - aim) * 0.9; // lowered bow tilts forward/down
   ctx.save();
   ctx.translate(hx, hy);
   ctx.rotate(rot);
-  const R = 12;
+  const R = look.radius || 12;
+  const tipX = R * 0.21;
+  const bellyX = R * 0.42;
+  const curveX = R * 0.54;
+  const tipKick = R * 0.21;
+  const wood = look.wood || C.bowWood;
+  const tip = look.tip || C.bowTip;
+  const string = look.string || C.string;
+  const grip = look.grip || C.belt;
+  if (look.glow) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = look.glowAlpha || 0.28;
+    ctx.strokeStyle = look.glow;
+    ctx.lineWidth = 5.5;
+    ctx.beginPath();
+    ctx.moveTo(tipX, -R);
+    ctx.quadraticCurveTo(curveX, -R * 0.55, bellyX, 0);
+    ctx.quadraticCurveTo(curveX, R * 0.55, tipX, R);
+    ctx.stroke();
+    ctx.restore();
+  }
   // Limbs: two mirrored curves with recurved tips
-  ctx.strokeStyle = C.bowWood; ctx.lineWidth = 2.4; ctx.lineCap = "round";
+  ctx.strokeStyle = wood; ctx.lineWidth = look.limbWidth || 2.4; ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.moveTo(2.5, -R);
-  ctx.quadraticCurveTo(6.5, -R * 0.55, 5, 0);
-  ctx.quadraticCurveTo(6.5, R * 0.55, 2.5, R);
+  ctx.moveTo(tipX, -R);
+  ctx.quadraticCurveTo(curveX, -R * 0.55, bellyX, 0);
+  ctx.quadraticCurveTo(curveX, R * 0.55, tipX, R);
   ctx.stroke();
   // Recurve tips flick back
-  ctx.strokeStyle = C.bowTip; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(2.5, -R); ctx.lineTo(5, -R - 2.5); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(2.5, R); ctx.lineTo(5, R + 2.5); ctx.stroke();
+  ctx.strokeStyle = tip; ctx.lineWidth = look.tipWidth || 2;
+  ctx.beginPath(); ctx.moveTo(tipX, -R); ctx.lineTo(tipX + tipKick, -R - tipKick); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(tipX, R); ctx.lineTo(tipX + tipKick, R + tipKick); ctx.stroke();
   // Grip wrap
-  ctx.strokeStyle = C.belt; ctx.lineWidth = 3.2;
-  ctx.beginPath(); ctx.moveTo(5, -2.5); ctx.lineTo(5, 2.5); ctx.stroke();
+  ctx.strokeStyle = grip; ctx.lineWidth = look.gripWidth || 3.2;
+  ctx.beginPath(); ctx.moveTo(bellyX, -2.5); ctx.lineTo(bellyX, 2.5); ctx.stroke();
   ctx.lineCap = "butt";
   // String: tip-to-tip, mid vertex pulled back while drawing
-  ctx.strokeStyle = C.string; ctx.lineWidth = 1;
+  ctx.strokeStyle = string; ctx.lineWidth = look.stringWidth || 1;
   ctx.beginPath();
-  ctx.moveTo(5, -R - 2.5);
+  ctx.moveTo(tipX + tipKick, -R - tipKick);
   if (pull > 0 && pullPt) {
     // pullPt is in archer-local space; un-rotate it into bow-local space
     const dx = pullPt.x - hx, dy = pullPt.y - hy;
     ctx.lineTo(dx * Math.cos(rot) + dy * Math.sin(rot), -dx * Math.sin(rot) + dy * Math.cos(rot));
   }
-  ctx.lineTo(5, R + 2.5);
+  ctx.lineTo(tipX + tipKick, R + tipKick);
   ctx.stroke();
+  ctx.restore();
+}
+
+function drawDagger(hx, hy, p = 0) {
+  const thrust = ease(Math.min(1, Math.max(0, p)));
+  ctx.save();
+  ctx.translate(hx + thrust * 7, hy - thrust * 2);
+  ctx.rotate(-0.55 + thrust * 1.15);
+  ctx.fillStyle = "#4b3522";
+  ctx.fillRect(-2, -1.5, 5, 3);
+  ctx.fillStyle = "#c9a24a";
+  ctx.fillRect(1, -3, 1.5, 6);
+  ctx.fillStyle = "#cfd5dc";
+  ctx.beginPath();
+  ctx.moveTo(2, -2.2);
+  ctx.lineTo(15, 0);
+  ctx.lineTo(2, 2.2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  ctx.beginPath();
+  ctx.moveTo(4, -0.8);
+  ctx.lineTo(12, 0);
+  ctx.lineTo(4, 0.8);
+  ctx.closePath();
+  ctx.fill();
   ctx.restore();
 }
 
@@ -210,6 +257,7 @@ export function drawArcher(u) {
   const P = ball ? CB : C;
   const grap = u.grapple;
   const grapPull = grap && grap.phase === "pull";
+  const melee = !grap && !shoot && (u.meleeMode > 0 || (u.aiState === "combat" && u.combatTarget && u.combatTarget.type === "imp"));
 
   ctx.save();
   ctx.translate(u.x, 0);
@@ -433,6 +481,28 @@ export function drawArcher(u) {
     if (ball) drawBallistaWeapon(grip.x, grip.y, 0.05, 0, 0, false);
     else drawBow(grip.x, grip.y, 0.05, 0, null);
     limb(frontSh.x, frontSh.y, hand.x, hand.y, P.skin, 2.6);
+  } else if (melee) {
+    const slash = u.strike > 0 ? 1 - Math.min(1, u.strike / 0.22) : 0.18 + Math.sin(t * 8) * 0.05;
+    const guardHand = { x: backSh.x - 2, y: shY + 10 };
+    const knifeHand = {
+      x: frontSh.x + 5 + slash * 5,
+      y: frontSh.y + 7 - Math.sin(slash * Math.PI) * 5,
+    };
+    limb(backSh.x, backSh.y, guardHand.x, guardHand.y, P.skin, 2.5);
+    if (ball) drawBallistaWeapon(guardHand.x, guardHand.y, 0.05, 0, 0, false);
+    else drawBow(guardHand.x, guardHand.y, 0.05, 0, null);
+    limb(frontSh.x, frontSh.y, knifeHand.x, knifeHand.y, P.skin, 2.8);
+    drawDagger(knifeHand.x, knifeHand.y, slash);
+    if (u.strike > 0) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(0.45, u.strike * 1.8);
+      ctx.strokeStyle = "#d7dde5";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.arc(knifeHand.x + 10, knifeHand.y, 12, -0.75, 0.55);
+      ctx.stroke();
+      ctx.restore();
+    }
   } else if (shoot && ball) {
     // Siege crossbow: held level with both hands; the rear hand cranks the
     // windlass during the draw, and the whole weapon kicks back on release

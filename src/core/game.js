@@ -28,7 +28,7 @@ import { makePlayer } from '../entities/Player.js';
 import { makeWall, wallReady, wallBackDir, wallClimbAnchorX, nearWallClimbAnchor, nearWallClimbAccess, overWallPlatform } from '../entities/Wall.js';
 import { makeUnit } from '../entities/Unit.js';
 
-import { WEAPON_SHOP, ARMOR_SHOP, setPickupWeapon as setShopPickupWeapon } from '../systems/economy/ShopSystem.js';
+import { WEAPON_SHOP, ARMOR_SHOP, updateShop, setPickupWeapon as setShopPickupWeapon } from '../systems/economy/ShopSystem.js';
 import { upgradeBase, pickupWeapon, setBuildStations } from '../util/GameStateHelpers.js';
 import { addXP, checkUpgrade } from '../systems/economy/UpgradeSystem.js';
 import { newGame, buildStations } from '../systems/infrastructure/GameInit.js';
@@ -224,7 +224,10 @@ function updatePortals() {
     if (dist(player.x, p.x) < 300) {
       p.lastDayActivated = Game.day;
       const count = 2 + (Game.day > 5 ? 1 : 0);
-      for (let i=0; i<count; i++) spawnEnemy("imp", p);
+      for (let i=0; i<count; i++) {
+        const guardian = spawnEnemy("imp", p);
+        guardian.portalGuardian = true;
+      }
     }
   }
 }
@@ -304,6 +307,7 @@ function update(dt) {
   updateSpawning(dt);
   updateNightClear();
   checkUpgrade();
+  updateShop();
   updateCamera();
   Audio.updateAmbientZones(state.player.x, CFG.baseX, FOREST.startDist);
   checkEndConditions();
@@ -416,7 +420,6 @@ function loop(now) {
   last = now;
   dt = clamp(dt, 0, 0.05);
 
-  DEV.updateStats(dt);
   const gdt = dt * DEV.speedMult;
   updateFXEffects(gdt);
 
