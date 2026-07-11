@@ -25,7 +25,7 @@ import { UI, DEV, baseName } from '../rendering/HUD.js';
 import { updateArcherShoot } from '../rendering/sprites/Archer.js';
 
 import { makePlayer } from '../entities/Player.js';
-import { makeWall, wallReady, wallBackDir, wallClimbAnchorX, nearWallClimbAccess, overWallPlatform } from '../entities/Wall.js';
+import { makeWall, wallReady, wallBackDir, wallClimbAnchorX, nearWallClimbAnchor, nearWallClimbAccess, overWallPlatform } from '../entities/Wall.js';
 import { makeUnit } from '../entities/Unit.js';
 
 import { WEAPON_SHOP, ARMOR_SHOP, setPickupWeapon as setShopPickupWeapon } from '../systems/economy/ShopSystem.js';
@@ -121,7 +121,9 @@ function updatePlayerWallClimb(player, dt, upHeld, downHeld) {
 
   const cur = player.wallClimbT || 0;
   if (upHeld && (accessWall === wall || nearWallClimbAccess(wall, player.x))) player.wallClimbTarget = 1;
-  if (downHeld && cur > 0.02) player.wallClimbTarget = 0;
+  if (downHeld && cur > 0.02 && (nearWallClimbAnchor(wall, player.x) || (player.climbingWall && (player.wallClimbTarget || 0) === 0))) {
+    player.wallClimbTarget = 0;
+  }
   if ((cur > 0.02 || player.onWall) && !overWallPlatform(wall, player.x) && !nearWallClimbAccess(wall, player.x)) {
     player.wallClimbTarget = 0;
   }

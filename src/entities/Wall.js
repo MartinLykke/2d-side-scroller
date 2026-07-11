@@ -59,10 +59,16 @@ export function wallClimbAnchorX(w) {
   return rearX - d * 5;
 }
 
+export function nearWallClimbAnchor(w, x) {
+  if (!wallReady(w)) return false;
+  const deckH = wallDeckHeight(w);
+  const range = w.level >= 5 ? 24 : deckH <= 56 ? 30 : 24;
+  return Math.abs(x - wallClimbAnchorX(w)) <= range;
+}
+
 export function nearWallClimbAccess(w, x) {
   if (!wallReady(w)) return false;
-  const anchorX = wallClimbAnchorX(w);
-  if (Math.abs(x - anchorX) < (w.level >= 5 ? 58 : 46)) return true;
+  if (nearWallClimbAnchor(w, x)) return true;
   if (overWallPlatform(w, x)) return true;
 
   const deckH = wallDeckHeight(w);
