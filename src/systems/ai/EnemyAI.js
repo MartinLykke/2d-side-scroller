@@ -7,7 +7,7 @@ import { Audio } from '../infrastructure/Audio.js';
 import { spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js';
 import { meleeHitPlayer } from '../combat/PlayerCombat.js';
 import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js';
-import { wallHeight, entityWallLift } from '../../entities/Wall.js';
+import { wallHeight, wallWidth, entityWallLift } from '../../entities/Wall.js';
 import { updateBoss, dropRiderFromDragon } from './BossAI.js';
 
 const IMP_STACK_STEP = 18;
@@ -116,6 +116,14 @@ function wallOutsideX(w) {
 
 function wallInsideX(w) {
   return w.x - w.side * 48;
+}
+
+function impPlayerBlockedByWall(e, player) {
+  const wall = wallAt(e.x < CFG.baseX ? -1 : 1, e.x);
+  if (!wall || e.breachedWall) return false;
+  const half = Math.max(24, wallWidth(wall) / 2);
+  const playerOutsideWall = (player.x - wall.x) * wall.side > half + 6;
+  return !playerOutsideWall;
 }
 
 function impStackForWall(w) {
@@ -468,6 +476,10 @@ function updateImpPlayerCombat(e, t, dt) {
   const near = d < 130 && e.carry === 0;
   if (!near && e.aiState !== "attackPlayer") return false;
   if (d > 240 || e.breachedWall) {
+    if (e.aiState === "attackPlayer") setImpState(e, "advance");
+    return false;
+  }
+  if (impPlayerBlockedByWall(e, player)) {
     if (e.aiState === "attackPlayer") setImpState(e, "advance");
     return false;
   }
