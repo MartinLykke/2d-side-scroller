@@ -11,11 +11,12 @@ import { ARCHER_SKILLS } from '../config/archerSkills.js';
 import { GUARD_SKILLS } from '../config/guardSkills.js';
 import { makeUnit } from '../entities/Unit.js';
 import { saveMeta } from '../systems/infrastructure/RoguelikeSystem.js';
+import { expectedGoldForDay, goldRewardAmount } from '../systems/economy/EconomyBalance.js';
 
 // ── Skill Tree ────────────────────────────────────────────────
 const BRANCH_NAMES = {
-  archer: { 1: "🎯 Pilen", 2: "🏹 Buen", 3: "🌲 Taktik" },
-  guard: { 1: "🗡️ Spyd", 2: "🛡 Skjold", 3: "⚔ Taktik" },
+  archer: { 1: "🎯 The Arrow", 2: "🏹 The Bow", 3: "🌲 Tactics" },
+  guard: { 1: "🗡️ Spear", 2: "🛡 Shield", 3: "⚔ Tactics" },
 };
 const SKILL_TREES = { archer: ARCHER_SKILLS, guard: GUARD_SKILLS };
 
@@ -42,11 +43,11 @@ function renderSkillTree() {
 
   const type = currentSkillTree();
   const points = type === "guard" ? (state.guardSkillPoints || 0) : (state.archerSkillPoints || 0);
-  ptEl.textContent = `Evnepoint: ${points}`;
+  ptEl.textContent = `Skill points: ${points}`;
 
   // Update title
   if (titleEl) {
-    const titles = { archer: "🏹 BUESKYTTERNES EVNETRÆ", guard: "🛡️ VAGTENS EVNETRÆ" };
+    const titles = { archer: "🏹 ARCHER SKILL TREE", guard: "🛡️ GUARD SKILL TREE" };
     titleEl.textContent = titles[type];
   }
 
@@ -55,7 +56,7 @@ function renderSkillTree() {
     tabsEl.innerHTML = "";
     for (const t of ["archer", "guard"]) {
       const btn = document.createElement("button");
-      btn.textContent = t === "archer" ? "🏹 Bueskytte" : "🛡️ Vagt";
+      btn.textContent = t === "archer" ? "🏹 Archer" : "🛡️ Guard";
       btn.style.cssText = `background:${t===type?"rgba(242,193,78,0.2)":"rgba(255,255,255,0.05)"};border:1px solid ${t===type?"#f2c14e":"rgba(255,255,255,0.2)"};color:${t===type?"#f2c14e":"#c8b890"};padding:6px 16px;border-radius:6px;cursor:pointer;font-size:13px;font-family:inherit;transition:background 0.15s;`;
       btn.onclick = () => { Game.skillTreeType = t; renderSkillTree(); };
       tabsEl.appendChild(btn);
@@ -91,7 +92,7 @@ function renderSkillTree() {
   ultimatesEl.innerHTML = "";
   const ultHdr = document.createElement("div");
   ultHdr.style.cssText = "grid-column:1/-1;font-size:11px;color:#c069ff;text-align:center;font-weight:bold;letter-spacing:1px;margin-bottom:4px;";
-  ultHdr.textContent = "👑 ULTIMATIVE EVNER";
+  ultHdr.textContent = "👑 ULTIMATE ABILITIES";
   ultimatesEl.appendChild(ultHdr);
   for (const sk of ultimates) ultimatesEl.appendChild(makeSkillNode(sk));
 }
@@ -108,7 +109,7 @@ function makeSkillNode(sk) {
   div.innerHTML = `
     <div style="font-size:12px;font-weight:bold;color:${unlocked?"#9bd05a":available?"#f2c14e":"#7a6a50"};">${sk.name} ${unlocked?"✓":""}</div>
     <div style="font-size:10px;color:#9a8a70;margin-top:3px;line-height:1.4;">${sk.desc}</div>
-    <div style="font-size:10px;margin-top:5px;color:${available?"#f2c14e":"#5a4a38"};">Kost: ${sk.cost} point${sk.requires.length?" · Kræver: "+sk.requires.map(r=>skillTree[r]?.name||r).join(", "):""}</div>
+    <div style="font-size:10px;margin-top:5px;color:${available?"#f2c14e":"#5a4a38"};">Cost: ${sk.cost} pts${sk.requires.length?" · Requires: "+sk.requires.map(r=>skillTree[r]?.name||r).join(", "):""}</div>
   `;
   if (available) {
     div.onmouseenter = () => div.style.background = "rgba(242,193,78,0.22)";
@@ -149,16 +150,17 @@ export function closeSkillTree() {
 
 window._closeSkillTree = closeSkillTree;
 window._openSkillTree  = openSkillTree;
+window._skipToDusk = () => UI.skipToDusk();
 
 function phaseName() {
   const t=Game.time;
-  if (t<=CFG.phases.day)   return "Dag";
-  if (t<=CFG.phases.dusk)  return "Aften";
-  if (t<=CFG.phases.night) return "Nat";
-  return "Daggry";
+  if (t<=CFG.phases.day)   return "Day";
+  if (t<=CFG.phases.dusk)  return "Dusk";
+  if (t<=CFG.phases.night) return "Night";
+  return "Dawn";
 }
 
-function baseName(lvl) { return ["—","Lejr","Lille landsby","Stor landsby","Slot"][lvl]; }
+function baseName(lvl) { return ["—","Camp","Small Village","Large Village","Castle"][lvl]; }
 export { baseName };
 
 export const UI = {
@@ -171,14 +173,30 @@ export const UI = {
 
   toggleMute() { Audio.init(); this.muted = !Audio.toggle(); },
 
+  skipToDusk() {
+    if (Game.state !== "play" || Game.time >= CFG.phases.day) return;
+    // Pay out a discounted share of the day's expected income for the skipped time,
+    // so skipping is never better than playing the day out.
+    const skippedFrac = (CFG.phases.day - Game.time) / CFG.phases.day;
+    const gold = goldRewardAmount(expectedGoldForDay() * skippedFrac * 0.45, "passive");
+    if (gold > 0) {
+      state.player.coins = clamp(state.player.coins + gold, 0, CFG.maxCoinsCarry);
+      floaty(state.player.x, "+" + gold + "🪙", "#f2c14e");
+    }
+    Game.time = CFG.phases.day + 0.005;
+    floaty(state.base.x, "→ Dusk 🌆", "#cfe6f2");
+  },
+
   refresh() {
     const { player, base, units, vagrants, stations } = state;
     const ph = phaseName();
-    const dayText = ph === "Nat" ? "Nat " + Game.day : "Dag " + Game.day;
+    const dayText = ph === "Night" ? "Night " + Game.day : "Day " + Game.day;
     document.getElementById("hud-day-text").textContent = dayText;
     document.getElementById("hud-phase-text").textContent = "";
-    document.getElementById("hud-phase-icon").textContent = ph==="Nat"?"🌙":ph==="Aften"?"🌆":ph==="Daggry"?"🌅":"☀";
+    document.getElementById("hud-phase-icon").textContent = ph==="Night"?"🌙":ph==="Dusk"?"🌆":ph==="Dawn"?"🌅":"☀";
     document.getElementById("hud-base-text").textContent = "";
+    const skipEl = document.getElementById("hud-skipnight");
+    if (skipEl) skipEl.style.display = (ph === "Day" && Game.state === "play") ? "" : "none";
     document.getElementById("hud-coins-text").textContent = player.coins;
     document.getElementById("hud-hp-text").textContent    = "";
 
@@ -193,13 +211,13 @@ export const UI = {
     document.getElementById("hud-arch-text").textContent  = arch;
     document.getElementById("hud-build-text").textContent = build;
 
-    let obj = "🎯 Overlev så længe du kan. Trusselsniveau " + (Game.threatLevel || Game.day);
-    if (base.level<4) obj += " · opgradér basen ("+base.level+"/4)";
-    else obj += " · slottet står";
+    let obj = "🎯 Survive as long as you can. Threat level " + (Game.threatLevel || Game.day);
+    if (base.level<4) obj += " · upgrade the base ("+base.level+"/4)";
+    else obj += " · the castle stands";
     if (Game.isNight) {
       let activeEnemies = 0;
       for (let i = 0; i < state.enemies.length; i++) if (!state.enemies[i].fleeing) activeEnemies++;
-      obj="🌙 NAT — "+(Game.nightQuota-activeEnemies>0?"horden angriber!":"hold linjen!");
+      obj="🌙 NIGHT — "+(Game.nightQuota-activeEnemies>0?"the horde attacks!":"hold the line!");
     }
     document.getElementById("hud-objective").textContent = obj;
 
@@ -246,18 +264,18 @@ export const UI = {
     } else if (mineLadderNear) {
       this.prompt.classList.remove("hidden");
       this.prompt.innerHTML=Game.inMine
-        ? `Gå op af minen &nbsp;<span class="hold">tryk F</span>`
-        : `⛏ Gå ned i minen &nbsp;<span class="hold">tryk F</span>`;
+        ? `Climb out of the mine &nbsp;<span class="hold">press F</span>`
+        : `⛏ Go down into the mine &nbsp;<span class="hold">press F</span>`;
     } else if (vagNear) {
       this.prompt.classList.remove("hidden");
-      this.prompt.innerHTML=`Rekruttér undersåt &nbsp;<span class="cost">1🪙</span> &nbsp;<span class="hold">hold ↓/S</span>`;
+      this.prompt.innerHTML=`Recruit subject &nbsp;<span class="cost">1🪙</span> &nbsp;<span class="hold">hold ↓/S</span>`;
     } else if (lootNear) {
       this.prompt.classList.remove("hidden");
       const w=WEAPONS[lootNear.weaponId];
-      this.prompt.innerHTML=`Saml op: ${w.name} &nbsp;<span class="hold">tryk F</span>`;
+      this.prompt.innerHTML=`Pick up: ${w.name} &nbsp;<span class="hold">press F</span>`;
     } else if (nearShop && !Game.shopOpen) {
       this.prompt.classList.remove("hidden");
-      this.prompt.innerHTML=`B - Åbn butik 🏪`;
+      this.prompt.innerHTML=`B - Open shop 🏪`;
     } else {
       this.prompt.classList.add("hidden");
     }
@@ -297,32 +315,32 @@ export const DEV = {
     Game.meta.upgrades = {};
     saveMeta();
     const x = state.player ? state.player.x : 0;
-    floaty(x,"Opgraderinger nulstillet","#ff8a6a");
+    floaty(x,"Upgrades reset","#ff8a6a");
   },
 
   skipToNight() {
     if (Game.state!=="play") return;
     Game.time=CFG.phases.dusk+0.005;
-    floaty(state.base.x,"→ Nat 🌙","#cfe6f2");
+    floaty(state.base.x,"→ Night 🌙","#cfe6f2");
   },
 
   skipToDay() {
     if (Game.state!=="play") return;
     Game.time=0.02; Game.day++; planNight();
     if (state.enemies) state.enemies.forEach(e=>e.fleeing=true);
-    floaty(state.base.x,"→ Dag ☀","#f2c14e");
+    floaty(state.base.x,"→ Day ☀","#f2c14e");
   },
 
   _jumpToDay(n) {
     if (Game.state!=="play") return;
-    if (Game.day >= n) { floaty(state.base.x,"Allerede dag "+Game.day,"#ff8a6a"); return; }
+    if (Game.day >= n) { floaty(state.base.x,"Already day "+Game.day,"#ff8a6a"); return; }
     Game.day = n - 1;
     Game.time = 0.02;
     planNight();
     if (state.enemies) state.enemies.forEach(e=>e.fleeing=true);
     // Queue night immediately
     Game.time = CFG.phases.dusk + 0.005;
-    floaty(state.base.x,"→ Dag "+n+" 📅","#f2c14e");
+    floaty(state.base.x,"→ Day "+n+" 📅","#f2c14e");
   },
   skipToDay10() { this._jumpToDay(10); },
   skipToDay15() { this._jumpToDay(15); },
@@ -339,14 +357,14 @@ export const DEV = {
     while (state.base.level < 4) {
       window._upgradeBase?.();
     }
-    floaty(state.base.x, "🏰 Maksimal niveau nået!", "#f2c14e");
+    floaty(state.base.x, "🏰 Max level reached!", "#f2c14e");
   },
 
   maxWallLevels() {
     if (Game.state!=="play") return;
     const { walls } = state;
     if (!walls || walls.length === 0) {
-      floaty(state.base.x, "Ingen mure at opgradere", "#ff8a6a");
+      floaty(state.base.x, "No walls to upgrade", "#ff8a6a");
       return;
     }
     for (const w of walls) {
@@ -356,7 +374,7 @@ export const DEV = {
       w.hp = w.maxHp;
       w.buildProgress = 1;
     }
-    floaty(state.base.x, "⬆ Alle mure → maks niveau!", "#9bd05a");
+    floaty(state.base.x, "⬆ All walls → max level!", "#9bd05a");
   },
 
   healAll() {
@@ -364,7 +382,7 @@ export const DEV = {
     state.player.hp=state.player.maxHp; state.base.hp=state.base.maxHp;
     state.units.forEach(u=>u.hp=u.maxHp);
     state.walls.forEach(w=>{ if (w.commissioned&&w.buildProgress>=1) w.hp=w.maxHp; });
-    floaty(state.base.x,"💚 Helbredt!","#9bd05a");
+    floaty(state.base.x,"💚 Healed!","#9bd05a");
   },
 
   spawnEnemyNearBase(type) {
@@ -407,30 +425,33 @@ export const DEV = {
   spawnAnimalNearBase(type) {
     if (Game.state!=="play") return;
     const x = state.base.x + pick([-1, 1]) * rand(200, 400);
-    state.animals.push({
+    const a = {
       x, vx: 0, dir: pick([-1, 1]),
       state: "graze", stateT: rand(2, 5), alive: true, anim: rand(0, 6),
       flee: 0, fleeT: 0, type,
       eatDown: 0, headT: rand(1, 3), scan: 0, earFlick: 0,
       dying: false, deathT: 0,
-    });
-    const names = { deer: "🦌 Hjort", rabbit: "🐇 Kanin" };
+    };
+    if (type === "duck") { a.fy = 0; a.flyTargetX = null; a.cruiseFy = 0; a.wingStretch = 0; }
+    if (type === "bear") { a.hp = 12; a.maxHp = 12; a.attackCd = 0; a.attackAnim = 0; a.flash = 0; a.chargeCd = 0; a.charging = 0; }
+    state.animals.push(a);
+    const names = { deer: "🦌 Deer", rabbit: "🐇 Rabbit", duck: "🦆 Duck", bear: "🐻 Bear" };
     floaty(state.base.x, (names[type]||type) + "!", "#9bd05a");
   },
 
   killAll() {
     if (Game.state!=="play") return;
     const n=state.enemies.length; state.enemies.length=0;
-    floaty(state.base.x,"💀 "+n+" fjender!","#f2c14e");
+    floaty(state.base.x,"💀 "+n+" enemies!","#f2c14e");
   },
 
   toggleGodMode() {
     this.godMode=!this.godMode;
     window._DEV_GOD_MODE=this.godMode;
     const btn=document.getElementById("dev-god-btn");
-    btn.textContent="God mode: "+(this.godMode?"🟢 TIL":"⚫ FRA");
+    btn.textContent="God mode: "+(this.godMode?"🟢 ON":"⚫ OFF");
     btn.classList.toggle("dev-active",this.godMode);
-    if (state.player) floaty(state.player.x,this.godMode?"🛡 Uspårbar":"🛡 Sårbar igen","#cfe6f2");
+    if (state.player) floaty(state.player.x,this.godMode?"🛡 Invulnerable":"🛡 Vulnerable again","#cfe6f2");
   },
 
   setSpeed(mult) {
@@ -449,45 +470,59 @@ export const DEV = {
     if (state.player.weapon) {
       state.lootItems.push({ x:state.player.x+20, weaponId:state.player.weapon });
       state.player.weapon=null;
-      floaty(state.player.x,"Våben droppet","#c8c8c8");
+      floaty(state.player.x,"Weapon dropped","#c8c8c8");
     }
   },
 
   spawnUnit(role) {
     if (Game.state!=="play") return;
     if (role === "miner" && !state.mineBuilt) {
-      floaty(state.base.x, "Byg minen først (base lvl 3)", "#ff8a6a");
+      floaty(state.base.x, "Build the mine first (base lvl 3)", "#ff8a6a");
       return;
     }
     const popCap = CFG.popCapByLevel[state.base.level];
     if (state.units.length + state.vagrants.length >= popCap) {
-      floaty(state.base.x,"Befolkningsloft nået","#ff8a6a");
+      floaty(state.base.x,"Population cap reached","#ff8a6a");
       return;
     }
     const x = role === "miner" ? MINE.stationX + pick([-1, 1]) * 30 : state.base.x + pick([-1, 1]) * 120;
     const u = makeUnit(role, x);
     state.units.push(u);
-    const roleNames = { archer: "🏹 Bueskytter", builder: "🔨 Bygmand", farmer: "🌾 Landmand", guard: "🛡 Vagt", miner: "⛏ Minearbejder" };
-    floaty(state.base.x, roleNames[role] + " født!", "#9bd05a");
+    const roleNames = { archer: "🏹 Archer", builder: "🔨 Builder", farmer: "🌾 Farmer", guard: "🛡 Guard", miner: "⛏ Miner" };
+    floaty(state.base.x, roleNames[role] + " born!", "#9bd05a");
   },
 
   levelUpUnits(role, levels = 1) {
     if (Game.state!=="play") return;
     const targets = state.units.filter(u => u.role === role);
     if (!targets.length) {
-      floaty(state.base.x, "Ingen " + (role === "archer" ? "bueskytter" : "vagter"), "#ff8a6a");
+      floaty(state.base.x, "No " + (role === "archer" ? "archers" : "guards"), "#ff8a6a");
       return;
     }
     for (const u of targets) {
       u.level = (u.level || 1) + levels;
       u.xp = 0;
-      floaty(u.x, "⬆ Niv." + u.level + "!", "#f2c14e");
+      floaty(u.x, "⬆ Lvl " + u.level + "!", "#f2c14e");
       spawnParticles(u.x, groundY - 30, 8, "#f2c14e", 50, 80);
     }
     const pts = targets.length * levels;
     if (role === "archer") state.archerSkillPoints = (state.archerSkillPoints || 0) + pts;
     else state.guardSkillPoints = (state.guardSkillPoints || 0) + pts;
-    floaty(state.base.x, "+" + pts + " evnepoint", "#9bd05a");
+    floaty(state.base.x, "+" + pts + " skill points", "#9bd05a");
+  },
+
+  // Grant every archer skill at once (or pass a list of ids to test specific ones)
+  grantArcherSkills(ids = null) {
+    if (Game.state!=="play") return;
+    state.archerSkills = ids || Object.keys(ARCHER_SKILLS);
+    floaty(state.base.x, "🏹 Archer skills granted!", "#9bd05a");
+  },
+
+  addSkillPoints(n) {
+    if (Game.state!=="play") return;
+    state.archerSkillPoints = (state.archerSkillPoints || 0) + n;
+    state.guardSkillPoints = (state.guardSkillPoints || 0) + n;
+    floaty(state.base.x, "+" + n + " skill points", "#9bd05a");
   },
 
   updateStats(dt) {
@@ -503,10 +538,10 @@ export const DEV = {
       else if (r === "miner") mine++;
     }
     el.innerHTML=
-      `FPS: <b>${Math.round(this._fps)}</b> &nbsp;|&nbsp; Dag: <b>${Game.day}</b> &nbsp;t: <b>${Game.time.toFixed(3)}</b><br>`+
-      `Fjender: <b>${state.enemies?.length||0}</b> &nbsp;|&nbsp; Enheder: <b>${state.units?.length||0}</b> (🏹${arch} 🔨${build} 🌾${farm} ⛏${mine})<br>`+
-      `Mønter (jord): <b>${state.coins?.length||0}</b> &nbsp;|&nbsp; Partikler: <b>${state.particles?.length||0}</b><br>`+
-      `Spiller X: <b>${state.player?Math.round(state.player.x):"-"}</b> &nbsp;|&nbsp; Kamera: <b>${Math.round(Game.cam)}</b>`;
+      `FPS: <b>${Math.round(this._fps)}</b> &nbsp;|&nbsp; Day: <b>${Game.day}</b> &nbsp;t: <b>${Game.time.toFixed(3)}</b><br>`+
+      `Enemies: <b>${state.enemies?.length||0}</b> &nbsp;|&nbsp; Units: <b>${state.units?.length||0}</b> (🏹${arch} 🔨${build} 🌾${farm} ⛏${mine})<br>`+
+      `Coins (ground): <b>${state.coins?.length||0}</b> &nbsp;|&nbsp; Particles: <b>${state.particles?.length||0}</b><br>`+
+      `Player X: <b>${state.player?Math.round(state.player.x):"-"}</b> &nbsp;|&nbsp; Camera: <b>${Math.round(Game.cam)}</b>`;
   },
 };
 

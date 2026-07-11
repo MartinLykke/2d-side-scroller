@@ -5,6 +5,7 @@ import { WEAPONS } from '../../config/weapons.js';
 import { clamp, rand, pick, mulberry32 } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
+import { goldCoinChunks, goldRewardAmount } from '../economy/EconomyBalance.js';
 
 export function spawnCoin(x, value = 1, fromY = -40, vx = 0, vy = -180) {
   const c = { x, y: fromY, vy, value, settled: false, life: 60, magnet: false, vx };
@@ -12,8 +13,47 @@ export function spawnCoin(x, value = 1, fromY = -40, vx = 0, vy = -180) {
   return c;
 }
 
+export function spawnGoldReward(x, amount, source = "enemy", opts = {}) {
+  const actual = goldRewardAmount(amount, source);
+  spawnGoldCoins(x, actual, opts);
+  return actual;
+}
+
+export function spawnGoldCoins(x, amount, opts = {}) {
+  const chunks = goldCoinChunks(amount, opts.maxCoinValue);
+  for (const value of chunks) {
+    const c = spawnCoin(
+      x + rand(-(opts.spreadX || 22), opts.spreadX || 22),
+      value,
+      opts.fromY ?? groundY - 24,
+      rand(-(opts.vx || 80), opts.vx || 80),
+      rand(-(opts.vyMax || 260), -(opts.vyMin || 120))
+    );
+    if (opts.mine) c.mine = true;
+  }
+}
+
 export function floaty(x, text, color = "#f2c14e", size = 15) {
   state.floatTexts.push({ x, y: groundY - 90, text, color, life: 1.4, vy: -34, size });
+}
+
+// Combo-aware purchase text: buying again while the previous text is still on
+// screen bumps a counter ("x2", "x3"…) and grows the text instead of stacking.
+const purchaseCombos = {};
+export function purchaseFloaty(key, x, baseText, color) {
+  const c = purchaseCombos[key];
+  if (c && state.floatTexts.includes(c.f)) {
+    c.n++;
+    c.f.text = `${baseText} x${c.n}`;
+    c.f.size = Math.min(17 + c.n * 4, 38);
+    c.f.life = c.f.maxLife = 1.6;
+    c.f.y = groundY - 90 - Math.min(c.n * 3, 24);
+    c.f.vy = -34;
+  } else {
+    const f = { x, y: groundY - 90, text: baseText, color, life: 1.6, maxLife: 1.6, vy: -34, size: 17, pop: true };
+    state.floatTexts.push(f);
+    purchaseCombos[key] = { n: 1, f };
+  }
 }
 
 export function critFloaty(x, dmg) {
@@ -44,13 +84,21 @@ export function spawnAnimal() {
   if (state.animals.length > 16) return;
   const bears = state.animals.filter(a => a.type === "bear").length;
   if (bears < 2 && Math.random() < 0.15) return spawnBear();
-  // Deer and rabbits spawn across the entire forest-covered map
-  const x = rand(0, CFG.worldWidth);
+  // Deer and rabbits spawn across the forest; ducks hatch at the ponds
+  const type = pick(["rabbit","rabbit","deer","deer","duck","duck"]);
+  let x = rand(0, CFG.worldWidth), spawnState = "graze";
+  const ponds = state.ponds || [];
+  if (type === "duck" && ponds.length && Math.random() < 0.8) {
+    const p = pick(ponds);
+    x = p.x + rand(-p.hw * 0.5, p.hw * 0.5);
+    spawnState = "swim";
+  }
   state.animals.push({
     x, vx: 0, dir: pick([-1, 1]),
-    state: "graze", stateT: rand(2, 5), alive: true, anim: rand(0, 6),
-    flee: 0, fleeT: 0, type: pick(["rabbit","rabbit","deer","deer"]),
+    state: spawnState, stateT: spawnState === "swim" ? rand(8, 18) : rand(2, 5), alive: true, anim: rand(0, 6),
+    flee: 0, fleeT: 0, type,
     eatDown: 0, headT: rand(1, 3), scan: 0, earFlick: 0,
+    fy: 0, flyTargetX: null, cruiseFy: 0, wingStretch: 0,
     dying: false, deathT: 0,
   });
 }
@@ -124,7 +172,9 @@ export function planNight() {
   Game.threatLevel  = Math.max(1, d);
   let quotaMult = Game.diffMult || 1;
   if (Game.diffMult > 1.5) quotaMult *= 1.35;
-  Game.nightQuota   = Math.round((3 + d * 3.5 + Math.pow(d * 0.7, 1.6) + Math.max(0, d - 8) * 2.25) * quotaMult);
+  // Base horde scaling: 2x from day 1, ramping up ~10% per day (caps at 3.5x)
+  const hordeMult = Math.min(3.5, 2 + Math.max(0, d - 1) * 0.1);
+  Game.nightQuota   = Math.round((3 + d * 3.5 + Math.pow(d * 0.7, 1.6) + Math.max(0, d - 8) * 2.25) * quotaMult * hordeMult);
   Game.nightSpawned = 0;
   Game.spawnTimer   = 0;
   Game.nightCleared = false;
@@ -151,7 +201,8 @@ export function updateSpawning(dt) {
       const pressure = Math.min(0.55, Math.max(0, Game.day - 4) * 0.018);
       let diffSpeedUp = Game.diffMult > 1 ? 1 / Math.sqrt(Game.diffMult) : 1;
       if (Game.diffMult > 1.5) diffSpeedUp *= 0.7;
-      Game.spawnTimer = rand(0.6, 1.6) * (1 - pressure) * diffSpeedUp;
+      // Halved interval so the doubled quota still fits inside the night window
+      Game.spawnTimer = rand(0.3, 0.8) * (1 - pressure) * diffSpeedUp;
       const type = nightEnemyType();
       const portal = pick(state.portals);
       let spawned;
@@ -214,6 +265,6 @@ export function buildLocations() {
 
 export function spawnLocLoot(loc) {
   loc.lootSpawned = true;
-  for (let i = 0; i < loc.lootGold; i++) spawnCoin(loc.x + rand(-50, 50), 1, groundY - 20, rand(-70, 70));
+  spawnGoldReward(loc.x, loc.lootGold, "location", { spreadX: 50, fromY: groundY - 20, vx: 70 });
   if (loc.weaponId) state.lootItems.push({ x: loc.x + rand(-24, 24), weaponId: loc.weaponId, dropVy: -340, dropY: groundY - 160 });
 }

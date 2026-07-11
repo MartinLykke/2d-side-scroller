@@ -4,10 +4,10 @@ import { Game, state } from '../core/state.js';
 import { WEAPONS } from '../config/weapons.js';
 import { drawPlayer as drawPlayerBody } from './sprites/Player.js';
 import { shootPose, ease, drawBow, limb } from './sprites/Archer.js';
-import { darkness, skyColors, drawStars, drawClouds, drawBirds, getTrees, drawHills, drawTreeLayer, drawLowFog, drawAmbientFront, drawLevelUpBeams, biomeAt, FX, windSway } from './Effects.js';
+import { darkness, skyColors, drawStars, drawClouds, drawCelestials, drawBirds, getTrees, drawHills, drawTreeLayer, drawLowFog, drawAmbientFront, drawLevelUpBeams, biomeAt, FX, windSway } from './Effects.js';
 
 // Import all render modules
-import { drawGroundTexture, drawGroundDeco, drawEntityShadows, drawPortals, drawWalls, drawBase, drawStations, drawForestTrees, drawForestCamps, drawBuildings } from './scene/RenderWorld.js';
+import { drawGroundTexture, drawGroundDeco, drawPonds, drawEntityShadows, drawPortals, drawWalls, drawBase, drawStations, drawForestTrees, drawForestCamps, drawBuildings } from './scene/RenderWorld.js';
 import { drawVagrants, drawUnits, drawEnemies, drawAnimals } from './scene/RenderEntities.js';
 import { drawCoins, drawArrows, drawLootItems, drawChests, drawGroundBows, drawGroundHammers } from './scene/RenderItems.js';
 import { drawCaltrops, drawPoisonShots, drawFirePools, drawLegendaryEffects, drawParticles, drawFloats, drawSpells, drawCampLight } from './scene/RenderEffects.js';
@@ -153,7 +153,7 @@ export function render() {
   g.addColorStop(0,rgb(top)); g.addColorStop(0.62,rgb(lerpColor(top,bot,0.6))); g.addColorStop(1,rgb(bot));
   ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
 
-  drawStars(dark); drawClouds(dark,top); drawBirds(dark);
+  drawStars(dark); drawCelestials(dark); drawClouds(dark,top); drawBirds(dark);
 
   const trees=getTrees();
   drawHills(trees.hills,dark);
@@ -183,7 +183,7 @@ export function render() {
   const _skx=_sk>0?(Math.random()-0.5)*_sk*12:0, _sky=_sk>0?(Math.random()-0.5)*_sk*7:0;
   ctx.save();
   ctx.translate(W/2+_skx, groundY+_sky); ctx.scale(zoom,zoom); ctx.translate(-W/2-Game.cam,-groundY);
-  drawGroundTexture(dark); drawGroundDeco(dark); drawMineCutaway(drawPlayer, dark); drawForestCamps(dark); drawForestTrees(dark);
+  drawGroundTexture(dark); drawGroundDeco(dark); drawPonds(dark); drawMineCutaway(drawPlayer, dark); drawForestCamps(dark); drawForestTrees(dark);
   drawEntityShadows(); drawPortals(dark); drawWalls(dark); drawBuildings(dark); drawBase(dark);
   drawStations(); drawCoins(); drawGroundBows(); drawGroundHammers(); drawLootItems(); drawChests();
   drawAnimals(); drawVagrants(); drawCaltrops(); drawFirePools(); drawUnits(); drawEnemies(dark); drawLegendaryEffects();

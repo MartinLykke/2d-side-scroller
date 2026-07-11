@@ -47,9 +47,9 @@ export function drawWeaponPickupOverlay() {
   ctx.fillStyle=rc; ctx.fillText(w.name, cx-40, cy-17);
   ctx.font="13px Trebuchet MS"; ctx.fillStyle="rgba(255,255,255,0.75)";
   ctx.fillText(RARITY_NAME[w.rarity], cx-40, cy+4);
-  ctx.fillText("Skade: "+w.dmg+"  Rækkevidde: "+w.range, cx-40, cy+22);
+  ctx.fillText("Damage: "+w.dmg+"  Range: "+w.range, cx-40, cy+22);
   ctx.fillStyle="rgba(200,200,200,0.5)"; ctx.font="11px Trebuchet MS"; ctx.textAlign="center";
-  ctx.fillText("Våben samlet op", cx, cy+46);
+  ctx.fillText("Weapon picked up", cx, cy+46);
   ctx.restore();
 }
 
@@ -63,7 +63,7 @@ export function drawInventoryOverlay() {
   ctx.fillStyle="rgba(20,16,36,0.97)"; ctx.fill();
   ctx.strokeStyle="rgba(200,180,120,0.35)"; ctx.lineWidth=2; ctx.stroke();
   ctx.textAlign="center"; ctx.font="bold 18px Trebuchet MS";
-  ctx.fillStyle="#f0e6cf"; ctx.fillText("Inventar  [I – luk]", W/2, H/2-144);
+  ctx.fillStyle="#f0e6cf"; ctx.fillText("Inventory  [I – close]", W/2, H/2-144);
   ctx.strokeStyle="rgba(200,180,120,0.2)"; ctx.lineWidth=1;
   ctx.beginPath(); ctx.moveTo(W/2, H/2-128); ctx.lineTo(W/2, H/2+158); ctx.stroke();
   const charX=W/2-130, charY=H/2+60;
@@ -97,7 +97,7 @@ export function drawInventoryOverlay() {
   for (let i=0;i<n;i++) drawHeart(charX-(n-1)*gap/2+i*gap, hhy, 4, (player&&i<player.hp)?"#e0556a":"rgba(255,255,255,0.2)");
   const rx=W/2+40;
   ctx.textAlign="left"; ctx.font="bold 14px Trebuchet MS"; ctx.fillStyle="rgba(200,180,120,0.6)";
-  ctx.fillText("Udstyret våben", rx, H/2-105);
+  ctx.fillText("Equipped weapon", rx, H/2-105);
   if (player && player.weapon) {
     const ww=WEAPONS[player.weapon], rc=RARITY_COL[ww.rarity];
     const eff=effectiveWeapon(player.weapon, player.weaponUpgrades||[]);
@@ -105,16 +105,16 @@ export function drawInventoryOverlay() {
     ctx.font="bold 20px Trebuchet MS"; ctx.fillStyle=rc;
     ctx.fillText(ww.name, rx, H/2-78);
     ctx.font="13px Trebuchet MS"; ctx.fillStyle="rgba(255,255,255,0.65)";
-    ctx.fillText(RARITY_NAME[ww.rarity]+(upgs.length>0?" · "+upgs.length+" opgraderinger":""), rx, H/2-58);
+    ctx.fillText(RARITY_NAME[ww.rarity]+(upgs.length>0?" · "+upgs.length+" upgrades":""), rx, H/2-58);
     ctx.fillStyle="rgba(200,200,200,0.8)";
-    ctx.fillText("Type:        "+(ww.type==="melee"?"Nærkamp":ww.type==="ranged"?"Bue":"Magi"), rx, H/2-32);
+    ctx.fillText("Type:        "+(ww.type==="melee"?"Melee":ww.type==="ranged"?"Bow":"Magic"), rx, H/2-32);
     const dmgBonus=eff.dmg-ww.dmg, rngBonus=eff.range-ww.range, spdDiff=Math.round((ww.speed-eff.speed)*100)/100;
-    ctx.fillStyle="rgba(200,200,200,0.8)"; ctx.fillText("Skade:", rx, H/2-12);
+    ctx.fillStyle="rgba(200,200,200,0.8)"; ctx.fillText("Damage:", rx, H/2-12);
     ctx.fillStyle="#f0e6cf"; ctx.fillText(eff.dmg+(dmgBonus>0?" (+"+dmgBonus+")":""), rx+90, H/2-12);
-    ctx.fillStyle="rgba(200,200,200,0.8)"; ctx.fillText("Rækkevidde:", rx, H/2+10);
+    ctx.fillStyle="rgba(200,200,200,0.8)"; ctx.fillText("Range:", rx, H/2+10);
     ctx.fillStyle="#f0e6cf"; ctx.fillText(eff.range+" px"+(rngBonus>0?" (+"+rngBonus+")":""), rx+110, H/2+10);
-    ctx.fillStyle="rgba(200,200,200,0.8)"; ctx.fillText("Hastighed:", rx, H/2+32);
-    ctx.fillStyle="#f0e6cf"; ctx.fillText(eff.speed+"x"+(spdDiff>0?" (hurtigere)":""), rx+90, H/2+32);
+    ctx.fillStyle="rgba(200,200,200,0.8)"; ctx.fillText("Speed:", rx, H/2+32);
+    ctx.fillStyle="#f0e6cf"; ctx.fillText(eff.speed+"x"+(spdDiff>0?" (faster)":""), rx+90, H/2+32);
     ctx.save(); ctx.translate(rx+90, H/2+100);
     if (ww.type==="melee") {
       const len=clamp(ww.range*0.6,30,52);
@@ -132,10 +132,10 @@ export function drawInventoryOverlay() {
     ctx.restore();
   } else {
     ctx.font="15px Trebuchet MS"; ctx.fillStyle="rgba(200,200,200,0.4)";
-    ctx.fillText("Intet våben udstyret", rx, H/2-60);
+    ctx.fillText("No weapon equipped", rx, H/2-60);
     ctx.font="12px Trebuchet MS"; ctx.fillStyle="rgba(200,200,200,0.3)";
-    ctx.fillText("Find et våben i verden og", rx, H/2-30);
-    ctx.fillText("tryk F for at samle det op.", rx, H/2-12);
+    ctx.fillText("Find a weapon in the world and", rx, H/2-30);
+    ctx.fillText("press F to pick it up.", rx, H/2-12);
   }
   ctx.restore();
 }
@@ -172,12 +172,12 @@ export function drawShopOverlay() {
   ctx.fillStyle="rgba(18,14,32,0.97)"; ctx.fill();
   ctx.strokeStyle="rgba(200,180,120,0.4)"; ctx.lineWidth=2; ctx.stroke();
   ctx.textAlign="center"; ctx.font="bold 18px Trebuchet MS";
-  ctx.fillStyle="#f0e6cf"; ctx.fillText("🏪 Butik  [B – luk | ◀▶ naviger | T – skift fane | E – køb]", cx, cy-panelH/2+30);
+  ctx.fillStyle="#f0e6cf"; ctx.fillText("🏪 Shop  [B – close | ◀▶ navigate | T – switch tab | E – buy]", cx, cy-panelH/2+30);
   ctx.strokeStyle="rgba(200,180,120,0.2)"; ctx.lineWidth=1;
   ctx.beginPath(); ctx.moveTo(cx-panelW/2+16,cy-panelH/2+40); ctx.lineTo(cx+panelW/2-16,cy-panelH/2+40); ctx.stroke();
   const tabW = (panelW-padX*2)/2;
   const tabY = cy-panelH/2+44;
-  const tabLabels = ["⚔ Våben","🛡 Rustning"];
+  const tabLabels = ["⚔ Weapons","🛡 Armor"];
   window._shopTabRects = [];
   for (let ti=0;ti<2;ti++) {
     const tx = cx-panelW/2+padX+ti*tabW;
@@ -248,19 +248,19 @@ export function drawShopOverlay() {
       ctx.fillStyle=ARMOR_RARITY_COL[sa.rarity];
       ctx.fillText(sa.name, cx-panelW/2+20, statsY+12);
       ctx.font="12px Trebuchet MS"; ctx.fillStyle="rgba(200,200,200,0.75)";
-      ctx.fillText(ARMOR_RARITY_NAME[sa.rarity]+"  ·  Forsvar: +"+sa.defense+"  ·  "+sa.desc, cx-panelW/2+20, statsY+32);
+      ctx.fillText(ARMOR_RARITY_NAME[sa.rarity]+"  ·  Defense: +"+sa.defense+"  ·  "+sa.desc, cx-panelW/2+20, statsY+32);
     } else {
       const sw = WEAPONS[selItem.weaponId];
       ctx.textAlign="left"; ctx.font="bold 13px Trebuchet MS"; ctx.fillStyle=RARITY_COL[sw.rarity];
       ctx.fillText(sw.name, cx-panelW/2+20, statsY+12);
       ctx.font="12px Trebuchet MS"; ctx.fillStyle="rgba(200,200,200,0.75)";
-      const typeLabel = sw.type==="melee"?"Nærkamp":sw.type==="ranged"?"Bue":"Magi";
-      ctx.fillText(typeLabel+"  ·  Skade: "+sw.dmg+"  ·  Rækkevidde: "+sw.range+" px  ·  Hastighed: "+sw.speed+"x", cx-panelW/2+20, statsY+32);
+      const typeLabel = sw.type==="melee"?"Melee":sw.type==="ranged"?"Bow":"Magic";
+      ctx.fillText(typeLabel+"  ·  Damage: "+sw.dmg+"  ·  Range: "+sw.range+" px  ·  Speed: "+sw.speed+"x", cx-panelW/2+20, statsY+32);
     }
   }
   ctx.textAlign="center"; ctx.font="13px Trebuchet MS";
   ctx.fillStyle="#f2c14e";
-  ctx.fillText("Dine mønter: "+player.coins+"🪙", cx, cy+panelH/2-12);
+  ctx.fillText("Your coins: "+player.coins+"🪙", cx, cy+panelH/2-12);
   ctx.restore();
 }
 
@@ -276,10 +276,10 @@ export function drawUpgradeMenu() {
   ctx.fillStyle = "rgba(6,4,14,0.9)"; ctx.fillRect(0,0,W,H);
   ctx.textAlign = "center";
   ctx.font = "bold 20px Trebuchet MS"; ctx.fillStyle = "#f2c14e";
-  ctx.fillText("⬆ Niveau " + player.level + "! Vælg en opgradering", cx, cy - 158);
+  ctx.fillText("⬆ Level " + player.level + "! Choose an upgrade", cx, cy - 158);
   ctx.font = "13px Trebuchet MS"; ctx.fillStyle = rc;
   const upgs = (player.weaponUpgrades||[]).length;
-  ctx.fillText(w.name + (upgs > 0 ? "  (+" + upgs + " opgraderinger)" : ""), cx, cy - 132);
+  ctx.fillText(w.name + (upgs > 0 ? "  (+" + upgs + " upgrades)" : ""), cx, cy - 132);
   const cardW = 185, cardH = 168, gap = 14;
   const totalW = opts.length * cardW + (opts.length - 1) * gap;
   const sx = cx - totalW/2;
@@ -300,12 +300,12 @@ export function drawUpgradeMenu() {
     ctx.font = "11px Trebuchet MS"; ctx.fillStyle = "rgba(200,190,170,0.72)";
     ctx.fillText(opt.desc, ox+cardW/2, oy+70);
     let yy = oy + 96;
-    if (opt.effect.dmg)        { ctx.fillStyle="#9bd05a"; ctx.font="12px Trebuchet MS"; ctx.fillText("Skade: " + curEff.dmg + " → " + nxtEff.dmg, ox+cardW/2, yy); yy+=20; }
-    if (opt.effect.speedBonus) { ctx.fillStyle="#6ab4ff"; ctx.font="12px Trebuchet MS"; ctx.fillText("Hastighed: " + curEff.speed + " → " + nxtEff.speed + "x", ox+cardW/2, yy); yy+=20; }
-    if (opt.effect.range)      { ctx.fillStyle="#f2c14e"; ctx.font="12px Trebuchet MS"; ctx.fillText("Rækkevidde: " + curEff.range + " → " + nxtEff.range + " px", ox+cardW/2, yy); yy+=20; }
+    if (opt.effect.dmg)        { ctx.fillStyle="#9bd05a"; ctx.font="12px Trebuchet MS"; ctx.fillText("Damage: " + curEff.dmg + " → " + nxtEff.dmg, ox+cardW/2, yy); yy+=20; }
+    if (opt.effect.speedBonus) { ctx.fillStyle="#6ab4ff"; ctx.font="12px Trebuchet MS"; ctx.fillText("Speed: " + curEff.speed + " → " + nxtEff.speed + "x", ox+cardW/2, yy); yy+=20; }
+    if (opt.effect.range)      { ctx.fillStyle="#f2c14e"; ctx.font="12px Trebuchet MS"; ctx.fillText("Range: " + curEff.range + " → " + nxtEff.range + " px", ox+cardW/2, yy); yy+=20; }
   }
   ctx.textAlign = "center"; ctx.font = "11px Trebuchet MS"; ctx.fillStyle = "rgba(180,180,180,0.45)";
-  ctx.fillText("◀▶ naviger  ·  E/Enter vælg  ·  1/2/3 direkte  ·  Esc annuller", cx, cy + cardH/2 + 46);
+  ctx.fillText("◀▶ navigate  ·  E/Enter select  ·  1/2/3 direct  ·  Esc cancel", cx, cy + cardH/2 + 46);
   ctx.restore();
 }
 
@@ -319,7 +319,7 @@ export function drawXpBar() {
   ctx.save();
   ctx.fillStyle = "rgba(0,0,0,0.5)"; roundedRect(bx-6, by-22, bw+12, bh+30, 6); ctx.fill();
   ctx.font = "bold 11px Trebuchet MS"; ctx.textAlign = "left";
-  ctx.fillStyle = "#f2c14e"; ctx.fillText("Niveau " + player.level, bx, by-7);
+  ctx.fillStyle = "#f2c14e"; ctx.fillText("Level " + player.level, bx, by-7);
   ctx.fillStyle = "rgba(255,255,255,0.12)"; ctx.fillRect(bx, by, bw, bh);
   ctx.fillStyle = "#9bd05a"; ctx.fillRect(bx, by, bw*frac, bh);
   ctx.strokeStyle = "rgba(255,255,255,0.18)"; ctx.lineWidth=1; ctx.strokeRect(bx, by, bw, bh);
@@ -377,17 +377,17 @@ export function drawLegendaryIntro() {
   drawLegendaryBossHead(intro, cx-panW/2+110, py+panH/2, 72);
   const tx = cx-panW/2+210;
   ctx.fillStyle="rgba(255,255,255,0.35)"; ctx.font="11px Trebuchet MS"; ctx.textAlign="left";
-  ctx.fillText("⚔ LEGENDARISK BOSS ANKOMMER", tx, py+38);
+  ctx.fillText("⚔ LEGENDARY BOSS APPROACHES", tx, py+38);
   ctx.fillStyle="#f2c14e"; ctx.font="bold 28px Trebuchet MS";
   ctx.fillText(ET.name, tx, py+74);
   ctx.fillStyle=ET.eye; ctx.font="13px Trebuchet MS";
-  ctx.fillText("Dag " + Game.day + "  ·  Specielt angreb: " + (ET.attackName||""), tx, py+98);
+  ctx.fillText("Day " + Game.day + "  ·  Special attack: " + (ET.attackName||""), tx, py+98);
   ctx.fillStyle="rgba(240,230,210,0.7)"; ctx.font="12px Trebuchet MS";
   const descs = {
-    legend1:"Stamper jorden og sender en shockwave der ødelægger alt inden for 200px.",
-    legend2:"Lader op og charger med lynhurtig fart og knuser alt i vejen.",
-    legend3:"Udsender en kæmpemæssig tomhedspuls der rammer alt inden for 310px.",
-    magmaGolem:"Panserskal af obsidian – ram den glødende kerne når den åbner sig! Knuser mure og efterlader brændende magmasøer.",
+    legend1:"Stomps the ground and sends a shockwave destroying everything within 200px.",
+    legend2:"Charges up and rushes at lightning speed, crushing everything in its path.",
+    legend3:"Emits a massive void pulse that hits everything within 310px.",
+    magmaGolem:"Armored obsidian shell – hit the glowing core when it opens! Crushes walls and leaves burning pools of magma.",
   };
   ctx.fillText(descs[intro.bossType]||"", tx, py+120);
   ctx.fillStyle="rgba(255,255,255,0.1)"; roundedRect(tx, py+140, panW-230, 12, 6); ctx.fill();
@@ -395,6 +395,6 @@ export function drawLegendaryIntro() {
   const barW=(panW-230)*0.7;
   roundedRect(tx, py+140, barW, 12, 6); ctx.fill();
   ctx.fillStyle="rgba(255,255,255,0.5)"; ctx.font="10px Trebuchet MS"; ctx.textAlign="left";
-  ctx.fillText("Liv: " + ET.hp, tx, py+168);
+  ctx.fillText("HP: " + ET.hp, tx, py+168);
   ctx.restore();
 }

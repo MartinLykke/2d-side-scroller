@@ -3,7 +3,7 @@ import { clamp, dist, rand } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { floaty, spawnCoin, spawnParticles } from './SpawnSystem.js';
+import { floaty, spawnGoldReward, spawnParticles } from './SpawnSystem.js';
 
 // The mine lives directly under the base and reuses the surface coordinate
 // space: same x-axis, same ground line. Game.inMine only switches which scene
@@ -135,11 +135,17 @@ export function minerAI(u, dt) {
   if (u.workTimer >= CFG.minerInterval) {
     u.workTimer = 0;
     v.ore--;
-    const c = spawnCoin(v.x + rand(-14, 14), 1, groundY - 26, rand(-40, 40), rand(-160, -90));
-    c.mine = true;
+    const mined = spawnGoldReward(v.x, 1, "mine", {
+      spreadX: 14,
+      fromY: groundY - 26,
+      vx: 40,
+      vyMin: 90,
+      vyMax: 160,
+      mine: true,
+    });
     mineParticles(v.x, groundY - 20, 6, "#f2c14e", 40, 60);
     mineParticles(v.x, groundY - 22, 4, "#8a7a66", 50, 40);
-    if (Game.inMine) Audio.coin();
+    if (mined > 0 && Game.inMine) Audio.coin();
     if (v.ore <= 0) {
       u.veinTarget = null;
       expandMine(v);

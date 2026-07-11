@@ -16,9 +16,27 @@ export function roundedRect(x, y, w, h, r) {
 export function legs(x, baseYy, anim, spread, col) {
   ctx.strokeStyle=col; ctx.lineWidth=2.6; ctx.lineCap="round";
   const s=Math.sin(anim);
-  ctx.beginPath(); ctx.moveTo(x-3,baseYy); ctx.lineTo(x-3+s*spread,groundY); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x+3,baseYy); ctx.lineTo(x+3-s*spread,groundY); ctx.stroke();
+  const lf=x-3+s*spread, rf=x+3-s*spread;
+  ctx.beginPath(); ctx.moveTo(x-3,baseYy); ctx.lineTo(lf,groundY-2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x+3,baseYy); ctx.lineTo(rf,groundY-2); ctx.stroke();
   ctx.lineCap="butt";
+  drawBoot(lf,groundY,col,0.9);
+  drawBoot(rf,groundY,col,0.9);
+}
+
+export function drawBoot(x, y, col, scale=1, dir=1) {
+  ctx.save();
+  ctx.fillStyle=col;
+  roundedRect(x-2.7*scale, y-3.2*scale, 7.2*scale, 3.4*scale, 1.4*scale);
+  ctx.fill();
+  ctx.fillStyle="rgba(0,0,0,0.22)";
+  ctx.fillRect(x-2.1*scale, y-0.8*scale, 6.4*scale, 1.1*scale);
+  if (dir < 0) {
+    ctx.fillRect(x-3.3*scale, y-2.2*scale, 1.6*scale, 1.2*scale);
+  } else {
+    ctx.fillRect(x+3.4*scale, y-2.2*scale, 1.6*scale, 1.2*scale);
+  }
+  ctx.restore();
 }
 
 export function drawArm(x1,y1,x2,y2,col) {

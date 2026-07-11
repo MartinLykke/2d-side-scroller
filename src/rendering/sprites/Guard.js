@@ -1,4 +1,5 @@
 import { ctx, groundY } from '../../core/canvas.js';
+import { drawBoot } from '../DrawHelpers.js';
 
 // ---------------------------------------------------------------------------
 // Procedural guard (unlocked at base level 3): steel kettle helm, padded
@@ -66,10 +67,12 @@ export function drawGuard(u) {
   const stride = moving ? 5 : 0;
   let backFoot = -3 + s * stride, frontFoot = 3 - s * stride;
   if (thrust > 0.1 && !moving) { backFoot = -5.5; frontFoot = 5 + lean * 0.6; }
-  limb(-3, hipY, backFoot, groundY - 3, C.pants, 3.2);
-  limb(backFoot, groundY - 3.5, backFoot + 1.6, groundY, C.boots, 3.6);
-  limb(3, hipY, frontFoot, groundY - 3, C.pants, 3.2);
-  limb(frontFoot, groundY - 3.5, frontFoot + 1.6, groundY, C.boots, 3.6);
+  limb(-3, hipY, backFoot, groundY - 4, C.pants, 3.2);
+  limb(backFoot, groundY - 4.5, backFoot + 0.5, groundY - 2, C.boots, 3.6);
+  drawBoot(backFoot + 0.5, groundY, C.boots, 1);
+  limb(3, hipY, frontFoot, groundY - 4, C.pants, 3.2);
+  limb(frontFoot, groundY - 4.5, frontFoot + 0.5, groundY - 2, C.boots, 3.6);
+  drawBoot(frontFoot + 0.5, groundY, C.boots, 1);
 
   // --- shield on the back arm (behind the torso) ---
   const shieldX = -6 + lean * 0.3;

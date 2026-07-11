@@ -16,7 +16,7 @@ export function addXP(amount) {
     player.xp -= xpToNext(player.level || 1);
     player.level = (player.level || 1) + 1;
     player.pendingUpgrade = true;
-    floaty(player.x, "⬆ Niveau " + player.level + "!", "#f2c14e");
+    floaty(player.x, "⬆ Level " + player.level + "!", "#f2c14e");
     Audio.levelUp();
   }
 }

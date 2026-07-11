@@ -2,7 +2,7 @@ import { ENEMY_TYPES } from '../../config/enemies.js';
 import { ctx, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { roundedRect, legs, drawArm, drawHpBar } from '../DrawHelpers.js';
-import { wallHeight } from '../../entities/Wall.js';
+import { wallHeight, overWallPlatform } from '../../entities/Wall.js';
 import { drawArcher } from '../sprites/Archer.js';
 import { drawBuilder } from '../sprites/Builder.js';
 import { drawVillager } from '../sprites/Villager.js';
@@ -69,6 +69,86 @@ export function drawVagrants() {
   }
 }
 
+// Grappling hook flight: rope from the archer's hand to a grapnel biting the
+// wall top. Drawn in world space so mirroring/lift transforms don't apply.
+function drawGrappleRope(u, lift) {
+  const g = u.grapple;
+  const targetX = g.toX;
+  const targetY = groundY - g.lift - 16;
+  const handX = u.x + (u.dir || 1) * 5;
+  const handY = groundY - lift - 27;
+  let hx, hy;
+  if (g.phase === "throw") {
+    const p = Math.min(g.t, 1);
+    const e = 1 - (1 - p) * (1 - p);
+    hx = handX + (targetX - handX) * e;
+    hy = handY + (targetY - handY) * e - Math.sin(p * Math.PI) * 18; // thrown arc
+  } else {
+    hx = targetX; hy = targetY;
+  }
+  // rope sags while flying, snaps taut once the pull starts
+  const sag = g.phase === "throw" ? 10 : Math.max(2, 14 * (1 - Math.min(g.t, 1)));
+  ctx.save();
+  ctx.strokeStyle = "#c9b48a"; ctx.lineWidth = 1.3;
+  ctx.beginPath(); ctx.moveTo(handX, handY);
+  ctx.quadraticCurveTo((handX + hx) / 2, Math.max(handY, hy) + sag, hx, hy);
+  ctx.stroke();
+  // grapnel: shank with two curved flukes
+  const ang = Math.atan2(hy - handY, hx - handX);
+  ctx.translate(hx, hy); ctx.rotate(ang);
+  ctx.strokeStyle = "#8a8a94"; ctx.lineWidth = 2; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-4, 0); ctx.lineTo(4, 0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(4, 0); ctx.quadraticCurveTo(7, -3, 3, -6); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(4, 0); ctx.quadraticCurveTo(7, 3, 3, 6); ctx.stroke();
+  ctx.restore();
+}
+
+// Power shot: sparks build while the archer stands still, a bright aura when
+// fully charged, and an expanding shockwave ring on release.
+function drawPowerCharge(u, lift) {
+  const t = performance.now() / 1000;
+  const cx = u.x, cy = groundY - 26 - lift;
+  const p = Math.min((u.powerTimer || 0) / 3, 1);
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  if (u.powerFlash > 0) {
+    const fp = 1 - u.powerFlash / 0.4;
+    ctx.globalAlpha = 0.7 * (1 - fp);
+    ctx.strokeStyle = "#ffe9a0"; ctx.lineWidth = 3 * (1 - fp) + 1;
+    ctx.beginPath(); ctx.arc(cx, cy, 10 + fp * 42, 0, Math.PI * 2); ctx.stroke();
+  }
+  if (u.charged) {
+    const pulse = 0.75 + 0.25 * Math.sin(t * 10 + u.x);
+    ctx.globalAlpha = 0.5 * pulse;
+    const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, 26);
+    g.addColorStop(0, "rgba(255,240,180,0.9)");
+    g.addColorStop(0.5, "rgba(255,204,68,0.4)");
+    g.addColorStop(1, "rgba(200,120,0,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, 26, 0, Math.PI * 2); ctx.fill();
+    // orbiting sparks
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = "#fff2b0";
+    for (let i = 0; i < 3; i++) {
+      const a = t * 4 + i * (Math.PI * 2 / 3);
+      ctx.beginPath(); ctx.arc(cx + Math.cos(a) * 16, cy + Math.sin(a) * 9 - 2, 1.6, 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (p > 0.13) {
+    // charging: sparks rise off the ground and tighten toward the archer
+    ctx.fillStyle = "#ffcc44";
+    for (let i = 0; i < 4; i++) {
+      const cycle = (t * (0.8 + i * 0.13) + i * 0.37) % 1;
+      const sx = cx + Math.sin(i * 2.7 + u.x) * 14 * (1 - cycle * 0.6);
+      const sy = groundY - 4 - cycle * 34 - lift;
+      ctx.globalAlpha = p * 0.8 * Math.sin(cycle * Math.PI);
+      ctx.beginPath(); ctx.arc(sx, sy, 1.4 + p, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = p * 0.35;
+    ctx.strokeStyle = "#ffcc44"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.ellipse(cx, groundY - 2 - lift, 12 * p + 4, 3.5, 0, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
+}
+
 export function drawUnits() {
   for (const u of state.units) {
     if (u.mine) continue; // miners are drawn by the mine scene
@@ -77,8 +157,10 @@ export function drawUnits() {
     else if (u.role==="builder") { body="#6a4a28"; tool="hammer"; }
     else if (u.role==="farmer")  { body="#5a6a2a"; tool="scythe"; }
     else if (u.role==="guard")   { body="#3a4a5a"; head="#b09a7a"; }
-    const climbT = u.wall && Math.abs(u.x - u.wall.x) < 90 ? (u.wallClimbT || (u.onWall ? 1 : 0)) : 0;
-    const wallLift = u.wall ? Math.max(0, wallHeight(u.wall) - 14) * climbT : 0;
+    const climbT = u.wall && overWallPlatform(u.wall, u.x) ? (u.wallClimbT || (u.onWall ? 1 : 0)) : 0;
+    let wallLift = u.wall ? Math.max(0, wallHeight(u.wall) - 14) * climbT : 0;
+    // Grapple flight: the rope, not the climb, carries the archer up
+    if (u.grapple) wallLift = u.grappleLiftY || 0;
 
     const shadowAlpha = u.role === "archer" && state.archerSkills.includes("master_shadows") && Game.isNight && (u.smokeReveal || 0) <= 0 ? 0.32 : 1;
     ctx.save();
@@ -88,9 +170,11 @@ export function drawUnits() {
       const p = Math.min((u.deathT || 0) / (u.deathDuration || 1.25), 1);
       const ease = 1 - Math.pow(1 - p, 3);
       ctx.globalAlpha *= Math.max(0.25, 1 - Math.max(0, p - 0.72) / 0.28);
-      ctx.translate(0, groundY);
+      // Pivot at the unit's own feet — sprites draw at absolute u.x, so the
+      // rotation origin must be moved there or the body swings around x=0.
+      ctx.translate(u.x, groundY);
       ctx.rotate((u.deathSpin || 1) * ease * (u.role === "guard" ? 1.35 : 1.55));
-      ctx.translate(0, -groundY + ease * 3);
+      ctx.translate(-u.x, -groundY + ease * 3);
     }
 
     if (u.role === "archer") {
@@ -112,6 +196,14 @@ export function drawUnits() {
       ctx.restore();
     }
     ctx.restore();
+
+    if (!u.dying && u.role === "archer") {
+      if (u.grapple) drawGrappleRope(u, wallLift);
+      if (state.archerSkills.includes("powershot") && !state.archerSkills.includes("heavy_ballista") &&
+          (u.charged || u.powerFlash > 0 || (u.powerTimer || 0) > 0.4)) {
+        drawPowerCharge(u, wallLift);
+      }
+    }
 
     if (!u.dying && u.role === "archer" && u.archerName) {
       const shadowAlpha = state.archerSkills.includes("master_shadows") && Game.isNight && (u.smokeReveal || 0) <= 0 ? 0.35 : 0.9;
@@ -186,7 +278,7 @@ function drawStuckImpArrows(e) {
 
 function drawImp(e, t, dark, atkF) {
   const T = performance.now() / 1000;
-  const flash = e.flash > 0;
+  const flash = e.flash > 0 && !e.dying;
   const atkKind = e.impAttackKind || "claw";
   // Pounce is driven by the AI's own attack clock so pose and motion stay in sync.
   const pounce = atkKind === "pounce" && e.aiState === "impAttack" && !e.dying && e.impPounceP != null ? e.impPounceP : -1;
@@ -408,7 +500,7 @@ function drawImp(e, t, dark, atkF) {
 
 function drawEmberBrute(e, t, dark, atkF) {
   const T = performance.now() / 1000;
-  const flash = e.flash > 0;
+  const flash = e.flash > 0 && !e.dying;
   const bob = Math.abs(Math.sin(e.anim * 0.9)) * 2;
   const y = groundY - bob;
   const body = flash ? "#fff" : "#5a1a10";
@@ -586,7 +678,7 @@ function drawEmberBrute(e, t, dark, atkF) {
 
 function drawFireImp(e, t, dark, atkF) {
   const T = performance.now() / 1000;
-  const flash = e.flash > 0;
+  const flash = e.flash > 0 && !e.dying;
   const w = t.w;
   const y = groundY - w * 0.62;
   const flap = Math.sin(e.anim * 5) * 8;
@@ -719,7 +811,7 @@ function drawFireImp(e, t, dark, atkF) {
 // Rider imps are separate entities positioned on its back by EnemyAI.
 function drawFireDragon(e, t, dark, atkF) {
   const T = performance.now() / 1000;
-  const flash = e.flash > 0;
+  const flash = e.flash > 0 && !e.dying;
   const w = t.w;
   const yc = groundY - 26;              // body centerline (entity is translated by e.fy)
   const flap = Math.sin(e.anim * 1.6);  // slow, heavy wingbeat
@@ -907,7 +999,7 @@ function drawFireDragon(e, t, dark, atkF) {
 function drawMagmaGolem(e, t, dark, atkF) {
   const T = performance.now() / 1000;
   const w = t.w;
-  const flash = e.flash > 0;
+  const flash = e.flash > 0 && !e.dying;
   const clamp01 = v => Math.max(0, Math.min(1, v));
   const smooth = v => {
     v = clamp01(v);
@@ -1404,12 +1496,13 @@ export function drawEnemies(dark) {
     if (e.dying) {
       const deathProgress = Math.min(e.deathT / (e.deathDuration || 0.5), 1);
       const ease = 1 - Math.pow(1 - deathProgress, 3);
-      const impFall = e.type === "imp";
-      const rotation = impFall ? (e.deathSpin || 1) * ease * (e.deathKind === "impFallBack" ? 1.55 : 1.18) : ease * Math.PI / 2;
-      const sink = impFall ? ease * 4 : 0;
-      ctx.translate(0, groundY - sink);
+      // Ragdoll: rotation comes from integrated physics, pivot at body center
+      const rotation = e.deathAngle !== undefined ? e.deathAngle : ease * Math.PI / 2;
+      const sink = ease * 4;
+      const pivotY = groundY - w * 0.45;
+      ctx.translate(0, pivotY - sink);
       ctx.rotate(rotation);
-      ctx.translate(0, -groundY);
+      ctx.translate(0, -pivotY);
     }
     if (e.type === "imp" && e.burn > 0) {
       const ft = performance.now() / 1000;
@@ -1458,6 +1551,25 @@ export function drawEnemies(dark) {
     }
     drawStuckImpArrows(e);
     ctx.restore();
+
+    // Hunter's Mark: a pulsing crimson chevron hovers over the marked target
+    if (e.hunterMark > 0 && !e.dying) {
+      const mt = performance.now() / 1000;
+      const my = groundY + drawYOff - t.w - (t.flying ? 26 : 16) - Math.sin(mt * 5 + e.x) * 2.5;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, e.hunterMark) * (0.75 + 0.25 * Math.sin(mt * 9));
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha *= 0.5;
+      const mg = ctx.createRadialGradient(e.x, my, 1, e.x, my, 11);
+      mg.addColorStop(0, "rgba(255,90,58,0.9)"); mg.addColorStop(1, "rgba(120,10,0,0)");
+      ctx.fillStyle = mg; ctx.beginPath(); ctx.arc(e.x, my, 11, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = "#ff5a3a";
+      ctx.beginPath();
+      ctx.moveTo(e.x - 5, my - 6); ctx.lineTo(e.x, my); ctx.lineTo(e.x + 5, my - 6);
+      ctx.lineTo(e.x + 5, my - 3); ctx.lineTo(e.x, my + 3.5); ctx.lineTo(e.x - 5, my - 3);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    }
 
     // Bosses get a big always-on health bar with a name plate
     if (isBoss || t.legendary) {

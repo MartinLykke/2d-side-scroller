@@ -6,7 +6,7 @@ import { makePlayer } from '../../entities/Player.js';
 import { makeWall } from '../../entities/Wall.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { Audio } from './Audio.js';
-import { spawnCoin, spawnParticles, spawnAnimal, planNight } from '../world/SpawnSystem.js';
+import { spawnParticles, spawnAnimal, planNight, purchaseFloaty } from '../world/SpawnSystem.js';
 import { buildForest } from '../world/ForestSystem.js';
 import { makeBuildings, buildingCost, buildingLabel, payBuilding } from '../world/OutpostSystem.js';
 import { upgradeBase } from '../../util/GameStateHelpers.js';
@@ -15,6 +15,75 @@ import { baseName } from '../../rendering/HUD.js';
 import { applyPermanentUpgrades, applyPermanentWorldUpgrades } from './RoguelikeSystem.js';
 import { initMineVeins } from '../world/MineSystem.js';
 
+function missingDefenseHp() {
+  let missing = Math.max(0, state.base.maxHp - state.base.hp);
+  for (const w of state.walls || []) {
+    if (!w.commissioned || w.buildProgress < 1) continue;
+    missing += Math.max(0, w.maxHp - w.hp);
+  }
+  return missing;
+}
+
+function repairDefenseCost() {
+  const missing = missingDefenseHp();
+  if (missing <= 0) return 0;
+  return CFG.repairAllCost + Math.ceil(missing / 24);
+}
+
+function canReinforceDefenses() {
+  if ((state.base?.level || 1) < 4 || missingDefenseHp() > 0) return false;
+  if (state.base.hp < state.base.maxHp + 30) return true;
+  return (state.walls || []).some(w =>
+    w.commissioned &&
+    w.buildProgress >= 1 &&
+    w.hp < Math.ceil(w.maxHp * 1.35)
+  );
+}
+
+function reinforceDefenseCost() {
+  if (!canReinforceDefenses()) return 0;
+  return CFG.reinforceCostBase + Game.day * CFG.reinforceCostPerDay;
+}
+
+function baseStationCost(base) {
+  if (base.level < 4) return CFG.baseUpgradeCost[base.level];
+  return repairDefenseCost() || reinforceDefenseCost();
+}
+
+function baseStationLabel(base) {
+  if (base.level < 4) return `Upgrade ${baseName(base.level)} -> ${baseName(base.level + 1)}`;
+  if (repairDefenseCost() > 0) return "Repair castle and walls";
+  if (reinforceDefenseCost() > 0) return "Reinforce defenses";
+  return "The castle is fully secured";
+}
+
+function payBaseStation(base) {
+  if (base.level < 4) {
+    upgradeBase();
+    addXP(30);
+    return;
+  }
+  if (repairDefenseCost() > 0) {
+    base.hp = Math.max(base.hp, base.maxHp);
+    for (const w of state.walls || []) {
+      if (w.commissioned && w.buildProgress >= 1) w.hp = Math.max(w.hp, w.maxHp);
+    }
+    spawnParticles(base.x, groundY - 40, 18, "#9bd05a", 80, 90);
+    Audio.build();
+    return;
+  }
+  if (reinforceDefenseCost() > 0) {
+    base.hp = Math.min(base.maxHp + 30, Math.max(base.hp, base.maxHp) + 20);
+    for (const w of state.walls || []) {
+      if (!w.commissioned || w.buildProgress < 1) continue;
+      const cap = Math.ceil(w.maxHp * 1.35);
+      w.hp = Math.min(cap, Math.max(w.hp, w.maxHp) + Math.ceil(w.maxHp * 0.25));
+    }
+    spawnParticles(base.x, groundY - 70, 24, "#cfe6f2", 120, 110);
+    Audio.build();
+  }
+}
+
 export function buildStations() {
 
   const { base, walls } = state;
@@ -22,22 +91,34 @@ export function buildStations() {
 
   state.stations.push({
     id:"base", x:()=>base.x, paid:0,
-    cost:()=>base.level<4?CFG.baseUpgradeCost[base.level]:0,
-    label:()=>base.level<4?`Opgradér ${baseName(base.level)} → ${baseName(base.level+1)}`:"Slottet er fuldt udbygget",
-    onPaid:()=>{ upgradeBase(); addXP(30); },
+    cost:()=>baseStationCost(base),
+    label:()=>baseStationLabel(base),
+    onPaid:()=>payBaseStation(base),
   });
   state.stations.push({
     id:"bow", x:()=>STATIONS_X.bow, paid:0,
     cost:()=>CFG.bowCost,
-    label:()=>"Køb bue (skab en bueskytte)",
-    onPaid:()=>{ state.groundBows.push({ x:STATIONS_X.bow+rand(-12,12), claimed:false }); Audio.recruit(); },
+    label:()=>"Buy bow (creates an archer)",
+    onPaid:()=>{
+      const bx = STATIONS_X.bow+rand(-12,12);
+      state.groundBows.push({ x:bx, claimed:false, born:performance.now()/1000 });
+      purchaseFloaty("bow", bx, "🏹 Bow purchased!", "#9bd05a");
+      spawnParticles(bx, groundY-20, 18, "#9bd05a", 80, 140);
+      Audio.recruit();
+    },
   });
   if (state.base.level >= 2) {
     state.stations.push({
       id:"hammer", x:()=>STATIONS_X.hammer, paid:0,
       cost:()=>CFG.hammerCost,
-      label:()=>"Køb hammer (skab en bygger)",
-      onPaid:()=>{ state.groundHammers.push({ x:STATIONS_X.hammer+rand(-12,12), claimed:false }); Audio.recruit(); },
+      label:()=>"Buy hammer (creates a builder)",
+      onPaid:()=>{
+        const hx = STATIONS_X.hammer+rand(-12,12);
+        state.groundHammers.push({ x:hx, claimed:false, born:performance.now()/1000 });
+        purchaseFloaty("hammer", hx, "🔨 Hammer purchased!", "#f2a230");
+        spawnParticles(hx, groundY-20, 18, "#f2a230", 80, 140);
+        Audio.recruit();
+      },
     });
   }
   if (state.base.level >= 2) {
@@ -45,9 +126,9 @@ export function buildStations() {
       id:"farm", x:()=>STATIONS_X.farm, paid:0,
       cost:()=>state.farmLevel>=5?0:CFG.farmUpgradeCosts[state.farmLevel],
       label:()=>{
-        if (state.farmLevel===0) return "Byg gård (passiv guldindkomst)";
-        if (state.farmLevel>=5) return "Gård er fuldt opgraderet (niveau 5)";
-        return `Opgradér gård niveau ${state.farmLevel}→${state.farmLevel+1}`;
+        if (state.farmLevel===0) return "Build farm (passive gold income)";
+        if (state.farmLevel>=5) return "Farm is fully upgraded (level 5)";
+        return `Upgrade farm level ${state.farmLevel}→${state.farmLevel+1}`;
       },
       onPaid:()=>{
         state.farmLevel++;
@@ -61,17 +142,17 @@ export function buildStations() {
     state.stations.push({
       id:"shop", x:()=>STATIONS_X.shop, paid:0,
       cost:()=>0,
-      label:()=>"🏪 Butik",
+      label:()=>"🏪 Shop",
       onPaid:()=>{},
     });
   }
   if (state.base.level >= 3) {
     state.stations.push({
       id:"guard", x:()=>STATIONS_X.guard, paid:0,
-      cost:()=> state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level] ? 0 : 8,
+      cost:()=> state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level] ? 0 : CFG.guardCost,
       label:()=> state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level]
-        ? "Befolkningsgrænse nået"
-        : "Rekruttér vagt (8🪙) – nærkampenhed",
+        ? "Population cap reached"
+        : `Recruit guard (${CFG.guardCost} coins) - melee unit`,
       onPaid:()=>{
         if (state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level]) return;
         const u = makeUnit("guard", STATIONS_X.guard + rand(-20, 20));
@@ -85,7 +166,7 @@ export function buildStations() {
     state.stations.push({
       id:"mine", x:()=>STATIONS_X.mine, paid:0,
       cost:()=>CFG.mineCost,
-      label:()=>"Byg mine (grav guld under slottet)",
+      label:()=>"Build mine (dig for gold beneath the castle)",
       onPaid:()=>{
         state.mineBuilt = true;
         initMineVeins();
@@ -100,8 +181,8 @@ export function buildStations() {
       id:"miner", mineLayer:true, x:()=>MINE.stationX, paid:0,
       cost:()=> state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level] ? 0 : CFG.minerCost,
       label:()=> state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level]
-        ? "Befolkningsgrænse nået"
-        : `Rekruttér minearbejder (${CFG.minerCost}🪙) – graver guld`,
+        ? "Population cap reached"
+        : `Recruit miner (${CFG.minerCost}🪙) – digs for gold`,
       onPaid:()=>{
         if (state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level]) return;
         const u = makeUnit("miner", MINE.stationX + rand(-20, 20));
@@ -121,10 +202,10 @@ export function buildStations() {
         return 0;
       },
       label:()=>{
-        if (!w.commissioned) return "Byg mur";
-        if (w.buildProgress < 1) return "Bygges...";
-        if (w.level < 5) return `Opgradér mur (lvl ${w.level}→${w.level+1})`;
-        return "Mur (maks niveau 5)";
+        if (!w.commissioned) return "Build wall";
+        if (w.buildProgress < 1) return "Under construction...";
+        if (w.level < 5) return `Upgrade wall (lvl ${w.level}→${w.level+1})`;
+        return "Wall (max level 5)";
       },
       onPaid:()=>{
         if (!w.commissioned) {

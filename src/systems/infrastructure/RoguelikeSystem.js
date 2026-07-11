@@ -14,27 +14,27 @@ const HUB = {
 };
 const HUB_TRANSITION_TIME = 1.15;
 const HUB_UPGRADE_LABELS = {
-  heart: "Max liv",
-  blade: "Skade",
-  purse: "Startguld",
-  ember: "Mere glød",
+  heart: "Max HP",
+  blade: "Damage",
+  purse: "Starting gold",
+  ember: "More embers",
   regen: "Regen",
-  wanderer_lantern: "Vagabond",
-  grave_bow: "Startbue",
-  oath_sparks: "Evnepoint",
-  moon_cache: "Guld-cache",
-  old_crew: "Start crew",
-  stone_oath: "Startmure",
+  wanderer_lantern: "Vagrant",
+  grave_bow: "Starting bow",
+  oath_sparks: "Skill points",
+  moon_cache: "Gold cache",
+  old_crew: "Starting crew",
+  stone_oath: "Starting walls",
   crowned_camp: "Base lvl 2",
-  ghost_bow: "Kortbue",
+  ghost_bow: "Short bow",
 };
 
 export const META_UPGRADES = [
   {
     id: "heart",
     tier: "basic",
-    name: "Blodets Segl",
-    desc: "+1 max liv per rang",
+    name: "Seal of Blood",
+    desc: "+1 max HP per rank",
     max: 5,
     x: 640,
     color: "#d95b72",
@@ -44,8 +44,8 @@ export const META_UPGRADES = [
   {
     id: "blade",
     tier: "basic",
-    name: "Askeslebet Våben",
-    desc: "+8% skade per rang",
+    name: "Ash-Honed Weapon",
+    desc: "+8% damage to you and all allies per rank",
     max: 6,
     x: 750,
     color: "#f2c14e",
@@ -55,8 +55,8 @@ export const META_UPGRADES = [
   {
     id: "purse",
     tier: "basic",
-    name: "Gravkongens Pung",
-    desc: "+3 startguld per rang",
+    name: "Grave King's Purse",
+    desc: "+3 starting gold per rank",
     max: 5,
     x: 860,
     color: "#e6b64a",
@@ -66,8 +66,8 @@ export const META_UPGRADES = [
   {
     id: "ember",
     tier: "basic",
-    name: "Glødende Krone",
-    desc: "+10% ekstra run-belønning per rang",
+    name: "Glowing Crown",
+    desc: "+10% extra run reward per rank",
     max: 4,
     x: 970,
     color: "#8fd8ff",
@@ -77,8 +77,8 @@ export const META_UPGRADES = [
   {
     id: "regen",
     tier: "basic",
-    name: "Månebrønd",
-    desc: "hurtigere heling udenfor kamp",
+    name: "Moonwell",
+    desc: "faster healing out of combat",
     max: 4,
     x: 1080,
     color: "#9bd05a",
@@ -88,8 +88,8 @@ export const META_UPGRADES = [
   {
     id: "wanderer_lantern",
     tier: "epic",
-    name: "Vildfaren Lygte",
-    desc: "+1 ekstra vagabond ved run-start",
+    name: "Wayward Lantern",
+    desc: "+1 extra vagrant at run start",
     max: 2,
     x: 1330,
     color: "#b9a7ff",
@@ -99,8 +99,8 @@ export const META_UPGRADES = [
   {
     id: "grave_bow",
     tier: "epic",
-    name: "Gravbue",
-    desc: "+1 løs bue ved lejrens start",
+    name: "Grave Bow",
+    desc: "+1 loose bow at camp start",
     max: 2,
     x: 1440,
     color: "#7fd6a4",
@@ -110,8 +110,8 @@ export const META_UPGRADES = [
   {
     id: "oath_sparks",
     tier: "epic",
-    name: "Edsflammer",
-    desc: "+1 bue- og vagt-evnepoint",
+    name: "Oath Flames",
+    desc: "+1 archer and guard skill point",
     max: 2,
     x: 1550,
     color: "#ff9bd2",
@@ -121,8 +121,8 @@ export const META_UPGRADES = [
   {
     id: "moon_cache",
     tier: "epic",
-    name: "Månecache",
-    desc: "+12 startguld og et lille gnistregn",
+    name: "Moon Cache",
+    desc: "+12 starting gold and a small shower of sparks",
     max: 1,
     x: 1660,
     color: "#d9e8ff",
@@ -132,8 +132,8 @@ export const META_UPGRADES = [
   {
     id: "old_crew",
     tier: "legendary",
-    name: "Den Første Ed",
-    desc: "start med 1 bueskytte og 1 bygger",
+    name: "The First Oath",
+    desc: "start with 1 archer and 1 builder",
     max: 1,
     x: 1950,
     color: "#ffcf5a",
@@ -143,8 +143,8 @@ export const META_UPGRADES = [
   {
     id: "stone_oath",
     tier: "legendary",
-    name: "Steneden",
-    desc: "start med 2 niveau 1 mure",
+    name: "Stone Oath",
+    desc: "start with 2 level 1 walls",
     max: 1,
     x: 2060,
     color: "#c6c6d8",
@@ -154,8 +154,8 @@ export const META_UPGRADES = [
   {
     id: "crowned_camp",
     tier: "legendary",
-    name: "Kronet Lejr",
-    desc: "start hvert run med base niveau 2",
+    name: "Crowned Camp",
+    desc: "start every run with base level 2",
     max: 1,
     x: 2170,
     color: "#f2c14e",
@@ -165,8 +165,8 @@ export const META_UPGRADES = [
   {
     id: "ghost_bow",
     tier: "legendary",
-    name: "Spøgelsespil",
-    desc: "start selv med en kortbue",
+    name: "Ghost Bow",
+    desc: "start with a short bow yourself",
     max: 1,
     x: 2280,
     color: "#8fd8ff",
@@ -327,7 +327,7 @@ function buildMetaStations() {
     },
     label: () => {
       const lvl = metaLevel(upg.id);
-      if (lvl >= upg.max) return `${upg.name} er fuldt vækket (${lvl}/${upg.max})`;
+      if (lvl >= upg.max) return `${upg.name} is fully awakened (${lvl}/${upg.max})`;
       return `${upg.name} ${lvl}/${upg.max}: ${upg.desc}`;
     },
     onPaid: () => {
@@ -434,7 +434,7 @@ function updateHubPayment(dt) {
 
   const cost = near.cost();
   if (p.coins < cost) {
-    hubFloat(near.x(), "Ikke nok sjæleglød", "#ff8a6a");
+    hubFloat(near.x(), "Not enough embers", "#ff8a6a");
     state.payCooldown = 0.55;
     return;
   }
@@ -812,7 +812,7 @@ function drawAltar(upg) {
 
   // readable upgrade plaque
   const plaqueLabel = upgradeLabel(upg);
-  const costText = maxed ? "MAX" : `${cost} glød`;
+  const costText = maxed ? "MAX" : `${cost} embers`;
   ctx.fillStyle = near ? "rgba(12,10,20,0.86)" : "rgba(12,10,20,0.68)";
   ctx.fillRect(-44, 8, 88, 35);
   ctx.strokeStyle = upg.color + (near ? "cc" : "66");
@@ -842,9 +842,9 @@ function drawAltar(upg) {
 }
 
 const HUB_TIERS = [
-  { text: "GRUND", hint: "Stats og glød", x0: 575, x1: 1145, cx: 860, color: "#9bd05a" },
-  { text: "EPISK", hint: "Run-start bonusser", x0: 1265, x1: 1725, cx: 1495, color: "#b9a7ff" },
-  { text: "LEGENDARISK", hint: "Store startfordele", x0: 1885, x1: 2345, cx: 2115, color: "#f2c14e" },
+  { text: "BASIC", hint: "Stats and embers", x0: 575, x1: 1145, cx: 860, color: "#9bd05a" },
+  { text: "EPIC", hint: "Run-start bonuses", x0: 1265, x1: 1725, cx: 1495, color: "#b9a7ff" },
+  { text: "LEGENDARY", hint: "Big starting advantages", x0: 1885, x1: 2345, cx: 2115, color: "#f2c14e" },
 ];
 
 function drawBrazier(x, color, t) {
@@ -963,11 +963,11 @@ function drawHubText() {
   ctx.fillRect(0, 0, W, 78);
   ctx.fillStyle = "#f2c14e";
   ctx.font = "bold 18px sans-serif";
-  ctx.fillText(`Sjæleglød: ${Game.meta?.embers || 0}`, 24, 32);
+  ctx.fillText(`Embers: ${Game.meta?.embers || 0}`, 24, 32);
   ctx.fillStyle = "#cfc6b0";
   ctx.font = "13px sans-serif";
   const reward = Game.meta?.lastReward || 0;
-  ctx.fillText(`Sidste run: dag ${Game.meta?.lastDay || 1}, ${Game.meta?.lastKills || 0} faldne, +${reward} glød. Gå til højre ind i den blå portal når du er klar.`, 24, 56);
+  ctx.fillText(`Last run: day ${Game.meta?.lastDay || 1}, ${Game.meta?.lastKills || 0} slain, +${reward} embers. Head right into the blue portal when you are ready.`, 24, 56);
   ctx.restore();
 }
 
@@ -1004,7 +1004,7 @@ function drawHubPrompt() {
     ctx.fillText(`${upgradeLabel(nearUpgrade)} - ${nearUpgrade.name}`, x + 18, y + 24);
     ctx.fillStyle = "#f3dfb5";
     ctx.font = "13px sans-serif";
-    ctx.fillText(`Effekt: ${nearUpgrade.desc}`, x + 18, y + 46);
+    ctx.fillText(`Effect: ${nearUpgrade.desc}`, x + 18, y + 46);
 
     ctx.fillStyle = "rgba(255,255,255,0.12)";
     ctx.fillRect(x + 18, y + 56, progressW, 8);
@@ -1016,17 +1016,17 @@ function drawHubPrompt() {
     ctx.textAlign = "right";
     ctx.fillStyle = "#d8d1bf";
     ctx.font = "12px sans-serif";
-    ctx.fillText(`Rang ${lvl}/${nearUpgrade.max}`, x + panelW - 18, y + 24);
+    ctx.fillText(`Rank ${lvl}/${nearUpgrade.max}`, x + panelW - 18, y + 24);
     ctx.fillStyle = maxed ? "#ffe9a3" : (affordable ? "#bff5c8" : "#ff9d84");
     ctx.font = "bold 13px sans-serif";
-    const buyText = maxed ? "Fuldt opgraderet" : affordable ? `Pris: ${cost} glød - hold ned/S` : `Pris: ${cost} glød - mangler ${cost - coins}`;
+    const buyText = maxed ? "Fully upgraded" : affordable ? `Price: ${cost} embers - hold down/S` : `Price: ${cost} embers - missing ${cost - coins}`;
     ctx.fillText(buyText, x + panelW - 18, y + 50);
   } else if (portalNear) {
     ctx.fillStyle = "#bfefff";
-    ctx.fillText("Gå ind i portalen for at starte et nyt run", W / 2, H - 46);
+    ctx.fillText("Enter the portal to start a new run", W / 2, H - 46);
   } else if (npcNear) {
     ctx.fillStyle = "#cfe6f2";
-    ctx.fillText("Den Tilslørede: Hver død er en nøgle. Betal ved seglene, kronbærer.", W / 2, H - 46);
+    ctx.fillText("The Veiled One: Every death is a key. Pay at the seals, crown-bearer.", W / 2, H - 46);
   }
   ctx.restore();
 }

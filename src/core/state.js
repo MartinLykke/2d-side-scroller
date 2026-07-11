@@ -58,6 +58,7 @@ export const state = {
   weaponPickup: null,
   forestTrees: [],
   forestCamps: [],
+  ponds: [],
   groundBows: [],
   groundHammers: [],
   spells: [],

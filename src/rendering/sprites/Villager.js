@@ -1,4 +1,5 @@
 import { ctx, groundY } from '../../core/canvas.js';
+import { drawBoot } from '../DrawHelpers.js';
 
 // ---------------------------------------------------------------------------
 // Procedural villager: the plain folk — vagrants wandering in and peasants
@@ -41,10 +42,14 @@ export function drawVillager(u, dir = u.dir, moving = u.moving) {
   // --- legs ---
   const s = Math.sin(anim);
   const stride = moving ? 5 : 0;
-  limb(-3, hipY, -3 + s * stride, groundY - 3, P.pants, 3);
-  limb(-3 + s * stride, groundY - 3.5, -1.4 + s * stride, groundY, BOOTS, 3.4);
-  limb(3, hipY, 3 - s * stride, groundY - 3, P.pants, 3);
-  limb(3 - s * stride, groundY - 3.5, 4.6 - s * stride, groundY, BOOTS, 3.4);
+  const backFoot = -3 + s * stride;
+  const frontFoot = 3 - s * stride;
+  limb(-3, hipY, backFoot, groundY - 4, P.pants, 3);
+  limb(backFoot, groundY - 4.5, backFoot + 0.5, groundY - 2, BOOTS, 3.4);
+  drawBoot(backFoot + 0.5, groundY, BOOTS, 0.92);
+  limb(3, hipY, frontFoot, groundY - 4, P.pants, 3);
+  limb(frontFoot, groundY - 4.5, frontFoot + 0.5, groundY - 2, BOOTS, 3.4);
+  drawBoot(frontFoot + 0.5, groundY, BOOTS, 0.92);
 
   // --- tunic ---
   ctx.fillStyle = P.tunic;

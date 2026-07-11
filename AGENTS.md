@@ -20,7 +20,7 @@ Press `P` to open the dev panel. It exposes:
 - Gold/ember injection (+10/50/1000 coins, +10/50/500 embers, reset meta)
 - Time skips (skip to night, next day, jump to day 10/15/20)
 - Base upgrade, max walls, full heal (player + units + base + walls)
-- Enemy spawning (imp, fire imp, dragon, 8-imp wave, kill all)
+- Enemy spawning (imp, flying imp, dragon, 8-imp wave, kill all)
 - Unit spawning (archer, builder, farmer, guard)
 - Weapon grants (short bow, lightning tome, meteor tome), drop weapon, god mode
 - Speed multiplier (×1, ×2, ×4)
@@ -110,7 +110,7 @@ Every module imports these directly; nothing is passed as arguments through upda
 | Type | HP | Notes |
 |------|----|-------|
 | Imp | 6 | Basic melee, spawns in night quotas |
-| Fire Imp | 8 | Flying, shoots fireballs at 430 px range |
+| Flying Imp | 8 | Flying, shoots fireballs at 430 px range |
 | Fire Dragon | 320 | Boss (night 5+), flying, drops rider imps, legendary attacks |
 
 Enemies spawn from portals, advance toward base, stack on walls. Flee at dawn.

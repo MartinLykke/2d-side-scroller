@@ -15,6 +15,7 @@ const IMP_ATTACH_RANGE = 34;
 const IMP_TOP_TRIGGER_PAD = 18;
 const IMP_STACK_EXTRA_SLOTS = 2;
 const IMP_QUEUE_SPACING = 18;
+const IMP_PYRAMID_BASE = 4; // bottom-row width of the waiting pyramid
 const WALL_DUEL_GAP = 22;
 let impStackSequence = 1;
 
@@ -30,16 +31,18 @@ function approachSpeedMult(distToBase) {
   return mix(APPROACH_NEAR_MULT, APPROACH_FAR_MULT, distToBase / APPROACH_SLOW_RANGE);
 }
 
-const IMP_UNOPPOSED_RANGE = 260;
-const IMP_SPRINT_MULT = 2.4;
-function impSprintMult(e) {
+// Enemies far from any opposition (player or living unit) sprint toward the
+// base so slow types like the ember brute actually arrive before dawn.
+const UNOPPOSED_RANGE = 260;
+const UNOPPOSED_SPRINT_MULT = 2.4;
+function unopposedSprintMult(e) {
   const { player, units } = state;
-  if (!Game.inMine && dist(e.x, player.x) < IMP_UNOPPOSED_RANGE) return 1;
+  if (!Game.inMine && dist(e.x, player.x) < UNOPPOSED_RANGE) return 1;
   for (const u of units) {
     if (u.hp <= 0 || u.dying || u.mine) continue;
-    if (dist(e.x, u.x) < IMP_UNOPPOSED_RANGE) return 1;
+    if (dist(e.x, u.x) < UNOPPOSED_RANGE) return 1;
   }
-  return IMP_SPRINT_MULT;
+  return UNOPPOSED_SPRINT_MULT;
 }
 
 function fleeToPortal(e, t, dt) {
@@ -159,8 +162,42 @@ function sendImpToStackQueue(e, w) {
   setImpState(e, "stackQueue");
 }
 
-function queueXForWall(w, idx) {
-  return wallOutsideX(w) + w.side * (IMP_ATTACH_RANGE + 16 + idx * IMP_QUEUE_SPACING);
+// Waiting imps form a pyramid just behind the stack: bottom row fills first
+// (nearest the wall = front of queue), upper rows stand on the shoulders of the
+// row below. Overflow beyond the pyramid lines up on the ground behind it.
+function queueSlotForWall(w, idx) {
+  let row = 0, rem = idx, width = IMP_PYRAMID_BASE;
+  while (row < IMP_PYRAMID_BASE - 1 && rem >= width) { rem -= width; row++; width--; }
+  let col = rem;
+  if (row === IMP_PYRAMID_BASE - 1 && rem >= width) { // pyramid full → ground line behind
+    row = 0;
+    col = IMP_PYRAMID_BASE + (rem - width) + 1;
+  }
+  const x = wallOutsideX(w) + w.side * (IMP_ATTACH_RANGE + 16 + (col + row * 0.5) * IMP_QUEUE_SPACING);
+  return { x, fy: -row * IMP_STACK_STEP };
+}
+
+// Move a queued imp toward its pyramid slot; stands perfectly still once there.
+function moveImpToQueueSlot(e, t, dt, wall, idx) {
+  const slot = queueSlotForWall(wall, idx);
+  const dx = slot.x - e.x;
+  if (Math.abs(dx) > 2) {
+    e.dir = Math.sign(dx);
+    e.x += e.dir * Math.min(t.speed * 0.85 * dt, Math.abs(dx));
+  } else {
+    e.x = slot.x;
+    e.dir = -wall.side;
+  }
+  // Climb/hop vertically only when roughly over the slot; drop quickly, climb slower.
+  const nearSlot = Math.abs(slot.x - e.x) < IMP_QUEUE_SPACING;
+  const targetFy = nearSlot ? slot.fy : Math.max(e.fy || 0, slot.fy);
+  const dy = targetFy - (e.fy || 0);
+  if (Math.abs(dy) > 1) {
+    const rate = dy > 0 ? 260 : 110; // dy>0 = falling down, dy<0 = hopping up
+    e.fy = (e.fy || 0) + Math.sign(dy) * Math.min(Math.abs(dy), rate * dt);
+  } else {
+    e.fy = targetFy;
+  }
 }
 
 function assignImpToStack(e, w) {
@@ -515,7 +552,65 @@ function updateImpCombat(e, t, dt) {
   return true;
 }
 
+// Imp hurled over a wall by an ember brute: ballistic arc, lands inside as breached
+function updateThrownImp(e, t, dt) {
+  e.thrownT = Math.min(1, (e.thrownT || 0) + dt * 1.05);
+  e.x = mix(e.thrownStartX, e.thrownEndX, e.thrownT);
+  e.fy = mix(e.thrownStartY || 0, 0, e.thrownT) - Math.sin(e.thrownT * Math.PI) * (e.thrownPeak || 90);
+  e.dir = Math.sign(e.thrownEndX - e.thrownStartX) || e.dir;
+  if (Math.random() < 0.3) spawnParticles(e.x, groundY + e.fy, 1, "#6b5a45", 14, 20);
+  if (e.thrownT >= 1) {
+    e.fy = 0;
+    e.breachedWall = true;
+    spawnParticles(e.x, groundY - 6, 6, "#6b5a45", 40, 30);
+    changeState(e, "recovery", 0.4);
+  }
+  return true;
+}
+
+const BRUTE_THROW_WALL_RANGE = 240;
+const BRUTE_THROW_IMP_RANGE = 130;
+
+function findThrowableImp(brute) {
+  let best = null, bd = BRUTE_THROW_IMP_RANGE;
+  for (const o of state.enemies) {
+    if (o.type !== "imp" || o.fleeing || o.dying || o.ridingDragon) continue;
+    if (o.stackWallRef || o.wallTopWall || o.leftStack || o.breachedWall) continue;
+    if (o.aiState === "stacking" || o.aiState === "climbOver" || o.aiState === "stackQueue" || o.aiState === "thrown" || o.aiState === "vaulting") continue;
+    const d = dist(brute.x, o.x);
+    if (d < bd) { bd = d; best = o; }
+  }
+  return best;
+}
+
+// Special attack: near the base, the brute grabs a loose imp and hurls it over
+// the nearest wall so it lands on the inside.
+function updateBruteThrow(e, t, dt) {
+  if (e.throwCd === undefined) e.throwCd = rand(2, 4);
+  e.throwCd -= dt;
+  if (e.throwCd > 0 || e.charging || e.fleeing || e.aiState === "recovery") return;
+  const side = e.x < CFG.baseX ? -1 : 1;
+  const wall = wallAt(side, e.x);
+  if (!wall || dist(e.x, wall.x) > BRUTE_THROW_WALL_RANGE) return;
+  const imp = findThrowableImp(e);
+  if (!imp) return;
+  e.throwCd = rand(5, 9);
+  e.attackAnim = 0.3 * swingMult(e);
+  breakImpStack(imp);
+  imp.thrownT = 0;
+  imp.thrownStartX = imp.x;
+  imp.thrownStartY = imp.fy || 0;
+  imp.thrownEndX = wallInsideX(wall) - wall.side * rand(0, 40);
+  imp.thrownPeak = wallHeight(wall) + rand(40, 70);
+  imp.knock = 0;
+  changeState(imp, "thrown", 0);
+  spawnParticles(e.x, groundY - 40, 8, "#ff6a20", 60, 50);
+  floaty(e.x, "THROW!", "#ff6a20");
+  Audio.hit();
+}
+
 function updateImp(e, t, dt) {
+  if (e.aiState === "thrown") return updateThrownImp(e, t, dt);
   if (e.knock && (e.aiState === "stacking" || e.aiState === "climbOver")) {
     breakImpStack(e);
     setImpState(e, "recovery");
@@ -568,10 +663,34 @@ function updateImp(e, t, dt) {
     } else {
       e.fy = Math.min(0, (e.fy || 0) + 120 * dt);
     }
+    // Landed inside — if another wall still stands between here and the base,
+    // this breach only applies to the wall just crossed, not the next one.
+    if ((e.fy || 0) >= 0) {
+      const nextWall = wallAt(e.x < CFG.baseX ? -1 : 1, e.x);
+      if (nextWall) {
+        e.breachedWall = false;
+        setImpState(e, "advance");
+        return false;
+      }
+    }
     const guard = nearestGuardForImp(e, 260);
     if (guard) {
       e.combatTarget = guard;
       return updateImpCombat(e, t, dt);
+    }
+    if (dist(e.x, state.base.x) < 70) {
+      e.dir = Math.sign(state.base.x - e.x) || e.dir;
+      if (e.attackCd <= 0) {
+        e.attackCd = 0.9;
+        e.attackAnim = 0.22 * swingMult(e);
+        const crit = applyCrit(t.baseDmg ?? t.dmg, CFG.critChance, CFG.critMultiplier);
+        state.base.hp -= crit.damage; state.base.flash = 0.2;
+        spawnParticles(state.base.x + rand(-30, 30), groundY - 30, 4, "#ff6a4a");
+        if (crit.isCrit) critFloaty(state.base.x, crit.damage);
+        else floaty(state.base.x, "-" + crit.damage, "#ff6a4a");
+        Audio.hit();
+      }
+      return true;
     }
     e.dir = Math.sign(state.base.x - e.x) || e.dir;
     e.x += e.dir * t.speed * dt;
@@ -596,14 +715,12 @@ function updateImp(e, t, dt) {
     const isFront = activeQueue[0] === e;
     if (!stackHasRoom || !isFront) {
       const queueIdx = Math.max(0, e.queueIndex || activeQueue.indexOf(e));
-      const qx = queueXForWall(wall, queueIdx);
-      e.dir = Math.sign(qx - e.x) || -wall.side;
-      if (Math.abs(qx - e.x) > 2) e.x += e.dir * Math.min(t.speed * 0.85 * dt, Math.abs(qx - e.x));
-      e.fy = 0;
+      moveImpToQueueSlot(e, t, dt, wall, queueIdx);
       return true;
     }
     e.queueWallRef = null;
     e.queueIndex = undefined;
+    e.fy = 0;
   }
   const incomingStack = state.enemies.some(other =>
     other !== e &&
@@ -619,23 +736,21 @@ function updateImp(e, t, dt) {
     breakImpStack(e);
     setImpState(e, "advance");
     e.dir = Math.sign(attachX - e.x) || e.dir;
-    e.x += e.dir * t.speed * impSprintMult(e) * dt;
+    e.x += e.dir * t.speed * unopposedSprintMult(e) * dt;
     return true;
   }
 
   if (!reachedWall && incomingStack) {
     setImpState(e, "advance");
     e.dir = Math.sign(attachX - e.x) || e.dir;
-    e.x += e.dir * t.speed * 1.05 * impSprintMult(e) * dt;
+    e.x += e.dir * t.speed * 1.05 * unopposedSprintMult(e) * dt;
     return true;
   }
 
   if (activeStack.length >= cap && e.stackWallRef !== wall) {
     sendImpToStackQueue(e, wall);
     const queue = impQueueForWall(wall);
-    const qx = queueXForWall(wall, e.queueIndex ?? queue.indexOf(e));
-    e.dir = Math.sign(qx - e.x) || -wall.side;
-    if (Math.abs(qx - e.x) > 2) e.x += e.dir * Math.min(t.speed * dt, Math.abs(qx - e.x));
+    moveImpToQueueSlot(e, t, dt, wall, e.queueIndex ?? Math.max(0, queue.indexOf(e)));
     return true;
   }
 
@@ -649,7 +764,7 @@ function updateImp(e, t, dt) {
   const stackX = attachX + (e.impStackX || 0);
   const attachDx = stackX - e.x;
   if (Math.abs(attachDx) > 1) e.x += Math.sign(attachDx) * Math.min(Math.abs(attachDx), t.speed * 1.25 * dt);
-  else e.x = attachX;
+  else e.x = stackX;
   e.vx = 0;
   e.fy = e.impStackY || 0;
   e.dir = -wall.side;
@@ -765,7 +880,7 @@ export function updateEnemies(dt) {
         continue;
       }
       e.dir = Math.sign(base.x - e.x) || e.dir;
-      e.x += e.dir * t.speed * approachSpeedMult(Math.abs(base.x - e.x)) * dt;
+      e.x += e.dir * t.speed * unopposedSprintMult(e) * approachSpeedMult(Math.abs(base.x - e.x)) * dt;
       if (!Game.inMine && e.shootCd !== undefined && e.shootCd <= 0 && dist(e.x, player.x) < 380) {
         const arrowY = groundY + (e.fy || -80);
         state.arrows.push({ x: e.x, y: arrowY, vx: Math.sign(player.x - e.x) * 320, vy: 180, target: {x: player.x}, life: 1.5, hitKind: "player" });
@@ -805,8 +920,8 @@ export function updateEnemies(dt) {
       }
     }
 
-    // Handle knockback with recovery state
-    if (e.knock) {
+    // Handle knockback with recovery state (thrown imps keep their arc)
+    if (e.knock && e.aiState !== "thrown") {
       e.x += e.knock * dt;
       e.knock *= Math.max(0, 1 - 9 * dt);
       if (Math.abs(e.knock) < 8) {
@@ -918,6 +1033,8 @@ export function updateEnemies(dt) {
           Audio.hit();
         }
       }
+
+      updateBruteThrow(e, t, dt);
     }
     if (e.charging) continue;
 
@@ -1090,25 +1207,14 @@ export function updateEnemies(dt) {
         if (e.stateTimer <= 0) changeState(e, "chasing", 0);
       } else if (e.aiState === "attacking") {
         if (e.stateTimer <= 0) {
-          const target = e.aggroUnit;
-          if (target.role === "archer" && target.smoked > 0) {
-            changeState(e, "chasing", 0);
-          } else if (target.role === "archer" && target.smoked <= 0 && state.archerSkills.includes("smoke_bomb")) {
-            target.smoked = 2.0;
-            spawnParticles(target.x, groundY - 30, 20, "#aaaaaa", 70, 60);
-            changeState(e, "recovery", 0.4);
-            e.attackCd = 1.2; e.aggroUnit = null;
-            Audio.hit();
-          } else {
-            changeState(e, "recovery", 0.4);
-            e.attackCd = 0.8; e.attackAnim = 0.22 * swingMult(e);
-            const crit = applyCrit(2, CFG.critChance, CFG.critMultiplier);
-            e.aggroUnit.hp -= crit.damage; e.aggroUnit.panic = 1;
-            spawnParticles(e.aggroUnit.x, groundY - 30, 3, "#7a1f1f");
-            if (crit.isCrit) critFloaty(e.aggroUnit.x, crit.damage);
-            else floaty(e.aggroUnit.x, "-" + crit.damage, "#7a1f1f");
-            Audio.hit();
-          }
+          changeState(e, "recovery", 0.4);
+          e.attackCd = 0.8; e.attackAnim = 0.22 * swingMult(e);
+          const crit = applyCrit(2, CFG.critChance, CFG.critMultiplier);
+          e.aggroUnit.hp -= crit.damage; e.aggroUnit.panic = 1;
+          spawnParticles(e.aggroUnit.x, groundY - 30, 3, "#7a1f1f");
+          if (crit.isCrit) critFloaty(e.aggroUnit.x, crit.damage);
+          else floaty(e.aggroUnit.x, "-" + crit.damage, "#7a1f1f");
+          Audio.hit();
         }
       } else {
         const unitChaseMult = debuffSpeedMult(e);
@@ -1125,7 +1231,7 @@ export function updateEnemies(dt) {
       if (e.attackCd <= 0 && e.aiState !== "recovery") {
         changeState(e, "attacking", 0.4);
         e.attackCd = 0.9; e.attackAnim = 0.22 * swingMult(e);
-        const crit = applyCrit(t.dmg, CFG.critChance, CFG.critMultiplier);
+        const crit = applyCrit(t.baseDmg ?? t.dmg, CFG.critChance, CFG.critMultiplier);
         base.hp -= crit.damage; base.flash = 0.2;
         spawnParticles(base.x + rand(-30, 30), groundY - 30, 4, "#ff6a4a");
         if (crit.isCrit) critFloaty(base.x, crit.damage);
@@ -1153,7 +1259,7 @@ export function updateEnemies(dt) {
     if (e.aiState !== "attacking" && e.aiState !== "recovery") {
       e.dir = Math.sign(base.x - e.x) || e.dir;
       const slowMult = debuffSpeedMult(e);
-      const sprintMult = e.type === "imp" ? impSprintMult(e) : 1;
+      const sprintMult = t.boss ? 1 : unopposedSprintMult(e);
       e.x += e.dir * t.speed * slowMult * sprintMult * approachSpeedMult(Math.abs(base.x - e.x)) * dt;
     }
   }

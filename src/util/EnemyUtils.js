@@ -1,7 +1,7 @@
 import { ENEMY_TYPES } from '../config/enemies.js';
 import { groundY } from '../core/canvas.js';
 import { Game, state } from '../core/state.js';
-import { spawnCoin, spawnParticles, floaty } from '../systems/world/SpawnSystem.js';
+import { spawnGoldReward, spawnParticles } from '../systems/world/SpawnSystem.js';
 import { Audio } from '../systems/infrastructure/Audio.js';
 import { registerEnemyKill } from '../systems/infrastructure/RoguelikeSystem.js';
 
@@ -18,18 +18,24 @@ export function killEnemyWithAnimation(e, knockDirection = 0) {
   if (e.dying) return;
   const t = ENEMY_TYPES[e.type];
   const overkill = Math.max(0, -(e.hp || 0));
-  const violence = e.type === "imp" ? Math.min(4, Math.sqrt(overkill) / 2.2) : 0;
+  const violence = Math.min(4, Math.sqrt(overkill) / 2.2);
   const brutal = violence > 1.25;
+  // Mass factor relative to an imp: heavy enemies topple, light ones tumble
+  const light = 1 / Math.sqrt((t.w || 22) / 22);
 
-  // Start death animation
+  // Start death animation (ragdoll: rotation integrated with angular velocity + bounces)
   e.dying = true;
   e.deathT = 0;
-  e.deathDuration = e.type === "imp" ? 1.05 + violence * 0.32 : 0.5;
-  e.deathKind = e.type === "imp" ? (brutal || Math.random() < 0.45 ? "impFallBack" : "impCrumple") : "fall";
+  e.deathDuration = (t.boss ? 1.7 : 1.05) + violence * 0.32;
+  e.deathKind = brutal || Math.random() < 0.45 ? "impFallBack" : "impCrumple";
   e.deathDir = knockDirection || (e.dir ? -e.dir : 1);
-  e.deathSpin = e.type === "imp" ? (e.deathDir < 0 ? -1 : 1) * (0.85 + Math.random() * 0.35 + violence * 1.7) : 1;
-  e.knock = e.type === "imp" ? e.deathDir * (110 + Math.random() * 70 + violence * 210) : knockDirection * 600;
-  e.deathVy = e.type === "imp" && e.deathKind === "impFallBack" ? -(85 + Math.random() * 50 + violence * 95) : 0;
+  e.deathSpin = (e.deathDir < 0 ? -1 : 1) * (0.85 + Math.random() * 0.35 + violence * 1.7);
+  e.knock = e.deathDir * (110 + Math.random() * 70 + violence * 210) * light;
+  e.deathVy = (e.deathKind === "impFallBack" ? -(120 + Math.random() * 70 + violence * 110) : -(45 + Math.random() * 40)) * light;
+  e.deathAngle = 0;
+  e.deathAngVel = e.deathSpin * (e.deathKind === "impFallBack" ? 3.2 : 1.9) * (1 + violence * 0.5) * light;
+  e.deathBounces = 0;
+  e.flash = 0;
   if (t.flying) {
     e.deathDuration = Math.max(e.deathDuration, (e.fy !== undefined ? Math.abs(e.fy) : 80) / 260 + 0.35);
   }
@@ -69,25 +75,9 @@ export function killEnemyWithAnimation(e, knockDirection = 0) {
 }
 
 export function killEnemy(e) {
-  if (e.type === "imp" && !e.dying) {
-    const knockDir = e.combatTarget ? Math.sign(e.x - e.combatTarget.x) || 1 : (e.dir ? -e.dir : 1);
-    killEnemyWithAnimation(e, knockDir);
-    return;
-  }
-  const t = ENEMY_TYPES[e.type];
-  registerEnemyKill(t.reward);
-  for (let k = 0; k < t.reward; k++) spawnCoin(e.x + Math.random() * 44 - 22, 1, groundY - 28, Math.random() * 160 - 80, Math.random() * 120 - 260);
-  spawnParticles(e.x, groundY - 24, 12, t.color === "#1f1830" ? "#ff2a6a" : "#6a2a4a", 80, 100);
-  Audio.enemyDie();
-  if (window._addXP) window._addXP(t.reward * 8);
-  if (t.legendary && state.legendaryBoss === e) {
-    state.legendaryBoss = null;
-    state.legendaryEffects = [];
-    for (const u of state.units) u.rallied = false;
-    spawnParticles(e.x, groundY - 80, 80, t.eye, 300, 250);
-  }
-  const idx = state.enemies.indexOf(e);
-  if (idx >= 0) state.enemies.splice(idx, 1);
+  if (e.dying) return;
+  const knockDir = e.combatTarget ? Math.sign(e.x - e.combatTarget.x) || 1 : (e.dir ? -e.dir : 1);
+  killEnemyWithAnimation(e, knockDir);
 }
 
 export function updateDyingEnemies(dt) {
@@ -97,30 +87,46 @@ export function updateDyingEnemies(dt) {
     if (e.dying) {
       e.deathT += dt;
       const et = t[e.type];
+      if (e.flash > 0) e.flash -= dt;
 
       // Drop coins once during animation
       if (e.shouldDropCoins && e.deathT > 0.1) {
-        for (let k = 0; k < et.reward; k++) spawnCoin(e.x + Math.random() * 44 - 22, 1, groundY - 28, Math.random() * 160 - 80, Math.random() * 120 - 260);
+        spawnGoldReward(e.x, et.reward, et.boss ? "boss" : "enemy", { fromY: groundY - 28, spreadX: 22, vx: 80, vyMin: 120, vyMax: 260 });
         e.shouldDropCoins = false;
       }
 
-      // Knockback physics during death
-      if (e.type === "imp") {
-        if (e.knock) { e.x += e.knock * dt; e.knock *= Math.max(0, 1 - (e.deathFriction || 5.5) * dt); if (Math.abs(e.knock) < 2) e.knock = 0; }
-        if (e.deathVy) {
-          e.deathVy += (e.deathGravity || 420) * dt;
-          e.fy = Math.min(0, (e.fy || 0) + e.deathVy * dt);
-          if (e.fy >= 0) { e.fy = 0; e.deathVy = 0; }
-        }
-      } else if (e.knock) {
-        e.x += e.knock * dt; e.knock *= 0.9; if (Math.abs(e.knock) < 2) e.knock = 0;
-      }
-
-      // Flying enemies tumble to the ground as they die
-      if (et.flying && e.fy !== undefined && e.fy < 0) {
+      // Ragdoll physics during death (all enemy types)
+      if (e.knock) { e.x += e.knock * dt; e.knock *= Math.max(0, 1 - (e.deathFriction || 5.5) * dt); if (Math.abs(e.knock) < 2) e.knock = 0; }
+      const airborne = (e.fy || 0) < 0 || (e.deathVy || 0) < 0;
+      if (airborne) {
+        // Free tumble while airborne
         e.deathVy = (e.deathVy || 0) + (e.deathGravity || 420) * dt;
-        e.fy = Math.min(0, e.fy + e.deathVy * dt);
-        if (e.fy >= 0) { e.fy = 0; e.deathVy = 0; }
+        e.fy = (e.fy || 0) + e.deathVy * dt;
+        e.deathAngle = (e.deathAngle || 0) + (e.deathAngVel || 0) * dt;
+        if (e.fy >= 0) {
+          e.fy = 0;
+          if (e.deathVy > 100 && (e.deathBounces || 0) < 2) {
+            // Bounce: lose energy, keep tumbling slower
+            e.deathVy = -e.deathVy * 0.35;
+            e.deathBounces = (e.deathBounces || 0) + 1;
+            e.deathAngVel = (e.deathAngVel || 0) * 0.5;
+            e.knock = (e.knock || 0) * 0.6;
+            e.deathDuration = Math.max(e.deathDuration, e.deathT + 0.55);
+            if (e.type === "imp") spawnImpBlood(e, 0.5, groundY - 6);
+            else spawnParticles(e.x, groundY - 10, 5, "#8a1a2a", 60, 60);
+          } else {
+            e.deathVy = 0;
+            e.deathAngVel = (e.deathAngVel || 0) * 0.3;
+          }
+        }
+      } else {
+        // On the ground: rotation settles toward the nearest lying-flat angle, sliding stops
+        const a = e.deathAngle || 0;
+        const bias = (e.deathAngVel || e.deathSpin || 1) >= 0 ? 0.12 : -0.12;
+        const rest = (Math.round((a + bias) / Math.PI - 0.5) + 0.5) * Math.PI + (bias > 0 ? 0.06 : -0.06);
+        e.deathAngle = a + (rest - a) * Math.min(1, 9 * dt);
+        e.deathAngVel = (e.deathAngVel || 0) * Math.max(0, 1 - 8 * dt);
+        if (e.knock) e.knock *= Math.max(0, 1 - 7 * dt);
       }
 
       if (e.deathT >= e.deathDuration) {

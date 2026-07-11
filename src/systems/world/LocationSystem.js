@@ -14,6 +14,10 @@ export const LOC_RESPAWN_DIST = 1200;
 
 let addXPFn = null;
 
+function archerNearLocation(loc, trig) {
+  return state.units.some(u => u.role === "archer" && u.hp > 0 && !u.dying && dist(u.x, loc.x) < trig);
+}
+
 function releaseLocationSurvivors(loc) {
   if (!loc.remainingVagrants) return;
 
@@ -63,7 +67,9 @@ export function updateLocations(dt) {
     const loc = locations[i];
     const def = LOC_DEFS[loc.type];
     const nearLoc = dist(player.x, loc.x) < def.trig;
-    if (loc.blockedUntilExit && !nearLoc) loc.blockedUntilExit = false;
+    // Archers can also discover locations holding survivors and recruit them
+    const nearArcher = loc.remainingVagrants > 0 && archerNearLocation(loc, def.trig);
+    if (loc.blockedUntilExit && !nearLoc && !nearArcher) loc.blockedUntilExit = false;
 
     // Cleared location fade-out when player walks away
     if (loc.cleared && loc.lootSpawned) {
@@ -83,7 +89,7 @@ export function updateLocations(dt) {
     }
 
     if (!loc.preActivated && loc.x >= screenL && loc.x <= screenR) preActivateLocation(loc, i);
-    if (!loc.triggered && nearLoc) {
+    if (!loc.triggered && (nearLoc || nearArcher)) {
       loc.triggered = true;
       if (addXPFn) addXPFn(25 + loc.enemyCount * 5);
       // Empty locations: spawn loot directly (no chest to open)
@@ -93,7 +99,7 @@ export function updateLocations(dt) {
       }
     }
 
-    if (loc.triggered && loc.remainingVagrants > 0 && nearLoc && !loc.blockedUntilExit) {
+    if (loc.triggered && loc.remainingVagrants > 0 && (nearLoc || nearArcher) && !loc.blockedUntilExit) {
       releaseLocationSurvivors(loc);
     }
   }

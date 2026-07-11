@@ -42,12 +42,12 @@ export function buildingCost(b) {
 
 export function buildingLabel(b) {
   if (b.type === "tower") {
-    if (!b.built) return "Byg vagttårn (skyder selv fjender)";
-    if (b.level < 3) return `Opgradér vagttårn (lvl ${b.level}→${b.level + 1})`;
-    return "Vagttårn (maks niveau)";
+    if (!b.built) return "Build watchtower (shoots enemies on its own)";
+    if (b.level < 3) return `Upgrade watchtower (lvl ${b.level}→${b.level + 1})`;
+    return "Watchtower (max level)";
   }
-  if (b.type === "lumber") return "Byg skovhuggerlejr (bonusguld pr. stamme)";
-  if (b.type === "shrine") return "Byg helligdom (helbreder i nærheden)";
+  if (b.type === "lumber") return "Build lumber camp (bonus gold per log)";
+  if (b.type === "shrine") return "Build shrine (heals nearby)";
   return "";
 }
 
@@ -103,7 +103,7 @@ function updateShrine(b, dt) {
   let healed = false;
   const p = state.player;
   if (p && p.hp < p.maxHp && dist(p.x, b.x) < CFG.shrineRange) {
-    p.hp++; floaty(p.x, "+❤ Helligdom", "#8fd8ff"); healed = true;
+    p.hp++; floaty(p.x, "+❤ Shrine", "#8fd8ff"); healed = true;
   }
   for (const u of state.units) {
     if (u.hp < u.maxHp && dist(u.x, b.x) < CFG.shrineRange) { u.hp = Math.min(u.maxHp, u.hp + 1); healed = true; }

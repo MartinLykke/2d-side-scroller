@@ -48,6 +48,96 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8137"],
       "port": 8137
+    },
+    {
+      "name": "game-server-5",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8163"],
+      "port": 8163
+    },
+    {
+      "name": "game-server-4",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8151"],
+      "port": 8151
+    },
+    {
+      "name": "game-server-6",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8177"],
+      "port": 8177
+    },
+    {
+      "name": "game-server-7",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8191"],
+      "port": 8191
+    },
+    {
+      "name": "game-server-8",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8205"],
+      "port": 8205
+    },
+    {
+      "name": "game-server-9",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8219"],
+      "port": 8219
+    },
+    {
+      "name": "game-server-10",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8233"],
+      "port": 8233
+    },
+    {
+      "name": "game-server-12",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8261"],
+      "port": 8261
+    },
+    {
+      "name": "game-server-11",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8247"],
+      "port": 8247
+    },
+    {
+      "name": "game-server-14",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8289"],
+      "port": 8289
+    },
+    {
+      "name": "game-server-15",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8303"],
+      "port": 8303
+    },
+    {
+      "name": "game-server-16",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8317"],
+      "port": 8317
+    },
+    {
+      "name": "game-server-13",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8275"],
+      "port": 8275
+    },
+    {
+      "name": "game-server-18",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8345"],
+      "port": 8345
+    },
+    {
+      "name": "game-server-17",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8331"],
+      "port": 8331
     }
   ]
 }

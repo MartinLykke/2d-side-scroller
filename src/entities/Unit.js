@@ -23,9 +23,10 @@ export function makeUnit(role, x) {
     u.shotCount = 0;
     u.powerTimer = 0;
     u.charged = false;
-    u.smoked = 0;
-    u.smokeReveal = 0;
+    u.smokeReveal = 0;   // master_shadows: brief visibility window after shooting
     u.barrageCount = 0;
+    u.grapple = null;    // active grappling-hook flight state
+    u.grappleCd = 0;
     // Animation states for shooting sequence
     u.shootState = null; // null, "anticipation", "pull", "release", "follow-through"
     u.shootTimer = 0;

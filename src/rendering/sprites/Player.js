@@ -1,4 +1,5 @@
 import { ctx, groundY } from '../../core/canvas.js';
+import { drawBoot } from '../DrawHelpers.js';
 
 // The player: a regal warrior-king with armor and crown, drawn in the villager style
 // Uses the same local-space convention as Archer/Builder/Villager
@@ -35,10 +36,13 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
   // --- legs with boots ---
   const s = Math.sin(gallop * 2);
   const stride = moving ? 5 : 0;
-  limb(-3, hipY, -3 + s * stride, groundY - 3, "#3a2a1a", 3.5);
-  limb(-3 + s * stride, groundY - 3.5, -1.4 + s * stride, groundY, BOOTS, 3.5);
-  limb(3, hipY, 3 - s * stride, groundY - 3, "#3a2a1a", 3.5);
-  limb(3 - s * stride, groundY - 3.5, 4.6 - s * stride, groundY, BOOTS, 3.5);
+  const backFoot = -3 + s * stride, frontFoot = 3 - s * stride;
+  limb(-3, hipY, backFoot, groundY - 3, "#3a2a1a", 3.5);
+  limb(backFoot, groundY - 3.5, backFoot + 0.5, groundY - 2, BOOTS, 3.5);
+  drawBoot(backFoot + 0.5, groundY, BOOTS, 1);
+  limb(3, hipY, frontFoot, groundY - 3, "#3a2a1a", 3.5);
+  limb(frontFoot, groundY - 3.5, frontFoot + 0.5, groundY - 2, BOOTS, 3.5);
+  drawBoot(frontFoot + 0.5, groundY, BOOTS, 1);
 
   // --- armor: chest plate ---
   ctx.fillStyle = ARMOR_PRIMARY;

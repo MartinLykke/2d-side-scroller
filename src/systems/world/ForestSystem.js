@@ -3,20 +3,20 @@ import { clamp, dist, rand, mulberry32 } from '../../util/math.js';
 import { Game, state } from '../../core/state.js';
 import { groundY } from '../../core/canvas.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, spawnCoin, floaty } from './SpawnSystem.js';
+import { spawnParticles, spawnGoldReward } from './SpawnSystem.js';
 import { makeTree } from '../../rendering/Effects.js';
 
-const CAMP_SPACING = 600;
+const CAMP_SPACING = 1700;
 const CAMP_TRIGGER = 120;
 const CAMP_CLEAR_DIST = 125;
-const CAMP_RESPAWN_MIN = 80;
-const CAMP_RESPAWN_MAX = 150;
+const CAMP_RESPAWN_MIN = 30;
+const CAMP_RESPAWN_MAX = 60;
 const CAMP_RESPAWN_DIST = 1050;
 
 function makeForestCamp(x, r = Math.random) {
   return {
     x,
-    vagrants: 1 + Math.floor(r() * 3),
+    vagrants: 1 + Math.floor(r() * 2),
     triggered: false,
     respawnTimer: 0,
     blockedUntilExit: false,
@@ -24,10 +24,55 @@ function makeForestCamp(x, r = Math.random) {
 }
 
 function pickCampX() {
-  const side = Math.random() < 0.5 ? -1 : 1;
-  const nearForest = CFG.baseX + side * (FOREST.startDist + 450);
-  const deepForest = side < 0 ? 260 : CFG.worldWidth - 260;
-  return side < 0 ? rand(deepForest, nearForest) : rand(nearForest, deepForest);
+  for (let tries = 0; tries < 20; tries++) {
+    const side = Math.random() < 0.5 ? -1 : 1;
+    const nearForest = CFG.baseX + side * (FOREST.startDist + 450);
+    const deepForest = side < 0 ? 260 : CFG.worldWidth - 260;
+    const x = side < 0 ? rand(deepForest, nearForest) : rand(nearForest, deepForest);
+    if (!nearPond(x, CAMP_CLEAR_DIST)) return x;
+  }
+  return CFG.baseX + (Math.random() < 0.5 ? -1 : 1) * (FOREST.startDist + 600);
+}
+
+// ---------------- Ponds ----------------
+// Small forest lakes of varied size. Purely shallow — everyone wades through;
+// only ducks treat them as home. Regenerated deterministically from the tree
+// seed, so they survive save/load without being stored.
+const POND_TREE_MARGIN = 45; // trees stop this far short of the waterline
+
+function makePonds(r) {
+  const ponds = [];
+  const count = 3 + Math.floor(r() * 3); // 3–5 per world
+  const excludeLeft = CFG.baseX - FOREST.startDist - 220;
+  const excludeRight = CFG.baseX + FOREST.startDist + 220;
+  for (let tries = 0; tries < 80 && ponds.length < count; tries++) {
+    const hw = 70 + r() * r() * 190; // half-width 70–260, small ponds most common
+    const x = 1000 + r() * (CFG.worldWidth - 2000);
+    if (x + hw > excludeLeft && x - hw < excludeRight) continue; // keep the base area dry
+    if (ponds.some(p => Math.abs(p.x - x) < p.hw + hw + 650)) continue;
+    ponds.push({ x, hw, seed: Math.floor(r() * 1e9) });
+  }
+  return ponds;
+}
+
+function nearPond(x, margin = 0) {
+  for (const p of (state.ponds || [])) if (Math.abs(x - p.x) < p.hw + margin) return p;
+  return null;
+}
+
+// The pond the point is actually over the water of (not just the shore).
+export function pondAt(x) {
+  for (const p of (state.ponds || [])) if (Math.abs(x - p.x) < p.hw - 16) return p;
+  return null;
+}
+
+export function nearestPond(x) {
+  let best = null, bd = 1e9;
+  for (const p of (state.ponds || [])) {
+    const d = Math.abs(x - p.x);
+    if (d < bd) { bd = d; best = p; }
+  }
+  return best;
 }
 
 export function buildForest() {
@@ -38,20 +83,24 @@ export function buildForest() {
   const excludeLeft = CFG.baseX - FOREST.startDist;
   const excludeRight = CFG.baseX + FOREST.startDist;
 
+  // Ponds first, so camps and trees can keep clear of the water
+  state.ponds = makePonds(r);
+
   // Place camps at intervals in the forest, both sides of base
   const campPositions = [];
-  for (let x = excludeLeft - CAMP_SPACING; x > 200; x -= CAMP_SPACING + r() * 300) {
+  for (let x = excludeLeft - CAMP_SPACING; x > 200; x -= CAMP_SPACING + r() * 700) {
     campPositions.push(x + r() * 80 - 40);
   }
-  for (let x = excludeRight + CAMP_SPACING; x < CFG.worldWidth - 200; x += CAMP_SPACING + r() * 300) {
+  for (let x = excludeRight + CAMP_SPACING; x < CFG.worldWidth - 200; x += CAMP_SPACING + r() * 700) {
     campPositions.push(x + r() * 80 - 40);
   }
 
   for (const cx of campPositions) {
+    if (nearPond(cx, CAMP_CLEAR_DIST)) continue;
     camps.push(makeForestCamp(cx, r));
   }
 
-  for (let x = 100; x < CFG.worldWidth - FOREST.endDist; x += FOREST.spacing) {
+  for (let x = FOREST.endDist; x < CFG.worldWidth - FOREST.endDist; x += FOREST.spacing) {
     if (x >= excludeLeft && x <= excludeRight) continue;
     if (r() < gapChance) continue;
 
@@ -63,6 +112,7 @@ export function buildForest() {
       if (Math.abs(offsetX - c.x) < CAMP_CLEAR_DIST) { nearCamp = true; break; }
     }
     if (nearCamp) continue;
+    if (nearPond(offsetX, POND_TREE_MARGIN)) continue;
 
     const tree = makeTree(offsetX, 170 + r() * 80, r, { harvestable: true });
     trees.push({
@@ -165,12 +215,14 @@ export function updateForestTrees(dt) {
 }
 
 // Returns the nearest unchopped, still-standing tree, or null.
-export function nearestChoppableTree(x) {
+// isSafe (optional) filters out spots the worker should avoid (e.g. bears).
+export function nearestChoppableTree(x, isSafe) {
   const { forestTrees } = state;
   if (!forestTrees || !forestTrees.length) return null;
   let best = null, bd = 1e9;
   for (const t of forestTrees) {
     if (t.chopped || t.falling || t.lying || t.carriedBy) continue;
+    if (isSafe && !isSafe(t.x)) continue;
     const d = dist(x, t.x);
     if (d < bd) { bd = d; best = t; }
   }
@@ -178,12 +230,13 @@ export function nearestChoppableTree(x) {
 }
 
 // Returns the nearest lying, unclaimed log ready to be carried home.
-export function nearestLog(x) {
+export function nearestLog(x, isSafe) {
   const { forestTrees } = state;
   if (!forestTrees || !forestTrees.length) return null;
   let best = null, bd = 1e9;
   for (const t of forestTrees) {
     if (!t.lying || t.claimedBy || t.carriedBy) continue;
+    if (isSafe && !isSafe(t.x)) continue;
     const d = dist(x, t.x);
     if (d < bd) { bd = d; best = t; }
   }
@@ -212,6 +265,6 @@ export function deliverLog(log) {
   log.carriedBy = null;
   const camps = (state.buildings || []).filter(b => b.type === "lumber" && b.built).length;
   const coins = 3 + camps * CFG.lumberLogBonus;
-  for (let i = 0; i < coins; i++) spawnCoin(CFG.baseX + rand(-24, 24), 1, groundY - 20, rand(-60, 60));
+  spawnGoldReward(CFG.baseX, coins, "lumber", { spreadX: 24, fromY: groundY - 20, vx: 60 });
   Audio.build();
 }

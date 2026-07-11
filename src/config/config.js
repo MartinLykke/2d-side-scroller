@@ -9,46 +9,51 @@ export const CFG = {
   payRange: 78,
   playerSpeed: 250,
   playerSprint: 430,
-  maxCoinsCarry: 999999,
+  maxCoinsCarry: 300,
+  maxGoldCoinValue: 10,
   startCoins: 6,
   playerMaxHp: 5,
   playerInvuln: 0.9,
   playerRegenTime: 7,
   popCapByLevel: [0, 8, 16, 26, 40],
-  baseUpgradeCost: [0, 12, 28, 55],
+  baseUpgradeCost: [0, 10, 24, 45],
   baseMaxHp: [0, 60, 90, 130, 180],
-  wallCost: 6,
-  wallUpgradeCosts: [14, 22, 35, 55],
+  wallCost: 5,
+  wallUpgradeCosts: [11, 18, 28, 44],
   wallHp: [0, 45, 90, 150, 220, 320],
   bowCost: 4,
   hammerCost: 3,
-  farmCost: 10,
-  farmUpgradeCosts: [10, 16, 24, 38, 58],
+  guardCost: 7,
+  farmCost: 8,
+  farmUpgradeCosts: [8, 13, 20, 31, 46],
   critChance: 0.15,
   critMultiplier: 1.5,
   // Buildings unlocked by base upgrades
   clearRadius: 65,          // forest must be felled this close before building
-  towerCosts: [18, 26, 40], // watchtower build + upgrade costs (lvl 1-3)
+  towerCosts: [15, 22, 34], // watchtower build + upgrade costs (lvl 1-3)
   towerRange: 430,
-  lumberCost: 14,
+  lumberCost: 11,
   lumberLogBonus: 2,        // extra coins per delivered log, per camp
-  shrineCost: 22,
+  shrineCost: 18,
   shrineRange: 190,
   shrineHealTime: 3.5,
   // Mine (unlocked at base level 3): underground gold digging below the base
-  mineCost: 30,
-  minerCost: 6,
+  mineCost: 24,
+  minerCost: 5,
   minerInterval: 3.5,     // seconds of digging per gold coin
   mineVeinOre: 6,         // coins per vein before it is exhausted
   mineMaxLooseCoins: 80,  // miners stop digging when this much gold lies uncollected
   mineExpandStep: 170,    // how far a tunnel wall pushes out when its vein is exhausted
+  repairAllCost: 14,
+  reinforceCostBase: 26,
+  reinforceCostPerDay: 2,
 };
 
 export const STATIONS_X = {
   bow:    CFG.baseX - 130,
   hammer: CFG.baseX + 130,
   farm:   CFG.baseX - 480,
-  shop:   CFG.baseX + 300,
+  shop:   CFG.baseX + 445, // between the two right wall slots (mirrors the farm on the left)
   guard:  CFG.baseX + 220,
   mine:   CFG.baseX - 250,
 };
@@ -83,7 +88,7 @@ export const BUILDING_SLOTS = [
   { type: "lumber", x: CFG.baseX + 1010, unlock: 2, needsClearing: true },
   { type: "tower",  x: CFG.baseX - 780,  unlock: 3, needsClearing: true },
   { type: "tower",  x: CFG.baseX + 780,  unlock: 3, needsClearing: true },
-  { type: "shrine", x: CFG.baseX + 480,  unlock: 3 },
+  { type: "shrine", x: CFG.baseX + 530,  unlock: 3 },
 ];
 
 export const PORTALS = [

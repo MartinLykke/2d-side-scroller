@@ -38,7 +38,7 @@ wagon(x, dark) {
   ctx.lineWidth = 2;
   ctx.strokeRect(-32,-12,64,22);
 
-  // brædder
+  // planks
   ctx.strokeStyle = woodLight;
   ctx.lineWidth = 1;
   for (let i=-3;i<=3;i++) {
@@ -48,7 +48,7 @@ wagon(x, dark) {
     ctx.stroke();
   }
 
-  // trækstang
+  // drawbar
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(32,-2);
@@ -57,7 +57,7 @@ wagon(x, dark) {
 
   ctx.restore();
 
-  // venstre hjul
+  // left wheel
   ctx.strokeStyle = wood;
   ctx.lineWidth = 3;
   ctx.beginPath();
@@ -80,7 +80,7 @@ wagon(x, dark) {
   ctx.arc(x-38,groundY+4,2,0,Math.PI*2);
   ctx.fill();
 
-  // højre hjul
+  // right wheel
   ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.arc(x+24,groundY-8,12,0,Math.PI*2);
@@ -109,13 +109,13 @@ wagon(x, dark) {
   ctx.lineWidth=1;
   ctx.strokeRect(x+50,groundY-10,13,12);
 
-  // sæk
+  // sack
   ctx.fillStyle=rgb(lerpColor([130,112,82],[38,34,24],dark));
   ctx.beginPath();
   ctx.ellipse(x-56,groundY-4,7,9,0,0,Math.PI*2);
   ctx.fill();
 
-  // lille tønde
+  // small barrel
   ctx.fillStyle=wood;
   ctx.fillRect(x+66,groundY-12,10,12);
   ctx.strokeStyle=woodDark;
@@ -132,7 +132,7 @@ grave(x, dark) {
   ctx.ellipse(x+2,groundY-1,18,4,0,0,Math.PI*2);
   ctx.fill();
 
-  // jordhøj
+  // mound of earth
   ctx.fillStyle=rgb(lerpColor([88,68,46],[26,20,16],dark));
   ctx.beginPath();
   ctx.ellipse(x,groundY-1,20,5,0,0,Math.PI*2);
@@ -200,14 +200,14 @@ grave(x, dark) {
   ctx.ellipse(x,groundY-33,5,2,0,0,Math.PI*2);
   ctx.fill();
 
-  // ukrudt venstre
+  // weeds left
   ctx.beginPath();
   ctx.moveTo(x-15,groundY);
   ctx.lineTo(x-13,groundY-6);
   ctx.lineTo(x-11,groundY);
   ctx.fill();
 
-  // ukrudt højre
+  // weeds right
   ctx.beginPath();
   ctx.moveTo(x+12,groundY);
   ctx.lineTo(x+15,groundY-7);
@@ -269,7 +269,7 @@ battlefield(x, dark) {
   banner(x-68,-8);
   banner(x+42,6);
 
-  // sværd
+  // sword
   const sword=(sx,ang)=>{
     ctx.save();
     ctx.translate(sx,groundY);
@@ -313,7 +313,7 @@ battlefield(x, dark) {
   ctx.arc(x-56,groundY-4,2,0,Math.PI*2);
   ctx.fill();
 
-  // knækket spyd
+  // broken spear
   ctx.strokeStyle=wd;
   ctx.lineWidth=2;
   ctx.beginPath();
@@ -349,7 +349,7 @@ battlefield(x, dark) {
   ctx.ellipse(x+18,groundY-2,3,2,0,0,Math.PI*2);
   ctx.fill();
 
-  // græs
+  // grass
   ctx.fillStyle=rgb(lerpColor([74,104,64],[20,30,18],dark));
 
   ctx.beginPath();
@@ -988,7 +988,9 @@ mill(x, dark) {
 };
 
 function drawTorch(x, y) {
-  const fl=(FX&&FX.flicker)||1;
+  // per-torch flicker phase so neighbouring torches don't pulse in unison
+  const t=performance.now()/1000;
+  const fl=0.74 + 0.24*Math.sin(t*9 + x*0.73) + 0.12*Math.sin(t*23.3 + x*1.91);
   ctx.strokeStyle="#3a2a1a"; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,y-12); ctx.stroke();
   ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.fillStyle=`rgba(255,150,50,0.55)`; ctx.beginPath(); ctx.arc(x,y-15,14*fl,0,Math.PI*2); ctx.fill(); ctx.restore();
   ctx.fillStyle="rgba(255,170,60,0.97)"; ctx.beginPath(); ctx.ellipse(x,y-15,3,6*fl,0,0,Math.PI*2); ctx.fill();

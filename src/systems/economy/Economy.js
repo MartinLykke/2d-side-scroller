@@ -90,6 +90,20 @@ export function updateCoins(dt) {
         Audio.coin();
         spawnParticles(player.x, groundY - 50, 3, "#f2c14e", 30, 40);
       }
+      continue;
+    }
+    // Archers scoop up coins they walk past (out of the player's magnet range),
+    // then hand the gold to the player when nearby (see dropArcherGoldToPlayer)
+    if (c.settled && !c.mine) {
+      for (const u of state.units) {
+        if (u.role !== "archer" || u.hp <= 0 || u.dying || u.mine) continue;
+        if (dist(c.x, u.x) < 26) {
+          u.gold = (u.gold || 0) + c.value;
+          coins.splice(i, 1);
+          spawnParticles(u.x, groundY - 30, 3, "#f2c14e", 30, 40);
+          break;
+        }
+      }
     }
   }
 }

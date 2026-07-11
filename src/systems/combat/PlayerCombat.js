@@ -6,7 +6,7 @@ import { dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnCoin, spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js';
+import { spawnGoldReward, spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js';
 import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js';
 import { shootArrow } from './ProjectileSystem.js';
 import { castSpell } from './SpellSystem.js';
@@ -104,7 +104,7 @@ export function updatePlayerAttack(dt) {
   const { player, enemies } = state;
   if (!player.weapon) return;
   if (Game.inMine) { if (player.swing > 0) player.swing -= dt; player.attackCd -= dt; return; }
-  if (player.weapon === "short_bow" && (player.weaponUpgrades || []).some(u => u.id === "is_eksplosion")) {
+  if (player.weapon === "short_bow" && (player.weaponUpgrades || []).some(u => u.id === "ice_explosion")) {
     player.iceNovaCd = (player.iceNovaCd || 0) - dt;
     if (player.iceNovaCd <= 0) {
       triggerIceNova(player);
@@ -140,9 +140,8 @@ export function updatePlayerAttack(dt) {
       if (tgt.hp <= 0) {
         tgt.dying = true; tgt.deathT = 0;
         spawnParticles(tgt.x, groundY - 20, 8, "#7a4a2a");
-        const reward = 8;
-        for (let k = 0; k < reward; k++) spawnCoin(tgt.x + rand(-15, 15), 1, groundY - 20, rand(-50, 50), rand(-220, -120));
-        floaty(tgt.x, "+" + reward + "🪙", "#f2c14e");
+        const reward = spawnGoldReward(tgt.x, 8, "hunt", { spreadX: 15, fromY: groundY - 20, vx: 50, vyMin: 120, vyMax: 220 });
+        if (reward > 0) floaty(tgt.x, "+" + reward + "🪙", "#f2c14e");
       }
     } else {
       spawnImpBlood(tgt, 1 + crit.damage * 0.12, groundY - 28);

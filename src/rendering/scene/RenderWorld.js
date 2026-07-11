@@ -3,11 +3,17 @@ import { CFG, STATIONS_X } from '../../config/config.js';
 import { ctx, W, H, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { FX, biomeAt, getGroundTex, getDeco, windGust, windSway, drawTree, makeTree } from '../Effects.js';
-import { wallHeight } from '../../entities/Wall.js';
+import { wallHeight, wallRenderWidth, wallBackDir, wallPlatformDepth } from '../../entities/Wall.js';
 import { groundShadow, roundedRect, stoneCol, stoneLt, woodCol, litWindow, drawHpBar } from '../DrawHelpers.js';
 import { ENEMY_TYPES } from '../../config/enemies.js';
 
 // ---------- Ground ----------
+// True when a ground doodad would sit inside a pond's water footprint.
+function overPond(x, margin = 0) {
+  for (const p of (state.ponds || [])) if (Math.abs(x - p.x) < p.hw + margin) return true;
+  return false;
+}
+
 export function drawGroundTexture(dark) {
   const tex=getGroundTex(), camL=Game.cam-30, camR=Game.cam+W+30;
   for (const p of tex.patches) {
@@ -30,8 +36,16 @@ export function drawGroundTexture(dark) {
   }
   ctx.lineCap="round";
   const plx=state.player?state.player.x:null;
+  // packed-earth courtyard: no grass between the camp and its built walls
+  let clearL=CFG.baseX, clearR=CFG.baseX;
+  for (const w of state.walls) {
+    if (!w.commissioned || w.buildProgress < 0.95) continue;
+    if (w.x < CFG.baseX) clearL=Math.min(clearL, w.x); else clearR=Math.max(clearR, w.x);
+  }
   for (const f of tex.fringe) {
     if (f.x<camL||f.x>camR) continue;
+    if (f.x>clearL && f.x<clearR) continue;
+    if (overPond(f.x, -4)) continue; // no grass growing out of the water
     // thin out grass blades right in front of the player so the figure stays clear
     if (plx!==null) {
       const d=Math.abs(f.x-plx);
@@ -97,6 +111,7 @@ export function drawGroundDeco(dark) {
   const px=state.player?state.player.x:null;
   for (const it of items) {
     if (it.x<camL||it.x>camR) continue;
+    if (overPond(it.x, -2)) continue; // ponds get their own shoreline dressing
     // fade small clutter near the player so characters stay easy to spot
     const d=px===null?999:Math.abs(it.x-px);
     if (d<110) {
@@ -107,9 +122,159 @@ export function drawGroundDeco(dark) {
   }
 }
 
+// ---------- Ponds ----------
+// Shallow forest ponds: mud bank, gradient water, drifting glints, lilypads,
+// cattails on the shores, and ripple rings for anything wading through.
+function pondRipple(x, y, r, alpha) {
+  ctx.strokeStyle = `rgba(220,235,240,${alpha})`;
+  ctx.lineWidth = 1.1;
+  ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.28, 0, 0, Math.PI * 2); ctx.stroke();
+}
+
+export function drawPonds(dark) {
+  const ponds = state.ponds;
+  if (!ponds || !ponds.length) return;
+  const t = performance.now() / 1000;
+  const camL = Game.cam - 80, camR = Game.cam + W + 80;
+
+  for (const p of ponds) {
+    if (p.x + p.hw < camL || p.x - p.hw > camR) continue;
+    const r = mulberry32(p.seed);
+    const hw = p.hw;
+    const sy = groundY + 1.5;                 // waterline sits just under the grass lip
+    const depth = 13 + hw * 0.045;
+
+    // mud bank ring under the water
+    ctx.fillStyle = rgb(lerpColor([58, 44, 32], [14, 12, 14], dark));
+    ctx.beginPath(); ctx.ellipse(p.x, sy + 1, hw + 14, depth + 5, 0, 0, Math.PI); ctx.fill();
+
+    // water body: flat surface, curved bed
+    const shallow = lerpColor([96, 138, 148], [24, 34, 52], dark);
+    const deep = lerpColor([34, 66, 78], [8, 14, 26], dark);
+    const wg = ctx.createLinearGradient(0, sy, 0, sy + depth);
+    wg.addColorStop(0, rgb(shallow));
+    wg.addColorStop(1, rgb(deep));
+    ctx.fillStyle = wg;
+    ctx.beginPath(); ctx.ellipse(p.x, sy, hw, depth, 0, 0, Math.PI); ctx.fill();
+
+    // sky sheen along the surface
+    ctx.fillStyle = withA(lerpColor([196, 224, 228], [90, 120, 160], dark), 0.4);
+    ctx.fillRect(p.x - hw + 4, sy, hw * 2 - 8, 1.6);
+    // moon glint at night
+    if (dark > 0.45) {
+      ctx.fillStyle = `rgba(210,225,255,${0.16 * dark})`;
+      ctx.beginPath(); ctx.ellipse(p.x + hw * 0.2, sy + 2.5, hw * 0.3, 2.2, 0, 0, Math.PI * 2); ctx.fill();
+    }
+
+    // drifting light glints on the water
+    for (let k = 0; k < 5; k++) {
+      const ph = (t * 0.25 + k / 5 + r() * 0.3) % 1;
+      const gx = p.x - hw * 0.8 + ph * hw * 1.6;
+      const ga = Math.sin(ph * Math.PI) * (0.22 - dark * 0.1);
+      if (ga <= 0.02) continue;
+      ctx.strokeStyle = `rgba(230,244,246,${ga})`;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(gx - 6 - Math.sin(t * 1.3 + k * 2) * 3, sy + 2 + (k % 3) * 2.4);
+      ctx.lineTo(gx + 6 + Math.sin(t * 1.7 + k) * 3, sy + 2 + (k % 3) * 2.4);
+      ctx.stroke();
+    }
+
+    // idle ripple rings opening up here and there
+    for (let k = 0; k < 3; k++) {
+      const cyc = 3 + k;
+      const ph = ((t + k * 1.7 + p.seed % 7) % cyc) / cyc;
+      const rx = p.x + (r() * 2 - 1) * hw * 0.6;
+      if (ph < 0.55) pondRipple(rx, sy + 2.5, 3 + ph * 22, (0.55 - ph) * 0.5);
+    }
+
+    // ---- seeded shoreline dressing ----
+    // lilypads floating near the middle
+    const pads = 2 + Math.floor(r() * (hw / 60));
+    for (let k = 0; k < pads; k++) {
+      const px = p.x + (r() * 2 - 1) * hw * 0.62;
+      const ps = 0.7 + r() * 0.7;
+      const flower = r() < 0.3;
+      const bob = Math.sin(t * 1.1 + px * 0.13) * 0.7;
+      ctx.fillStyle = rgb(lerpColor([64, 108, 62], [18, 32, 26], dark));
+      ctx.beginPath(); ctx.ellipse(px, sy + 1.5 + bob, 7 * ps, 2.6 * ps, 0, 0, Math.PI * 2); ctx.fill();
+      // notch cut toward the stem
+      ctx.fillStyle = rgb(shallow);
+      ctx.beginPath(); ctx.moveTo(px, sy + 1.5 + bob);
+      ctx.lineTo(px + 8 * ps, sy + 0.4 + bob); ctx.lineTo(px + 8 * ps, sy + 2.6 + bob);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = withA([255, 255, 255], 0.1);
+      ctx.beginPath(); ctx.ellipse(px - 1.5 * ps, sy + 0.9 + bob, 3 * ps, 1 * ps, 0, 0, Math.PI * 2); ctx.fill();
+      if (flower) { // the odd white lily flower
+        ctx.fillStyle = rgb(lerpColor([238, 234, 220], [110, 115, 140], dark));
+        ctx.beginPath(); ctx.arc(px - 2, sy - 0.8 + bob, 2.2 * ps, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#e8c050";
+        ctx.beginPath(); ctx.arc(px - 2, sy - 0.8 + bob, 0.8 * ps, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    // cattails and reeds hugging each shore
+    for (const side of [-1, 1]) {
+      const n = 2 + Math.floor(r() * 3);
+      for (let k = 0; k < n; k++) {
+        const rx = p.x + side * (hw - 6 + r() * 26);
+        const rh = 20 + r() * 14;
+        const cattail = r() < 0.6;
+        const sway = windSway(rx * 0.3, 3);
+        ctx.strokeStyle = rgb(lerpColor([106, 122, 62], [22, 30, 24], dark));
+        ctx.lineWidth = 1.7;
+        ctx.beginPath(); ctx.moveTo(rx, groundY + 2);
+        ctx.quadraticCurveTo(rx + sway * 0.6, groundY - rh * 0.6, rx + sway, groundY - rh);
+        ctx.stroke();
+        if (cattail) { // brown cattail head
+          ctx.fillStyle = rgb(lerpColor([104, 68, 40], [30, 22, 18], dark));
+          ctx.beginPath(); ctx.ellipse(rx + sway, groundY - rh + 2, 1.7, 5, sway * 0.02, 0, Math.PI * 2); ctx.fill();
+        }
+        // slim leaf blade
+        ctx.strokeStyle = rgb(lerpColor([88, 112, 58], [18, 26, 22], dark));
+        ctx.lineWidth = 1.1;
+        ctx.beginPath(); ctx.moveTo(rx + 2, groundY + 2);
+        ctx.quadraticCurveTo(rx + 5 + sway, groundY - rh * 0.5, rx + 9 + sway * 1.3, groundY - rh * 0.75);
+        ctx.stroke();
+      }
+      // a wet shore stone or two
+      if (r() < 0.7) {
+        const stx = p.x + side * (hw + 6 + r() * 14);
+        const sts = 0.7 + r() * 0.7;
+        ctx.fillStyle = rgb(lerpColor([104, 104, 110], [28, 30, 40], dark));
+        ctx.beginPath(); ctx.ellipse(stx, groundY + 1 - 2 * sts, 5.5 * sts, 3.6 * sts, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,0.13)";
+        ctx.beginPath(); ctx.ellipse(stx - 1.4 * sts, groundY - 3 * sts, 2.6 * sts, 1.3 * sts, 0, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
+    // ---- wading ripples: anything walking through the shallow water ----
+    const waders = [];
+    if (state.player && !Game.inMine) waders.push(state.player);
+    for (const u of state.units) if (!u.mine) waders.push(u);
+    for (const v of state.vagrants) waders.push(v);
+    for (const e of state.enemies) if (!e.fy || e.fy >= -4) waders.push(e);
+    for (const a of state.animals) if (a.alive && a.type !== "duck" && !(a.fy < 0)) waders.push(a);
+    for (const wd of waders) {
+      if (Math.abs(wd.x - p.x) >= hw - 12) continue;
+      const moving = Math.abs(wd.vx || 0) > 5;
+      pondRipple(wd.x, sy + 2.5, 9 + Math.sin(t * 5 + wd.x) * 1.5, 0.34);
+      pondRipple(wd.x - (wd.vx > 0 ? 8 : -8), sy + 2.5, 14, moving ? 0.2 : 0.08);
+      if (moving && Math.random() < 0.25) {
+        ctx.fillStyle = "rgba(215,235,240,0.45)";
+        ctx.beginPath();
+        ctx.arc(wd.x + (Math.random() * 12 - 6), sy - (1 + Math.random() * 4), 0.6 + Math.random() * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+}
+
 // ---------- Building pieces ----------
 function drawTorch(x, y) {
-  const t=performance.now()/1000, fl=(FX&&FX.flicker)||1;
+  const t=performance.now()/1000;
+  // per-torch flicker phase so neighbouring torches don't pulse in unison
+  const fl=0.74 + 0.24*Math.sin(t*9 + x*0.73) + 0.12*Math.sin(t*23.3 + x*1.91);
   const sway=Math.sin(t*7+x*0.7)*1.4+windGust()*0.6;
   const fy=y-16;
   // handle with wrapped head
@@ -823,20 +988,137 @@ export function drawForestCamps(dark) {
   }
 }
 
+// Wooden fighting platform behind a wall (levels 1-4): plank deck on support
+// posts at unit stand height, with stairs (low walls) or a ladder (tall
+// walls) down to the ground on the base side. The level-5 castle wall draws
+// its own two-tier walkway.
+function drawWallPlatform(w, h, flash) {
+  const deckH = Math.max(0, h - 14);
+  if (deckH < 12) return;
+  const d = wallBackDir(w);
+  const depth = wallPlatformDepth(w);
+  const x0 = w.x + d * (wallRenderWidth(w) / 2 - 2); // tucked slightly into the wall
+  const x1 = x0 + d * depth;
+  const deckY = groundY - deckH;
+  const wood  = flash ? "#e8d8a8" : "#6b4a26";
+  const woodD = flash ? "#d8c090" : "#4c3216";
+
+  ctx.save();
+
+  // support posts + diagonal brace
+  ctx.fillStyle = woodD;
+  const nPosts = Math.max(2, Math.round(depth / 32) + 1);
+  for (let i = 0; i < nPosts; i++) {
+    const px = x0 + d * (5 + i * (depth - 10) / (nPosts - 1));
+    ctx.fillRect(px - 2, deckY + 5, 4, deckH - 5);
+  }
+  ctx.strokeStyle = woodD; ctx.lineWidth = 3; ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(x0 + d * 5, groundY - 2);
+  ctx.lineTo(x1 - d * 5, deckY + 7);
+  ctx.stroke();
+
+  // plank deck
+  const left = Math.min(x0, x1), wDeck = Math.abs(x1 - x0);
+  ctx.fillStyle = wood; ctx.fillRect(left, deckY, wDeck, 7);
+  ctx.fillStyle = "rgba(255,255,255,0.10)"; ctx.fillRect(left, deckY, wDeck, 2);
+  ctx.fillStyle = "rgba(0,0,0,0.22)"; ctx.fillRect(left, deckY + 5, wDeck, 2);
+  ctx.strokeStyle = "rgba(0,0,0,0.25)"; ctx.lineWidth = 1;
+  for (let s = 10; s < depth - 4; s += 12) {
+    const px = x0 + d * s;
+    ctx.beginPath(); ctx.moveTo(px, deckY + 1); ctx.lineTo(px, deckY + 6); ctx.stroke();
+  }
+
+  // low railing along the rear (base-side) edge of the deck
+  ctx.fillStyle = woodD;
+  ctx.fillRect(x1 - d * 3 - 1.5, deckY - 13, 3, 13);
+  ctx.fillRect(x1 - d * depth * 0.55 - 1.5, deckY - 13, 3, 13);
+  ctx.strokeStyle = woodD; ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.moveTo(x1 - d * 2, deckY - 11);
+  ctx.lineTo(x1 - d * depth * 0.58, deckY - 11);
+  ctx.stroke();
+
+  if (deckH <= 56) {
+    // staircase running from the rear deck edge down toward the base
+    const run = deckH;
+    const steps = Math.max(3, Math.round(deckH / 9));
+    ctx.strokeStyle = woodD; ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(x1 + d * run, groundY - 1);
+    ctx.lineTo(x1, deckY + 4);
+    ctx.stroke();
+    ctx.fillStyle = wood;
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const px = x1 + d * run * (1 - t);
+      const py = groundY - deckH * t + 2;
+      ctx.fillRect(px - 5, py, 10, 3.5);
+    }
+  } else {
+    // tall wall: ladder against the rear deck edge
+    const ladX = x1 - d * 5;
+    ctx.strokeStyle = woodD; ctx.lineWidth = 3; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(ladX - 4, groundY); ctx.lineTo(ladX - 4, deckY + 4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ladX + 4, groundY); ctx.lineTo(ladX + 4, deckY + 4); ctx.stroke();
+    ctx.lineWidth = 2;
+    for (let ry = groundY - 7; ry > deckY + 8; ry -= 10) {
+      ctx.beginPath(); ctx.moveTo(ladX - 4, ry); ctx.lineTo(ladX + 4, ry); ctx.stroke();
+    }
+  }
+
+  ctx.lineCap = "butt";
+  ctx.restore();
+}
+
 export function drawWalls(dark) {
   const night=dark>0.25;
   for (const w of state.walls) {
     const x=w.x;
     if (!w.commissioned) { drawFlag(x,"#6fb3d6"); continue; }
     const h=wallHeight(w)*(0.3+0.7*clamp(w.buildProgress,0,1));
-    const WW=[0,26,34,44,56,72,96][w.level]||26;
+    const WW=w.level>=5?96:wallRenderWidth(w);
     if (w.flash>0) w.flash-=0.016;
     const flash=w.flash>0;
     const stoneColors=["","#7a5a36","#6b6b78","#555568","#484458","#3a3448"];
     const col=flash?"#e8d8a8":(stoneColors[w.level]||"#7a5a36");
     groundShadow(x,WW*0.7,0.26);
+    if (w.level<5) drawWallPlatform(w,h,flash);
 
-    if (w.level < 5) {
+    if (w.level === 1) {
+      const palH = h + 5 * clamp(w.buildProgress,0,1);
+      const topY = groundY - palH;
+      const plankW = 8.5;
+      const xs = [-16, -8, 0, 8, 16];
+      ctx.fillStyle="rgba(0,0,0,0.24)";
+      roundedRect(x-WW/2-2,groundY-7,WW+4,8,3); ctx.fill();
+      for (let i=0;i<xs.length;i++) {
+        const px=x+xs[i];
+        const wobble=(i%2===0?0:3);
+        const pTop=topY+wobble;
+        const pBot=groundY-2;
+        const left=px-plankW/2, right=px+plankW/2;
+        ctx.fillStyle=flash?"#e8d8a8":(i%2===0?"#8a6036":"#744c2a");
+        ctx.beginPath();
+        ctx.moveTo(left,pBot);
+        ctx.lineTo(left,pTop+6);
+        ctx.lineTo(px,pTop);
+        ctx.lineTo(right,pTop+6);
+        ctx.lineTo(right,pBot);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle="rgba(255,255,255,0.09)";
+        ctx.fillRect(left+1,pTop+8,2.2,pBot-pTop-11);
+        ctx.fillStyle="rgba(0,0,0,0.18)";
+        ctx.fillRect(right-2.4,pTop+9,2,pBot-pTop-12);
+      }
+      ctx.strokeStyle="rgba(45,28,14,0.72)"; ctx.lineWidth=3; ctx.lineCap="round";
+      ctx.beginPath(); ctx.moveTo(x-WW/2+2,groundY-palH*0.56); ctx.lineTo(x+WW/2-2,groundY-palH*0.49); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x-WW/2+3,groundY-palH*0.28); ctx.lineTo(x+WW/2-3,groundY-palH*0.31); ctx.stroke();
+      ctx.lineCap="butt";
+      ctx.fillStyle="rgba(0,0,0,0.22)";
+      roundedRect(x-WW/2+2,groundY-5,WW-4,5,2); ctx.fill();
+      if (night&&w.buildProgress>0.6) drawTorch(x+WW/2-3,groundY-palH*0.72);
+    } else if (w.level < 5) {
       roundedRect(x-WW/2,groundY-h,WW,h,4); ctx.fillStyle=col; ctx.fill();
       ctx.fillStyle="rgba(255,255,255,0.08)"; roundedRect(x-WW/2,groundY-h,WW*0.3,h,4); ctx.fill();
       ctx.fillStyle="rgba(0,0,0,0.18)"; ctx.fillRect(x+WW*0.28,groundY-h,WW*0.22,h);
@@ -1423,7 +1705,7 @@ function drawClearingHint(x) {
   ctx.fillText("🪓", x, groundY-46+bob);
   if (state.player && Math.abs(state.player.x-x)<150) {
     ctx.font="12px sans-serif"; ctx.fillStyle="rgba(255,240,200,0.9)";
-    ctx.fillText("Ryd træerne for at bygge her", x, groundY-70);
+    ctx.fillText("Clear the trees to build here", x, groundY-70);
   }
   ctx.restore();
 }

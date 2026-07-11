@@ -11,15 +11,27 @@ function stuckArrowAlpha(ar) {
   return clamp(ar.stuckTimer / Math.min(STUCK_ARROW_FADE_TIME, ar.stuckMaxTimer || STUCK_ARROW_FADE_TIME), 0, 1);
 }
 
-function drawStuckArrowShaft(wid, alpha) {
+function drawStuckArrowShaft(ar, alpha) {
   ctx.globalAlpha = alpha;
+  const wid = ar.weaponId;
+  if (ar.ballista) {
+    // Heavy ballista bolt lodged in the ground
+    ctx.strokeStyle = "#4a3a28"; ctx.lineWidth = 3.4;
+    ctx.beginPath(); ctx.moveTo(-16,0); ctx.lineTo(7,0); ctx.stroke();
+    ctx.fillStyle = "#9aa2ae";
+    ctx.beginPath(); ctx.moveTo(7,-3); ctx.lineTo(14,0); ctx.lineTo(7,3); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#8f2a24";
+    ctx.beginPath(); ctx.moveTo(-16,0); ctx.lineTo(-21,-4); ctx.lineTo(-13.5,-1); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-16,0); ctx.lineTo(-21,4); ctx.lineTo(-13.5,1); ctx.closePath(); ctx.fill();
+    return;
+  }
   const magic = wid === "void_bow" || wid === "dark_bow" || wid === "dragons_bow";
-  ctx.strokeStyle = magic ? "#e8d8ff" : "#c9b48a";
+  ctx.strokeStyle = ar.powered ? "#e8c060" : magic ? "#e8d8ff" : "#c9b48a";
   ctx.lineWidth = magic ? 1.7 : 1.4;
   ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(5,0); ctx.stroke();
   ctx.fillStyle = "#b8bcc4";
   ctx.beginPath(); ctx.moveTo(5,-1.6); ctx.lineTo(8.5,0); ctx.lineTo(5,1.6); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = magic ? "#c69fff" : "#8fae4a";
+  ctx.fillStyle = ar.powered ? "#ffcc44" : magic ? "#c69fff" : "#8fae4a";
   ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(-13,-2.6); ctx.lineTo(-8.5,-0.6); ctx.closePath(); ctx.fill();
   ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(-13,2.6); ctx.lineTo(-8.5,0.6); ctx.closePath(); ctx.fill();
 }
@@ -28,11 +40,26 @@ export function drawCoins(mineLayer = false) {
   const t=performance.now();
   for (const c of state.coins) {
     if (!!c.mine !== mineLayer) continue;
-    const yy=c.settled?groundY-4-Math.sin(t/300+c.x)*1.5:c.y;
-    if (c.settled) groundShadow(c.x,5,0.15);
-    ctx.fillStyle="#f2c14e"; ctx.beginPath(); ctx.ellipse(c.x,yy,5,6,0,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle="#caa028"; ctx.beginPath(); ctx.ellipse(c.x,yy,2.4,3.4,0,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle="rgba(255,250,210,0.9)"; ctx.beginPath(); ctx.ellipse(c.x-1.4,yy-1.8,1,1.6,0,0,Math.PI*2); ctx.fill();
+    const v = c.value || 1;
+    // Tier look: 1 = small gold, 5 = larger amber with rim, 10+ = big pale-gold with glow ring
+    const sc = v >= 10 ? 1.6 : v >= 5 ? 1.3 : 1;
+    const body = v >= 10 ? "#ffe9a0" : v >= 5 ? "#f0a63a" : "#f2c14e";
+    const inner = v >= 10 ? "#e3b53c" : v >= 5 ? "#b06f1a" : "#caa028";
+    const yy=c.settled?groundY-4*sc-Math.sin(t/300+c.x)*1.5:c.y;
+    if (c.settled) groundShadow(c.x,5*sc,0.15);
+    if (v >= 10) {
+      // soft glow so high-value coins pop
+      const g=ctx.createRadialGradient(c.x,yy,2,c.x,yy,14);
+      g.addColorStop(0,"rgba(255,230,140,0.5)"); g.addColorStop(1,"rgba(255,230,140,0)");
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(c.x,yy,14,0,Math.PI*2); ctx.fill();
+    }
+    ctx.fillStyle=body; ctx.beginPath(); ctx.ellipse(c.x,yy,5*sc,6*sc,0,0,Math.PI*2); ctx.fill();
+    if (v >= 5) {
+      ctx.strokeStyle = v >= 10 ? "#fff6d0" : "#ffd98a"; ctx.lineWidth=1.2;
+      ctx.beginPath(); ctx.ellipse(c.x,yy,5*sc-1,6*sc-1,0,0,Math.PI*2); ctx.stroke();
+    }
+    ctx.fillStyle=inner; ctx.beginPath(); ctx.ellipse(c.x,yy,2.4*sc,3.4*sc,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle="rgba(255,250,210,0.9)"; ctx.beginPath(); ctx.ellipse(c.x-1.4*sc,yy-1.8*sc,1*sc,1.6*sc,0,0,Math.PI*2); ctx.fill();
   }
 }
 
@@ -44,7 +71,7 @@ export function drawArrows() {
     ctx.save(); ctx.translate(ar.x,ar.y); ctx.rotate(ang);
     const wid = ar.weaponId;
     if (ar.stuck) {
-      drawStuckArrowShaft(wid, stuckArrowAlpha(ar));
+      drawStuckArrowShaft(ar, stuckArrowAlpha(ar));
       ctx.restore();
       continue;
     }
@@ -66,6 +93,54 @@ export function drawArrows() {
         ctx.beginPath(); ctx.moveTo(-30,0); ctx.quadraticCurveTo(-16,7+Math.sin(t*26)*3,-4,2); ctx.stroke();
       }
       ctx.restore();
+      ctx.restore();
+      continue;
+    }
+    if (ar.ballista) {
+      // Massive iron-tipped siege bolt with a speed-shred wake
+      ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.35;
+      const bw=ctx.createLinearGradient(-34,0,0,0);
+      bw.addColorStop(0,"rgba(255,150,60,0)"); bw.addColorStop(1,"rgba(255,190,110,0.55)");
+      ctx.fillStyle=bw; ctx.beginPath(); ctx.ellipse(-16,0,18,3.5,0,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle="#3a2c1c"; ctx.lineWidth=4;
+      ctx.beginPath(); ctx.moveTo(-18,0); ctx.lineTo(8,0); ctx.stroke();
+      ctx.strokeStyle="#6b4f2e"; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(-18,0); ctx.lineTo(8,0); ctx.stroke();
+      // iron bands
+      ctx.strokeStyle="#9aa2ae"; ctx.lineWidth=4;
+      ctx.beginPath(); ctx.moveTo(-4,-2); ctx.lineTo(-4,2); ctx.moveTo(-12,-2); ctx.lineTo(-12,2); ctx.stroke();
+      // heavy head
+      ctx.fillStyle="#b8bfc9";
+      ctx.beginPath(); ctx.moveTo(8,-3.4); ctx.lineTo(17,0); ctx.lineTo(8,3.4); ctx.closePath(); ctx.fill();
+      ctx.fillStyle="#7a828e";
+      ctx.beginPath(); ctx.moveTo(8,0); ctx.lineTo(17,0); ctx.lineTo(8,3.4); ctx.closePath(); ctx.fill();
+      // crimson vanes
+      ctx.fillStyle="#8f2a24";
+      ctx.beginPath(); ctx.moveTo(-18,0); ctx.lineTo(-24,-4.4); ctx.lineTo(-15,-1); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-18,0); ctx.lineTo(-24,4.4); ctx.lineTo(-15,1); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      continue;
+    }
+    if (ar.powered) {
+      // Power shot: white-hot golden arrow with a comet glow
+      ctx.save(); ctx.globalCompositeOperation="lighter";
+      const pg=ctx.createRadialGradient(2,0,1,2,0,16);
+      pg.addColorStop(0,"rgba(255,250,220,0.95)");
+      pg.addColorStop(0.4,"rgba(255,204,68,0.7)");
+      pg.addColorStop(1,"rgba(200,120,0,0)");
+      ctx.fillStyle=pg; ctx.beginPath(); ctx.arc(2,0,16,0,Math.PI*2); ctx.fill();
+      const tail=ctx.createLinearGradient(-30,0,0,0);
+      tail.addColorStop(0,"rgba(255,180,40,0)"); tail.addColorStop(1,"rgba(255,220,110,0.6)");
+      ctx.fillStyle=tail; ctx.beginPath(); ctx.ellipse(-14,0,16,3,0,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle="#ffe9a0"; ctx.lineWidth=2.2;
+      ctx.beginPath(); ctx.moveTo(-12,0); ctx.lineTo(6,0); ctx.stroke();
+      ctx.fillStyle="#fff6d0";
+      ctx.beginPath(); ctx.moveTo(6,-2); ctx.lineTo(10.5,0); ctx.lineTo(6,2); ctx.closePath(); ctx.fill();
+      ctx.fillStyle="#ffcc44";
+      ctx.beginPath(); ctx.moveTo(-12,0); ctx.lineTo(-15.5,-3); ctx.lineTo(-10,-0.7); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-12,0); ctx.lineTo(-15.5,3); ctx.lineTo(-10,0.7); ctx.closePath(); ctx.fill();
       ctx.restore();
       continue;
     }
@@ -194,11 +269,44 @@ export function drawChests() {
       ctx.save(); ctx.font="bold 12px Trebuchet MS"; ctx.textAlign="center";
       const py=yy-bob-36, pa=0.7+0.28*Math.sin(t*3);
       ctx.globalAlpha=pa;
-      ctx.fillStyle="rgba(0,0,0,0.55)"; ctx.fillText("[F] Åbn kiste",x+1,py+1);
-      ctx.fillStyle="#f2c14e"; ctx.fillText("[F] Åbn kiste",x,py);
+      ctx.fillStyle="rgba(0,0,0,0.55)"; ctx.fillText("[F] Open chest",x+1,py+1);
+      ctx.fillStyle="#f2c14e"; ctx.fillText("[F] Open chest",x,py);
       ctx.restore();
     }
   }
+}
+
+// Shared purchase-feedback visuals for freshly bought station items.
+// Returns the drop-in y-offset (item falls and bounces during the first second).
+function purchaseFX(item, x, yy, t, color) {
+  const age = item.born != null ? t - item.born : 99;
+  let dropOff = 0;
+  if (age < 1) {
+    const p = Math.min(age / 0.45, 1);
+    dropOff = -(1 - p) * (1 - p) * 90;                       // fall from above
+    if (age > 0.45 && age < 0.75) dropOff = -Math.sin((age - 0.45) / 0.3 * Math.PI) * 10; // bounce
+  }
+  if (age < 0.9) {
+    // expanding flash ring at landing
+    const rp = Math.max(0, (age - 0.35) / 0.55);
+    if (rp > 0) {
+      ctx.save(); ctx.globalAlpha = (1 - rp) * 0.8; ctx.strokeStyle = color; ctx.lineWidth = 3 * (1 - rp) + 1;
+      ctx.beginPath(); ctx.arc(x, yy, 10 + rp * 42, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    }
+  }
+  if (!item.claimed) {
+    // vertical beacon so the item is easy to spot
+    const pulse = 0.16 + 0.08 * Math.sin(t * 2.4 + x * 0.01);
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    const g = ctx.createLinearGradient(0, yy - 130, 0, yy);
+    g.addColorStop(0, "rgba(0,0,0,0)"); g.addColorStop(1, color);
+    ctx.globalAlpha = pulse; ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(x - 4, yy - 130); ctx.lineTo(x + 4, yy - 130);
+    ctx.lineTo(x + 11, yy); ctx.lineTo(x - 11, yy); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  return dropOff;
 }
 
 export function drawGroundBows() {
@@ -207,7 +315,8 @@ export function drawGroundBows() {
   for (const b of state.groundBows) {
     const bob=Math.sin(t*2.2+b.x*0.01)*2.5, yy=groundY-14+bob, alpha=b.claimed?0.35:0.7;
     groundShadow(b.x,8,0.18);
-    ctx.save(); ctx.globalAlpha=alpha; ctx.translate(b.x,yy); ctx.rotate(-0.3+Math.sin(t*1.1+b.x*0.005)*0.06);
+    const dropOff = purchaseFX(b, b.x, yy, t, "#9bd05a");
+    ctx.save(); ctx.globalAlpha=alpha; ctx.translate(b.x,yy+dropOff); ctx.rotate(-0.3+Math.sin(t*1.1+b.x*0.005)*0.06);
     ctx.strokeStyle="#8a5a2a"; ctx.lineWidth=2.5; ctx.lineCap="round"; ctx.beginPath(); ctx.arc(0,0,8,-1.2,1.2); ctx.stroke();
     ctx.strokeStyle="#e8d8a8"; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(8*Math.cos(-1.2),8*Math.sin(-1.2)); ctx.lineTo(8*Math.cos(1.2),8*Math.sin(1.2)); ctx.stroke();
     ctx.restore();
@@ -224,7 +333,8 @@ export function drawGroundHammers() {
   for (const h of state.groundHammers) {
     const bob = Math.sin(t*2.2+h.x*0.01)*2.5, yy = groundY-16+bob, alpha = h.claimed ? 0.35 : 0.72;
     groundShadow(h.x, 8, 0.18);
-    ctx.save(); ctx.globalAlpha=alpha; ctx.translate(h.x, yy); ctx.rotate(0.3+Math.sin(t*1.1+h.x*0.005)*0.06);
+    const dropOff = purchaseFX(h, h.x, yy, t, "#f2a230");
+    ctx.save(); ctx.globalAlpha=alpha; ctx.translate(h.x, yy+dropOff); ctx.rotate(0.3+Math.sin(t*1.1+h.x*0.005)*0.06);
     ctx.strokeStyle="#7a5a2a"; ctx.lineWidth=2.5; ctx.lineCap="round";
     ctx.beginPath(); ctx.moveTo(0,8); ctx.lineTo(0,-8); ctx.stroke();
     ctx.lineCap="butt";

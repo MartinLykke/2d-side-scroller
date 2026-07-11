@@ -1,4 +1,5 @@
 import { ctx, groundY } from '../../core/canvas.js';
+import { drawBoot } from '../DrawHelpers.js';
 
 // ---------------------------------------------------------------------------
 // Procedural builder: stocky craftsman with leather apron, flat cap and a
@@ -67,10 +68,12 @@ export function drawBuilder(u) {
   const stride = moving ? 5.5 : 0;
   let backFoot = -3 + s * stride, frontFoot = 3 - s * stride;
   if (working) { backFoot = -5.5; frontFoot = 4.5; }
-  limb(-3, hipY, backFoot, groundY - 3, C.pants, 3.4);
-  limb(backFoot, groundY - 3.5, backFoot + 1.8, groundY, C.boots, 3.8);
-  limb(3, hipY, frontFoot, groundY - 3, C.pants, 3.4);
-  limb(frontFoot, groundY - 3.5, frontFoot + 1.8, groundY, C.boots, 3.8);
+  limb(-3, hipY, backFoot, groundY - 4, C.pants, 3.4);
+  limb(backFoot, groundY - 4.5, backFoot + 0.6, groundY - 2, C.boots, 3.8);
+  drawBoot(backFoot + 0.6, groundY, C.boots, 1.05);
+  limb(3, hipY, frontFoot, groundY - 4, C.pants, 3.4);
+  limb(frontFoot, groundY - 4.5, frontFoot + 0.6, groundY - 2, C.boots, 3.8);
+  drawBoot(frontFoot + 0.6, groundY, C.boots, 1.05);
 
   // --- Torso: broad tunic ------------------------------------------------------
   ctx.fillStyle = C.tunic;

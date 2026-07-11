@@ -64,6 +64,7 @@ function handleKeydown(e) {
   if ((k === "arrowdown" || k === "s") && !e.repeat && !Game.inventoryOpen && !Game.shopOpen) {
     if (tryToggleMine()) { e.preventDefault(); return; }
   }
+  if (k === "n" && !Game.inventoryOpen && !Game.shopOpen) { UI.skipToDusk(); e.preventDefault(); return; }
   if (k === "i") { Game.inventoryOpen = !Game.inventoryOpen; Game.shopOpen = false; }
   if (k === "b" && !Game.inventoryOpen) tryOpenShop();
   if (Game.shopOpen) handleShopKeys(k, e);

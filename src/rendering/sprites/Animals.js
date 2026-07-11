@@ -227,6 +227,296 @@ function drawRabbit(a) {
   ctx.restore();
 }
 
+// ---------------- Duck (mallard) ----------------
+// Ground: waddles, dabbles tail-up, occasional wing flutter. Air: flies with
+// big flapping wings; shot down mid-flight it tumbles out of the sky.
+const DUCK = {
+  head: "#2e7d46", headShine: "#4aa763", ring: "#ece6d6", breast: "#6b4530",
+  body: "#8f7a5e", belly: "#cfc5ae", wing: "#70604a", wingDark: "#4e4234",
+  speculum: "#3f6fd8", bill: "#e8a83a", foot: "#e08a30", eye: "#1a1208", tail: "#3a3226",
+};
+
+// One wing authored pointing straight up from the shoulder; caller rotates it
+function duckWing(len, color, withSpeculum) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.quadraticCurveTo(-5.5, -len * 0.45, -2.2, -len);   // leading edge to tip
+  ctx.quadraticCurveTo(2.6, -len * 0.55, 3.4, -1);       // trailing feather edge
+  ctx.closePath();
+  ctx.fill();
+  // feather slits along the trailing edge
+  ctx.strokeStyle = "rgba(0,0,0,0.18)"; ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(0.6, -len * 0.25); ctx.lineTo(-1.4, -len * 0.8);
+  ctx.moveTo(1.8, -len * 0.2); ctx.lineTo(0.2, -len * 0.6);
+  ctx.stroke();
+  if (withSpeculum) {
+    ctx.fillStyle = DUCK.speculum;
+    ctx.beginPath(); ctx.ellipse(0.6, -len * 0.28, 1.5, len * 0.17, 0.15, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function drawDuckHead(headX, headY, eat, nib) {
+  // green neck from the shoulder up to the head
+  const neckBase = { x: 5, y: -1.5 };
+  ctx.strokeStyle = DUCK.head; ctx.lineWidth = 3.2; ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(neckBase.x, neckBase.y);
+  ctx.quadraticCurveTo(headX - 2, lerp(-6, headY + 2, eat), headX, headY);
+  ctx.stroke();
+  ctx.lineCap = "butt";
+  // white neck ring, drawn perpendicular a bit up the neck
+  const dx = headX - neckBase.x, dy = headY - neckBase.y;
+  const dl = Math.hypot(dx, dy) || 1;
+  const bx = neckBase.x + dx * 0.32, by = neckBase.y + dy * 0.32;
+  ctx.strokeStyle = DUCK.ring; ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(bx - (dy / dl) * 1.8, by + (dx / dl) * 1.8);
+  ctx.lineTo(bx + (dy / dl) * 1.8, by - (dx / dl) * 1.8);
+  ctx.stroke();
+  // head with an iridescent sheen
+  ctx.fillStyle = DUCK.head;
+  ctx.beginPath(); ctx.arc(headX, headY + nib * 0.3, 2.9, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = DUCK.headShine;
+  ctx.beginPath(); ctx.ellipse(headX - 0.6, headY - 1.1, 1.7, 1, -0.4, 0, Math.PI * 2); ctx.fill();
+  // bill
+  ctx.fillStyle = DUCK.bill;
+  ctx.save();
+  ctx.translate(headX + 2.7, headY + 0.7 + nib * 0.5); ctx.rotate(eat * 0.5);
+  ctx.beginPath(); ctx.ellipse(0, 0, 2.5, 1.1, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  // eye
+  ctx.fillStyle = DUCK.eye;
+  ctx.beginPath(); ctx.arc(headX + 0.9, headY - 0.7, 0.8, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawDuck(a) {
+  const t = performance.now() / 1000;
+  const flying = a.state === "fly" && !a.dying;
+  const falling = a.dying && a.fy < 0;
+  const dp = a.dying && !falling ? ease(Math.min(a.deathT / 0.6, 1)) : 0;
+
+  ctx.save();
+  ctx.translate(a.x, 0);
+  if (a.dir < 0) ctx.scale(-1, 1);
+  ctx.globalAlpha = fadeAlpha(a);
+
+  if (falling) {
+    // tumbling out of the sky, wings limp above the body
+    ctx.translate(0, groundY + a.fy);
+    ctx.rotate(a.spin || 0);
+    ctx.fillStyle = DUCK.wingDark;
+    ctx.beginPath(); ctx.ellipse(-1, -6, 2.1, 6.2, 0.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = DUCK.wing;
+    ctx.beginPath(); ctx.ellipse(2, -5, 1.8, 5.4, -0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = DUCK.body;
+    ctx.beginPath(); ctx.ellipse(0, 0, 8.5, 4.4, 0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = DUCK.belly;
+    ctx.beginPath(); ctx.ellipse(0.5, 1.6, 5.5, 2.3, 0.2, 0, Math.PI * 2); ctx.fill();
+    // head dangling on a slack neck
+    ctx.strokeStyle = DUCK.head; ctx.lineWidth = 2.8; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(7, 0.5); ctx.quadraticCurveTo(10, 3, 10.5, 6); ctx.stroke();
+    ctx.lineCap = "butt";
+    ctx.fillStyle = DUCK.head;
+    ctx.beginPath(); ctx.arc(10.6, 6.5, 2.6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = DUCK.bill;
+    ctx.beginPath(); ctx.ellipse(12.8, 8, 2.2, 1, 0.7, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    return;
+  }
+
+  if (flying) {
+    const bodyY = groundY + a.fy + Math.sin(a.anim * 0.9) * 1.6;
+    const flapNear = -0.35 - Math.sin(a.anim) * 0.85;
+    const flapFar  = -0.35 - Math.sin(a.anim - 0.55) * 0.85;
+
+    // far wing behind the body
+    ctx.save();
+    ctx.translate(0.5, bodyY - 2); ctx.rotate(flapFar);
+    duckWing(11, DUCK.wingDark, false);
+    ctx.restore();
+
+    // pointed tail
+    ctx.fillStyle = DUCK.tail;
+    ctx.beginPath();
+    ctx.moveTo(-8, bodyY - 1.5); ctx.lineTo(-14, bodyY - 0.5); ctx.lineTo(-8.5, bodyY + 1.8);
+    ctx.closePath(); ctx.fill();
+
+    // streamlined body
+    ctx.fillStyle = DUCK.body;
+    ctx.beginPath(); ctx.ellipse(0, bodyY, 10.5, 4, 0.06, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = DUCK.belly;
+    ctx.beginPath(); ctx.ellipse(-1, bodyY + 1.7, 6.2, 2, 0.06, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = DUCK.breast;
+    ctx.beginPath(); ctx.ellipse(6, bodyY + 1, 3.2, 2.2, 0.2, 0, Math.PI * 2); ctx.fill();
+    // feet tucked flat under the tail
+    ctx.strokeStyle = DUCK.foot; ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.moveTo(-4, bodyY + 3.2); ctx.lineTo(-7.5, bodyY + 3.6); ctx.stroke();
+
+    // stretched neck and head
+    const headX = 14.5, headY = bodyY - 3.2;
+    ctx.strokeStyle = DUCK.head; ctx.lineWidth = 3; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(8, bodyY - 1); ctx.lineTo(headX - 1, headY + 0.5); ctx.stroke();
+    ctx.lineCap = "butt";
+    ctx.strokeStyle = DUCK.ring; ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.moveTo(10, bodyY - 3.4); ctx.lineTo(10.8, bodyY + 0.4); ctx.stroke();
+    ctx.fillStyle = DUCK.head;
+    ctx.beginPath(); ctx.arc(headX, headY, 2.9, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = DUCK.headShine;
+    ctx.beginPath(); ctx.ellipse(headX - 0.5, headY - 1.1, 1.7, 1, -0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = DUCK.bill;
+    ctx.beginPath(); ctx.ellipse(headX + 3.1, headY + 0.3, 2.5, 1.1, 0.08, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = DUCK.eye;
+    ctx.beginPath(); ctx.arc(headX + 0.9, headY - 0.7, 0.8, 0, Math.PI * 2); ctx.fill();
+
+    // near wing in front, with the blue speculum flashing
+    ctx.save();
+    ctx.translate(2.5, bodyY - 1.5); ctx.rotate(flapNear);
+    duckWing(12, DUCK.wing, true);
+    ctx.restore();
+
+    ctx.restore();
+    return;
+  }
+
+  // ---- swimming on a pond ----
+  if (a.state === "swim" && !a.dying) {
+    const bob = Math.sin(t * 1.7 + a.x * 0.05) * 0.8;
+    const eat = ease(a.eatDown || 0);            // tail-up dabble, head under water
+    const bodyY = groundY - 0.5 + bob + eat * 1.5;
+
+    // trailing V wake
+    ctx.strokeStyle = "rgba(225,240,244,0.3)"; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(-8, bodyY + 3.5); ctx.lineTo(-22, bodyY + 1.5);
+    ctx.moveTo(-8, bodyY + 4.5); ctx.lineTo(-22, bodyY + 6.5);
+    ctx.stroke();
+
+    ctx.save();
+    ctx.translate(0, bodyY);
+    ctx.rotate(eat * 0.95);                      // bottoms-up while dabbling
+
+    // perky up-curled tail
+    ctx.fillStyle = DUCK.tail;
+    ctx.beginPath();
+    ctx.moveTo(-7.5, -0.5);
+    ctx.quadraticCurveTo(-11.5, -2, -12.5, -5.5);
+    ctx.lineTo(-8.8, 0.8);
+    ctx.closePath(); ctx.fill();
+
+    // plump body riding the water
+    ctx.fillStyle = DUCK.body;
+    ctx.beginPath(); ctx.ellipse(0, 0, 8.5, 4.6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = DUCK.breast;
+    ctx.beginPath(); ctx.ellipse(5.5, 0.4, 2.7, 2.7, 0, 0, Math.PI * 2); ctx.fill();
+
+    // folded wing with speculum stripe
+    ctx.fillStyle = DUCK.wing;
+    ctx.beginPath(); ctx.ellipse(-1.5, -0.9, 5.2, 2.5, 0.1, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = DUCK.ring; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(-5.6, -0.4); ctx.lineTo(-2.4, -0.7); ctx.stroke();
+    ctx.strokeStyle = DUCK.speculum; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(-5.4, -0.4); ctx.lineTo(-2.6, -0.7); ctx.stroke();
+
+    if (a.wingStretch > 0) { // flap-and-shake on the water
+      ctx.save();
+      ctx.translate(1.2, -2);
+      ctx.rotate(-0.5 + Math.sin(a.wingStretch * 22) * 0.7);
+      duckWing(10, DUCK.wing, true);
+      ctx.restore();
+    }
+
+    // head: proud above water, or rooting below the surface
+    const nib = eat > 0.85 ? Math.sin(t * 16) * 0.5 : 0;
+    drawDuckHead(lerp(6.5, 10, eat), lerp(-9, 2.5, eat), eat, nib);
+    ctx.restore();
+
+    // waterline lapping over the hull hides the legs entirely
+    ctx.fillStyle = "rgba(70,110,122,0.75)";
+    ctx.beginPath(); ctx.ellipse(0, groundY + 3.4, 12.5, 2.8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(215,235,240,0.5)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.ellipse(0, groundY + 1.6, 10.5, 1.6, 0, 0, Math.PI * 2); ctx.stroke();
+    // splash beads while dabbling
+    if (eat > 0.7) {
+      ctx.fillStyle = "rgba(220,238,242,0.6)";
+      for (let k = 0; k < 3; k++) {
+        ctx.beginPath();
+        ctx.arc(4 + Math.sin(t * 9 + k * 2.1) * 5, groundY - 1 - Math.abs(Math.sin(t * 7 + k)) * 4, 0.9, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    ctx.restore();
+    return;
+  }
+
+  // ---- on the ground ----
+  const g = a.anim;
+  const walk = a.state === "walk";
+  const waddle = walk ? Math.sin(g * 1.4) : 0;
+  const eat = a.dying ? 0 : ease(a.eatDown || 0);
+  const bodyY = lerp(groundY - 7.5 - (walk ? Math.abs(waddle) * 1.1 : 0), groundY - 4.5, dp);
+
+  // orange legs with little webbed feet, stepping on the waddle beat
+  if (dp < 1) {
+    ctx.strokeStyle = DUCK.foot; ctx.lineWidth = 1.6; ctx.lineCap = "round";
+    for (const [ax, phase] of [[-2, 0], [2, Math.PI]]) {
+      let fx = ax, lift = 0;
+      if (walk) { fx = ax + Math.sin(g * 1.4 + phase) * 2.6; lift = Math.max(0, Math.cos(g * 1.4 + phase)) * 2; }
+      ctx.beginPath(); ctx.moveTo(ax * 0.6, bodyY + 2.5); ctx.lineTo(fx, groundY - lift); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(fx, groundY - lift); ctx.lineTo(fx + 2.6, groundY - lift); ctx.stroke();
+    }
+    ctx.lineCap = "butt";
+  }
+
+  // body group: waddle rock, tail-up dabble tip, death flop-forward
+  ctx.save();
+  ctx.translate(0, bodyY);
+  ctx.rotate(waddle * 0.08 + eat * 0.42 + dp * 1.45);
+  if (dp > 0) ctx.translate(0, dp * 2);
+
+  // perky up-curled tail
+  ctx.fillStyle = DUCK.tail;
+  ctx.beginPath();
+  ctx.moveTo(-7.5, -0.5);
+  ctx.quadraticCurveTo(-11.5, -2, -12.5, -5.5);
+  ctx.lineTo(-8.8, 0.8);
+  ctx.closePath(); ctx.fill();
+
+  // plump body
+  ctx.fillStyle = DUCK.body;
+  ctx.beginPath(); ctx.ellipse(0, 0, 8.5, 4.6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = DUCK.belly;
+  ctx.beginPath(); ctx.ellipse(0.5, 1.9, 6, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = DUCK.breast;
+  ctx.beginPath(); ctx.ellipse(5.5, 0.4, 2.7, 2.7, 0, 0, Math.PI * 2); ctx.fill();
+
+  // folded wing on the flank with speculum stripe
+  ctx.fillStyle = DUCK.wing;
+  ctx.beginPath(); ctx.ellipse(-1.5, -0.9, 5.2, 2.5, 0.1, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = DUCK.ring; ctx.lineWidth = 1.6;
+  ctx.beginPath(); ctx.moveTo(-5.6, -0.4); ctx.lineTo(-2.4, -0.7); ctx.stroke();
+  ctx.strokeStyle = DUCK.speculum; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(-5.4, -0.4); ctx.lineTo(-2.6, -0.7); ctx.stroke();
+
+  // standing wing flutter: quick open-wing flaps on the spot
+  if (a.wingStretch > 0 && !a.dying) {
+    ctx.save();
+    ctx.translate(1.2, -2);
+    ctx.rotate(-0.5 + Math.sin(a.wingStretch * 22) * 0.7);
+    duckWing(10, DUCK.wing, true);
+    ctx.restore();
+  }
+
+  // head: upright, or rooting in the grass while dabbling
+  const nib = eat > 0.85 ? Math.sin(t * 16) * 0.5 : 0;
+  drawDuckHead(lerp(6.5, 9.5, eat), lerp(-9, -2.5, eat), eat, nib);
+
+  ctx.restore();
+  ctx.restore();
+}
+
 // ---------------- Bear ----------------
 const BEAR = { body: "#5a4028", dark: "#463020", belly: "#6e5236", muzzle: "#8a6a48", claw: "#2c2018", eye: "#1a120a" };
 
@@ -235,9 +525,9 @@ function drawBear(a) {
   const chase = a.state === "chase" && !a.dying;
   const walk = a.state === "walk" && !a.dying;
   const dp = a.dying ? ease(Math.min(a.deathT / 1.3, 1)) : 0;
-  // Ny angrebslogik: en hurtig svirpende bevægelse
-  const atk = a.attackAnim > 0 ? Math.sin(ease(a.attackAnim / 0.4) * Math.PI * 1.5) : 0; // Gør slaget mere dynamisk
-  const rear = a.attackAnim > 0 ? Math.sin(ease(a.attackAnim / 0.4) * Math.PI) * 0.3 : 0; // Let løft af kroppen
+  // New attack logic: a quick swiping motion
+  const atk = a.attackAnim > 0 ? Math.sin(ease(a.attackAnim / 0.4) * Math.PI * 1.5) : 0; // Makes the strike more dynamic
+  const rear = a.attackAnim > 0 ? Math.sin(ease(a.attackAnim / 0.4) * Math.PI) * 0.3 : 0; // Slight lift of the body
 
   ctx.save();
   ctx.translate(a.x, 0);
@@ -250,11 +540,11 @@ function drawBear(a) {
   const sniff = a.dying ? 0 : ease(a.eatDown || 0);
 
   // Justeret bodyY for kortere ben
-  const baseGround = groundY - 6; // Bjørnen er tættere på jorden
+  const baseGround = groundY - 6; // The bear sits closer to the ground
   const bodyY = lerp(baseGround - 14 - lope + roll - rear * 15, groundY - 5, dp);
   const bodyRot = -rear * 0.5 + dp * 0.4;
 
-  // --- legs: KORTERE OG TYKKERE ---
+  // --- legs: SHORTER AND THICKER ---
   if (dp < 1) {
     const fold = dp * 6;
     ctx.strokeStyle = BEAR.dark; ctx.lineWidth = 7; ctx.lineCap = "round"; // Tykkere ben
@@ -274,7 +564,7 @@ function drawBear(a) {
       }
 
       const front = ax > 0;
-      // Frontbenene løftes slet ikke ved almindelig gang/løb, kun ved angreb
+      // Front legs are not lifted at all during normal walking/running, only when attacking
       const z = front ? groundY - lift - fold : groundY - lift - fold;
 
       ctx.beginPath();
@@ -326,22 +616,22 @@ function drawBear(a) {
   ctx.beginPath(); ctx.arc(head.x - 2.5, head.y - 4.5, 2, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc(head.x + 1.5, head.y - 5.2, 2, 0, Math.PI * 2); ctx.fill();
 
-  // --- NYT: Angrebsarm med klo (tegnes separat for at svinge) ---
+  // --- NEW: Attack arm with claw (drawn separately so it can swing) ---
   if (a.attackAnim > 0) {
     ctx.save();
     // Flyt transformationspunktet til skulderen
     ctx.translate(7, bodyY - 2);
-    // Roter armen baseret på 'atk' (0 -> 1.5 PI)
+    // Rotate the arm based on 'atk' (0 -> 1.5 PI)
     ctx.rotate(atk * 1.8 - 0.5);
 
     // Overarm
     ctx.strokeStyle = BEAR.body; ctx.lineWidth = 7; ctx.lineCap = "round";
     ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(12, 0); ctx.stroke();
 
-    // Underarm og pote
+    // Forearm and paw
     ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(22, 5); ctx.stroke();
 
-    // Kløer (stikker ud fra poten)
+    // Claws (protruding from the paw)
     if (atk > 0.5) {
         ctx.strokeStyle = BEAR.claw; ctx.lineWidth = 2;
         const clawLen = 6 + Math.sin(atk*Math.PI)*3;
@@ -354,10 +644,10 @@ function drawBear(a) {
     }
     ctx.restore();
   } else {
-      // Standard frontben (hvis ikke angriber)
+      // Standard front legs (when not attacking)
       ctx.strokeStyle = BEAR.dark; ctx.lineWidth = 7; ctx.lineCap = "round";
       const baseFrontLegX = 8;
-      const fPhase = 0; // fast fase når den ikke løber
+      const fPhase = 0; // fixed phase when not running
       const fX = chase ? baseFrontLegX + Math.sin(g * 2.2 + fPhase)*5 : baseFrontLegX;
       const fZ = chase ? groundY - Math.max(0, -Math.cos(g * 2.2 + fPhase))*3 : groundY;
 
@@ -394,7 +684,8 @@ function drawStuckArrows(a) {
     if (alpha <= 0) continue;
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.translate(a.x + ar.x, ar.y);
+    // rel arrows (ducks hit mid-flight) ride the body as it falls
+    ctx.translate(a.x + ar.x, ar.rel ? groundY + (a.fy || 0) + ar.y : ar.y);
     ctx.rotate(ar.a || 0);
     ctx.strokeStyle = "#c9b48a"; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(-15, 0); ctx.lineTo(5, 0); ctx.stroke();
@@ -412,6 +703,7 @@ export function drawAnimals() {
     if (!a.alive) continue;
     if (a.type === "deer") drawDeer(a);
     else if (a.type === "bear") drawBear(a);
+    else if (a.type === "duck") drawDuck(a);
     else drawRabbit(a);
     drawStuckArrows(a);
   }

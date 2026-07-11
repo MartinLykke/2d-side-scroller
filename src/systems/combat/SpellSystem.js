@@ -43,9 +43,9 @@ function chainLightning(x, dmg, bounces) {
     const baseTargetX = nearest.x;
     const baseTargetY = enemyDrawY;
 
-    const knækY = (i === steps) ? 0 : rand(-15, 15);
+    const bendY = (i === steps) ? 0 : rand(-15, 15);
     const nxtX = curX + (baseTargetX - x) / steps;
-    const nxtY = (baseTargetY * t) + (enemyDrawY * (1 - t)) + knækY;
+    const nxtY = (baseTargetY * t) + (enemyDrawY * (1 - t)) + bendY;
 
     const dSeg = Math.hypot(nxtX - curX, nxtY - curY);
     const pSteps = Math.ceil(dSeg / 5);
@@ -101,8 +101,8 @@ export function castSpell(player, wBase, tgt) {
       const targetBaseX = tgt.x;
       const targetBaseY = enemyY;
 
-      const knækX = (i === segments) ? 0 : rand(-35, 35);
-      const nextX = (targetBaseX * t) + (currentX * (1 - t)) + knækX;
+      const bendX = (i === segments) ? 0 : rand(-35, 35);
+      const nextX = (targetBaseX * t) + (currentX * (1 - t)) + bendX;
       const nextY = currentY + ((targetBaseY - (groundY - 1000)) / segments);
 
       const segDist = Math.hypot(nextX - currentX, nextY - currentY);

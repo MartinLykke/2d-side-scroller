@@ -93,7 +93,7 @@ function updateFireDragon(e, t, dt) {
 //     shockwave that damages and knocks back everything nearby.
 //  3. Magma volley: hurls arcs of magma boulders at the base that leave
 //     burning fire pools on the ground.
-// Below 35% HP it erupts once: faster, angrier, and it vents fire imps.
+// Below 35% HP it erupts once: faster, angrier, and it vents flying imps.
 
 const GOLEM_ARMOR_TIME  = 7;
 const GOLEM_CORE_TIME   = 3.5;

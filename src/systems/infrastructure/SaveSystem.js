@@ -79,7 +79,8 @@ export function loadGame() {
       if (snap.mineVeins) snap.mineVeins.forEach((s, i) => { if (state.mineVeins[i]) Object.assign(state.mineVeins[i], s); });
     }
     state.archerSkillPoints = snap.archerSkillPoints || 0;
-    state.archerSkills = snap.archerSkills || [];
+    // smoke_bomb was replaced by hunters_mark; migrate old saves
+    state.archerSkills = (snap.archerSkills || []).map(id => id === "smoke_bomb" ? "hunters_mark" : id);
     state.guardSkillPoints = snap.guardSkillPoints || 0;
     state.guardSkills = snap.guardSkills || [];
     Game.threatLevel = Math.max(1, snap.day || 1);

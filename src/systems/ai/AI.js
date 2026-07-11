@@ -4,13 +4,14 @@ import { clamp, dist, rand, pick } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, spawnCoin, floaty as showFloaty } from '../world/SpawnSystem.js';
+import { spawnParticles, spawnGoldCoins, spawnGoldReward, floaty as showFloaty } from '../world/SpawnSystem.js';
 import { shootArrow, killEnemy } from '../combat/Combat.js';
 import { killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js';
-import { wallHeight } from '../../entities/Wall.js';
+import { wallHeight, wallStandX, wallBackDir, wallRenderWidth, wallPlatformDepth, overWallPlatform } from '../../entities/Wall.js';
 import { makeUnit } from '../../entities/Unit.js';
-import { nearestChoppableTree, chopTree, nearestLog, deliverLog } from '../world/ForestSystem.js';
+import { nearestChoppableTree, chopTree, nearestLog, deliverLog, pondAt, nearestPond } from '../world/ForestSystem.js';
 import { minerAI } from '../world/MineSystem.js';
+import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 
 function hasSkill(id) { return state.archerSkills.includes(id); }
 
@@ -21,17 +22,12 @@ function floaty(x, text, color) {
 
 function archerShoot(u, x, h, tgt) {
   const skills = state.archerSkills;
-  // Powershot: charge if standing still
-  if (skills.includes("powershot")) {
-    if (!u.moving) { u.powerTimer += 0.016; } else { u.powerTimer = 0; u.charged = false; }
-    if (u.powerTimer >= 3) u.charged = true;
-  }
 
   // Heavy Ballista overrides everything
   if (skills.includes("heavy_ballista")) {
     shootArrow(x, h, tgt, u);
     const arr = state.arrows[state.arrows.length - 1];
-    if (arr) { arr.ballista = true; arr.vx *= 0.45; arr.vy *= 0.45; arr.pierce = 3; arr.dmgMult = 5; }
+    if (arr) { arr.ballista = true; arr.vx *= 0.55; arr.vy *= 0.55; arr.pierce = 3; arr.dmgMult = 5; }
     u.shotCount = 0; u.charged = false; u.powerTimer = 0;
     return;
   }
@@ -48,7 +44,13 @@ function archerShoot(u, x, h, tgt) {
     if (skills.includes("bouncing_volley")) arr.bouncing = true;
     if (isPowered) { arr.powered = true; arr.vx *= 1.5; arr.vy *= 1.5; arr.dmgMult = 3; arr.pierce = (arr.pierce||0) + 1; }
   }
-  if (isPowered) { u.charged = false; u.powerTimer = 0; }
+  if (isPowered) {
+    u.charged = false; u.powerTimer = 0;
+    u.powerFlash = 0.4; // release flash on the sprite
+    Game.screenShake = Math.max(Game.screenShake, 0.15);
+    spawnParticles(x, h, 14, "#ffcc44", 80, 90);
+    spawnParticles(x, h, 8, "#fff2b0", 50, 110);
+  }
 
   // Double shot: second arrow with slight spread
   if (skills.includes("double_shot")) {
@@ -64,12 +66,12 @@ function archerShoot(u, x, h, tgt) {
   }
 }
 
-// ── Pigfælder ────────────────────────────────────────────────────────────
-// Lægges kun i felten (udenfor basens mure), med cooldown pr. bueskytte.
-const CALTROP_COOLDOWN    = 10;  // sek. mellem hver fælde pr. bueskytte
-const CALTROP_HOME_RADIUS = 700; // murene ender ved baseX±620 — herudenfor er "i felten"
-const CALTROP_PLACE_TIME  = 0.7; // sek. læggeanimation
-const CALTROP_DROP_AT     = 0.5; // hvor langt inde i animationen fælden slippes
+// ── Caltrops ─────────────────────────────────────────────────────────────
+// Only placed in the field (outside the base walls), with a cooldown per archer.
+const CALTROP_COOLDOWN    = 10;  // sec. between each trap per archer
+const CALTROP_HOME_RADIUS = 700; // the walls end at baseX±620 — beyond that is "in the field"
+const CALTROP_PLACE_TIME  = 0.7; // sec. placing animation
+const CALTROP_DROP_AT     = 0.5; // how far into the animation the trap is released
 const ARCHER_DAY_SIGHT = 720;
 const ARCHER_NIGHT_SIGHT = 820;
 const ARCHER_HUNT_SIGHT = 820;
@@ -80,7 +82,7 @@ function tryPlaceCaltrop(u, foe) {
   if (dist(u.x, CFG.baseX) < CALTROP_HOME_RADIUS) return false; // aldrig hjemme ved basen
   if (u.onWall || !foe) return false;
   const t = ENEMY_TYPES[foe.type];
-  if (t && t.flying) return false; // flyvende fjender træder ikke i fælder
+  if (t && t.flying) return false; // flying enemies do not step in traps
   if (dist(u.x, foe.x) > 240) return false;
   u.caltropCd = CALTROP_COOLDOWN;
   u.placingTrap = 0.0001; // animationsfremdrift 0→1
@@ -88,6 +90,65 @@ function tryPlaceCaltrop(u, foe) {
   u.shootState = null;
   u.dir = Math.sign(foe.x - u.x) || u.dir;
   return true;
+}
+
+// ── Grappling hook ───────────────────────────────────────────────────────
+// Instead of walking behind the wall and slowly climbing, the archer fires a
+// hook at the wall top and is yanked up along the rope.
+// Phases: "throw" (hook flies out) → "pull" (archer zips up the rope).
+const GRAPPLE_THROW_TIME = 0.22;
+const GRAPPLE_PULL_TIME  = 0.42;
+const GRAPPLE_RANGE      = 260;
+
+function tryStartGrapple(u, w, postX) {
+  if (!hasSkill("grappling_hook") || u.grapple || (u.grappleCd || 0) > 0) return false;
+  if (!w || w.hp <= 0 || w.buildProgress < 1) return false;
+  if (u.onWall || (u.wallClimbT || 0) > 0.1) return false;
+  const d = dist(u.x, postX);
+  if (d < 26 || d > GRAPPLE_RANGE) return false;
+  u.grapple = {
+    phase: "throw", t: 0,
+    fromX: u.x, toX: postX, wall: w,
+    lift: Math.max(0, wallHeight(w) - 14),
+  };
+  u.shootState = null;
+  u.dir = Math.sign(postX - u.x) || u.dir;
+  Audio.bowLoad();
+  return true;
+}
+
+function updateGrapple(u, dt) {
+  const g = u.grapple;
+  const w = g.wall;
+  // Wall destroyed mid-flight: drop back down
+  if (!w || w.hp <= 0 || !w.commissioned) {
+    u.grapple = null; u.grappleLiftY = 0;
+    u.wallClimbT = 0; u.onWall = false;
+    return;
+  }
+  g.lift = Math.max(0, wallHeight(w) - 14);
+
+  if (g.phase === "throw") {
+    g.t += dt / GRAPPLE_THROW_TIME;
+    u.dir = Math.sign(g.toX - u.x) || u.dir;
+    if (g.t >= 1) { g.phase = "pull"; g.t = 0; Audio.bow(); }
+    return;
+  }
+
+  // "pull": zip along the rope in a shallow arc
+  g.t += dt / GRAPPLE_PULL_TIME;
+  const p = Math.min(g.t, 1);
+  const e = p * p * (3 - 2 * p);
+  u.x = g.fromX + (g.toX - g.fromX) * e;
+  u.grappleLiftY = g.lift * e + Math.sin(p * Math.PI) * 12;
+  if (Math.random() < 0.4) spawnParticles(u.x, groundY - u.grappleLiftY - 10, 1, "#c9b48a", 14, 12);
+  if (g.t >= 1) {
+    u.grapple = null; u.grappleLiftY = 0;
+    u.wall = w; u.wallClimbT = 1; u.onWall = true;
+    u.grappleCd = 2.5;
+    spawnParticles(u.x, groundY - g.lift - 4, 9, "#caa46a", 45, 45);
+    Audio.build();
+  }
 }
 
 export function nearestEnemy(x, range, includeFleeing = false) {
@@ -132,12 +193,6 @@ function archerWallCapacity(w) {
   return Math.max(2, w.level + 1);
 }
 
-function wallStandOffset(w, slot) {
-  const cap = archerWallCapacity(w);
-  const spacing = Math.min(16, Math.max(10, 56 / cap));
-  return (slot - (cap - 1) / 2) * spacing;
-}
-
 function wallOccupancy(w) {
   return Game.wallSlots[w.x] || 0;
 }
@@ -179,11 +234,12 @@ function assignArcherPost(u, preferredSide, dt) {
 
   const { slot, onWall: wantOnWall } = reserveWallSlot(wall);
   const postX = wantOnWall
-    ? wall.x + wallStandOffset(wall, slot)
-    : wall.x + Math.sign(CFG.baseX - wall.x) * (slot - archerWallCapacity(wall) + 1) * 26;
+    ? wallStandX(wall, slot)
+    : wall.x + wallBackDir(wall) * (wallRenderWidth(wall) / 2 + wallPlatformDepth(wall) + 30 + (slot - archerWallCapacity(wall)) * 26);
 
-  // Archers must first walk to the foot of the wall before they can start climbing it
-  const nearWall = dist(u.x, wall.x) < 60;
+  // Archers must first reach the platform (stairs/ladder zone) behind the
+  // wall before they can start climbing up onto it
+  const nearWall = overWallPlatform(wall, u.x);
   const climbTarget = (wantOnWall && nearWall) ? 1 : 0;
   u.wallClimbT = clamp((u.wallClimbT || 0) + Math.sign(climbTarget - (u.wallClimbT || 0)) * ARCHER_CLIMB_SPEED * dt, 0, 1);
   if (Math.abs((u.wallClimbT || 0) - climbTarget) < 0.02) u.wallClimbT = climbTarget;
@@ -201,12 +257,14 @@ function dropArcherGoldToPlayer(u) {
   if (gold <= 0 || !state.player) return;
 
   const dx = state.player.x - u.x;
-  const dir = Math.sign(dx) || u.dir || 1;
-  for (let g = 0; g < gold; g++) {
-    const vx = clamp(dx * 2 + dir * rand(35, 85) + rand(-25, 25), -360, 360);
-    spawnCoin(u.x + rand(-10, 10), 1, groundY - 28, vx, rand(-250, -170));
-  }
-  floaty(u.x, "+" + gold + " guld", "#f2c14e");
+  spawnGoldCoins(u.x, gold, {
+    spreadX: 10,
+    fromY: groundY - 28,
+    vx: Math.min(360, Math.abs(dx * 2) + 85),
+    vyMin: 170,
+    vyMax: 250,
+  });
+  floaty(u.x, "+" + gold + " gold", "#f2c14e");
   u.gold = 0;
 }
 
@@ -224,7 +282,24 @@ function archerAI(u, dt) {
     dropArcherGoldToPlayer(u);
   }
 
-  // Læggeanimation for pigfælde: skytten knæler og sætter fælden
+  // Mid-grapple: the flight owns the archer until landing
+  if (u.grapple) { updateGrapple(u, dt); return; }
+
+  // Powershot: charge while standing still, lose the charge when moving
+  if (hasSkill("powershot") && !hasSkill("heavy_ballista")) {
+    if (!u.moving && !u.placingTrap) {
+      u.powerTimer = (u.powerTimer || 0) + dt;
+      if (u.powerTimer >= 3 && !u.charged) {
+        u.charged = true;
+        spawnParticles(u.x, groundY - 34, 10, "#ffcc44", 40, 60);
+      }
+    } else {
+      u.powerTimer = 0;
+      u.charged = false;
+    }
+  }
+
+  // Placing animation for caltrop: the archer kneels and sets the trap
   if (u.placingTrap > 0) {
     u.placingTrap += dt / CALTROP_PLACE_TIME;
     if (!u.trapDropped && u.placingTrap >= CALTROP_DROP_AT) {
@@ -237,26 +312,26 @@ function archerAI(u, dt) {
       });
     }
     if (u.placingTrap >= 1) u.placingTrap = 0;
-    return; // står stille mens fælden lægges
+    return; // stands still while the trap is placed
   }
 
-  // Nulstil den faste side, når det bliver dag igen
+  // Reset the fixed side when day returns
   if (!Game.isNight && !sunsetApproaching()) {
     u.fixedSide = null;
   }
 
-  // Rally to legendary boss (Har højeste prioritet)
+  // Rally to legendary boss (has highest priority)
 // --- FORBEDRET ARCHER BOSS LOGIK ---
   const lb = state.legendaryBoss;
   if (lb && !lb.fleeing) {
     const d = dist(u.x, lb.x);
     u.dir = Math.sign(lb.x - u.x) || u.dir;
 
-    // Tjek om der er en sikker mur mellem skytten og bossen
+    // Check whether there is a safe wall between the archer and the boss
     let wallDefending = null;
     for (const w of state.walls) {
       if (w.commissioned && w.hp > 0 && w.buildProgress >= 1) {
-        // Hvis muren står mellem bueskytten og bossen
+        // If the wall stands between the archer and the boss
         if ((u.x < w.x && w.x < lb.x) || (lb.x < w.x && w.x < u.x)) {
           wallDefending = w;
           break;
@@ -265,28 +340,28 @@ function archerAI(u, dt) {
     }
 
     if (wallDefending) {
-      // Hvis vi har en mur som beskyttelse, så bliv på vores post/mur!
+      // If we have a wall for protection, stay at our post/wall!
       const side = u.fixedSide || (u.x < CFG.baseX ? -1 : 1);
       const post = assignArcherPost(u, side, dt);
       moveToward(u, post, 84, dt);
     } else {
-      // PANIK: Ingen mur beskytter os! Hold afstand (Kiting)
+      // PANIC: No wall protects us! Keep distance (kiting)
       const idealDist = 300;
       if (d < idealDist - 40) {
-        // Bossen er for tæt på! Løb VÆK fra bossen
+        // The boss is too close! Run AWAY from the boss
         u.dir = Math.sign(u.x - lb.x) || u.dir;
-        u.x += u.dir * 110 * dt; // Løb hurtigt bagud
+        u.x += u.dir * 110 * dt; // Run quickly backwards
       } else if (d > idealDist + 40) {
-        // For langt væk, gå tættere på indtil vi kan ramme
+        // Too far away, move closer until we can hit
         moveToward(u, lb.x, 84, dt);
       }
     }
 
-    // Skyd på bossen hvis inden for rækkevidde
+    // Shoot at the boss if within range
     if (d < 580 && u.cooldown <= 0) {
-      const shootH = u.onWall && u.wall && Math.abs(u.x - u.wall.x) < 40 ? wallHeight(u.wall) + 16 : 40;
+      const shootH = u.onWall && u.wall && overWallPlatform(u.wall, u.x) ? wallHeight(u.wall) + 16 : 40;
       archerShoot(u, u.x, groundY - shootH, lb);
-      u.cooldown = hasSkill("heavy_ballista") ? 2.2 : 0.75; // Lidt hurtigere skud mod bossen
+      u.cooldown = hasSkill("heavy_ballista") ? 2.2 : 0.75; // Slightly faster shots against the boss
       u.smokeReveal = 0.5;
     }
     return;
@@ -294,15 +369,14 @@ function archerAI(u, dt) {
 
   const closeFoe = nearestEnemy(u.x, Game.isNight ? ARCHER_NIGHT_SIGHT : ARCHER_DAY_SIGHT);
 
-  // Smoke bomb: update smoked timer
-  if (u.smoked > 0) u.smoked -= dt;
+  // Master of Shadows: brief visibility window after each shot
   if (u.smokeReveal > 0) u.smokeReveal -= dt;
 
   // Barrage: rapid-fire queue
   if (u.barrageCount > 0 && u.cooldown <= 0) {
     const tgt = nearestEnemy(u.x, 800, true);
     if (tgt) {
-      const shootH = u.onWall && u.wall && Math.abs(u.x - u.wall.x) < 40 ? wallHeight(u.wall) + 16 : 40;
+      const shootH = u.onWall && u.wall && overWallPlatform(u.wall, u.x) ? wallHeight(u.wall) + 16 : 40;
       archerShoot(u, u.x, groundY - shootH, tgt);
       u.dir = Math.sign(tgt.x - u.x) || u.dir;
     }
@@ -311,36 +385,42 @@ function archerAI(u, dt) {
     return;
   }
 
-  // --- LOGIK FOR AFTEN OG NAT (PRE-NIGHT & NIGHT) ---
+  // --- LOGIC FOR DUSK AND NIGHT (PRE-NIGHT & NIGHT) ---
   if (Game.isNight || sunsetApproaching()) {
-    // Tildel en fast side (højre/venstre) som ikke ændrer sig før næste dag
+    // Assign a fixed side (right/left) that does not change until the next day
     const side = assignFixedSide(u);
     const post = assignArcherPost(u, side, dt);
 
-    // Find kun fjender på skyttens EGEN tildelte side for at undgå at kigge mod den anden mur
+    // Only find enemies on the archer's OWN assigned side to avoid facing the other wall
     const sideFoe = nearestThreatOnSide(u.x, ARCHER_NIGHT_SIGHT, side);
 
-    // Bevægelse til posten
+    // Movement to the post — grapplers zip up, the rest walk and climb
     if (!sideFoe || dist(u.x, sideFoe.x) > 150) {
-      if (u.onWall && u.wall && hasSkill("grappling_hook") && dist(u.x, post) > 60) {
-        u.x = post; u.wallClimbT = 1; u.onWall = true; // instant grapple
-      } else {
-        moveToward(u, post, Game.isNight ? 84 : 65, dt); // Lidt hurtigere om natten
-      }
+      if (tryStartGrapple(u, u.wall, post)) return;
+      moveToward(u, post, Game.isNight ? 84 : 65, dt); // Slightly faster at night
     }
 
-    // Skyd hvis der er en fjende på din side
+    // Shoot if there is an enemy on your side
     if (sideFoe && u.cooldown <= 0) {
-      const shootH = u.onWall && u.wall && Math.abs(u.x - u.wall.x) < 40 ? wallHeight(u.wall) + 16 : 40;
+      const shootH = u.onWall && u.wall && overWallPlatform(u.wall, u.x) ? wallHeight(u.wall) + 16 : 40;
       archerShoot(u, u.x, groundY - shootH, sideFoe);
       u.cooldown = hasSkill("heavy_ballista") ? 2.2 : 0.8;
       u.dir = Math.sign(sideFoe.x - u.x) || u.dir;
       u.smokeReveal = 0.5;
+    } else if (!sideFoe && u.cooldown <= 0) {
+      // No threats around: pick off game animals in range without leaving the post
+      const prey = nearestAnimal(u.x, ARCHER_HUNT_SHOOT_RANGE);
+      if (prey && prey.type !== "bear") {
+        const shootH = u.onWall && u.wall && overWallPlatform(u.wall, u.x) ? wallHeight(u.wall) + 16 : 40;
+        shootArrow(u.x, groundY - shootH, prey, u);
+        u.cooldown = 1.6;
+        u.dir = Math.sign(prey.x - u.x) || u.dir;
+      }
     }
-  } 
+  }
   // --- LOGIK FOR DAGTIMERNE ---
   else {
-    // Hvis fjenden er faretruende tæt på om dagen, så ryk bagud og skyd
+    // If the enemy is dangerously close during the day, fall back and shoot
     const tooClose = nearestEnemy(u.x, 90);
     if (tooClose) {
       u.onWall = false; u.wall = null;
@@ -382,6 +462,14 @@ function archerAI(u, dt) {
         separateFromArchers(u, dt);
         return;
       }
+
+      // Collect gold dropped from hunts before resuming patrol
+      const coin = nearestGroundCoin(u.x, ARCHER_HUNT_SIGHT);
+      if (coin) {
+        u.onWall = false; u.wall = null;
+        moveToward(u, coin.x, 58, dt);
+        return;
+      }
     }
 
     if (closeFoe) {
@@ -410,8 +498,6 @@ function archerAI(u, dt) {
       if (dist(u.x, outerEdge) < 60) u.patrolDir *= -1;
       u.dir = u.patrolDir;
       u.x += u.patrolDir * 58 * dt;
-      
-      if (hasSkill("powershot") && !u.moving) u.powerTimer = (u.powerTimer||0) + dt;
     }
   }
 }
@@ -435,6 +521,19 @@ function builderAI(u, dt) {
     if (e.type !== "imp" || e.hp <= 0 || e.dying || e.fleeing) continue;
     if (dist(u.x, e.x) < 260) { u.panic = Math.max(u.panic || 0, 0.6); break; }
   }
+  // Bears maul builders too. Refresh panic every frame while one is close (or
+  // actively chasing within its 430px chase sight) so the builder keeps
+  // running instead of turning back the moment the 1s hit-panic decays.
+  for (const a of state.animals) {
+    if (a.type !== "bear" || !a.alive || a.dying || a.hp <= 0) continue;
+    const d = dist(u.x, a.x);
+    if (d < 300 || (a.state === "chase" && d < 480)) {
+      u.panic = Math.max(u.panic || 0, 0.6);
+      u.bearThreatX = a.x; // keep running from here until panic fully fades
+      break;
+    }
+  }
+  if (u.panic <= 0) u.bearThreatX = null;
   if (u.panic > 0) {
     if (u.pendingLog) { u.pendingLog.claimedBy = null; u.pendingLog = null; }
     if (u.carryLog) {
@@ -444,8 +543,16 @@ function builderAI(u, dt) {
       u.carryLog.carriedBy = null;
       u.carryLog = null;
     } // drop the log and run
-    u.dir = Math.sign(CFG.baseX - u.x) || u.dir;
-    moveToward(u, CFG.baseX, 150, dt);
+    // Run home for safety, but a bear will chase all the way to base and
+    // maul a builder standing still there — while it's still within its
+    // 430px chase sight, keep running directly away until it disengages.
+    const bearOnHeels = u.bearThreatX != null && dist(u.x, u.bearThreatX) < 480;
+    const fleeTo = bearOnHeels
+      ? clamp(u.x + Math.sign(u.x - u.bearThreatX || 1) * 600, 200, CFG.worldWidth - 200)
+      : CFG.baseX;
+    u.dir = Math.sign(fleeTo - u.x) || u.dir;
+    // Flee faster than a charging bear's average pace, or it runs them down
+    moveToward(u, fleeTo, 220, dt);
     return;
   }
   // A log already picked up gets carried home no matter what else is going on.
@@ -503,11 +610,19 @@ function builderAI(u, dt) {
     }
     return;
   }
-  const freeLog = nearestLog(u.x);
+  // Don't pick work sites next to a bear — harvest somewhere else instead.
+  const awayFromBears = (x) => {
+    for (const a of state.animals) {
+      if (a.type !== "bear" || !a.alive || a.dying || a.hp <= 0) continue;
+      if (dist(x, a.x) < 380) return false;
+    }
+    return true;
+  };
+  const freeLog = nearestLog(u.x, awayFromBears);
   if (freeLog) { freeLog.claimedBy = u; u.pendingLog = freeLog; return; }
 
   // No logs waiting either: fell the nearest available forest tree while it's safe.
-  const tree = nearestChoppableTree(u.x);
+  const tree = nearestChoppableTree(u.x, awayFromBears);
   if (Game.isNight && tree) {
     if (nearestEnemy(tree.x, 220)) u.panic = 0.6;
   }
@@ -541,7 +656,7 @@ function farmerAI(u, dt) {
     if (u.workTimer > (Game.isNight ? 99 : interval)) {
       u.workTimer = 0;
       const coins = lvl >= 5 ? 3 : lvl >= 3 ? 2 : 1;
-      for (let c = 0; c < coins; c++) spawnCoin(fx + rand(-24, 24), 1, groundY - 20, rand(-40, 40));
+      spawnGoldReward(fx, coins, "passive", { spreadX: 24, fromY: groundY - 20, vx: 40 });
       spawnParticles(fx, groundY - 20, 4 + lvl, "#9bd05a", 20, 30);
     }
   }
@@ -560,7 +675,7 @@ function grantGuardXP(u) {
 
 function guardDamageEnemy(u, foe, dmg, cooldown = 0.8) {
   if (!foe || foe.hp <= 0 || u.cooldown > 0) return false;
-  foe.hp -= dmg;
+  foe.hp -= dmg * permanentDamageMultiplier();
   foe.flash = 0.14;
   spawnImpBlood(foe, 0.9 + dmg * 0.3);
   u.cooldown = cooldown;
@@ -643,6 +758,15 @@ function guardWallTopX(u, w) {
   const slot = Math.max(0, Math.min(cap - 1, guardWallSlot(u, w)));
   const spacing = Math.min(16, Math.max(10, 58 / cap));
   return w.x + (slot - (cap - 1) / 2) * spacing;
+}
+
+// Idle standing post on the fighting platform behind the wall. Guards step
+// forward to the crest (guardWallTopX / duel positions) only when an imp is
+// coming over the top.
+function guardWallStandX(u, w) {
+  const cap = guardWallCapacity(w);
+  const slot = Math.max(0, Math.min(cap - 1, guardWallSlot(u, w)));
+  return wallStandX(w, slot) + wallBackDir(w) * 6;
 }
 
 function guardDuelPositions(u, w) {
@@ -772,7 +896,7 @@ function guardAI(u, dt) {
 
   if (u.wall && u.onWall && guardHasWallSlot(u, u.wall)) {
     const wall = u.wall;
-    const postX = guardWallTopX(u, wall);
+    const postX = guardWallStandX(u, wall);
     u.aiState = "guardWall";
     updateGuardWallClimb(u, wall, true, dt);
     const topThreat = nearestTopImpForWall(wall, u);
@@ -880,7 +1004,7 @@ function guardAI(u, dt) {
       moveToward(u, holdX, 62, dt);
       return;
     }
-    const postX = guardWallTopX(u, wall);
+    const postX = topThreat ? guardWallTopX(u, wall) : guardWallStandX(u, wall);
     if (dist(u.x, postX) > 8) {
       u.aiState = "moveToWall";
       updateGuardWallClimb(u, wall, false, dt);
@@ -930,7 +1054,7 @@ function getArcherSideCounts() {
 }
 
 function assignFixedSide(u) {
-  // Hvis skytten allerede har en fast side for denne nat/aften, så hold fast i den
+  // If the archer already has a fixed side for this night/dusk, stick to it
   if (u.fixedSide) return u.fixedSide;
 
   const counts = getArcherSideCounts();
@@ -939,7 +1063,7 @@ function assignFixedSide(u) {
   } else if (counts.right < counts.left) {
     u.fixedSide = 1;
   } else {
-    // Hvis der er lige mange, vælg baseret på patrolDir eller tilfældighed
+    // If counts are equal, choose based on patrolDir or randomness
     u.fixedSide = u.patrolDir || (Math.random() < 0.5 ? -1 : 1);
   }
   return u.fixedSide;
@@ -965,6 +1089,8 @@ export function updateUnits(dt) {
     u.cooldown -= dt;
     if (u.impaleCd > 0) u.impaleCd -= dt;
     if (u.caltropCd > 0) u.caltropCd -= dt;
+    if (u.grappleCd > 0) u.grappleCd -= dt;
+    if (u.powerFlash > 0) u.powerFlash -= dt;
     if (u.panic > 0) u.panic -= dt;
     if (u.strike > 0) u.strike -= dt;
     if (u.dying) {
@@ -999,7 +1125,7 @@ export function updateCaltrops(dt) {
   for (let i = caltrops.length - 1; i >= 0; i--) {
     const c = caltrops[i];
 
-    // Kastet fælde falder i en lille bue før den lander og spændes
+    // Thrown trap falls in a small arc before it lands and arms itself
     if (c.state === "fall") {
       c.vy += 760 * dt;
       c.x += c.vx * dt;
@@ -1016,7 +1142,7 @@ export function updateCaltrops(dt) {
 
     if (c.settle > 0) c.settle -= dt;
 
-    // Udløst fælde: kæberne er klappet sammen, holder et øjeblik, og er så brugt
+    // Triggered trap: the jaws have snapped shut, hold for a moment, then it is spent
     if (c.state === "snap") {
       c.snapT += dt;
       if (c.snapT >= 1.2) caltrops.splice(i, 1);
@@ -1144,6 +1270,19 @@ export function updateVagrants(dt) {
       break;
     }
   }
+}
+
+// Nearest settled ground coin an archer could walk to. Coins inside the
+// player's magnet range (90 px) are left for the player to hoover up.
+function nearestGroundCoin(x, range) {
+  let best = null, bd = range;
+  for (const c of state.coins) {
+    if (!c.settled || c.mine) continue;
+    if (state.player && dist(c.x, state.player.x) < 90) continue;
+    const d = dist(x, c.x);
+    if (d < bd) { bd = d; best = c; }
+  }
+  return best;
 }
 
 export function nearestAnimal(x, range) {
@@ -1322,6 +1461,130 @@ function updateBear(a, dt) {
   a.x = clamp(a.x, 800, CFG.worldWidth - 800);
 }
 
+// Duck: waddles and dabbles like the other game, but takes wing when spooked
+// or on a whim — sometimes crossing right over the base, where archers get a
+// crack at shooting it down mid-flight.
+const DUCK_FLY_SPEED = 150;
+
+function duckTakeOff(a, targetX) {
+  a.state = "fly";
+  a.flyTargetX = clamp(targetX, 850, CFG.worldWidth - 850);
+  a.cruiseFy = -rand(230, 330);
+  a.dir = Math.sign(a.flyTargetX - a.x) || 1;
+  a.eatDown = 0;
+  a.wingStretch = 0;
+  spawnParticles(a.x, groundY - 10, 4, "#c9c2b4", 40, 60);
+}
+
+// Where a spooked or wandering duck flies: usually straight to a pond.
+function duckFlightTarget(a, awayDir = 0) {
+  const ponds = state.ponds || [];
+  const options = ponds.filter(p =>
+    Math.abs(p.x - a.x) > 350 &&
+    (!awayDir || Math.sign(p.x - a.x) === awayDir || Math.abs(p.x - a.x) > 1600));
+  if (options.length && Math.random() < 0.75) {
+    const p = pick(options);
+    return p.x + rand(-p.hw * 0.5, p.hw * 0.5);
+  }
+  const dir = awayDir || pick([-1, 1]);
+  return a.x + dir * rand(600, 1100);
+}
+
+function updateDuck(a, dt) {
+  const flying = a.state === "fly";
+  const swimming = a.state === "swim";
+  a.anim += dt * (flying ? 13 : swimming ? 3 : 6);
+
+  if (flying) {
+    // Glide toward cruise height, then sink toward the ground near the goal
+    const remaining = Math.abs(a.flyTargetX - a.x);
+    const targetFy = remaining < 420 ? 0 : a.cruiseFy;
+    a.fy += (targetFy - a.fy) * Math.min(1, dt * 2.2);
+    a.dir = Math.sign(a.flyTargetX - a.x) || a.dir; // never overshoot into an endless cruise
+    a.x += a.dir * DUCK_FLY_SPEED * dt;
+    if (remaining < 40 && a.fy > -16) {
+      a.fy = 0;
+      if (pondAt(a.x)) { // splash down onto the water
+        a.state = "swim"; a.stateT = rand(8, 18);
+        spawnParticles(a.x, groundY - 4, 6, "#bcd8de", 45, 55);
+      } else {
+        a.state = "graze"; a.stateT = rand(2, 5);
+        spawnParticles(a.x, groundY - 8, 3, "#c9c2b4", 30, 40);
+      }
+    }
+    a.x = clamp(a.x, 800, CFG.worldWidth - 800);
+    return;
+  }
+
+  // Spooked ducks escape by air, not by foot — from land or water alike
+  let threat = null, td = 150;
+  for (const u of state.units) {
+    if (u.role !== "archer") continue;
+    const d = dist(u.x, a.x); if (d < td) { td = d; threat = u; }
+  }
+  if (state.player) { const d = dist(state.player.x, a.x); if (d < td) { td = d; threat = state.player; } }
+  if (threat) {
+    if (swimming) spawnParticles(a.x, groundY - 4, 5, "#bcd8de", 50, 60);
+    duckTakeOff(a, duckFlightTarget(a, Math.sign(a.x - threat.x) || 1));
+    return;
+  }
+
+  if (swimming) {
+    const pond = pondAt(a.x);
+    if (!pond) { a.state = "walk"; a.stateT = rand(1.5, 3); return; }
+    // paddle a lazy back-and-forth, turning at the banks
+    a.x += a.dir * 13 * dt * (0.6 + Math.abs(Math.sin(a.anim * 0.7)) * 0.4);
+    if (Math.abs(a.x - pond.x) > pond.hw - 30) a.dir = Math.sign(pond.x - a.x) || 1;
+    a.stateT -= dt;
+    if (a.stateT <= 0) {
+      if (Math.random() < 0.15) { duckTakeOff(a, duckFlightTarget(a)); return; }
+      a.stateT = rand(6, 14);
+      if (Math.random() < 0.5) a.dir *= -1;
+    }
+  } else if (a.state === "walk") {
+    a.stateT -= dt;
+    a.x += a.dir * 15 * dt * (0.5 + Math.abs(Math.sin(a.anim * 0.55))); // waddle pace
+    if (pondAt(a.x)) { // waddled into the water — settle in for a swim
+      a.state = "swim"; a.stateT = rand(8, 18);
+      spawnParticles(a.x, groundY - 4, 4, "#bcd8de", 35, 40);
+    } else if (a.stateT <= 0) { a.state = "graze"; a.stateT = rand(3, 6); }
+  } else { // graze / dabble
+    a.stateT -= dt;
+    if (a.stateT <= 0) {
+      // A duck on dry land heads back to water before long
+      const home = nearestPond(a.x);
+      if (home && Math.abs(home.x - a.x) < 520 && Math.random() < 0.6) {
+        a.state = "walk"; a.stateT = rand(4, 8);
+        a.dir = Math.sign(home.x - a.x) || 1;
+      } else if (Math.random() < 0.35) {
+        // …or simply takes wing — often clear across the base
+        const overBase = Math.random() < 0.35;
+        const target = overBase
+          ? CFG.baseX + (a.x < CFG.baseX ? 1 : -1) * rand(500, 1500)
+          : duckFlightTarget(a);
+        duckTakeOff(a, target);
+        return;
+      } else {
+        a.state = "walk"; a.stateT = rand(1.5, 3.5); a.dir = pick([-1, 1]);
+      }
+    }
+  }
+
+  // Dabbling cycle: tail tips up while the head roots in the grass
+  a.headT -= dt;
+  if (a.headT <= 0) {
+    a.headUp = !a.headUp;
+    a.headT = a.headUp ? rand(1, 2.2) : rand(2, 4.5);
+    if (a.headUp && Math.random() < 0.35) a.wingStretch = 0.9; // wing flutter on the spot
+  }
+  // grazing on land, or tipping tail-up to dabble on the water
+  const grazing = (a.state === "graze" || a.state === "swim") && !a.headUp;
+  a.eatDown = clamp(a.eatDown + (grazing ? dt * 2.2 : -dt * 3), 0, 1);
+  if (a.wingStretch > 0) a.wingStretch -= dt;
+
+  a.x = clamp(a.x, 800, CFG.worldWidth - 800);
+}
+
 export function updateAnimals(dt) {
   const { animals } = state;
   for (let i = animals.length - 1; i >= 0; i--) {
@@ -1330,12 +1593,22 @@ export function updateAnimals(dt) {
 
     // Dead: play the collapse, leave the body a moment, then remove
     if (a.dying) {
+      // A duck shot out of the sky tumbles to the ground first
+      if (a.fy < 0) {
+        a.fallV = (a.fallV || 40) + 1100 * dt;
+        a.fy = Math.min(0, a.fy + a.fallV * dt);
+        a.x += a.dir * 30 * dt;
+        a.spin = (a.spin || 0) + dt * 8;
+        if (a.fy >= 0) spawnParticles(a.x, groundY - 8, 8, "#c9c2b4", 55, 70);
+        continue;
+      }
       a.deathT += dt;
       if (a.deathT > 5) a.alive = false;
       continue;
     }
 
     if (a.type === "bear") { updateBear(a, dt); continue; }
+    if (a.type === "duck") { updateDuck(a, dt); continue; }
 
     const fleeing = a.state === "flee";
     a.anim += dt * (fleeing ? 10 : 6);

@@ -2,7 +2,7 @@ import { state, Game } from '../../core/state.js';
 import { groundY } from '../../core/canvas.js';
 import { dist, rand } from '../../util/math.js';
 import { keys } from '../input/Input.js';
-import { spawnCoin, spawnParticles, floaty } from '../world/SpawnSystem.js';
+import { spawnGoldReward, spawnParticles } from '../world/SpawnSystem.js';
 import { Audio } from '../infrastructure/Audio.js';
 
 let pickupWeaponFn = null;
@@ -41,8 +41,13 @@ export function updateChests(dt) {
     if (ch.open) {
       ch.openAnim += dt * 2.5;
       if (ch.openAnim >= 1) {
-        for (let k = 0; k < ch.lootGold; k++)
-          spawnCoin(ch.x + rand(-40, 40), 1, groundY - 20, rand(-100, 100), rand(-300, -160));
+        spawnGoldReward(ch.x, ch.lootGold, "chest", {
+          spreadX: 40,
+          fromY: groundY - 20,
+          vx: 100,
+          vyMin: 160,
+          vyMax: 300,
+        });
         if (ch.weaponId)
           lootItems.push({ x: ch.x + rand(-20, 20), weaponId: ch.weaponId, dropVy: -380, dropY: groundY - 180 });
         spawnParticles(ch.x, groundY - 24, 20, "#f2c14e", 120, 150);

@@ -1,76 +1,76 @@
 export const GUARD_SKILLS = {
-  // ── Gren 1: Spyd ──
+  // ── Branch 1: Spear ──
   piercing_thrust: {
     id: "piercing_thrust", branch: 1, row: 1,
-    name: "Trængende Stød",
-    desc: "Stød øger skaden med 50% og gennemtrænger 2 fjender på linje.",
+    name: "Piercing Thrust",
+    desc: "Thrusts deal 50% more damage and pierce 2 enemies in a line.",
     cost: 1, requires: [],
   },
   impale_wall_climber: {
     id: "impale_wall_climber", branch: 1, row: 2,
-    name: "Murtrolde-Spyd",
-    desc: "Hvis en fjende klatrer på mur: spyd dem fast og kast dem langt væk.",
+    name: "Wall-Climber Spear",
+    desc: "If an enemy climbs a wall: impale them and hurl them far away.",
     cost: 2, requires: ["piercing_thrust"],
   },
   whirlwind_strike: {
     id: "whirlwind_strike", branch: 1, row: 3,
-    name: "Hvirvlende Slag",
-    desc: "Spin omkring og ramt alle fjender i nærheden — cooldown 4 sek.",
+    name: "Whirlwind Strike",
+    desc: "Spin around and hit all nearby enemies — cooldown 4 sec.",
     cost: 3, requires: ["impale_wall_climber"],
   },
 
-  // ── Gren 2: Skjold ──
+  // ── Branch 2: Shield ──
   shield_bash: {
     id: "shield_bash", branch: 2, row: 1,
-    name: "Skjoldstød",
-    desc: "Tryk Q — skjoldstød slår fjenden baglæns og stivner dem i 1 sek.",
+    name: "Shield Bash",
+    desc: "Press Q — a shield bash knocks the enemy back and stuns them for 1 sec.",
     cost: 1, requires: [],
   },
   shield_wall: {
     id: "shield_wall", branch: 2, row: 2,
-    name: "Skjoldmur",
-    desc: "Når fjenden rammer: reflektér 40% af skaden tilbage til angriberen.",
+    name: "Shield Wall",
+    desc: "When hit: reflect 40% of the damage back to the attacker.",
     cost: 2, requires: ["shield_bash"],
   },
   unbreakable: {
     id: "unbreakable", branch: 2, row: 3,
-    name: "Ubrydeligt",
-    desc: "Maksimal HP stiger med 4, og tar 20% mindre skade fra alle kilder.",
+    name: "Unbreakable",
+    desc: "Max HP increases by 4, and takes 20% less damage from all sources.",
     cost: 3, requires: ["shield_wall"],
   },
 
-  // ── Gren 3: Taktik ──
+  // ── Branch 3: Tactics ──
   guard_stance: {
     id: "guard_stance", branch: 3, row: 1,
-    name: "Vågen Holdning",
-    desc: "Når stille: reducér incoming skade med 30% og omdannelse til XP.",
+    name: "Vigilant Stance",
+    desc: "While standing still: reduce incoming damage by 30% and convert it to XP.",
     cost: 1, requires: [],
   },
   taunt: {
     id: "taunt", branch: 3, row: 2,
-    name: "Styremandat",
-    desc: "Ramt fjende: tvinge dem til at angribe dig næste sek i stedet for basis.",
+    name: "Taunt",
+    desc: "Hit enemy: force them to attack you for the next sec instead of the base.",
     cost: 2, requires: ["guard_stance"],
   },
   rally_cry: {
     id: "rally_cry", branch: 3, row: 3,
-    name: "Samlingsråb",
-    desc: "Tryk Q — alle allierede enheder får +20% skade i 6 sekunder.",
+    name: "Rally Cry",
+    desc: "Press Q — all allied units gain +20% damage for 6 seconds.",
     cost: 3, requires: ["taunt"],
   },
 
-  // ── Ultimative ──
+  // ── Ultimates ──
   spear_titan: {
     id: "spear_titan", branch: 0, row: 4,
-    name: "Spydtitan",
-    desc: "Spyd vokser massivt: 3× rækkevidde, 4× skade, kan splitte fjender.",
+    name: "Spear Titan",
+    desc: "The spear grows massively: 3× range, 4× damage, can cleave enemies.",
     cost: 5, requires: ["whirlwind_strike", "taunt"],
     ultimate: true,
   },
   fortress_guardian: {
     id: "fortress_guardian", branch: 0, row: 4,
-    name: "Fæstningens Værnr",
-    desc: "Skjold dekker 360°: modstår alle projektiler, og næby allierede tar -25% skade.",
+    name: "Fortress Guardian",
+    desc: "The shield covers 360°: blocks all projectiles, and nearby allies take -25% damage.",
     cost: 5, requires: ["unbreakable", "rally_cry"],
     ultimate: true,
   },

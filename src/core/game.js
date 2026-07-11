@@ -75,7 +75,7 @@ function updateNightClear() {
   const waveAlive = state.enemies.some(e => e.nightWave && !e.fleeing && !e.dying && e.hp > 0);
   if (waveAlive) return;
   Game.nightCleared = true;
-  floaty(state.base.x, "Bølgen er besejret - daggry nærmer sig", "#ffd27a", 18);
+  floaty(state.base.x, "The wave is defeated - dawn approaches", "#ffd27a", 18);
 }
 
 function updatePlayer(dt) {
@@ -154,7 +154,7 @@ function checkEndConditions() {
   if (base.hp<=0 && Game.state==="play") {
     Game.inMine=false;
     Game.state="defeat-pan";
-    Game.defeatText="Dit slot blev jævnet med jorden. Mørket sluger riget.";
+    Game.defeatText="Your castle was razed to the ground. Darkness swallows the kingdom.";
     Game.defeatPanTimer=0;
     spawnParticles(base.x, groundY-60, 60, "#ff8a3d", 260, 320);
     spawnParticles(base.x, groundY-60, 40, "#ffd27a", 200, 260);
@@ -166,7 +166,7 @@ function checkEndConditions() {
     Game.inMine=false;
     Game.state="player-death";
     Game.deathTimer=0;
-    Game.defeatText="Monarken faldt i kamp, og kronen rullede i mulden. Riget er fortabt.";
+    Game.defeatText="The monarch fell in battle, and the crown rolled into the dirt. The kingdom is lost.";
     player.vx=0; player.swing=0; player.knock=0; player.hurt=0;
     Audio.death();
     spawnParticles(player.x, groundY-40, 26, "#a4262b", 190, 210);
@@ -316,14 +316,14 @@ function drawDeathOverlay() {
     ctx.textAlign = "center";
     ctx.fillStyle = "rgba(0,0,0,0.55)";
     ctx.font = "600 38px Georgia, serif";
-    ctx.fillText("Monarken er faldet", W / 2 + 2, H * 0.34 + 2);
+    ctx.fillText("The monarch has fallen", W / 2 + 2, H * 0.34 + 2);
     ctx.fillStyle = "#e8d8b8";
-    ctx.fillText("Monarken er faldet", W / 2, H * 0.34);
+    ctx.fillText("The monarch has fallen", W / 2, H * 0.34);
     if (t > 1.5) {
       ctx.globalAlpha = clamp((t - 1.5) / 0.6, 0, 1) * (1 - f) * 0.85;
       ctx.font = "20px Georgia, serif";
       ctx.fillStyle = "#c9b89a";
-      ctx.fillText("Sjælegløden bærer dig videre…", W / 2, H * 0.34 + 36);
+      ctx.fillText("The embers carry you onward…", W / 2, H * 0.34 + 36);
     }
     ctx.restore();
   }
@@ -401,5 +401,5 @@ initFX();
 initMeta();
 Game.cam = clamp(CFG.baseX - W/2, 0, Math.max(0, CFG.worldWidth - W));
 setupInputHandlers();
-Game.start(false);
+if (hasSave()) document.getElementById("btn-continue")?.classList.remove("hidden");
 requestAnimationFrame(loop);

@@ -4,7 +4,7 @@ import { clamp, dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnCoin, spawnParticles, floaty, critFloaty, spawnLocLoot } from '../world/SpawnSystem.js';
+import { spawnGoldReward, spawnParticles, floaty, critFloaty, spawnLocLoot } from '../world/SpawnSystem.js';
 import { spawnLevelUpBeam } from '../../rendering/Effects.js';
 import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js';
 import { startArcherShoot, SHOOT_RELEASE_TIME } from '../../rendering/sprites/Archer.js';
@@ -22,6 +22,14 @@ function arrowTrail(ar) {
   if (ar.fireArrow) {
     spawnParticles(ar.x, ar.y, 2, "#ff6a20", 16, 14);
     if (Math.random() < 0.55) spawnParticles(ar.x, ar.y, 1, "#ffd060", 9, 18);
+  }
+  if (ar.powered) {
+    spawnParticles(ar.x, ar.y, 2, "#ffcc44", 18, 16);
+    if (Math.random() < 0.6) spawnParticles(ar.x, ar.y, 1, "#fff2b0", 10, 22);
+  }
+  if (ar.ballista) {
+    if (Math.random() < 0.8) spawnParticles(ar.x, ar.y, 1, "#9aa2ae", 14, 10);
+    if (Math.random() < 0.4) spawnParticles(ar.x, ar.y, 1, "#ffb060", 10, 14);
   }
   if (ar.frostArrow) {
     spawnParticles(ar.x, ar.y, 2, "#bfefff", 14, 14);
@@ -72,9 +80,11 @@ function stickArrowInEnemy(e, ar, enemyDrawY) {
 function stickArrowInAnimal(a, ar) {
   if (!a.stuckArrows) a.stuckArrows = [];
   if (a.stuckArrows.length >= 5) a.stuckArrows.shift();
+  const airborne = (a.fy || 0) < -10; // duck hit mid-flight: arrow rides the body down
   a.stuckArrows.push({
     x: clamp(ar.x - a.x, -12, 12),
-    y: groundY - (a.type === "bear" ? 26 : 14),
+    rel: airborne,
+    y: airborne ? -10 : groundY - (a.type === "bear" ? 26 : 14),
     a: Math.atan2(ar.vy, ar.vx),
     weaponId: ar.weaponId || null,
     t: stuckArrowLife(),
@@ -85,6 +95,7 @@ function stickArrowInAnimal(a, ar) {
 export function updateStuckArrows(dt) {
   const maxLife = stuckArrowLife();
   for (const e of state.enemies) {
+    if (e.hunterMark > 0) e.hunterMark -= dt;
     if (!e.stuckArrows || !e.stuckArrows.length) continue;
     for (let i = e.stuckArrows.length - 1; i >= 0; i--) {
       if (e.stuckArrows[i].t > maxLife) e.stuckArrows[i].t = maxLife;
@@ -108,7 +119,8 @@ function enemyDrawYOffset(e) {
 
 export function shootArrow(x, y, target, sourceUnit = null, weaponId = null) {
   const targetType = target.type && ENEMY_TYPES[target.type];
-  const tx = target.x, ty = targetType && targetType.flying ? groundY + (target.fy || -80) : groundY - 24;
+  const airborne = (targetType && targetType.flying) || (target.fy || 0) < -10; // flying enemy or a duck on the wing
+  const tx = target.x, ty = airborne ? groundY + (target.fy || -80) : groundY - 24;
   const dx = tx - x, dy = ty - y;
   const dist_h = Math.hypot(dx, dy);
 
@@ -134,8 +146,8 @@ export function shootArrow(x, y, target, sourceUnit = null, weaponId = null) {
   const delay = sourceUnit && (sourceUnit.role === "archer" || !sourceUnit.role) ? SHOOT_RELEASE_TIME : 0;
 
   const upgradeIds = sourceUnit?.weaponUpgrades ? sourceUnit.weaponUpgrades.map(u => u.id) : [];
-  const frostArrow = upgradeIds.includes("frostbue") || upgradeIds.includes("faengslende_pile") || upgradeIds.includes("is_eksplosion");
-  const rootArrow = upgradeIds.includes("faengslende_pile") || upgradeIds.includes("is_eksplosion");
+  const frostArrow = upgradeIds.includes("frost_bow") || upgradeIds.includes("binding_arrows") || upgradeIds.includes("ice_explosion");
+  const rootArrow = upgradeIds.includes("binding_arrows") || upgradeIds.includes("ice_explosion");
 
   state.arrows.push({
     x, y,
@@ -192,11 +204,18 @@ export function updateArrows(dt) {
         const enemyDrawY = et.flying ? groundY + (e.fy || -80) : groundY - 24 + enemyDrawYOffset(e);
         if (dist(ar.x, e.x) < et.w * 0.7 && Math.abs(ar.y - enemyDrawY) < (et.dragon ? 85 : 40)) {
           if (e.dying) {
+            // Piercing and ballista shots plow straight through corpses
+            if (ar.pierce > 0 || ar.ballista) continue;
             stickArrowInEnemy(e, ar, enemyDrawY);
             hit = true;
             break;
           }
-          const baseDmg = (ar.dmgMult ? Math.round(ar.dmgMult) : 1) * permanentDamageMultiplier();
+          const markBonus = ar.sourceUnit && e.hunterMark > 0 ? 1 : 0;
+          if (ar.sourceUnit?.role === "archer" && state.archerSkills.includes("hunters_mark")) {
+            if (!(e.hunterMark > 0)) spawnParticles(e.x, enemyDrawY - 18, 6, "#ff5a3a", 30, 45);
+            e.hunterMark = 5;
+          }
+          const baseDmg = ((ar.dmgMult ? Math.round(ar.dmgMult) : 1) + markBonus) * permanentDamageMultiplier();
           const crit = applyCrit(baseDmg, CFG.critChance, CFG.critMultiplier);
           stickArrowInEnemy(e, ar, enemyDrawY);
           e.hp -= crit.damage; e.flash = 0.12; Audio.hit();
@@ -211,7 +230,12 @@ export function updateArrows(dt) {
             spawnParticles(e.x, enemyDrawY, 12, "#ff6a20", 55, 70);
             spawnParticles(e.x, enemyDrawY, 7, "#ffd060", 35, 85);
           }
-          if (ar.powered) { if (!et.noKnockback) e.knock = (e.knock||0) + Math.sign(e.x - ar.vx) * 400; spawnParticles(e.x, enemyDrawY, 10, "#ffcc60", 60, 80); }
+          if (ar.powered) {
+            if (!et.noKnockback) e.knock = (e.knock||0) + (Math.sign(ar.vx) || 1) * 400;
+            spawnParticles(e.x, enemyDrawY, 16, "#ffcc60", 90, 100);
+            spawnParticles(e.x, enemyDrawY, 8, "#fff2b0", 55, 120);
+            Game.screenShake = Math.max(Game.screenShake, 0.35);
+          }
           if (ar.frostArrow) {
             e.frost = Math.max(e.frost || 0, 2.5);
             spawnParticles(e.x, enemyDrawY, 10, "#bfefff", 60, 70);
@@ -237,7 +261,7 @@ export function updateArrows(dt) {
           } else {
             spawnParticles(e.x, enemyDrawY, 4, "#8a2a4a");
           }
-          if (ar.ballista) { spawnParticles(e.x, enemyDrawY, 14, "#cc8840", 90, 100); Game.screenShake = Math.max(Game.screenShake, 0.3); if (!et.noKnockback) e.knock = (e.knock||0) + Math.sign(e.x - ar.vx) * 500; }
+          if (ar.ballista) { spawnParticles(e.x, enemyDrawY, 14, "#cc8840", 90, 100); spawnParticles(e.x, enemyDrawY, 8, "#9aa2ae", 70, 60); Game.screenShake = Math.max(Game.screenShake, 0.4); if (!et.noKnockback) e.knock = (e.knock||0) + (Math.sign(ar.vx) || 1) * 500; }
           if (ar.pierce > 0) {
             if (!ar._hitEnemies) ar._hitEnemies = new Set();
             ar._hitEnemies.add(e);
@@ -247,19 +271,28 @@ export function updateArrows(dt) {
             hit = true;
           }
           if (ar.bouncing && ar.sourceUnit) {
+            ar.bouncing = false; // one ricochet per arrow
             let nextTgt = null, nd = 400;
             for (const ne of enemies) {
-              if (ne === e || ne.fleeing) continue;
+              if (ne === e || ne.fleeing || ne.dying || ne.hp <= 0) continue;
               const d = dist(ar.x, ne.x); if (d < nd) { nd = d; nextTgt = ne; }
             }
             if (nextTgt) {
-              const ang = Math.atan2(groundY - 24 - ar.y, nextTgt.x - ar.x);
-              state.arrows.push({ x: ar.x, y: ar.y, vx: Math.cos(ang)*480, vy: Math.sin(ang)*480, target: nextTgt, life: 1.0, hitKind: "enemy", sourceUnit: ar.sourceUnit, fireArrow: ar.fireArrow, bouncing: false, pierce: 0 });
+              const net = ENEMY_TYPES[nextTgt.type];
+              const nty = net && net.flying ? groundY + (nextTgt.fy || -80) : groundY - 24;
+              const ang = Math.atan2(nty - ar.y, nextTgt.x - ar.x);
+              spawnParticles(ar.x, ar.y, 6, "#ffe9a0", 50, 60);
+              state.arrows.push({
+                x: ar.x, y: ar.y, vx: Math.cos(ang)*480, vy: Math.sin(ang)*480 - 40,
+                target: nextTgt, life: 1.0, hitKind: "enemy", sourceUnit: ar.sourceUnit,
+                fireArrow: ar.fireArrow, bouncing: false, pierce: 0,
+                weaponId: ar.weaponId,
+                _hitEnemies: new Set([e]), // never re-hit the enemy it bounced off
+              });
             }
           }
           if (e.hp <= 0) {
             if (ar.sourceUnit) {
-              ar.sourceUnit.gold = (ar.sourceUnit.gold || 0) + et.reward;
               ar.sourceUnit.xp = (ar.sourceUnit.xp || 0) + 1;
               const xpNeeded = (ar.sourceUnit.level || 1) * 3;
               if (ar.sourceUnit.xp >= xpNeeded) {
@@ -281,7 +314,9 @@ export function updateArrows(dt) {
 
     if (!hit && ar.hitKind === "enemy") {
       for (const a of animals) {
-        if (a.alive && !a.dying && dist(ar.x, a.x) < (a.type === "bear" ? 24 : 16) && ar.y > groundY - 36) {
+        const airborne = (a.fy || 0) < -10;
+        const inY = airborne ? Math.abs(ar.y - (groundY + a.fy)) < 24 : ar.y > groundY - 36;
+        if (a.alive && !a.dying && dist(ar.x, a.x) < (a.type === "bear" ? 24 : 16) && inY) {
           stickArrowInAnimal(a, ar);
           if (a.type === "bear") {
             // Bears are tough: they take arrow damage instead of dying outright
@@ -290,15 +325,10 @@ export function updateArrows(dt) {
             if (a.hp > 0) { hit = true; break; }
           }
           a.dying = true; a.deathT = 0;
-          spawnParticles(a.x, groundY - 20, 8, "#7a4a2a");
-          const reward = a.type === "bear" ? 8 : a.type === "deer" ? 3 : 1;
-          if (ar.sourceUnit?.role === "archer" && (a.type === "deer" || a.type === "rabbit")) {
-            ar.sourceUnit.gold = (ar.sourceUnit.gold || 0) + reward;
-            floaty(a.x, "+" + reward + " guld", "#f2c14e");
-          } else {
-            for (let k = 0; k < reward; k++) spawnCoin(a.x + rand(-15, 15), 1, groundY - 20, rand(-50, 50), rand(-220, -120));
-            floaty(a.x, "+" + reward + "🪙", "#f2c14e");
-          }
+          spawnParticles(a.x, groundY + (a.fy || 0) - 20, 8, airborne ? "#c9c2b4" : "#7a4a2a");
+          const reward = a.type === "bear" ? 8 : a.type === "deer" ? 3 : a.type === "duck" ? 2 : 1;
+          const actual = spawnGoldReward(a.x, reward, "hunt", { spreadX: 15, fromY: groundY - 20, vx: 50, vyMin: 120, vyMax: 220 });
+          if (actual > 0) floaty(a.x, "+" + actual + "🪙", "#f2c14e");
           hit = true; break;
         }
       }

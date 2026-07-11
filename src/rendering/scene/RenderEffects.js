@@ -3,8 +3,8 @@ import { ctx, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { FX } from '../Effects.js';
 
-// Pigfælde tegnet som en lille rovsaks: to takkede kæber på en bundplade.
-// open: 1 = spændt/åben (kæber ligger fladt ud), 0 = klappet sammen.
+// Caltrop drawn as a small snap trap: two jagged jaws on a base plate.
+// open: 1 = armed/open (jaws lie flat), 0 = snapped shut.
 function drawTrapJaws(x, y, open, rot) {
   ctx.save();
   ctx.translate(x, y);
@@ -16,18 +16,18 @@ function drawTrapJaws(x, y, open, rot) {
   ctx.fillStyle = "#55555e";
   ctx.fillRect(-1.5, -2, 3, 2.5);
 
-  const jawAngle = 0.12 + open * 1.28; // næsten lodret → lagt fladt ud
+  const jawAngle = 0.12 + open * 1.28; // almost vertical → laid out flat
   for (const s of [-1, 1]) {
     ctx.save();
     ctx.translate(s * 2, -0.5);
     ctx.rotate(s * jawAngle);
-    // kæbebue
+    // jaw arc
     ctx.strokeStyle = "#8a8a94"; ctx.lineWidth = 1.8; ctx.lineCap = "round";
     ctx.beginPath();
     ctx.moveTo(0, 0);
     ctx.quadraticCurveTo(-s * 3.2, -5, -s * 1.2, -9);
     ctx.stroke();
-    // tænder på indersiden af kæben
+    // teeth on the inside of the jaw
     ctx.fillStyle = "#b8b8c2";
     for (let k = 0; k < 3; k++) {
       const p = 0.25 + k * 0.3;
@@ -53,16 +53,16 @@ export function drawCaltrops() {
     let open = 1, alpha = 1, y = groundY - 3, rot = 0;
 
     if (c.state === "fall") {
-      // kastet fælde snurrer halvåben gennem luften
+      // thrown trap spins half-open through the air
       open = 0.4; y = c.y; rot = c.rot;
     } else if (c.state === "snap") {
-      // klapper sammen på et øjeblik, jolt opad, og fader så ud
+      // snaps shut in an instant, jolts upward, then fades out
       const shut = Math.min(1, c.snapT / 0.09);
       open = 1 - shut;
       y -= Math.sin(shut * Math.PI) * 2.5;
       alpha = Math.min(1, (1.2 - c.snapT) / 0.45);
     } else {
-      // spændt: lille sætte-hop efter landing + fade når levetiden rinder ud
+      // armed: small settle-hop after landing + fade as lifetime runs out
       alpha = Math.min(1, c.life / 2);
       if (c.settle > 0) {
         const b = c.settle / 0.3;
@@ -74,7 +74,7 @@ export function drawCaltrops() {
     ctx.globalAlpha = alpha * 0.9;
     drawTrapJaws(c.x, y, open, rot);
 
-    // svagt advarselsglimt på tandspidserne mens fælden står spændt
+    // faint warning glint on the tooth tips while the trap is armed
     if (c.state === "armed" && !(c.settle > 0)) {
       const blink = Math.max(0, Math.sin(T * 3 + c.x * 0.05));
       ctx.globalAlpha = alpha * blink * 0.5;
@@ -196,7 +196,12 @@ export function drawFloats(mineLayer = false) {
       lastSz = 0;
       continue;
     }
-    if (sz !== lastSz) { ctx.font=`bold ${sz}px Trebuchet MS`; lastSz = sz; }
+    let drawSz = sz;
+    if (f.pop && f.maxLife) {
+      // brief overshoot each time the text is (re)triggered
+      drawSz = Math.round(sz * (1 + Math.max(0, f.life - (f.maxLife - 0.18)) * 2.2));
+    }
+    if (drawSz !== lastSz) { ctx.font=`bold ${drawSz}px Trebuchet MS`; lastSz = drawSz; }
     ctx.fillStyle="rgba(0,0,0,0.5)"; ctx.fillText(f.text,f.x+1,f.y+1);
     ctx.fillStyle=f.color; ctx.fillText(f.text,f.x,f.y);
   }
