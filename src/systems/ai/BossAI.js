@@ -5,6 +5,7 @@ import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
 import { spawnParticles, floaty, spawnEnemy } from '../world/SpawnSystem.js';
 import { killEnemyWithAnimation } from '../../util/EnemyUtils.js';
+import { entityWallLift } from '../../entities/Wall.js';
 
 // All night-boss behavior lives here: the fire dragon (night 5), the magma
 // colossus (night 10) and the ground hazards they leave behind. EnemyAI
@@ -110,13 +111,13 @@ function golemShockwave(e, t) {
   Audio.hit();
 
   if (player && player.hp > 0 && !Game.inMine && dist(e.x, player.x) < GOLEM_SHOCK_RANGE
-      && player.jumpH <= 30 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
+      && (player.jumpH || 0) + entityWallLift(player) <= 30 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
     player.hp -= t.meleeDmg || 2;
     player.invuln = CFG.playerInvuln;
     player.hurt = 0.35;
     player.hpShowTimer = 3;
     player.knock = Math.sign(player.x - e.x || 1) * 300;
-    spawnParticles(player.x, groundY - 50, 8, "#c1453b");
+    spawnParticles(player.x, groundY - 50 - entityWallLift(player), 8, "#c1453b");
   }
   for (const u of state.units) {
     if (u.hp <= 0 || u.dying || u.onWall || u.mine) continue;
@@ -134,7 +135,7 @@ function golemSlamTarget(e) {
     if (w.commissioned && w.hp > 0 && dist(e.x, w.x) < GOLEM_SLAM_RANGE) return { kind: "wall", obj: w };
   }
   if (dist(e.x, base.x) < GOLEM_SLAM_RANGE + 20) return { kind: "base", obj: base };
-  if (player && player.hp > 0 && !Game.inMine && dist(e.x, player.x) < GOLEM_SLAM_RANGE - 14) return { kind: "player", obj: player };
+  if (player && player.hp > 0 && !Game.inMine && (player.jumpH || 0) + entityWallLift(player) <= 20 && dist(e.x, player.x) < GOLEM_SLAM_RANGE - 14) return { kind: "player", obj: player };
   return null;
 }
 
@@ -328,7 +329,7 @@ export function updateFirePools(dt) {
     if (p.tick <= 0) {
       p.tick = 0.85;
       if (player && player.hp > 0 && !Game.inMine && dist(p.x, player.x) < p.r
-          && player.jumpH <= 20 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
+          && (player.jumpH || 0) + entityWallLift(player) <= 20 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
         player.hp -= 1;
         player.invuln = CFG.playerInvuln;
         player.hurt = 0.35;

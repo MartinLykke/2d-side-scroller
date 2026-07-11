@@ -2,6 +2,7 @@ import { clamp, lerpColor, rgb, lerp, withA, shade } from '../util/math.js';
 import { ctx, W, H, groundY } from '../core/canvas.js';
 import { Game, state } from '../core/state.js';
 import { WEAPONS } from '../config/weapons.js';
+import { entityWallLift } from '../entities/Wall.js';
 import { drawPlayer as drawPlayerBody } from './sprites/Player.js';
 import { shootPose, ease, drawBow, limb } from './sprites/Archer.js';
 import { darkness, skyColors, drawStars, drawClouds, drawCelestials, drawBirds, getTrees, drawHills, drawTreeLayer, drawLowFog, drawAmbientFront, drawLevelUpBeams, biomeAt, FX, windSway } from './Effects.js';
@@ -20,7 +21,8 @@ function drawWeaponSwingArc(x, player) {
   if (!player.swing || player.swing <= 0 || !player.weapon) return;
   const w = player.weapon, prog = clamp(player.swing / 0.32, 0, 1);
   const dir = player.dir || 1;
-  const baseY = groundY - 40 - (player.bob||0) - (player.jumpH||0);
+  const lift = entityWallLift(player);
+  const baseY = groundY - 40 - (player.bob||0) - (player.jumpH||0) - lift;
   const WEAPON_ARC = {
     flame_sword:  { col:"#ff7730", glow:"#ffcc40", r:52, sw:6, a:0.8 },
     gilded_spear: { col:"#f2c14e", glow:"#ffffff", r:66, sw:4, a:0.85 },
@@ -47,11 +49,12 @@ function drawWeaponSwingArc(x, player) {
 function drawPlayer(dark) {
   const { player } = state;
   const x=player.x, bob=player.bob, gallop=player.gallop;
+  const wallLift = entityWallLift(player);
   const dying = Game.state==="player-death";
   if (!dying) drawWeaponSwingArc(x, player);
   ctx.save();
   if (!dying && player.invuln>0&&Math.floor(player.invuln*12)%2===0) ctx.globalAlpha=0.45;
-  ctx.translate(x, -bob - player.jumpH);
+  ctx.translate(x, -bob - player.jumpH - wallLift);
   if (player.dir<0) ctx.scale(-1,1);
   if (dying) {
     // Collapse backwards: knees buckle briefly, then topple around the feet
@@ -127,7 +130,7 @@ function drawPlayer(dark) {
   }
   ctx.restore();
   if (!dying && (player.hp <= 2 || player.hpShowTimer > 0)) {
-    const n=player.maxHp, gap=9, hy=groundY-86-bob-player.jumpH;
+    const n=player.maxHp, gap=9, hy=groundY-86-bob-player.jumpH-wallLift;
     for (let i=0;i<n;i++) drawHeart(player.x-(n-1)*gap/2+i*gap, hy, 4, i<player.hp?"#e0556a":"rgba(255,255,255,0.18)");
   }
 }

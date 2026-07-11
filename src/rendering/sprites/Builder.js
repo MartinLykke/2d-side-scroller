@@ -1,5 +1,6 @@
 import { ctx, groundY } from '../../core/canvas.js';
 import { drawBoot } from '../DrawHelpers.js';
+import { drawClimbPose, isClimbingEntity } from './FriendlyClimb.js';
 
 // ---------------------------------------------------------------------------
 // Procedural builder: stocky craftsman with leather apron, flat cap and a
@@ -53,6 +54,12 @@ export function drawBuilder(u) {
   ctx.translate(u.x, 0);
   if (u.dir < 0) ctx.scale(-1, 1);
 
+  if (isClimbingEntity(u)) {
+    drawClimbPose(u, C, { cap: true, apron: true });
+    ctx.restore();
+    return;
+  }
+
   const breathe = Math.sin(t * 1.6 + (u.x || 0) * 0.02);
   const bob = moving ? Math.abs(Math.sin(anim)) * 1.4 : breathe * 0.5 + 0.5;
   // Working: the whole body dips into each hammer strike
@@ -102,11 +109,15 @@ export function drawBuilder(u) {
   // neck strap + waist tie
   ctx.strokeStyle = C.strap; ctx.lineWidth = 1.4;
   ctx.beginPath(); ctx.moveTo(-3, shY + 2); ctx.lineTo(0, shY - 2); ctx.lineTo(3, shY + 2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-5.2, shY + 1); ctx.lineTo(-1.4, hipY + 4); ctx.moveTo(5.2, shY + 1); ctx.lineTo(1.4, hipY + 4); ctx.stroke();
   ctx.fillStyle = C.strap; ctx.fillRect(-5, hipY - 1.5, 10, 2.2);
   // belt pouch with nails
   ctx.fillStyle = C.pouch; ctx.fillRect(-6, hipY - 0.5, 4, 4.5);
   ctx.strokeStyle = C.headLt; ctx.lineWidth = 0.8;
   ctx.beginPath(); ctx.moveTo(-5, hipY - 0.5); ctx.lineTo(-5.5, hipY - 2.5); ctx.moveTo(-3.5, hipY - 0.5); ctx.lineTo(-3.2, hipY - 2); ctx.stroke();
+  ctx.fillStyle = "#8f8f9c";
+  ctx.fillRect(4.2, hipY + 0.2, 1.2, 4.5);
+  ctx.fillRect(6, hipY + 0.8, 1.2, 3.8);
 
   // --- Head: tanned face, stubble beard, flat cap -------------------------------
   ctx.fillStyle = C.skin;

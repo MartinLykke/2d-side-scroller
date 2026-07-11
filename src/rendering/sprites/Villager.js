@@ -1,5 +1,6 @@
 import { ctx, groundY } from '../../core/canvas.js';
 import { drawBoot } from '../DrawHelpers.js';
+import { drawClimbPose, isClimbingEntity } from './FriendlyClimb.js';
 
 // ---------------------------------------------------------------------------
 // Procedural villager: the plain folk — vagrants wandering in and peasants
@@ -33,6 +34,17 @@ export function drawVillager(u, dir = u.dir, moving = u.moving) {
   ctx.translate(u.x, 0);
   if (dir < 0) ctx.scale(-1, 1);
 
+  if (isClimbingEntity(u)) {
+    drawClimbPose(u, {
+      ...P,
+      skin: SKIN,
+      boots: BOOTS,
+      belt: ROPE,
+    });
+    ctx.restore();
+    return;
+  }
+
   const breathe = Math.sin(t * 1.7 + (u.x || 0) * 0.025);
   const bob = moving ? Math.abs(Math.sin(anim)) * 1.3 : breathe * 0.5 + 0.5;
   const hipY  = groundY - 17 - bob * 0.4;
@@ -62,10 +74,21 @@ export function drawVillager(u, dir = u.dir, moving = u.moving) {
   ctx.fillStyle = P.tunicLt; ctx.fillRect(-4.5, shY + 1, 3, 7); // worn highlight
   // a patch sewn on
   ctx.fillStyle = "rgba(0,0,0,0.14)"; ctx.fillRect(1, shY + 8, 3.2, 3.2);
+  ctx.strokeStyle = "rgba(230,220,180,0.35)";
+  ctx.lineWidth = 0.7;
+  ctx.strokeRect(1, shY + 8, 3.2, 3.2);
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.fillRect(-5.8, shY + 1.5, 2.2, 4.6);
+  ctx.fillRect(3.6, shY + 1.5, 2.2, 4.6);
   // rope belt with a hanging knot
   ctx.strokeStyle = ROPE; ctx.lineWidth = 1.6;
   ctx.beginPath(); ctx.moveTo(-5, hipY - 1); ctx.lineTo(5, hipY - 1); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(1.5, hipY - 1); ctx.lineTo(2.2, hipY + 3); ctx.stroke();
+  ctx.strokeStyle = "rgba(80,55,35,0.55)";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(-4.8, shY + 2); ctx.lineTo(4.4, hipY + 3); ctx.stroke();
+  ctx.fillStyle = "#6b4b2c";
+  ctx.fillRect(4.3, hipY + 0.5, 3.4, 5);
 
   // --- arms: loose swing, hands hanging ---
   const swing = moving ? Math.sin(anim) * 3 : breathe * 0.6;
@@ -78,9 +101,15 @@ export function drawVillager(u, dir = u.dir, moving = u.moving) {
   ctx.fillStyle = P.hair;
   ctx.beginPath(); ctx.arc(-0.4, headY - 1.6, 4.5, Math.PI * 0.95, Math.PI * 2.02); ctx.fill();
   ctx.beginPath(); ctx.ellipse(-3.4, headY - 0.5, 1.4, 2.4, 0.3, 0, Math.PI * 2); ctx.fill(); // hair over the ear
+  ctx.strokeStyle = "rgba(255,240,200,0.12)";
+  ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.arc(-1.2, headY - 2.3, 3.2, Math.PI * 1.1, Math.PI * 1.7); ctx.stroke();
   // simple eye dot so they read as facing somewhere
   ctx.fillStyle = "#3a2a1c";
   ctx.beginPath(); ctx.arc(2, headY - 0.4, 0.7, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "rgba(80,50,30,0.55)";
+  ctx.lineWidth = 0.7;
+  ctx.beginPath(); ctx.moveTo(0.6, headY + 0.2); ctx.lineTo(1.2, headY + 1.3); ctx.stroke();
 
   ctx.restore();
 }

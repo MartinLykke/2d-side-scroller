@@ -2,6 +2,7 @@ import { ctx, groundY } from '../../core/canvas.js';
 import { state } from '../../core/state.js';
 import { Audio } from '../../systems/infrastructure/Audio.js';
 import { drawBoot } from '../DrawHelpers.js';
+import { drawClimbPose, isClimbingEntity } from './FriendlyClimb.js';
 
 // ---------------------------------------------------------------------------
 // Procedural hooded archer: idle / walk / run / shoot, mirrored for east/west.
@@ -214,6 +215,12 @@ export function drawArcher(u) {
   ctx.translate(u.x, 0);
   if (u.dir < 0) ctx.scale(-1, 1);
 
+  if (isClimbingEntity(u)) {
+    drawClimbPose(u, P, { hood: !ball, helm: ball, plume: ball, cloak: true, quiver: true });
+    ctx.restore();
+    return;
+  }
+
   // --- Pose parameters -----------------------------------------------------
   const breathe = Math.sin(t * 1.8 + (u.x || 0) * 0.03);
   const bob = moving && !grap ? Math.abs(Math.sin(anim)) * (run ? 2.4 : 1.2) : breathe * 0.5 + 0.5;
@@ -340,6 +347,13 @@ export function drawArcher(u) {
   // belt + buckle
   ctx.fillStyle = P.belt; ctx.fillRect(-4.5, hipY - 2, 9, 2.6);
   ctx.fillStyle = P.buckle; ctx.fillRect(-1, hipY - 2, 2, 2.6);
+  ctx.strokeStyle = "rgba(30,20,12,0.55)";
+  ctx.lineWidth = 1.1;
+  ctx.beginPath(); ctx.moveTo(shX - 4.8, shY + 1); ctx.lineTo(3.8, hipY + 2); ctx.stroke();
+  ctx.fillStyle = P.belt;
+  ctx.fillRect(4.5, hipY - 0.5, 3, 5);
+  ctx.fillStyle = P.buckle;
+  ctx.fillRect(5, hipY + 0.4, 2, 1.2);
   // cloak shoulder mantle draped over the torso top
   ctx.fillStyle = P.cloak;
   ctx.beginPath();
@@ -517,9 +531,13 @@ export function drawArcher(u) {
     const swing = moving ? Math.sin(anim) * (run ? 4 : 2.5) : 0;
     const grip = { x: frontSh.x + 3 + swing * 0.4, y: frontSh.y + 9 };
     limb(backSh.x, backSh.y, backSh.x - 2 - swing, shY + 11, P.skin, 2.5);
+    ctx.fillStyle = P.belt;
+    ctx.beginPath(); ctx.ellipse(backSh.x - 1 - swing * 0.5, shY + 8, 1.8, 2.8, -0.3, 0, Math.PI * 2); ctx.fill();
     if (ball) drawBallistaWeapon(grip.x, grip.y, moving ? 0.15 : 0.05, 0, 0, false);
     else drawBow(grip.x, grip.y, moving ? 0.15 : 0.05, 0, null);
     limb(frontSh.x, frontSh.y, grip.x, grip.y, P.skin, 2.6);
+    ctx.fillStyle = P.belt;
+    ctx.beginPath(); ctx.ellipse(grip.x - 1, grip.y - 1.5, 1.8, 2.8, 0.2, 0, Math.PI * 2); ctx.fill();
   }
 
   ctx.restore();

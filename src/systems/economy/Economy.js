@@ -28,6 +28,11 @@ export function updatePayment(dt) {
   const keys = window._KEYS || {};
   state.payCooldown -= dt;
 
+  if (player.onWall || (player.wallClimbT || 0) > 0.02) {
+    state.payHoldTime = 0;
+    return;
+  }
+
   let near = null, nd = CFG.payRange;
   for (const s of stations) {
     if (!!s.mineLayer !== Game.inMine) continue; // stations only reachable on the player's layer

@@ -12,6 +12,7 @@ import { shootArrow } from './ProjectileSystem.js';
 import { castSpell } from './SpellSystem.js';
 import { startArcherShoot } from '../../rendering/sprites/Archer.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
+import { entityWallLift } from '../../entities/Wall.js';
 
 function meleeWeaponImpact(weaponId, x, y) {
   switch (weaponId) {
@@ -65,13 +66,15 @@ function meleeWeaponImpact(weaponId, x, y) {
 export function meleeHitPlayer(e, t, knockForce) {
   const { player } = state;
   if (Game.inMine || player.invuln > 0 || window._DEV_GOD_MODE) return false;
+  const lift = entityWallLift(player);
+  if (lift > 20 && !e.wallTopWall && e.aiState !== "climbOver" && e.aiState !== "vaulting") return false;
   const armorDef = player.armor ? (ARMORS[player.armor]?.defense || 0) : 0;
   const dmg = Math.max(1, t.meleeDmg - armorDef);
   player.hp    -= dmg;
   player.invuln = CFG.playerInvuln;
   player.hurt   = 0.35; player.hpShowTimer = 3;
   player.knock  = Math.sign(player.x - e.x) * knockForce;
-  spawnParticles(player.x, groundY - 50, 6, "#c1453b");
+  spawnParticles(player.x, groundY - 50 - lift, 6, "#c1453b");
   if (player.coins > 0) {
     player.coins--;
     floaty(player.x, "−1🪙", "#ff6a4a");
@@ -129,10 +132,11 @@ export function updatePlayerAttack(dt) {
   if (!tgt) return;
   player.dir = Math.sign(tgt.x - player.x) || player.dir;
   player.swing = 0.32;
+  const playerLift = entityWallLift(player) + (player.jumpH || 0);
   if (wBase.type === "melee") {
     const crit = applyCrit(w.dmg * permanentDamageMultiplier(), CFG.critChance, CFG.critMultiplier);
     tgt.hp -= crit.damage; tgt.flash = 0.14; Audio.swordSwing(); Audio.hit();
-    meleeWeaponImpact(player.weapon, tgt.x, groundY - 28);
+    meleeWeaponImpact(player.weapon, tgt.x, groundY - 28 - playerLift);
     if (crit.isCrit) critFloaty(tgt.x, crit.damage);
     else floaty(tgt.x, "-" + crit.damage, wBase.col);
     if (tgtIsAnimal) {
@@ -154,7 +158,7 @@ export function updatePlayerAttack(dt) {
     }
   } else if (wBase.type === "ranged") {
     startArcherShoot(player);
-    shootArrow(player.x, groundY - 30, tgt, player, player.weapon);
+    shootArrow(player.x, groundY - 30 - playerLift, tgt, player, player.weapon);
   } else {
     castSpell(player, wBase, tgt);
   }

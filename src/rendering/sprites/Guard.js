@@ -1,5 +1,6 @@
 import { ctx, groundY } from '../../core/canvas.js';
 import { drawBoot } from '../DrawHelpers.js';
+import { drawClimbPose, isClimbingEntity } from './FriendlyClimb.js';
 
 // ---------------------------------------------------------------------------
 // Procedural guard (unlocked at base level 3): steel kettle helm, padded
@@ -55,6 +56,12 @@ export function drawGuard(u) {
   ctx.translate(u.x, 0);
   if (u.dir < 0) ctx.scale(-1, 1);
 
+  if (isClimbingEntity(u)) {
+    drawClimbPose(u, C, { armor: true, helm: true, plume: true, shield: true });
+    ctx.restore();
+    return;
+  }
+
   const breathe = Math.sin(t * 1.7 + (u.x || 0) * 0.02);
   const bob = moving ? Math.abs(Math.sin(anim)) * 1.3 : breathe * 0.5 + 0.5;
   const lean = thrust * 3; // lunges into the stab
@@ -82,6 +89,10 @@ export function drawGuard(u) {
   ctx.beginPath(); ctx.arc(shieldX, shY + 8, 6.5, 0, Math.PI * 2); ctx.stroke();
   ctx.fillStyle = C.boss;
   ctx.beginPath(); ctx.arc(shieldX, shY + 8, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "rgba(242,193,78,0.8)";
+  ctx.lineWidth = 1.1;
+  ctx.beginPath(); ctx.moveTo(shieldX - 3.5, shY + 8); ctx.lineTo(shieldX + 3.5, shY + 8); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(shieldX, shY + 4.5); ctx.lineTo(shieldX, shY + 11.5); ctx.stroke();
   // arm gripping it
   limb(-4 + lean, shY + 2, shieldX, shY + 7, C.skin, 2.5);
 
@@ -102,6 +113,15 @@ export function drawGuard(u) {
   // belt + gold buckle
   ctx.fillStyle = C.strap; ctx.fillRect(-4.5, hipY - 1.5, 9, 2.4);
   ctx.fillStyle = C.boss; ctx.fillRect(-1, hipY - 1.5, 2, 2.4);
+  ctx.fillStyle = C.steelDk;
+  for (let k = -2; k <= 2; k++) {
+    ctx.beginPath();
+    ctx.moveTo(k * 2, hipY + 1);
+    ctx.lineTo(k * 2 + 1.4, hipY + 6);
+    ctx.lineTo(k * 2 - 1.4, hipY + 6);
+    ctx.closePath();
+    ctx.fill();
+  }
 
   // --- head: kettle helm with wide brim, shaded face ---
   const hx = lean * 0.8;
@@ -113,6 +133,14 @@ export function drawGuard(u) {
   ctx.beginPath(); ctx.arc(hx, headY - 1.8, 4.8, Math.PI, 0); ctx.fill();
   ctx.fillRect(hx - 6.4, headY - 2.4, 12.8, 1.8); // brim
   ctx.fillStyle = C.steelLt; ctx.fillRect(hx - 6.4, headY - 2.4, 12.8, 0.8);
+  ctx.strokeStyle = "#8f3232";
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(hx, headY - 6);
+  ctx.quadraticCurveTo(hx - 4, headY - 9, hx - 8, headY - 6.5);
+  ctx.stroke();
+  ctx.lineCap = "butt";
   // eye under the brim
   ctx.fillStyle = "#241c12";
   ctx.beginPath(); ctx.arc(hx + 2, headY + 0.4, 0.7, 0, Math.PI * 2); ctx.fill();

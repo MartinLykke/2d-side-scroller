@@ -8,7 +8,7 @@ import { spawnGoldReward, spawnParticles, floaty, critFloaty, spawnLocLoot } fro
 import { spawnLevelUpBeam } from '../../rendering/Effects.js';
 import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js';
 import { startArcherShoot, SHOOT_RELEASE_TIME } from '../../rendering/sprites/Archer.js';
-import { wallHeight } from '../../entities/Wall.js';
+import { entityWallLift } from '../../entities/Wall.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { spawnFirePool } from '../ai/BossAI.js';
 
@@ -335,16 +335,18 @@ export function updateArrows(dt) {
     }
 
     if (!hit && ar.hitKind === "player" && !Game.inMine) {
-      if (dist(ar.x, player.x) < 18 && Math.abs(ar.y - (groundY - 50)) < 50) {
+      const playerLift = entityWallLift(player) + (player.jumpH || 0);
+      const playerY = groundY - 50 - playerLift;
+      if (dist(ar.x, player.x) < 18 && Math.abs(ar.y - playerY) < 50) {
         if (player.invuln <= 0 && !window._DEV_GOD_MODE) {
           player.hp -= ar.dmg || 1; player.invuln = CFG.playerInvuln; player.hurt = 0.35; player.hpShowTimer = 3;
           player.knock = (player.x < ar.x ? -1 : 1) * -120;
           if (ar.enemyFireball) {
-            spawnParticles(player.x, groundY - 50, 16, "#ff6a20", 85, 95);
-            spawnParticles(player.x, groundY - 50, 8, "#ffd060", 50, 90);
+            spawnParticles(player.x, playerY, 16, "#ff6a20", 85, 95);
+            spawnParticles(player.x, playerY, 8, "#ffd060", 50, 90);
             Game.screenShake = Math.max(Game.screenShake, 0.22);
           } else {
-            spawnParticles(player.x, groundY - 50, 4, "#c1453b");
+            spawnParticles(player.x, playerY, 4, "#c1453b");
           }
           Audio.hit();
         }
@@ -355,7 +357,7 @@ export function updateArrows(dt) {
     if (!hit && ar.hitKind === "unit") {
       for (const u of units) {
         if (u.hp <= 0 || u.dying || u.mine) continue;
-        const uy = u.onWall && u.wall ? groundY - wallHeight(u.wall) - 18 : groundY - 30;
+        const uy = groundY - 30 - entityWallLift(u);
         if (dist(ar.x, u.x) < (ar.radius || 22) && Math.abs(ar.y - uy) < 46) {
           u.hp -= ar.dmg || 1;
           u.panic = 0.9;
@@ -385,7 +387,7 @@ export function updateArrows(dt) {
           u.knock = (u.knock || 0) + Math.sign(u.x - ar.x || 1) * 130;
         }
       }
-      if (!Game.inMine && dist(ar.x, player.x) < r * 0.6 && player.jumpH <= 0 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
+      if (!Game.inMine && dist(ar.x, player.x) < r * 0.6 && (player.jumpH || 0) + entityWallLift(player) <= 20 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
         player.hp -= 1; player.invuln = CFG.playerInvuln; player.hurt = 0.35; player.hpShowTimer = 3;
         player.knock = (player.x < ar.x ? -1 : 1) * 160;
       }

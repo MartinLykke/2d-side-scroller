@@ -26,6 +26,10 @@ export function wallBackDir(w) {
   return -w.side || -1;
 }
 
+export function wallReady(w) {
+  return !!w && w.commissioned && w.hp > 0 && w.buildProgress >= 1 && w.level > 0;
+}
+
 // How far the rear fighting platform extends behind the wall body.
 export function wallPlatformDepth(w) {
   const cap = Math.max(2, w.level + 1);
@@ -37,6 +41,46 @@ export function wallPlatformDepth(w) {
 // rest on the deck.
 export function wallDeckHeight(w) {
   return Math.max(0, wallHeight(w) - 14);
+}
+
+export function wallPlatformRearX(w) {
+  const d = wallBackDir(w);
+  const x0 = w.x + d * (wallRenderWidth(w) / 2 - 2);
+  return x0 + d * wallPlatformDepth(w);
+}
+
+export function wallClimbAnchorX(w) {
+  const d = wallBackDir(w);
+  if (w.level >= 5) return w.x + d * 42;
+
+  const deckH = wallDeckHeight(w);
+  const rearX = wallPlatformRearX(w);
+  if (deckH <= 56) return rearX + d * Math.min(30, deckH * 0.55);
+  return rearX - d * 5;
+}
+
+export function nearWallClimbAccess(w, x) {
+  if (!wallReady(w)) return false;
+  const anchorX = wallClimbAnchorX(w);
+  if (Math.abs(x - anchorX) < (w.level >= 5 ? 58 : 46)) return true;
+  if (overWallPlatform(w, x)) return true;
+
+  const deckH = wallDeckHeight(w);
+  if (w.level < 5 && deckH <= 56) {
+    const d = wallBackDir(w);
+    const rearX = wallPlatformRearX(w);
+    const stairEnd = rearX + d * deckH;
+    const lo = Math.min(rearX, stairEnd) - 10;
+    const hi = Math.max(rearX, stairEnd) + 10;
+    return x >= lo && x <= hi;
+  }
+  return false;
+}
+
+export function entityWallLift(entity) {
+  if (!entity || !wallReady(entity.wall)) return 0;
+  const t = Math.max(0, Math.min(1, entity.wallClimbT || (entity.onWall ? 1 : 0)));
+  return wallDeckHeight(entity.wall) * t;
 }
 
 // World x for a unit standing in a given platform slot behind the wall.

@@ -7,7 +7,7 @@ import { Audio } from '../infrastructure/Audio.js';
 import { spawnParticles, spawnGoldCoins, spawnGoldReward, floaty as showFloaty } from '../world/SpawnSystem.js';
 import { shootArrow, killEnemy } from '../combat/Combat.js';
 import { killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js';
-import { wallHeight, wallStandX, wallBackDir, wallRenderWidth, wallPlatformDepth, overWallPlatform } from '../../entities/Wall.js';
+import { wallHeight, wallStandX, wallBackDir, wallRenderWidth, wallPlatformDepth, overWallPlatform, entityWallLift } from '../../entities/Wall.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { nearestChoppableTree, chopTree, nearestLog, deliverLog, pondAt, nearestPond } from '../world/ForestSystem.js';
 import { minerAI } from '../world/MineSystem.js';
@@ -229,6 +229,7 @@ function assignArcherPost(u, preferredSide, dt) {
   if (!wall) {
     u.onWall = false;
     u.wallClimbT = 0;
+    u.climbingWall = false;
     return CFG.baseX + preferredSide * 110;
   }
 
@@ -241,9 +242,13 @@ function assignArcherPost(u, preferredSide, dt) {
   // wall before they can start climbing up onto it
   const nearWall = overWallPlatform(wall, u.x);
   const climbTarget = (wantOnWall && nearWall) ? 1 : 0;
+  const climbBefore = u.wallClimbT || 0;
   u.wallClimbT = clamp((u.wallClimbT || 0) + Math.sign(climbTarget - (u.wallClimbT || 0)) * ARCHER_CLIMB_SPEED * dt, 0, 1);
   if (Math.abs((u.wallClimbT || 0) - climbTarget) < 0.02) u.wallClimbT = climbTarget;
   u.onWall = u.wallClimbT >= 0.98;
+  u.climbingWall = Math.abs((u.wallClimbT || 0) - climbBefore) > 0.001 && !u.onWall;
+  if ((u.wallClimbT || 0) <= 0.02 || u.onWall) u.climbingWall = false;
+  if (u.climbingWall) u.climbAnim = (u.climbAnim || 0) + dt * 8;
 
   return postX;
 }
@@ -789,9 +794,13 @@ function updateGuardWallClimb(u, w, wantsTop, dt) {
   u.wall = w;
   const target = wantsTop ? 1 : 0;
   const speed = wantsTop ? 0.58 : 0.72;
+  const climbBefore = u.wallClimbT || 0;
   u.wallClimbT = clamp((u.wallClimbT || 0) + Math.sign(target - (u.wallClimbT || 0)) * speed * dt, 0, 1);
   if (Math.abs((u.wallClimbT || 0) - target) < 0.04) u.wallClimbT = target;
   u.onWall = u.wallClimbT >= 0.98;
+  u.climbingWall = Math.abs((u.wallClimbT || 0) - climbBefore) > 0.001 && !u.onWall;
+  if ((u.wallClimbT || 0) <= 0.02 || u.onWall) u.climbingWall = false;
+  if (u.climbingWall) u.climbAnim = (u.climbAnim || 0) + dt * 8;
 }
 
 function clearGuardWall(u, dt) {
@@ -801,6 +810,7 @@ function clearGuardWall(u, dt) {
       u.wallClimbT = 0;
       u.onWall = false;
       u.guardWall = null;
+      u.climbingWall = false;
       return true;
     }
     updateGuardWallClimb(u, u.wall, false, dt);
@@ -809,6 +819,7 @@ function clearGuardWall(u, dt) {
   u.onWall = false;
   u.wall = null;
   u.guardWall = null;
+  u.climbingWall = false;
   return true;
 }
 
@@ -1382,7 +1393,7 @@ function updateBear(a, dt) {
   // Sight: wider once already aggroed so victims can't juke it easily
   const sight = a.state === "chase" ? 430 : 320;
   let target = null, td = sight;
-  if (player && player.hp > 0 && !Game.inMine) { const d = dist(player.x, a.x); if (d < td) { td = d; target = player; } }
+  if (player && player.hp > 0 && !Game.inMine && !(player.onWall && player.wall && activeBearWall(player.wall))) { const d = dist(player.x, a.x); if (d < td) { td = d; target = player; } }
   for (const u of units) {
     if (u.mine || (u.onWall && u.wall && activeBearWall(u.wall))) continue;
     const d = dist(u.x, a.x);
@@ -1424,7 +1435,7 @@ function updateBear(a, dt) {
         if (player.invuln <= 0 && !window._DEV_GOD_MODE) {
           player.hp -= 1; player.invuln = CFG.playerInvuln; player.hurt = 0.35; player.hpShowTimer = 3;
           player.knock = Math.sign(player.x - a.x) * 160;
-          spawnParticles(player.x, groundY - 50, 6, "#c1453b");
+          spawnParticles(player.x, groundY - 50 - entityWallLift(player), 6, "#c1453b");
         }
       } else if (target.hp !== undefined) {
         target.hp -= 2; target.panic = 1;

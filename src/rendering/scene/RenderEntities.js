@@ -2,11 +2,12 @@ import { ENEMY_TYPES } from '../../config/enemies.js';
 import { ctx, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { roundedRect, legs, drawArm, drawHpBar } from '../DrawHelpers.js';
-import { wallHeight, overWallPlatform } from '../../entities/Wall.js';
+import { entityWallLift } from '../../entities/Wall.js';
 import { drawArcher } from '../sprites/Archer.js';
 import { drawBuilder } from '../sprites/Builder.js';
 import { drawVillager } from '../sprites/Villager.js';
 import { drawGuard } from '../sprites/Guard.js';
+import { drawFarmer } from '../sprites/Farmer.js';
 
 const STUCK_ARROW_FADE_TIME = 0.55;
 
@@ -157,8 +158,7 @@ export function drawUnits() {
     else if (u.role==="builder") { body="#6a4a28"; tool="hammer"; }
     else if (u.role==="farmer")  { body="#5a6a2a"; tool="scythe"; }
     else if (u.role==="guard")   { body="#3a4a5a"; head="#b09a7a"; }
-    const climbT = u.wall && overWallPlatform(u.wall, u.x) ? (u.wallClimbT || (u.onWall ? 1 : 0)) : 0;
-    let wallLift = u.wall ? Math.max(0, wallHeight(u.wall) - 14) * climbT : 0;
+    let wallLift = entityWallLift(u);
     // Grapple flight: the rope, not the climb, carries the archer up
     if (u.grapple) wallLift = u.grappleLiftY || 0;
 
@@ -181,6 +181,8 @@ export function drawUnits() {
       drawArcher(u);
     } else if (u.role === "builder") {
       drawBuilder(u);
+    } else if (u.role === "farmer") {
+      drawFarmer(u);
     } else if (u.role === "peasant") {
       drawVillager(u);
     } else if (u.role === "guard") {

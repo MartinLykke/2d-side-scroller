@@ -8,6 +8,7 @@ import { spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js';
 import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js';
 import { ENEMY_TYPES } from '../../config/enemies.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
+import { entityWallLift } from '../../entities/Wall.js';
 
 function dealAoE(x, dmg, radius, col) {
   for (const e of state.enemies) {
@@ -81,6 +82,8 @@ export function castSpell(player, wBase, tgt) {
   const ew = effectiveWeapon(player.weapon, player.weaponUpgrades || []);
   const dmgMult = permanentDamageMultiplier();
   const aoeR = (wBase.aoeRadius || 0) + (ew.range - wBase.range) * 0.2;
+  const casterLift = entityWallLift(player) + (player.jumpH || 0);
+  const casterY = groundY - 72 - casterLift;
 
   if (wBase.spellType === "lightning") {
     const crit = applyCrit(ew.dmg * dmgMult, CFG.critChance, CFG.critMultiplier);
@@ -122,13 +125,13 @@ export function castSpell(player, wBase, tgt) {
 
     if (tgt.hp <= 0) killEnemy(tgt);
 
-    spawnParticles(player.x, groundY - 72, 10, wBase.col, 50, 70);
+    spawnParticles(player.x, casterY, 10, wBase.col, 50, 70);
     Audio.spell();
     return;
   }
 
   let startX = player.x;
-  let startY = groundY - 72;
+  let startY = casterY;
   let targetX = tgt.x;
   let targetY = groundY - 28;
   let spd = wBase.spellType === "waterjet" ? 480 : 330;
@@ -158,7 +161,7 @@ export function castSpell(player, wBase, tgt) {
     age: 0,
   });
 
-  spawnParticles(player.x, groundY - 72, 10, wBase.col, 50, 70);
+  spawnParticles(player.x, casterY, 10, wBase.col, 50, 70);
   Audio.spell();
 }
 

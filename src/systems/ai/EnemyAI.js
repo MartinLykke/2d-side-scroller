@@ -7,7 +7,7 @@ import { Audio } from '../infrastructure/Audio.js';
 import { spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js';
 import { meleeHitPlayer } from '../combat/PlayerCombat.js';
 import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js';
-import { wallHeight } from '../../entities/Wall.js';
+import { wallHeight, entityWallLift } from '../../entities/Wall.js';
 import { updateBoss, dropRiderFromDragon } from './BossAI.js';
 
 const IMP_STACK_STEP = 18;
@@ -18,6 +18,11 @@ const IMP_QUEUE_SPACING = 18;
 const IMP_PYRAMID_BASE = 4; // bottom-row width of the waiting pyramid
 const WALL_DUEL_GAP = 22;
 let impStackSequence = 1;
+
+function playerCombatLift() {
+  const p = state.player;
+  return p ? (p.jumpH || 0) + entityWallLift(p) : 0;
+}
 
 function mix(a, b, t) {
   return lerp(a, b, clamp(t, 0, 1));
@@ -289,7 +294,7 @@ function damageWall(wall, baseDmg, particleCount = 3) {
 
 function shootEnemyFireball(e, t, target) {
   const launchY = groundY + (e.fy || -120) - 4;
-  const targetY = target === state.player ? groundY - 50 : groundY - 30;
+  const targetY = target === state.player ? groundY - 50 - playerCombatLift() : groundY - 30 - entityWallLift(target);
   const dx = target.x - e.x;
   const dy = targetY - launchY;
   const flightT = Math.max(0.55, Math.min(1.25, Math.abs(dx) / 330));
@@ -458,6 +463,7 @@ function updateImpAttack(e, t, dt) {
 function updateImpPlayerCombat(e, t, dt) {
   const player = state.player;
   if (!player || player.hp <= 0 || Game.inMine || e.wallTopWall || e.aiState === "climbOver" || e.aiState === "stacking" || e.aiState === "stackQueue") return false;
+  if (playerCombatLift() > 20) return false;
   const d = dist(e.x, player.x);
   const near = d < 130 && e.carry === 0;
   if (!near && e.aiState !== "attackPlayer") return false;
@@ -469,7 +475,7 @@ function updateImpPlayerCombat(e, t, dt) {
   breakImpStack(e);
   setImpState(e, "attackPlayer");
   e.dir = Math.sign(player.x - e.x) || e.dir;
-  if (d < 112 && e.attackCd <= 0 && player.jumpH <= 0) {
+  if (d < 112 && e.attackCd <= 0 && playerCombatLift() <= 4) {
     beginImpAttack(e, "player", player, chooseImpAttack(d));
     return true;
   }
@@ -887,9 +893,9 @@ export function updateEnemies(dt) {
         e.shootCd = 2.2;
         Audio.bow();
       }
-      if (!Game.inMine && dist(e.x, player.x) < 28 && e.attackCd <= 0 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
+      if (!Game.inMine && dist(e.x, player.x) < 28 && Math.abs((groundY + (e.fy || -80)) - (groundY - 50 - playerCombatLift())) < 72 && e.attackCd <= 0 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
         player.hp -= 1; player.invuln = CFG.playerInvuln; player.hurt = 0.35; player.hpShowTimer = 3;
-        spawnParticles(player.x, groundY - 50, 5, "#c1453b");
+        spawnParticles(player.x, groundY - 50 - playerCombatLift(), 5, "#c1453b");
         Audio.hit();
         e.attackCd = 1.5; e.fleeing = true;
       }
@@ -1003,11 +1009,11 @@ export function updateEnemies(dt) {
         e.stompCd = rand(t.stompMin, t.stompMax);
         const radius = t.stompRadius || 90;
         let hitSomething = false;
-        if (!Game.inMine && player.hp > 0 && dist(e.x, player.x) < radius && player.invuln <= 0 && !window._DEV_GOD_MODE) {
+        if (!Game.inMine && player.hp > 0 && dist(e.x, player.x) < radius && playerCombatLift() <= 20 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
           player.hp -= Math.max(1, (t.meleeDmg || 1));
           player.invuln = CFG.playerInvuln; player.hurt = 0.35; player.hpShowTimer = 3;
           player.knock = Math.sign(player.x - e.x || 1) * 260;
-          spawnParticles(player.x, groundY - 50, 6, "#c1453b");
+          spawnParticles(player.x, groundY - 50 - playerCombatLift(), 6, "#c1453b");
           hitSomething = true;
         }
         for (const u of units) {
@@ -1167,7 +1173,7 @@ export function updateEnemies(dt) {
       } else if (e.aiState === "attacking") {
         // Windup phase: stop moving, wait before attacking
         if (e.stateTimer <= 0) {
-          if (d < 30 && player.jumpH <= 0 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
+          if (d < 30 && playerCombatLift() <= 4 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
             const hadCoins = player.coins > 0;
             if (meleeHitPlayer(e, t, 230) && hadCoins) e.carry++;
             changeState(e, "recovery", 0.4);
@@ -1291,7 +1297,7 @@ function updateLocEnemy(e, t, dt) {
       if (e.stateTimer <= 0) changeState(e, "chasing", 0);
     } else if (e.aiState === "attacking") {
       if (e.stateTimer <= 0) {
-        if (dp < 32 && player.jumpH <= 0 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
+        if (dp < 32 && playerCombatLift() <= 4 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
           changeState(e, "recovery", 0.4);
           e.attackCd = 1.0;
           meleeHitPlayer(e, t, 220);

@@ -25,7 +25,7 @@ import { UI, DEV, baseName } from '../rendering/HUD.js';
 import { updateArcherShoot } from '../rendering/sprites/Archer.js';
 
 import { makePlayer } from '../entities/Player.js';
-import { makeWall } from '../entities/Wall.js';
+import { makeWall, wallReady, wallBackDir, wallClimbAnchorX, nearWallClimbAccess, overWallPlatform } from '../entities/Wall.js';
 import { makeUnit } from '../entities/Unit.js';
 
 import { WEAPON_SHOP, ARMOR_SHOP, setPickupWeapon as setShopPickupWeapon } from '../systems/economy/ShopSystem.js';
@@ -78,9 +78,86 @@ function updateNightClear() {
   floaty(state.base.x, "The wave is defeated - dawn approaches", "#ffd27a", 18);
 }
 
+const PLAYER_WALL_CLIMB_SPEED = 0.95;
+
+function nearestPlayerWallAccess(player) {
+  let best = null, bd = 1e9;
+  for (const w of state.walls) {
+    if (!wallReady(w) || !nearWallClimbAccess(w, player.x)) continue;
+    const d = Math.abs(player.x - wallClimbAnchorX(w));
+    if (d < bd) { bd = d; best = w; }
+  }
+  return best;
+}
+
+function updatePlayerWallClimb(player, dt, upHeld, downHeld) {
+  if (Game.inMine) {
+    player.wall = null;
+    player.onWall = false;
+    player.wallClimbT = 0;
+    player.climbingWall = false;
+    return false;
+  }
+
+  const accessWall = nearestPlayerWallAccess(player);
+  let wall = wallReady(player.wall) ? player.wall : null;
+  if (!wall || (player.wallClimbT || 0) <= 0.02) wall = accessWall || wall;
+
+  if (!wall) {
+    player.wall = null;
+    player.onWall = false;
+    player.wallClimbT = 0;
+    player.climbingWall = false;
+    player.wallClimbTarget = 0;
+    return false;
+  }
+
+  if (player.wall !== wall) {
+    player.wall = wall;
+    player.wallClimbT = 0;
+    player.onWall = false;
+    player.wallClimbTarget = 0;
+  }
+
+  const cur = player.wallClimbT || 0;
+  if (upHeld && (accessWall === wall || nearWallClimbAccess(wall, player.x))) player.wallClimbTarget = 1;
+  if (downHeld && cur > 0.02) player.wallClimbTarget = 0;
+  if ((cur > 0.02 || player.onWall) && !overWallPlatform(wall, player.x) && !nearWallClimbAccess(wall, player.x)) {
+    player.wallClimbTarget = 0;
+  }
+
+  const target = player.wallClimbTarget ?? (player.onWall ? 1 : 0);
+  const movingVertically = Math.abs(target - cur) > 0.002;
+  if (movingVertically) {
+    const step = PLAYER_WALL_CLIMB_SPEED * dt * Math.sign(target - cur);
+    player.wallClimbT = clamp(cur + step, 0, 1);
+    if (Math.abs(player.wallClimbT - target) < 0.03) player.wallClimbT = target;
+    const anchorX = wallClimbAnchorX(wall);
+    player.x += (anchorX - player.x) * Math.min(1, dt * 8);
+    player.vx = 0;
+    player.jumpH = 0;
+    player.jumpVy = 0;
+    player.dir = wallBackDir(wall);
+    player.bob = 0;
+    player.climbAnim = (player.climbAnim || 0) + dt * 8;
+  }
+
+  player.onWall = (player.wallClimbT || 0) >= 0.98;
+  player.climbingWall = movingVertically && !player.onWall;
+  if ((player.wallClimbT || 0) <= 0.02 && target === 0 && !upHeld) {
+    player.wallClimbT = 0;
+    player.onWall = false;
+    player.climbingWall = false;
+    player.wallClimbTarget = 0;
+    if (accessWall !== wall) player.wall = null;
+  }
+  return player.climbingWall;
+}
+
 function updatePlayer(dt) {
   const { player } = state;
   const left=keys["a"]||keys["arrowleft"], right=keys["d"]||keys["arrowright"], sprint=keys["shift"];
+  const up=keys["w"]||keys["arrowup"], down=keys["s"]||keys["arrowdown"];
   const speed=sprint?CFG.playerSprint:CFG.playerSpeed;
   let move=0; if (left) move-=1; if (right) move+=1;
   player.vx=move*speed;
@@ -89,7 +166,8 @@ function updatePlayer(dt) {
   if (move!==0) { player.dir=move; player.gallop+=dt*(sprint?16:10); player.bob=Math.abs(Math.sin(player.gallop))*3; }
   else player.bob*=0.9;
   if (player.knock) { player.x=clamp(player.x+player.knock*dt,120,CFG.worldWidth-120); player.knock*=0.86; if (Math.abs(player.knock)<6) player.knock=0; }
-  if ((keys[" "] || keys["space"]) && player.jumpH <= 0 && player.jumpVy <= 0) {
+  const climbing = updatePlayerWallClimb(player, dt, up, down);
+  if (!climbing && (keys[" "] || keys["space"]) && player.jumpH <= 0 && player.jumpVy <= 0) {
     player.jumpVy = 560;
   }
   player.jumpH += player.jumpVy * dt;
