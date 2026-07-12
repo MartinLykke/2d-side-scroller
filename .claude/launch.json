@@ -144,6 +144,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8359"],
       "port": 8359
+    },
+    {
+      "name": "game-server-20",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8373"],
+      "port": 8373
     }
   ]
 }

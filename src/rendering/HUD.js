@@ -163,7 +163,7 @@ function phaseName() {
   return "Dawn";
 }
 
-function baseName(lvl) { return ["—","Camp","Small Village","Large Village","Castle"][lvl]; }
+function baseName(lvl) { return ["—","Camp","Small Village","Large Village","Castle","Fortress","Citadel","Royal Capital"][lvl]; }
 export { baseName };
 
 export const UI = {
@@ -215,8 +215,8 @@ export const UI = {
     document.getElementById("hud-build-text").textContent = build;
 
     let obj = "🎯 Survive as long as you can. Threat level " + (Game.threatLevel || Game.day);
-    if (base.level<4) obj += " · upgrade the base ("+base.level+"/4)";
-    else obj += " · the castle stands";
+    if (base.level<CFG.maxBaseLevel) obj += " · upgrade the base ("+base.level+"/"+CFG.maxBaseLevel+")";
+    else obj += " · the royal capital stands";
     if (Game.isNight) {
       let activeEnemies = 0;
       for (let i = 0; i < state.enemies.length; i++) if (!state.enemies[i].fleeing) activeEnemies++;
@@ -272,7 +272,7 @@ export const UI = {
     const vagNear=!Game.inMine&&state.vagrants.find(v=>dist(player.x,v.x)<46&&Math.abs(v.vx)<1);
     const lootNear=!Game.inMine&&state.lootItems&&state.lootItems.find(it=>dist(player.x,it.x)<50);
     const shopSt=stations.find(s=>s.id==="shop");
-    const nearShop=!Game.inMine&&shopSt&&state.base.level>=4&&dist(player.x,shopSt.x())<100;
+    const nearShop=!Game.inMine&&shopSt&&state.base.level>=2&&dist(player.x,shopSt.x())<100;
     const mineLadderNear=state.mineBuilt&&dist(player.x,MINE.entranceX)<70;
     if (near) {
       this.prompt.classList.remove("hidden");
@@ -401,14 +401,14 @@ export const DEV = {
   skipToDay20() { this._jumpToDay(20); },
 
   upgradeBase() {
-    if (Game.state!=="play"||state.base.level>=4) return;
+    if (Game.state!=="play"||state.base.level>=CFG.maxBaseLevel) return;
     // call the upgradeBase exported from game.js via window
     window._upgradeBase?.();
   },
 
   maxBaseLevel() {
     if (Game.state!=="play") return;
-    while (state.base.level < 4) {
+    while (state.base.level < CFG.maxBaseLevel) {
       window._upgradeBase?.();
     }
     floaty(state.base.x, "🏰 Max level reached!", "#f2c14e");

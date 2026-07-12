@@ -1220,9 +1220,63 @@ export function drawBase(dark) {
     if (night) { drawTorch(x-122,groundY); drawTorch(x+122,groundY); } drawCampfire(x,dark);
   } else {
     drawGrandCastle(x,stoneL,stoneD,dark,night);
+    if (lvl>=5) drawCastleRegalia(x,lvl,dark);
   }
-  drawHpBar(x,groundY-(lvl>=4?250:lvl>=2?130:70),70,base.hp/base.maxHp,"#f2c14e");
+  drawHpBar(x,groundY-(lvl>=7?292:lvl>=4?250:lvl>=2?130:70),70,base.hp/base.maxHp,"#f2c14e");
   ctx.restore();
+}
+
+// Regalia layered onto the grand castle as the base climbs past level 4:
+// gold pennants at 5 (Fortress), azure keep pennants at 6 (Citadel) and the
+// burning Crown Aegis beacon above the keep at 7 (Royal Capital).
+function drawCastleRegalia(x, lvl, dark) {
+  const pennant=(px,py,col)=>{
+    const sway=windSway(px,3);
+    ctx.strokeStyle="#cdbfa3"; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(px,py-16); ctx.stroke();
+    ctx.fillStyle=col;
+    ctx.beginPath(); ctx.moveTo(px,py-16);
+    ctx.quadraticCurveTo(px+9+sway,py-14.5,px+15+sway,py-11.5);
+    ctx.quadraticCurveTo(px+9+sway,py-8.5,px,py-7); ctx.closePath(); ctx.fill();
+  };
+  // Fortress: gold pennants crowning the curtain wall ends
+  pennant(x-160,groundY-64,"#f2c14e");
+  pennant(x+160,groundY-64,"#f2c14e");
+  // Citadel: azure pennants on the keep's corner turrets
+  if (lvl>=6) {
+    pennant(x-50,groundY-262,"#6ab4ff");
+    pennant(x+50,groundY-262,"#6ab4ff");
+  }
+  // Royal Capital: the Crown Aegis beacon burns above the keep
+  if (lvl>=7) {
+    const t=performance.now()/1000;
+    const fy=groundY-266+Math.sin(t*2.2)*2.5;
+    const flick=Math.sin(t*7)*2+Math.sin(t*11)*1.2;
+    const g=ctx.createRadialGradient(x,fy,2,x,fy,26+flick);
+    g.addColorStop(0,"rgba(255,220,120,0.8)");
+    g.addColorStop(0.5,"rgba(255,140,50,0.3)");
+    g.addColorStop(1,"rgba(255,100,20,0)");
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,fy,26+flick,0,Math.PI*2); ctx.fill();
+    // flame core: teardrop with a gold heart
+    ctx.fillStyle="#ff8a30";
+    ctx.beginPath(); ctx.moveTo(x,fy-13-flick*0.5);
+    ctx.quadraticCurveTo(x+7,fy-4,x+5.5,fy+3);
+    ctx.quadraticCurveTo(x+3,fy+8,x,fy+8);
+    ctx.quadraticCurveTo(x-3,fy+8,x-5.5,fy+3);
+    ctx.quadraticCurveTo(x-7,fy-4,x,fy-13-flick*0.5); ctx.fill();
+    ctx.fillStyle="#ffd060";
+    ctx.beginPath(); ctx.moveTo(x,fy-6-flick*0.3);
+    ctx.quadraticCurveTo(x+3.5,fy-1,x+2.8,fy+3.5);
+    ctx.quadraticCurveTo(x+1.5,fy+6.5,x,fy+6.5);
+    ctx.quadraticCurveTo(x-1.5,fy+6.5,x-2.8,fy+3.5);
+    ctx.quadraticCurveTo(x-3.5,fy-1,x,fy-6-flick*0.3); ctx.fill();
+    // small gold crown emblem beneath the flame
+    ctx.fillStyle="#f2c14e";
+    ctx.beginPath();
+    ctx.moveTo(x-7,fy+16); ctx.lineTo(x-7,fy+11); ctx.lineTo(x-3.5,fy+13.5);
+    ctx.lineTo(x,fy+10); ctx.lineTo(x+3.5,fy+13.5); ctx.lineTo(x+7,fy+11);
+    ctx.lineTo(x+7,fy+16); ctx.closePath(); ctx.fill();
+  }
 }
 
 function drawStationIcon(x, emoji) {
@@ -1662,7 +1716,7 @@ export function drawStations() {
       ctx.restore();
     }
   }
-  if (state.base && state.base.level >= 4) drawShopBuilding(STATIONS_X.shop);
+  if (state.base && state.base.level >= 2) drawShopBuilding(STATIONS_X.shop);
   if (state.base && state.base.level >= 3) drawGuardStation(STATIONS_X.guard);
   if (state.base && state.base.level >= 3 && !state.mineBuilt) drawFlag(STATIONS_X.mine, "#d8b46a");
   if (state.mineBuilt) drawMineEntrance(STATIONS_X.mine);
@@ -1901,6 +1955,70 @@ function drawShrine(b, dark) {
   ctx.beginPath(); ctx.ellipse(x,groundY-27+bob,3.4,5.2*fl,0,0,Math.PI*2); ctx.fill();
 }
 
+// Ballista emplacement: a stone-footed swivel mount with two bow arms and a
+// loaded bolt. Level 2 gets iron-banded arms and a crimson war pennant.
+function drawBallista(b, night) {
+  const x=b.x, lvl=b.level;
+  const woodD="#4a3420", wood="#6a4a2a", woodL="#8a6338";
+  groundShadow(x, 42, 0.26);
+
+  // stone footing ring
+  ctx.fillStyle="#5a5a66";
+  ctx.beginPath(); ctx.ellipse(x,groundY-2,30,7,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle="rgba(255,255,255,0.12)";
+  ctx.beginPath(); ctx.ellipse(x-8,groundY-4,12,3,0,0,Math.PI*2); ctx.fill();
+
+  // timber deck
+  ctx.fillStyle=wood; ctx.fillRect(x-26,groundY-14,52,10);
+  ctx.fillStyle="rgba(0,0,0,0.2)"; ctx.fillRect(x-26,groundY-7,52,3);
+  ctx.strokeStyle=woodD; ctx.lineWidth=1;
+  for (const px of [-14,0,14]) { ctx.beginPath(); ctx.moveTo(x+px,groundY-14); ctx.lineTo(x+px,groundY-4); ctx.stroke(); }
+
+  // swivel post
+  ctx.fillStyle=woodD; ctx.fillRect(x-5,groundY-40,10,28);
+  ctx.fillStyle="rgba(255,255,255,0.1)"; ctx.fillRect(x-5,groundY-40,3,28);
+
+  // stock (slightly raised toward the sky)
+  const sy=groundY-46;
+  ctx.save(); ctx.translate(x,sy); ctx.rotate(-0.16);
+  ctx.fillStyle=woodL; ctx.fillRect(-30,-4,60,8);
+  ctx.fillStyle="rgba(0,0,0,0.18)"; ctx.fillRect(-30,1,60,3);
+  // bow arms
+  ctx.strokeStyle=lvl>=2?"#8a8a96":woodD; ctx.lineWidth=4; ctx.lineCap="round";
+  ctx.beginPath(); ctx.moveTo(22,-3); ctx.quadraticCurveTo(6,-26,-14,-30); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(22,3);  ctx.quadraticCurveTo(6,26,-14,30); ctx.stroke();
+  // string + loaded bolt
+  const drawn=b.fireFlash>0?6:0;
+  ctx.strokeStyle="#d8cba8"; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(-14,-30); ctx.lineTo(-24+drawn,0); ctx.lineTo(-14,30); ctx.stroke();
+  ctx.strokeStyle="#9aa2ae"; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.moveTo(-24+drawn,0); ctx.lineTo(26,0); ctx.stroke();
+  ctx.fillStyle="#cc8840";
+  ctx.beginPath(); ctx.moveTo(26,0); ctx.lineTo(33,-3); ctx.lineTo(33,3); ctx.closePath(); ctx.fill();
+  ctx.restore();
+
+  // iron bands + war pennant at level 2
+  if (lvl>=2) {
+    ctx.fillStyle="#8a8a96"; ctx.fillRect(x-5,groundY-34,10,3); ctx.fillRect(x-5,groundY-22,10,3);
+    const sway=windSway(x,3);
+    ctx.strokeStyle="#cdbfa3"; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(x+22,groundY-14); ctx.lineTo(x+22,groundY-58); ctx.stroke();
+    ctx.fillStyle="#c1453b";
+    ctx.beginPath(); ctx.moveTo(x+22,groundY-58);
+    ctx.quadraticCurveTo(x+31+sway,groundY-56,x+37+sway,groundY-53);
+    ctx.quadraticCurveTo(x+31+sway,groundY-50,x+22,groundY-48); ctx.fill();
+  }
+
+  // muzzle flash glow right after firing
+  if (b.fireFlash>0) {
+    ctx.save(); ctx.globalAlpha=b.fireFlash*3;
+    ctx.fillStyle="#ffd060";
+    ctx.beginPath(); ctx.arc(x+26,sy-8,8,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+  if (night) drawTorch(x-34,groundY);
+}
+
 export function drawBuildings(dark) {
   const night = dark > 0.25;
   const baseLvl = state.base ? state.base.level : 1;
@@ -1908,13 +2026,14 @@ export function drawBuildings(dark) {
     if (baseLvl < b.unlock) continue;
     if (!b.built) {
       if (b.needsClearing && !b.cleared) { drawClearingHint(b.x); continue; }
-      const flagCol = b.type==="tower" ? "#c98a4a" : b.type==="lumber" ? "#8a9a5a" : "#8fd8ff";
+      const flagCol = b.type==="tower" ? "#c98a4a" : b.type==="lumber" ? "#8a9a5a" : b.type==="ballista" ? "#c1453b" : "#8fd8ff";
       drawFlag(b.x, flagCol);
-      drawStationIcon(b.x, b.type==="tower" ? "🏹" : b.type==="lumber" ? "🪵" : "⛲");
+      drawStationIcon(b.x, b.type==="tower" ? "🏹" : b.type==="lumber" ? "🪵" : b.type==="ballista" ? "🎯" : "⛲");
       continue;
     }
     if (b.type === "tower") drawWatchtower(b, night);
     else if (b.type === "lumber") drawLumberCamp(b, night);
     else if (b.type === "shrine") drawShrine(b, dark);
+    else if (b.type === "ballista") drawBallista(b, night);
   }
 }

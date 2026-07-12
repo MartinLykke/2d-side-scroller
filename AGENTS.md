@@ -117,13 +117,18 @@ Enemies spawn from portals, advance toward base, stack on walls. Flee at dawn.
 
 ## Economy & progression
 
-### Base (levels 1–4)
-| Level | HP | Capacity | Unlocks |
-|-------|-----|----------|---------|
-| 1 | 60 | 8 | — |
-| 2 | 90 | 16 | Shop, farm, hammer, lumber camps |
-| 3 | 130 | 26 | Towers, shrine, guards |
-| 4 | 180 | 40 | Free lumber |
+### Base (levels 1–7)
+| Level | Name | HP | Capacity | Unlocks |
+|-------|------|-----|----------|---------|
+| 1 | Camp | 60 | 8 | — |
+| 2 | Small Village | 90 | 16 | Shop, farm, hammer, lumber camps |
+| 3 | Large Village | 130 | 26 | Towers, shrine, guards, mine |
+| 4 | Castle | 180 | 40 | Free lumber, +1 player max HP, repair station |
+| 5 | Fortress | 250 | 52 | — |
+| 6 | Citadel | 330 | 66 | Ballista emplacements |
+| 7 | Royal Capital | 430 | 80 | Crown Aegis (castle smites nearby enemies), +1 player max HP, reinforce station |
+
+Max level is `CFG.maxBaseLevel`. From level 4 on, the base station prioritizes repairs over the next upgrade.
 
 ### Stations
 Payment-gated purchases: hold ↓/S near a station. Payment rate accelerates with hold time (1→2→6 coins/tick). Coins refund if player walks away before completing. Stations are rebuilt on each base upgrade via `buildStations()` in `GameInit.js`.
@@ -131,12 +136,13 @@ Payment-gated purchases: hold ↓/S near a station. Payment rate accelerates wit
 ### Walls (4 slots, levels 1–5)
 Health scales 45→320 HP. Cost: 6→14→22→35→55🪙. Archers stand on walls with capacity per level.
 
-### Buildings (5 slots)
+### Buildings (7 slots)
 | Building | Count | Cost | Unlock | Effect |
 |----------|-------|------|--------|--------|
 | Lumber Camp | 2 | 14🪙 | Base 2 | Auto-mark trees; +2🪙 per delivered log |
 | Tower | 2 | 18/26/40🪙 | Base 3 | Auto-shoot enemies in 430 px range |
 | Shrine | 1 | 22🪙 | Base 3 | Heal player+units in 190 px radius every 3.5s |
+| Ballista | 2 | 45/70🪙 | Base 6 | Heavy piercing bolts at the toughest enemy in 640 px range (lvl 1–2) |
 
 Buildings in forest require surrounding trees to be felled first.
 

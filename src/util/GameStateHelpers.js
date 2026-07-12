@@ -14,7 +14,7 @@ export function setBuildStations(fn) {
 
 export function upgradeBase() {
   const { base } = state;
-  if (base.level >= 4) return;
+  if (base.level >= CFG.maxBaseLevel) return;
   base.level++;
   base.maxHp = CFG.baseMaxHp[base.level];
   base.hp    = base.maxHp;
@@ -26,6 +26,13 @@ export function upgradeBase() {
     state.player.hp = Math.min(state.player.hp + 1, state.player.maxHp);
     state.player.hasCrown = true;
     spawnParticles(base.x, groundY - 80, 24, "#f2c14e", 120, 160);
+  }
+  if (base.level === CFG.maxBaseLevel) {
+    state.player.maxHp++;
+    state.player.hp = Math.min(state.player.hp + 1, state.player.maxHp);
+    floaty(base.x, "👑 Crown Aegis awakened!", "#f2c14e");
+    spawnParticles(base.x, groundY - 120, 36, "#f2c14e", 150, 190);
+    spawnParticles(base.x, groundY - 160, 18, "#ff6a20", 90, 140);
   }
   if (buildStationsFn) buildStationsFn();
 }

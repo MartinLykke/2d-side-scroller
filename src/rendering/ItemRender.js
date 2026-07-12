@@ -8,6 +8,7 @@ import { WEAPONS, RARITY_COL } from '../config/weapons.js';
 import { ARMORS, ARMOR_RARITY_COL } from '../config/armor.js';
 import { shootPose, ease, drawBow, limb } from './sprites/Archer.js';
 import { drawTomeModel, roundedRect } from './DrawHelpers.js';
+import { armorOutfit } from './ArmorOutfits.js';
 
 export const WEAPON_TYPE_LABEL = { melee: "Melee", ranged: "Bow", magic: "Magic" };
 
@@ -708,13 +709,8 @@ export function drawArmorModel(armorId, s = 1, opts = {}) {
 }
 
 // ---------- Armor worn on the player's body ----------
-// Optional cape recolor for cloak-like armors (used by sprites/Player.js).
-export function armorCapeColors(armorId) {
-  if (armorId === "shadow_cloak") return { cape: "#5a3080", capeDk: "#31184a", capeLt: "#a06ae0" };
-  if (armorId === "void_armor")   return { cape: "#3c2360", capeDk: "#1e1030", capeLt: "#8a55e8" };
-  return null;
-}
-
+// Full-body palettes, helmets and auras live in ArmorOutfits.js; this file
+// keeps the animated chest-detail overlay drawn on top of the recolored body.
 // Torso overlay drawn on top of the player's cuirass/tabard. Coordinates
 // match sprites/Player.js: shoulders at (shX, shY), hips at hipY, x≈0 center.
 export function drawTorsoArmor(armorId, shX, shY, hipY) {
@@ -731,7 +727,7 @@ export function drawTorsoArmor(armorId, shX, shY, hipY) {
   };
   switch (armorId) {
     case "leather_cap":
-      return; // head piece only — handled by drawHeadArmor
+      return; // head piece only — handled by drawHelmet in ArmorOutfits.js
     case "studded_vest": {
       torso(); ctx.fillStyle = a.col; ctx.fill();
       ctx.strokeStyle = shade(a.col, 0.55); ctx.lineWidth = 0.8; ctx.stroke();
@@ -792,7 +788,7 @@ export function drawTorsoArmor(armorId, shX, shY, hipY) {
       break;
     }
     case "shadow_cloak": {
-      // shoulder mantle + clasp; the cape itself is recolored via armorCapeColors
+      // shoulder mantle + clasp; the cape itself is recolored via the outfit
       ctx.fillStyle = "#3a2154";
       ctx.beginPath();
       ctx.moveTo(shX - 8.4, shY + 2.2);
@@ -857,28 +853,6 @@ export function drawTorsoArmor(armorId, shX, shY, hipY) {
   }
 }
 
-// Head overlay (drawn between hair and crown so the crown stays on top).
-export function drawHeadArmor(armorId, headX, headY) {
-  if (armorId !== "leather_cap") return;
-  const a = ARMORS.leather_cap;
-  const col = a.col, dk = shade(col, 0.6);
-  ctx.fillStyle = col;
-  ctx.beginPath(); ctx.arc(headX - 0.3, headY - 1.2, 5.35, Math.PI * 0.86, Math.PI * 2.14); ctx.fill();
-  // back neck-guard flap
-  ctx.fillStyle = shade(col, 0.8);
-  ctx.beginPath();
-  ctx.moveTo(headX - 5.2, headY - 1);
-  ctx.quadraticCurveTo(headX - 6.4, headY + 2.4, headX - 4.6, headY + 4.4);
-  ctx.lineTo(headX - 3.2, headY + 2.2);
-  ctx.quadraticCurveTo(headX - 4.4, headY + 0.8, headX - 4.2, headY - 1.4);
-  ctx.closePath(); ctx.fill();
-  // brim + stitches
-  ctx.strokeStyle = dk; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.arc(headX - 0.3, headY - 1.1, 5.1, Math.PI * 0.92, Math.PI * 2.1); ctx.stroke();
-  ctx.strokeStyle = "#e8d8a8"; ctx.lineWidth = 0.5;
-  ctx.beginPath(); ctx.moveTo(headX - 2.4, headY - 5.6); ctx.quadraticCurveTo(headX, headY - 6.4, headX + 2.4, headY - 5.6); ctx.stroke();
-}
-
 // ---------- Weapon held in the player's hands ----------
 // Extracted from Renderer.js so the inventory paper-doll can reuse it.
 const PLAYER_SKIN = "#d3ac82";
@@ -902,17 +876,27 @@ function heldBowLook(weaponId, w) {
   };
 }
 
+// The weapon arms match the equipped outfit: bare skin by default, gauntlets
+// when the armor covers the arms.
+let ARM_LOOK = { arm: PLAYER_SKIN, bracer: PLAYER_BRACER, trim: PLAYER_GOLD };
+
 function drawPlayerWeaponArm(x1, y1, x2, y2, width = 3) {
-  limb(x1, y1, x2, y2, PLAYER_SKIN, width);
-  ctx.fillStyle = PLAYER_BRACER;
+  limb(x1, y1, x2, y2, ARM_LOOK.arm, width);
+  ctx.fillStyle = ARM_LOOK.bracer;
   ctx.beginPath(); ctx.ellipse(x2 - 0.4, y2 - 1.8, 2.1, 3.1, 0.15, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = PLAYER_GOLD;
+  ctx.fillStyle = ARM_LOOK.trim;
   ctx.fillRect(x2 - 2.1, y2 - 4.1, 4.2, 0.95);
 }
 
 export function drawHeldWeapon(player, px = 0) {
   if (!player.weapon) return;
   const w = WEAPONS[player.weapon], sw = player.swing || 0;
+  const outfit = armorOutfit(player.armor);
+  ARM_LOOK = {
+    arm: outfit?.gloves || PLAYER_SKIN,
+    bracer: outfit?.armor || PLAYER_BRACER,
+    trim: outfit?.goldDk || PLAYER_GOLD,
+  };
   ctx.save();
   if (w.type === "melee") {
     const attackP = sw > 0 ? 1 - clamp(sw / 0.32, 0, 1) : 0;
@@ -965,7 +949,7 @@ export function drawHeldWeapon(player, px = 0) {
         else if (shoot.phase === "draw") { const p = ease(shoot.p); drawHand = { x: (1 - p) * (grip.x + 4) + p * (px + 1), y: (1 - p) * (backSh.y - 6) + p * (groundY - 37 + 3) }; }
         else if (shoot.phase === "release") drawHand = { x: px - 1 - shoot.p * 3, y: groundY - 37 + 3 + shoot.p * 2 };
         else { const p = ease(shoot.p); drawHand = { x: px - 4 - p * 3, y: groundY - 37 + 5 + p * 9 }; }
-        limb(backSh.x, backSh.y, drawHand.x, drawHand.y, "#d3ac82", 2.5);
+        limb(backSh.x, backSh.y, drawHand.x, drawHand.y, ARM_LOOK.arm, 2.5);
         if ((shoot.phase === "draw" && shoot.p > 0.3) || shoot.phase === "release") {
           const nockX = shoot.phase === "draw" ? drawHand.x : grip.x + 5;
           ctx.strokeStyle = w.col; ctx.lineWidth = 1.4;
@@ -974,10 +958,10 @@ export function drawHeldWeapon(player, px = 0) {
           ctx.beginPath(); ctx.moveTo(grip.x + 9, grip.y - 1.6); ctx.lineTo(grip.x + 12.5, grip.y); ctx.lineTo(grip.x + 9, grip.y + 1.6); ctx.closePath(); ctx.fill();
         }
       } else {
-        limb(backSh.x, backSh.y, backSh.x - 2, backSh.y + 11, "#d3ac82", 2.5);
+        limb(backSh.x, backSh.y, backSh.x - 2, backSh.y + 11, ARM_LOOK.arm, 2.5);
       }
       drawBow(grip.x, grip.y, aim, pull, shoot && shoot.phase === "draw" ? drawHand : null, heldBowLook(player.weapon, w));
-      limb(frontSh.x, frontSh.y, grip.x, grip.y, "#d3ac82", 2.6);
+      limb(frontSh.x, frontSh.y, grip.x, grip.y, ARM_LOOK.arm, 2.6);
     }
   } else {
     const upgCount = (player.weaponUpgrades || []).length;

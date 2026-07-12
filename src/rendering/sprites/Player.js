@@ -1,7 +1,8 @@
 import { ctx, groundY } from '../../core/canvas.js';
 import { drawBoot } from '../DrawHelpers.js';
 import { drawClimbPose, isClimbingEntity } from './FriendlyClimb.js';
-import { armorCapeColors, drawTorsoArmor, drawHeadArmor } from '../ItemRender.js';
+import { drawTorsoArmor } from '../ItemRender.js';
+import { armorOutfit, drawHelmet, drawArmorAura } from '../ArmorOutfits.js';
 
 const C = {
   skin: "#d3ac82",
@@ -41,7 +42,7 @@ function limb(x1, y1, x2, y2, col, w) {
   ctx.lineCap = "butt";
 }
 
-function plate(x, y, w, h, color, trim = true) {
+function plate(x, y, w, h, color, trimCol = C.armorDk) {
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.moveTo(x - w * 0.45, y);
@@ -50,22 +51,25 @@ function plate(x, y, w, h, color, trim = true) {
   ctx.lineTo(x - w * 0.34, y + h);
   ctx.closePath();
   ctx.fill();
-  if (trim) {
-    ctx.strokeStyle = C.armorDk;
+  if (trimCol) {
+    ctx.strokeStyle = trimCol;
     ctx.lineWidth = 0.8;
     ctx.stroke();
   }
 }
 
-function drawCape(shX, shY, hipY, moving, run, airborne, gallop, capeCols = null) {
+function drawCape(shX, shY, hipY, moveB, runB, airB, gallop, O, longCloak) {
   const t = performance.now() / 1000;
   const strideWave = Math.sin(gallop * 1.4);
-  const flow = airborne ? -12 : run ? -10 - strideWave * 2 : moving ? -6 + strideWave * 1.5 : Math.sin(t * 1.3) * 1.5;
-  const lift = airborne ? -4 : 0;
-  const capeDk = capeCols?.capeDk || C.capeDk;
-  const cape   = capeCols?.cape   || C.cape;
-  const capeLt = capeCols?.capeLt || C.capeLt;
-  const longCloak = !!capeCols;
+  const idleFlow = Math.sin(t * 1.3) * 1.5;
+  const walkFlow = -6 + strideWave * 1.5;
+  const runFlow = -10 - strideWave * 2;
+  let flow = idleFlow + (walkFlow + (runFlow - walkFlow) * runB - idleFlow) * moveB;
+  flow += (-12 - flow) * airB;
+  const lift = -4 * airB;
+  const capeDk = O.capeDk;
+  const cape   = O.cape;
+  const capeLt = O.capeLt;
 
   ctx.fillStyle = capeDk;
   ctx.beginPath();
@@ -128,10 +132,11 @@ function drawHead(headX, headY, hurt, armorId = null) {
   ctx.lineWidth = 0.7;
   ctx.beginPath(); ctx.moveTo(headX + 0.7, headY + 0.2); ctx.lineTo(headX + 1.5, headY + 1.7); ctx.stroke();
 
-  if (armorId) drawHeadArmor(armorId, headX, headY);
+  // Equipped helmets paint over hair/face; each returns how far the crown lifts.
+  const crownLift = armorId ? drawHelmet(armorId, headX, headY) : 0;
 
   // Tiny ember-crown mark: enough to find the player, not enough to break the vagrant silhouette.
-  const crownY = headY - 6;
+  const crownY = headY - 6 - crownLift;
   ctx.fillStyle = C.gold;
   ctx.fillRect(headX - 3.4, crownY, 6.8, 1.5);
   ctx.beginPath(); ctx.moveTo(headX - 2.4, crownY); ctx.lineTo(headX - 1.2, crownY - 3); ctx.lineTo(headX, crownY); ctx.closePath(); ctx.fill();
@@ -150,24 +155,32 @@ function drawHead(headX, headY, hurt, armorId = null) {
 }
 
 export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop || 0) {
-  const capeCols = armorCapeColors(p.armor);
+  // Equipped armor reskins the entire model: cape, cuirass, tabard, legs,
+  // boots, trims and (via `gloves`) the bare arms.
+  const outfit = armorOutfit(p.armor);
+  const O = outfit ? { ...C, ...outfit } : C;
   if (isClimbingEntity(p)) {
     drawClimbPose(p, {
       skin: C.skin,
-      tunic: C.tabard,
-      tunicLt: capeCols?.capeLt || C.capeLt,
-      pants: C.pants,
-      boots: C.boots,
-      belt: C.leather,
-      steel: C.armor,
-      steelDk: C.armorDk,
-      buckle: C.gold,
+      tunic: O.tabard,
+      tunicLt: O.capeLt,
+      pants: O.pants,
+      boots: O.boots,
+      belt: O.leather,
+      steel: O.armor,
+      steelDk: O.armorDk,
+      buckle: O.gold,
       hair: C.hair,
-      cloak: capeCols?.cape || C.cape,
-      cloakDk: capeCols?.capeDk || C.capeDk,
-      accent: capeCols?.capeLt || C.capeLt,
+      cloak: O.cape,
+      cloakDk: O.capeDk,
+      accent: O.capeLt,
       gold: C.gold,
-    }, { armor: true, cape: true, crown: true, scale: 1.06 });
+    }, {
+      armor: true, cape: true, crown: true, scale: 1.06,
+      helm: outfit?.headgear === "helm",
+      hood: outfit?.headgear === "hood",
+      plume: p.armor === "plate_chestplate",
+    });
     return;
   }
 
@@ -178,6 +191,15 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
   const hurt = p.hurt || 0;
   const attack = Math.max(0, Math.min(1, (p.swing || 0) / 0.32));
 
+  // Eased pose blends so walk/run/jump transitions flow instead of snapping.
+  const anim = p._anim || (p._anim = { move: 0, run: 0, air: 0, last: t });
+  const adt = Math.min(0.1, Math.max(0, t - anim.last));
+  anim.last = t;
+  anim.move += ((moving ? 1 : 0) - anim.move) * (1 - Math.exp(-12 * adt));
+  anim.run += ((run ? 1 : 0) - anim.run) * (1 - Math.exp(-9 * adt));
+  anim.air += ((airborne ? 1 : 0) - anim.air) * (1 - Math.exp(-14 * adt));
+  const moveB = anim.move, runB = anim.run, airB = anim.air;
+
   ctx.save();
   if (hurt > 0) {
     ctx.translate(0, groundY);
@@ -186,73 +208,85 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
   }
 
   const breathe = Math.sin(t * 1.7);
-  const stride = Math.sin(gallop * 2);
-  const bob = airborne ? 0 : moving ? Math.abs(stride) * (run ? 1.8 : 1.2) : breathe * 0.45 + 0.45;
-  const lean = airborne ? 1.8 : run ? 3 : attack ? 1.5 : 0;
+  const cycle = gallop * 2;
+  const stride = Math.sin(cycle);
+  const idleBob = breathe * 0.45 + 0.45;
+  const strideBob = (0.5 - 0.5 * Math.cos(cycle * 2)) * (1.2 + 0.7 * runB);
+  const bob = (idleBob + (strideBob - idleBob) * moveB) * (1 - airB);
+  const lean = airB * 1.8 + (runB * 3 + attack * 1.5 * (1 - moveB)) * (1 - airB);
   const hipY = groundY - 17 - bob * 0.35;
   const shX = lean;
   const shY = groundY - 31 - bob;
-  const headX = shX + (run ? 1.5 : 0) + attack * 0.6;
+  const headX = shX + runB * 1.5 + attack * 0.6;
   const headY = groundY - 39 - bob;
 
-  drawCape(shX, shY, hipY, moving, run, airborne, gallop, capeCols);
+  // Legendary/epic outfits radiate an ambient aura behind the whole body.
+  if (outfit?.aura) drawArmorAura(p.armor, shX, shY + 8);
+
+  drawCape(shX, shY, hipY, moveB, runB, airB, gallop, O, !!outfit?.longCloak);
 
   // Legs with animated run, jump tuck, knee plates and boot cuffs.
-  const strideAmt = airborne ? 0 : moving ? (run ? 8 : 5.4) : 0;
+  // Feet lift in an arc during the swing phase so strides step instead of sliding.
+  const strideAmt = (5.4 + 2.6 * runB) * moveB * (1 - airB);
+  const liftAmt = (2.4 + 1.8 * runB) * moveB * (1 - airB);
+  const swingPhase = Math.cos(cycle);
   let backFoot = -3 + stride * strideAmt;
   let frontFoot = 3 - stride * strideAmt;
-  let backKneeY = groundY - 4;
-  let frontKneeY = groundY - 4;
-  if (airborne) {
-    backFoot = -6;
-    frontFoot = 6;
-    backKneeY = groundY - 12 - Math.max(0, p.jumpVy || 0) * 0.006;
-    frontKneeY = groundY - 7;
-  }
-  if (attack > 0 && !moving) {
-    backFoot = -6;
-    frontFoot = 5.5 + attack * 2;
+  let backLift = Math.max(0, swingPhase) * liftAmt * (1 - airB);
+  let frontLift = Math.max(0, -swingPhase) * liftAmt * (1 - airB);
+  let backKneeY = groundY - 4 - backLift * 0.8;
+  let frontKneeY = groundY - 4 - frontLift * 0.8;
+  backFoot += (-6 - backFoot) * airB;
+  frontFoot += (6 - frontFoot) * airB;
+  backKneeY += ((groundY - 12 - Math.max(0, p.jumpVy || 0) * 0.006) - backKneeY) * airB;
+  frontKneeY += ((groundY - 7) - frontKneeY) * airB;
+  const attackPose = attack * (1 - moveB) * (1 - airB);
+  if (attackPose > 0) {
+    backFoot += (-6 - backFoot) * attackPose;
+    frontFoot += (5.5 + attack * 2 - frontFoot) * attackPose;
+    backLift *= 1 - attackPose;
+    frontLift *= 1 - attackPose;
   }
 
-  limb(-3, hipY, backFoot, backKneeY, C.pants, 3.7);
-  limb(backFoot, backKneeY - 0.5, backFoot + 0.5, groundY - 2, C.boots, 3.9);
-  drawBoot(backFoot + 0.6, groundY, C.boots, 1.06);
-  limb(3, hipY, frontFoot, frontKneeY, C.pants, 3.7);
-  limb(frontFoot, frontKneeY - 0.5, frontFoot + 0.5, groundY - 2, C.boots, 3.9);
-  drawBoot(frontFoot + 0.6, groundY, C.boots, 1.06);
+  limb(-3, hipY, backFoot, backKneeY, O.pants, 3.7);
+  limb(backFoot, backKneeY - 0.5, backFoot + 0.5, groundY - 2 - backLift, O.boots, 3.9);
+  drawBoot(backFoot + 0.6, groundY - backLift, O.boots, 1.06);
+  limb(3, hipY, frontFoot, frontKneeY, O.pants, 3.7);
+  limb(frontFoot, frontKneeY - 0.5, frontFoot + 0.5, groundY - 2 - frontLift, O.boots, 3.9);
+  drawBoot(frontFoot + 0.6, groundY - frontLift, O.boots, 1.06);
 
-  ctx.fillStyle = C.armorDk;
+  ctx.fillStyle = O.armorDk;
   ctx.beginPath(); ctx.ellipse(backFoot, backKneeY - 2.5, 2.2, 1.6, -0.2, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.ellipse(frontFoot, frontKneeY - 2.5, 2.2, 1.6, 0.2, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = C.goldDk;
+  ctx.strokeStyle = O.goldDk;
   ctx.lineWidth = 1.1;
-  ctx.beginPath(); ctx.moveTo(backFoot - 3, groundY - 6); ctx.lineTo(backFoot + 3, groundY - 6); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(frontFoot - 3, groundY - 6); ctx.lineTo(frontFoot + 3, groundY - 6); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(backFoot - 3, groundY - 6 - backLift); ctx.lineTo(backFoot + 3, groundY - 6 - backLift); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(frontFoot - 3, groundY - 6 - frontLift); ctx.lineTo(frontFoot + 3, groundY - 6 - frontLift); ctx.stroke();
 
   // Scabbard and cloak clasp behind the torso.
   ctx.save();
   ctx.translate(shX - 6, shY + 6);
   ctx.rotate(0.55);
-  ctx.strokeStyle = C.leather;
+  ctx.strokeStyle = O.leather;
   ctx.lineWidth = 3.2;
   ctx.lineCap = "round";
   ctx.beginPath(); ctx.moveTo(0, -3); ctx.lineTo(0, 18); ctx.stroke();
-  ctx.strokeStyle = C.goldDk;
+  ctx.strokeStyle = O.goldDk;
   ctx.lineWidth = 1.2;
   ctx.beginPath(); ctx.moveTo(-2.5, 1); ctx.lineTo(2.5, 1); ctx.stroke();
   ctx.lineCap = "butt";
   ctx.restore();
 
-  // Torso: layered cuirass, red tabard, gold trims.
-  plate(shX, shY, 14, 20, C.armor);
-  ctx.fillStyle = C.armorLt;
+  // Torso: layered cuirass, tabard and trims in the outfit's colors.
+  plate(shX, shY, 14, 20, O.armor, O.armorDk);
+  ctx.fillStyle = O.armorLt;
   ctx.beginPath();
   ctx.moveTo(shX - 4.8, shY + 2);
   ctx.quadraticCurveTo(shX - 2.6, shY + 6, shX - 2.2, hipY + 2);
   ctx.lineTo(shX - 4.8, hipY + 1);
   ctx.closePath();
   ctx.fill();
-  ctx.strokeStyle = C.armorDk;
+  ctx.strokeStyle = O.armorDk;
   ctx.lineWidth = 0.9;
   for (let k = -1; k <= 1; k++) {
     ctx.beginPath();
@@ -260,7 +294,7 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
     ctx.lineTo(shX + k * 2.7, hipY + 2);
     ctx.stroke();
   }
-  ctx.fillStyle = C.tabard;
+  ctx.fillStyle = O.tabard;
   ctx.beginPath();
   ctx.moveTo(shX - 3.2, shY + 5);
   ctx.lineTo(shX + 3.2, shY + 5);
@@ -269,7 +303,7 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
   ctx.lineTo(-2.4, hipY + 9);
   ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = C.tabardDk;
+  ctx.fillStyle = O.tabardDk;
   ctx.beginPath();
   ctx.moveTo(shX + 1.4, shY + 6);
   ctx.lineTo(shX + 3.2, shY + 6);
@@ -277,11 +311,11 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = C.leather;
+  ctx.fillStyle = O.leather;
   ctx.fillRect(-6, hipY - 2, 12, 3);
-  ctx.fillStyle = C.gold;
+  ctx.fillStyle = O.gold;
   ctx.fillRect(-2.2, hipY - 2.3, 4.4, 3.6);
-  ctx.strokeStyle = C.goldDk;
+  ctx.strokeStyle = O.goldDk;
   ctx.lineWidth = 0.8;
   ctx.strokeRect(-2.2, hipY - 2.3, 4.4, 3.6);
 
@@ -290,29 +324,40 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
 
   // Pauldrons and arms with bracers. The weapon overlay adds the weapon hand,
   // but these base arms give idle/run/jump poses weight.
-  const armSwing = airborne ? -3 : moving ? Math.sin(gallop * 2) * (run ? 4 : 2.6) : breathe * 0.7;
-  ctx.fillStyle = C.armor;
+  const strideSwing = stride * (2.6 + 1.4 * runB);
+  const armSwing = (breathe * 0.7 + (strideSwing - breathe * 0.7) * moveB) * (1 - airB) - 3 * airB;
+  const armCol = outfit?.gloves || C.skin;
+  ctx.fillStyle = O.armor;
   ctx.beginPath(); ctx.ellipse(shX - 7, shY + 2, 3.2, 4.1, -0.35, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.ellipse(shX + 7, shY + 2, 3.2, 4.1, 0.35, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = C.gold;
+  ctx.fillStyle = O.gold;
   ctx.beginPath(); ctx.ellipse(shX - 7, shY + 0.8, 2.1, 1.2, -0.35, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.ellipse(shX + 7, shY + 0.8, 2.1, 1.2, 0.35, 0, Math.PI * 2); ctx.fill();
 
-  const leftHand = { x: shX - 8 - armSwing, y: shY + 13 + (airborne ? -3 : 0) };
-  const rightHand = { x: shX + 8 + armSwing + attack * 1.5, y: shY + 13 - attack * 3 };
-  limb(shX - 5.5, shY + 3, leftHand.x, leftHand.y, C.skin, 3);
-  limb(shX + 5.5, shY + 3, rightHand.x, rightHand.y, C.skin, 3);
-  ctx.fillStyle = C.armor;
+  // Arms counter-swing (opposite arm to leg); the forward hand rises slightly.
+  const counter = armSwing * moveB * (1 - airB);
+  let lhx = shX - 8 - armSwing * (1 - moveB) + counter;
+  let lhy = shY + 13 - Math.max(0, counter) * 0.35;
+  let rhx = shX + 8 + armSwing * (1 - moveB) - counter + attack * 1.5;
+  let rhy = shY + 13 - Math.max(0, -counter) * 0.35 - attack * 3;
+  lhx += (shX - 5 - lhx) * airB;
+  lhy += (shY + 10 - lhy) * airB;
+  rhx += (shX + 5 - rhx) * airB;
+  const leftHand = { x: lhx, y: lhy };
+  const rightHand = { x: rhx, y: rhy };
+  limb(shX - 5.5, shY + 3, leftHand.x, leftHand.y, armCol, 3);
+  limb(shX + 5.5, shY + 3, rightHand.x, rightHand.y, armCol, 3);
+  ctx.fillStyle = O.armor;
   ctx.beginPath(); ctx.ellipse(leftHand.x + 0.4, leftHand.y - 2.2, 2.1, 3.2, -0.35, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.ellipse(rightHand.x - 0.4, rightHand.y - 2.2, 2.1, 3.2, 0.35, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = C.goldDk;
+  ctx.fillStyle = O.goldDk;
   ctx.fillRect(leftHand.x - 2, leftHand.y - 4.1, 4, 1);
   ctx.fillRect(rightHand.x - 2, rightHand.y - 4.1, 4, 1);
 
-  ctx.fillStyle = C.gold;
+  ctx.fillStyle = O.gold;
   ctx.beginPath(); ctx.arc(shX - 3.4, shY - 1.4, 1.6, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc(shX + 3.4, shY - 1.4, 1.6, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = C.goldDk;
+  ctx.strokeStyle = O.goldDk;
   ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(shX - 3.4, shY - 1.2); ctx.quadraticCurveTo(shX, shY + 2.4, shX + 3.4, shY - 1.2); ctx.stroke();
 

@@ -15,9 +15,10 @@ export const CFG = {
   playerMaxHp: 5,
   playerInvuln: 0.9,
   playerRegenTime: 7,
-  popCapByLevel: [0, 8, 16, 26, 40],
-  baseUpgradeCost: [0, 10, 24, 45],
-  baseMaxHp: [0, 60, 90, 130, 180],
+  maxBaseLevel: 7,
+  popCapByLevel: [0, 8, 16, 26, 40, 52, 66, 80],
+  baseUpgradeCost: [0, 10, 24, 45, 90, 150, 230],
+  baseMaxHp: [0, 60, 90, 130, 180, 250, 330, 430],
   wallCost: 5,
   wallUpgradeCosts: [11, 18, 28, 44],
   wallHp: [0, 45, 90, 150, 220, 320],
@@ -47,6 +48,14 @@ export const CFG = {
   repairAllCost: 14,
   reinforceCostBase: 26,
   reinforceCostPerDay: 2,
+  // Ballista emplacements (unlocked at base level 6): heavy piercing bolts
+  ballistaCosts: [45, 70],  // build + upgrade cost (lvl 1-2)
+  ballistaRange: 640,
+  // Crown Aegis (base level 7): the castle smites enemies near the walls
+  aegisRange: 620,
+  aegisInterval: 3.0,
+  aegisDamage: 6,
+  aegisRadius: 80,
 };
 
 export const STATIONS_X = {
@@ -89,6 +98,9 @@ export const BUILDING_SLOTS = [
   { type: "tower",  x: CFG.baseX - 780,  unlock: 3, needsClearing: true },
   { type: "tower",  x: CFG.baseX + 780,  unlock: 3, needsClearing: true },
   { type: "shrine", x: CFG.baseX + 530,  unlock: 3 },
+  // Appended after the original slots so old saves (indexed by slot) still load.
+  { type: "ballista", x: CFG.baseX - 900, unlock: 6, needsClearing: true },
+  { type: "ballista", x: CFG.baseX + 900, unlock: 6, needsClearing: true },
 ];
 
 export const PORTALS = [

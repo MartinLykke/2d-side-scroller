@@ -165,8 +165,15 @@ function updatePlayer(dt) {
   player.vx=move*speed;
   if (Game.inMine) player.x=clamp(player.x+player.vx*dt, state.mineActiveLeft+24, state.mineActiveRight-24);
   else player.x=clamp(player.x+player.vx*dt, 120, CFG.worldWidth-120);
-  if (move!==0) { player.dir=move; player.gallop+=dt*(sprint?16:10); player.bob=Math.abs(Math.sin(player.gallop))*3; }
-  else player.bob*=0.9;
+  if (move!==0) player.dir=move;
+  const strideTarget = move!==0 ? (sprint?16:10) : 0;
+  player.strideRate = (player.strideRate||0) + (strideTarget-(player.strideRate||0))*Math.min(1,dt*8);
+  player.gallop += dt*player.strideRate;
+  if (move!==0) {
+    const bounce = (0.5-0.5*Math.cos(player.gallop*4))*2.6;
+    player.bob += (bounce-player.bob)*Math.min(1,dt*14);
+  }
+  else player.bob*=Math.exp(-9*dt);
   if (player.knock) { player.x=clamp(player.x+player.knock*dt,120,CFG.worldWidth-120); player.knock*=0.86; if (Math.abs(player.knock)<6) player.knock=0; }
   const climbing = updatePlayerWallClimb(player, dt, up, down);
   if (!climbing && (keys[" "] || keys["space"]) && player.jumpH <= 0 && player.jumpVy <= 0) {

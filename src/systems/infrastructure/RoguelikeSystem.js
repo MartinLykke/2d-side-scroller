@@ -354,8 +354,15 @@ function updateHubPlayer(dt) {
   let move = 0; if (left) move -= 1; if (right) move += 1;
   p.vx = move * speed;
   p.x = clamp(p.x + p.vx * dt, 120, HUB.width - 120);
-  if (move !== 0) { p.dir = move; p.gallop += dt * (sprint ? 16 : 10); p.bob = Math.abs(Math.sin(p.gallop)) * 3; }
-  else p.bob *= 0.9;
+  if (move !== 0) p.dir = move;
+  const strideTarget = move !== 0 ? (sprint ? 16 : 10) : 0;
+  p.strideRate = (p.strideRate || 0) + (strideTarget - (p.strideRate || 0)) * Math.min(1, dt * 8);
+  p.gallop += dt * p.strideRate;
+  if (move !== 0) {
+    const bounce = (0.5 - 0.5 * Math.cos(p.gallop * 4)) * 2.6;
+    p.bob += (bounce - p.bob) * Math.min(1, dt * 14);
+  }
+  else p.bob *= Math.exp(-9 * dt);
   if ((keys[" "] || keys["space"]) && p.jumpH <= 0 && p.jumpVy <= 0) p.jumpVy = 560;
   p.jumpH += p.jumpVy * dt;
   p.jumpVy -= 1400 * dt;

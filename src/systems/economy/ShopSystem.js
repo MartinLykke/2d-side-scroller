@@ -55,15 +55,15 @@ export function setPickupWeapon(fn) {
 
 export function shopTierUnlocked() {
   const lvl = state.base?.level || 1;
-  if (lvl < 4) return 0;
+  if (lvl < 2) return 0;
   if (lvl >= 4) return 6;
-  return 0;
+  return 1;
 }
 
 export function tryOpenShop() {
   if (Game.inMine) return;
   const shopSt = state.stations.find(s => s.id === "shop");
-  if (shopSt && state.base.level >= 4 && dist(state.player.x, shopSt.x()) < 100) {
+  if (shopSt && state.base.level >= 2 && dist(state.player.x, shopSt.x()) < 100) {
     Game.shopOpen = !Game.shopOpen;
     Game.shopIdx  = 0;
   }
@@ -73,7 +73,7 @@ export function tryOpenShop() {
 export function updateShop() {
   if (!Game.shopOpen) return;
   const shopSt = state.stations.find(s => s.id === "shop");
-  if (!shopSt || Game.inMine || state.base.level < 4 ||
+  if (!shopSt || Game.inMine || state.base.level < 2 ||
       dist(state.player.x, shopSt.x()) > SHOP_CLOSE_RANGE) {
     Game.shopOpen = false;
   }

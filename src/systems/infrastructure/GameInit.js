@@ -31,7 +31,7 @@ function repairDefenseCost() {
 }
 
 function canReinforceDefenses() {
-  if ((state.base?.level || 1) < 4 || missingDefenseHp() > 0) return false;
+  if ((state.base?.level || 1) < CFG.maxBaseLevel || missingDefenseHp() > 0) return false;
   if (state.base.hp < state.base.maxHp + 30) return true;
   return (state.walls || []).some(w =>
     w.commissioned &&
@@ -46,19 +46,22 @@ function reinforceDefenseCost() {
 }
 
 function baseStationCost(base) {
-  if (base.level < 4) return CFG.baseUpgradeCost[base.level];
-  return repairDefenseCost() || reinforceDefenseCost();
+  // Once the castle stands (lvl 4+), repairs take priority over further expansion.
+  if (base.level >= 4 && repairDefenseCost() > 0) return repairDefenseCost();
+  if (base.level < CFG.maxBaseLevel) return CFG.baseUpgradeCost[base.level];
+  return reinforceDefenseCost();
 }
 
 function baseStationLabel(base) {
-  if (base.level < 4) return `Upgrade ${baseName(base.level)} -> ${baseName(base.level + 1)}`;
-  if (repairDefenseCost() > 0) return "Repair castle and walls";
+  if (base.level >= 4 && repairDefenseCost() > 0) return "Repair castle and walls";
+  if (base.level < CFG.maxBaseLevel) return `Upgrade ${baseName(base.level)} -> ${baseName(base.level + 1)}`;
   if (reinforceDefenseCost() > 0) return "Reinforce defenses";
-  return "The castle is fully secured";
+  return "The royal capital is fully secured";
 }
 
 function payBaseStation(base) {
-  if (base.level < 4) {
+  const needsRepair = base.level >= 4 && repairDefenseCost() > 0;
+  if (!needsRepair && base.level < CFG.maxBaseLevel) {
     upgradeBase();
     addXP(30);
     return;
@@ -138,7 +141,7 @@ export function buildStations() {
       },
     });
   }
-  if (state.base.level >= 4) {
+  if (state.base.level >= 2) {
     state.stations.push({
       id:"shop", x:()=>STATIONS_X.shop, paid:0,
       cost:()=>0,

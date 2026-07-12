@@ -678,6 +678,230 @@ function drawEmberBrute(e, t, dark, atkF) {
   ctx.restore();
 }
 
+function drawAshPriest(e, t, dark, atkF) {
+  const T = performance.now() / 1000;
+  const flash = e.flash > 0 && !e.dying;
+  const sway = Math.sin(e.anim * 1.4) * 1.4;
+  const robe = flash ? "#fff" : "#38292c";
+  const robeDk = flash ? "#fff" : "#1f1416";
+  const robePanel = flash ? "#fff" : "#4c383a";
+  const ashPale = flash ? "#fff" : "#9c948c";
+  const ember = "#ff7a24";
+  const emberHot = "#ffc060";
+  const castF = Math.max(0, e.ashCastFlash || 0) / 0.34;
+  const wardF = Math.max(0, e.ashWardFlash || 0) / 0.45;
+  const burstF = Math.max(0, e.ashBurstFlash || 0) / 0.48;
+  const chanP = (e.ashChannelT || 0) > 0 ? 1 - Math.max(0, e.ashChannelT) / (e.ashChannelMax || 0.72) : -1;
+  // Rituals (scorch channel, kindle ward) lift the arms and staff overhead.
+  const raise = chanP >= 0 ? Math.min(1, chanP * 2.2) : Math.min(1, wardF * 1.3);
+  // Anticipation: the orb charges and the priest coils back just before a lance cast.
+  const windup = chanP < 0 && castF <= 0 && e.ashReady ? Math.max(0, Math.min(1, (0.5 - (e.shootCd ?? 9)) / 0.5)) : 0;
+  // Whole-body attack pose: lean/lunge into the cast, crouch into the burst slam.
+  const lean = castF * 0.28 - windup * 0.1 - burstF * 0.2 + (chanP >= 0 ? -0.07 : 0);
+  const lungeX = castF * 5 - windup * 2 - burstF * 2;
+  const y = groundY;
+
+  const SCALE = 1.55;
+  ctx.save();
+  ctx.translate(0, y); ctx.scale(SCALE, SCALE); ctx.translate(0, -y);
+
+  // ash nova shockwave rolling outward after a burst
+  if (burstF > 0) {
+    const p = 1 - burstF;
+    ctx.save(); ctx.globalAlpha = burstF * 0.8;
+    ctx.strokeStyle = "#5a4a44"; ctx.lineWidth = 2.4;
+    ctx.beginPath(); ctx.ellipse(0, y - 3, 8 + p * 26, 4 + p * 7, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = burstF * 0.6; ctx.strokeStyle = ember; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.ellipse(0, y - 3, 5 + p * 22, 3 + p * 6, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  // warm radiance while kindling an ally
+  if (wardF > 0) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = wardF * 0.55;
+    const wg = ctx.createRadialGradient(0, y - 22, 2, 0, y - 22, 26);
+    wg.addColorStop(0, "rgba(255,192,96,0.8)");
+    wg.addColorStop(1, "rgba(120,40,0,0)");
+    ctx.fillStyle = wg; ctx.beginPath(); ctx.ellipse(0, y - 22, 24, 27, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  // grey ash motes drifting up off the robe, the odd live ember among them
+  for (let k = 0; k < 5; k++) {
+    const wt = (T * 0.4 + k * 0.21) % 1;
+    const ax = -6 + k * 3 + Math.sin((T + k) * 1.3) * 2.5;
+    const ay = y - 6 - wt * 30;
+    ctx.save(); ctx.globalAlpha = (1 - wt) * (k % 3 === 0 ? 0.5 : 0.28);
+    ctx.fillStyle = k % 3 === 0 ? ember : "#7a6f68";
+    ctx.beginPath(); ctx.arc(ax, ay, 1.1 * (1 - wt) + 0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  // everything from the robe up shares the attack pose, pivoting at the hem
+  ctx.save();
+  ctx.translate(lungeX, 0);
+  ctx.translate(0, y); ctx.rotate(lean); ctx.scale(1, 1 - burstF * 0.14); ctx.translate(0, -y);
+
+  // tattered floor-length robe (no legs — it glides on a skirt of ash)
+  const hemY = y - 1;
+  const hemPath = () => {
+    ctx.moveTo(-9.5 - sway * 0.4, hemY);
+    ctx.lineTo(-6.5, hemY - 3); ctx.lineTo(-3.5, hemY); ctx.lineTo(-0.5, hemY - 2.6);
+    ctx.lineTo(2.5, hemY); ctx.lineTo(5.5, hemY - 3.2); ctx.lineTo(8.5 + sway * 0.4, hemY);
+  };
+  ctx.fillStyle = robe;
+  ctx.beginPath();
+  ctx.moveTo(-3 + sway * 0.3, y - 32);
+  ctx.quadraticCurveTo(-8, y - 22, -9.5 - sway * 0.4, hemY);
+  hemPath();
+  ctx.quadraticCurveTo(8.5, y - 22, 5.5 + sway * 0.3, y - 31);
+  ctx.closePath(); ctx.fill();
+  // lighter front panel catching the ember light
+  ctx.fillStyle = robePanel;
+  ctx.beginPath();
+  ctx.moveTo(1 + sway * 0.2, y - 29);
+  ctx.quadraticCurveTo(5.5, y - 18, 5 + sway * 0.3, hemY - 1.5);
+  ctx.quadraticCurveTo(1.5, hemY - 2.5, -1 + sway * 0.2, hemY - 1);
+  ctx.quadraticCurveTo(-1.5, y - 16, 1 + sway * 0.2, y - 29);
+  ctx.closePath(); ctx.fill();
+  // smouldering hemline, as if the robe never stops burning at the edges
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.35 + 0.18 * Math.sin(T * 2.6 + e.x);
+  ctx.strokeStyle = ember; ctx.lineWidth = 1.1;
+  ctx.beginPath(); hemPath(); ctx.stroke();
+  ctx.restore();
+  // ember sigil stitched down the front, flaring during rituals
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = 0.35 + 0.22 * Math.sin(T * 3 + e.x * 0.2) + Math.max(chanP, 0) * 0.5 + wardF * 0.4 + castF * 0.3;
+  ctx.strokeStyle = ember; ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  ctx.moveTo(1.6, y - 25); ctx.lineTo(3.6, y - 21); ctx.lineTo(1.6, y - 17);
+  ctx.moveTo(0.6, y - 21); ctx.lineTo(4.8, y - 21);
+  ctx.stroke();
+  ctx.restore();
+
+  // rope belt with a swinging censer trailing smoke
+  ctx.strokeStyle = flash ? "#fff" : "#6e5a48"; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(-5.5, y - 19); ctx.quadraticCurveTo(0, y - 17.6, 6, y - 19.4); ctx.stroke();
+  const cSwing = Math.sin(T * 2.3 + e.x * 0.1) * 1.6;
+  const cX = -4.5 + cSwing, cY = y - 12.5;
+  ctx.strokeStyle = flash ? "#fff" : "#4a3c30"; ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.moveTo(-4.5, y - 18.4); ctx.lineTo(cX, cY - 2); ctx.stroke();
+  ctx.fillStyle = robeDk;
+  ctx.beginPath(); ctx.arc(cX, cY, 2.1, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.55 + 0.25 * Math.sin(T * 6 + e.x);
+  ctx.fillStyle = ember;
+  ctx.beginPath(); ctx.arc(cX, cY + 0.4, 1, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.save(); ctx.globalAlpha = 0.2; ctx.fillStyle = "#3a3230";
+  const st = (T * 0.9 + e.x * 0.05) % 1;
+  ctx.beginPath(); ctx.arc(cX + Math.sin(T * 3) * 1.5, cY - 4 - st * 8, 1.8 * (1 - st) + 0.6, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // back arm: tucked at the sash, lifted skyward during rituals, flung back on a cast
+  ctx.strokeStyle = robeDk; ctx.lineWidth = 2.6; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-2, y - 26);
+  ctx.lineTo(-3.5 - raise * 2 - castF * 4, y - 19 - raise * 12 - castF * 3);
+  ctx.stroke();
+  if (raise > 0.3) {
+    ctx.fillStyle = ashPale;
+    ctx.beginPath(); ctx.arc(-3.5 - raise * 2, y - 19 - raise * 12, 1.3, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // pointed hood, its peak drooping forward
+  ctx.fillStyle = robeDk;
+  ctx.beginPath();
+  ctx.moveTo(-4.5 + sway * 0.3, y - 29);
+  ctx.quadraticCurveTo(-3, y - 41, 2, y - 40.5);
+  ctx.quadraticCurveTo(6.5, y - 40, 7.5, y - 36.5);
+  ctx.quadraticCurveTo(8.6, y - 33, 8.3, y - 28.5);
+  ctx.quadraticCurveTo(2, y - 25.5, -4.5 + sway * 0.3, y - 29);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = robe;
+  ctx.beginPath();
+  ctx.moveTo(-3 + sway * 0.3, y - 29.5);
+  ctx.quadraticCurveTo(-1.5, y - 39, 2.5, y - 38.8);
+  ctx.quadraticCurveTo(-0.5, y - 34, -0.2, y - 28.6);
+  ctx.closePath(); ctx.fill();
+  // hood peak curls to a point with a dying ember at its tip
+  ctx.fillStyle = robeDk;
+  ctx.beginPath(); ctx.moveTo(0.5, y - 40); ctx.quadraticCurveTo(-2.5, y - 43.5, -5, y - 42.5);
+  ctx.quadraticCurveTo(-2.5, y - 41.5, -0.5, y - 38.5); ctx.closePath(); ctx.fill();
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.4 + 0.3 * Math.sin(T * 4.4 + e.x);
+  ctx.fillStyle = ember; ctx.beginPath(); ctx.arc(-4.6, y - 42.4, 0.8, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // hollow of the cowl: void-dark, with a cracked ash mask floating in it
+  ctx.fillStyle = flash ? "#fff" : "#0d0608";
+  ctx.beginPath(); ctx.ellipse(4.3, y - 32, 3.5, 4.1, -0.12, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = ashPale;
+  ctx.beginPath();
+  ctx.moveTo(2.2, y - 30.6);
+  ctx.quadraticCurveTo(4.6, y - 27.6, 7.2, y - 30);
+  ctx.quadraticCurveTo(6.8, y - 32.2, 4.6, y - 32.4);
+  ctx.quadraticCurveTo(2.8, y - 32.2, 2.2, y - 30.6);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = flash ? "#fff" : "#5a534e"; ctx.lineWidth = 0.55;
+  ctx.beginPath(); ctx.moveTo(4.4, y - 32); ctx.lineTo(4.1, y - 29.4); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(5.8, y - 31.4); ctx.lineTo(6.3, y - 30); ctx.stroke();
+  // eyes burning above the mask, brighter at night and mid-ritual
+  const eyeGlow = 0.5 + 0.35 * dark + Math.max(chanP, 0) * 0.35 + castF * 0.3 + wardF * 0.3;
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = eyeGlow;
+  ctx.fillStyle = t.eye;
+  ctx.beginPath(); ctx.arc(3.3, y - 32.6, 1.7, 0, Math.PI * 2); ctx.arc(6, y - 32.3, 1.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = t.eye;
+  ctx.beginPath(); ctx.arc(3.3, y - 32.6, 0.7, 0, Math.PI * 2); ctx.arc(6, y - 32.3, 0.6, 0, Math.PI * 2); ctx.fill();
+
+  // staff arm: idle grip ahead of the body, thrust on a lance cast, raised overhead for rituals
+  const handX = 8.5 + castF * 6 - windup * 2 - raise * 3.5;
+  const handY = y - 19 - raise * 10 - castF * 2 + burstF * 5;
+  ctx.strokeStyle = robe; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(4.5, y - 26); ctx.quadraticCurveTo(7.5, y - 23 - raise * 5, handX, handY); ctx.stroke();
+  ctx.lineCap = "butt";
+  ctx.fillStyle = ashPale;
+  ctx.beginPath(); ctx.arc(handX, handY, 1.4, 0, Math.PI * 2); ctx.fill();
+
+  // gnarled staff crowned with a caged cinder
+  // tilt from vertical, forward positive: pulled back on windup, whipped
+  // forward on the cast, slammed toward the ground on a burst
+  const sa = 0.16 + castF * 1.15 - windup * 0.5 - raise * 0.7 + burstF * 1.3;
+  const topX = handX + Math.sin(sa) * 13, topY = handY - Math.cos(sa) * 13;
+  const botX = handX - Math.sin(sa) * 9, botY = Math.min(y, handY + Math.cos(sa) * 9);
+  ctx.strokeStyle = flash ? "#fff" : "#241512"; ctx.lineWidth = 1.8; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(botX, botY);
+  ctx.quadraticCurveTo(handX + Math.sin(sa) * 2 - 1.2, handY - Math.cos(sa) * 2, topX, topY);
+  ctx.stroke();
+  // crooked prongs cradling the orb
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(topX, topY); ctx.lineTo(topX - 2.4, topY - 3.4); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(topX, topY); ctx.lineTo(topX + 2.6, topY - 3); ctx.stroke();
+  ctx.lineCap = "butt";
+  const orbX = topX + Math.sin(sa) * 1.5, orbY = topY - Math.cos(sa) * 2.6;
+  const orbGlow = 0.45 + 0.2 * Math.sin(T * 5 + e.x) + Math.max(chanP, 0) * 0.8 + castF * 0.6 + wardF * 0.7;
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = Math.min(1, orbGlow);
+  const og = ctx.createRadialGradient(orbX, orbY, 0.4, orbX, orbY, 7 + Math.max(chanP, 0) * 4);
+  og.addColorStop(0, "rgba(255,208,96,0.95)");
+  og.addColorStop(0.4, "rgba(255,122,36,0.55)");
+  og.addColorStop(1, "rgba(120,20,0,0)");
+  ctx.fillStyle = og; ctx.beginPath(); ctx.arc(orbX, orbY, 7 + Math.max(chanP, 0) * 4, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = emberHot;
+  ctx.beginPath(); ctx.arc(orbX, orbY, 1.6 + Math.max(chanP, 0) * 0.8, 0, Math.PI * 2); ctx.fill();
+  // sparks orbiting the orb while a ritual charges
+  if (chanP >= 0 || wardF > 0.2) {
+    const spin = chanP >= 0 ? chanP : wardF;
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    for (let k = 0; k < 3; k++) {
+      const a = T * (6 + spin * 6) + k * 2.1;
+      ctx.globalAlpha = 0.5 + spin * 0.4;
+      ctx.fillStyle = k % 2 ? ember : emberHot;
+      ctx.beginPath(); ctx.arc(orbX + Math.cos(a) * (4 + spin * 2.5), orbY + Math.sin(a) * (4 + spin * 2.5), 0.9, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
 function drawFireImp(e, t, dark, atkF) {
   const T = performance.now() / 1000;
   const flash = e.flash > 0 && !e.dying;
@@ -1491,7 +1715,7 @@ export function drawEnemies(dark) {
     const w=t.w, bob=Math.abs(Math.sin(e.anim*2))*2;
     const isBoss = !!t.boss;
     const atkF = Math.max(0, e.attackAnim || 0) / 0.25;
-    const custom = e.type === "imp" ? drawImp : e.type === "fireImp" ? drawFireImp : e.type === "emberBrute" ? drawEmberBrute : e.type === "fireDragon" ? drawFireDragon : e.type === "magmaGolem" ? drawMagmaGolem : null;
+    const custom = e.type === "imp" ? drawImp : e.type === "fireImp" ? drawFireImp : e.type === "emberBrute" ? drawEmberBrute : e.type === "ashPriest" ? drawAshPriest : e.type === "fireDragon" ? drawFireDragon : e.type === "magmaGolem" ? drawMagmaGolem : null;
     ctx.save(); ctx.translate(e.x, drawYOff);
     if (atkF > 0 && !custom) ctx.scale(1 + atkF * 0.18, 1 - atkF * 0.12);
     if (e.dir<0) ctx.scale(-1,1);

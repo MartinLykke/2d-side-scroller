@@ -179,6 +179,14 @@ function impPlayerBlockedByWall(e, player) {
   return !playerOutsideWall;
 }
 
+function impDefenderBlockedByWall(e, defender) {
+  const wall = wallAt(e.x < CFG.baseX ? -1 : 1, e.x);
+  if (!wall || impWallBreachBypassesWall(e, wall)) return false;
+  const half = Math.max(24, wallRenderWidth(wall) / 2);
+  const defenderOutsideWall = (defender.x - wall.x) * wall.side > half + 6;
+  return !defenderOutsideWall;
+}
+
 function impStackForWall(w) {
   const stack = state.enemies.filter(e =>
     e.type === "imp" &&
@@ -600,6 +608,12 @@ function updateImpCombat(e, t, dt) {
     setImpState(e, e.breachedWall ? "vaulting" : "advance");
     return false;
   }
+  // Can't chase defenders blocked by walls (unless imp has breached)
+  if (impDefenderBlockedByWall(e, defender)) {
+    e.combatTarget = null;
+    setImpState(e, e.breachedWall ? "vaulting" : "advance");
+    return false;
+  }
   // Give up on workers that outrun the chase and get back to the assault.
   if (defender.role !== "guard" && defender.role !== "archer" && dist(e.x, defender.x) > 260) {
     e.combatTarget = null;
@@ -963,6 +977,7 @@ function updateImp(e, t, dt) {
     let b = null, bd = 150;
     for (const u of state.units) {
       if (u.hp <= 0 || u.dying || u.onWall || u.mine) continue;
+      if (impDefenderBlockedByWall(e, u)) continue;
       const d = dist(e.x, u.x);
       if (d < bd) { bd = d; b = u; }
     }
