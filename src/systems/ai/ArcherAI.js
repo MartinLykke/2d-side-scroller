@@ -18,11 +18,12 @@ import {
 // ── Archer shoot ─────────────────────────────────────────────────────────
 function archerShoot(u, x, h, tgt) {
   const skills = state.archerSkills;
+  const arrowBonus = ((u.rallyBoostT || 0) > 0 ? 1 : 0) + (lastStandActive() ? 1 : 0);
 
   if (skills.includes("heavy_ballista")) {
     shootArrow(x, h, tgt, u);
     const arr = state.arrows[state.arrows.length - 1];
-    if (arr) { arr.ballista = true; arr.vx *= 0.55; arr.vy *= 0.55; arr.pierce = 3; arr.dmgMult = 5; }
+    if (arr) { arr.ballista = true; arr.vx *= 0.55; arr.vy *= 0.55; arr.pierce = 3; arr.dmgMult = 5 + arrowBonus; }
     u.shotCount = 0; u.charged = false; u.powerTimer = 0;
     return;
   }
@@ -37,7 +38,9 @@ function archerShoot(u, x, h, tgt) {
     if (isFireArrow) arr.fireArrow = true;
     if (skills.includes("piercing_shot")) arr.pierce = 2;
     if (skills.includes("bouncing_volley")) arr.bouncing = true;
+    if (arrowBonus > 0) arr.dmgMult = (arr.dmgMult || 1) + arrowBonus;
     if (isPowered) { arr.powered = true; arr.vx *= 1.5; arr.vy *= 1.5; arr.dmgMult = 3; arr.pierce = (arr.pierce||0) + 1; }
+    if (isPowered && arrowBonus > 0) arr.dmgMult += arrowBonus;
   }
   if (isPowered) {
     u.charged = false; u.powerTimer = 0;
@@ -60,6 +63,15 @@ function archerShoot(u, x, h, tgt) {
   }
 }
 
+function lastStandActive() {
+  const base = state.base;
+  return !!(base && Game.isNight && base.hp > 0 && base.maxHp > 0 && base.hp / base.maxHp <= (CFG.lastStandBaseHpFrac || 0.34));
+}
+
+function defenderMeleeBonus(u) {
+  return ((u.rallyBoostT || 0) > 0 ? 1 : 0) + (lastStandActive() ? 1 : 0);
+}
+
 // ── XP & melee ───────────────────────────────────────────────────────────
 function grantArcherXP(u) {
   u.xp = (u.xp || 0) + 1;
@@ -74,7 +86,7 @@ function grantArcherXP(u) {
 
 function archerDaggerDamageEnemy(u, foe, dmg = 1, cooldown = 0.58) {
   if (!foe || foe.hp <= 0 || u.cooldown > 0) return false;
-  foe.hp -= dmg * permanentDamageMultiplier();
+  foe.hp -= (dmg + defenderMeleeBonus(u)) * permanentDamageMultiplier();
   foe.flash = 0.12;
   foe.combatTarget = u;
   if (foe.type === "imp" && (foe.wallTopWall || foe.aiState === "climbOver")) foe.aiState = "combat";

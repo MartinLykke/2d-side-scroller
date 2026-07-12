@@ -3,7 +3,7 @@ import { WEAPONS } from '../config/weapons.js';
 import { groundY } from '../core/canvas.js';
 import { Game, state } from '../core/state.js';
 import { inject } from '../core/services.js';
-import { spawnGoldReward, spawnParticles } from '../systems/world/SpawnSystem.js';
+import { spawnGoldReward, spawnParticles, floaty } from '../systems/world/SpawnSystem.js';
 import { Audio } from '../systems/infrastructure/Audio.js';
 import { registerEnemyKill } from '../systems/infrastructure/RoguelikeSystem.js';
 
@@ -25,6 +25,26 @@ export function spawnImpBlood(e, intensity = 1, y = null) {
   spawnParticles(e.x, yy, Math.ceil(5 * power), "#7a1020", 35 + power * 26, 36 + power * 32);
   spawnParticles(e.x, yy + 4, Math.ceil(3 * power), "#b12835", 24 + power * 20, 24 + power * 24);
   if (power > 1.4) spawnParticles(e.x, yy + 8, Math.ceil(2 * power), "#4b0710", 18 + power * 18, 18 + power * 16);
+}
+
+function registerMomentumKill(e, t) {
+  const player = state.player;
+  if (Game.state !== "play" || !player || !t) return;
+  const chainActive = (Game.killStreakTimer || 0) > 0;
+  Game.killStreak = chainActive ? (Game.killStreak || 0) + 1 : 1;
+  Game.killStreakTimer = 4.0;
+
+  const nextLevel = Math.min(5, Math.floor((Game.killStreak || 0) / 3));
+  if (nextLevel <= 0) return;
+
+  const oldLevel = Game.momentumLevel || 0;
+  Game.momentumLevel = Math.max(oldLevel, nextLevel);
+  Game.momentumTimer = Math.max(Game.momentumTimer || 0, 4.5 + Game.momentumLevel * 0.4);
+
+  if (Game.momentumLevel > oldLevel) {
+    floaty(player.x, "Momentum x" + Game.momentumLevel, "#ffd23e", 18);
+    spawnParticles(player.x, groundY - 45, 12 + Game.momentumLevel * 2, "#ffd23e", 80, 90);
+  }
 }
 
 export function killEnemyWithAnimation(e, knockDirection = 0) {
@@ -67,6 +87,7 @@ export function killEnemyWithAnimation(e, knockDirection = 0) {
 
   Audio.enemyDie();
   registerEnemyKill(t.reward);
+  registerMomentumKill(e, t);
   const addXP = inject('addXP');
   if (addXP) addXP(t.reward * 8);
 

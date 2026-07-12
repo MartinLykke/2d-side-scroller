@@ -41,6 +41,7 @@ function initTouchControls() {
   bindBtn("tc-jump",       " ");
   bindBtn("tc-interact",   "s");
   bindBtn("tc-pickup",     "f");
+  bindBtn("tc-dodge",      "x");
 }
 
 const isTouchDevice = ("ontouchstart" in window || navigator.maxTouchPoints > 0) && window.matchMedia("(pointer: coarse)").matches;

@@ -63,7 +63,7 @@ function updateTime(dt) {
   const t = Game.time;
   const nowNight = t > CFG.phases.dusk && t <= CFG.phases.night;
   if (nowNight && !Game.isNight) {
-    Game.isNight=true; Game.nightCleared=false; Audio.horn(); Audio.portalSpawn(); Audio.setNight(true);
+    Game.isNight=true; Game.nightCleared=false; Audio.horn(); Audio.portalSpawn(); Audio.setNight(true); startNightPortalWarning();
   }
   if (!nowNight && Game.isNight) {
     Game.isNight=false; Game.nightCleared=false; Audio.setNight(false); state.enemies.forEach(e=>e.fleeing=true);
@@ -75,10 +75,120 @@ function updateNightClear() {
   const waveAlive = state.enemies.some(e => e.nightWave && !e.fleeing && !e.dying && e.hp > 0);
   if (waveAlive) return;
   Game.nightCleared = true;
+  grantNightClearReward();
   floaty(state.base.x, "The wave is defeated - dawn approaches", "#ffd27a", 18);
 }
 
 const PLAYER_WALL_CLIMB_SPEED = 0.95;
+
+function grantNightClearReward() {
+  const { player, base, walls, units } = state;
+  if (!player || !base) return;
+
+  const gold = Math.max(2, Math.round(2 + Game.day * 0.8 + Math.min(7, (Game.nightQuota || 0) * 0.035)));
+  const room = Math.max(0, CFG.maxCoinsCarry - player.coins);
+  const paidGold = Math.min(room, gold);
+  if (paidGold > 0) {
+    player.coins += paidGold;
+    floaty(player.x, "+" + paidGold + " gold", "#f2c14e");
+  }
+
+  let healed = false;
+  if (player.hp < player.maxHp) {
+    player.hp = Math.min(player.maxHp, player.hp + 1);
+    player.hpShowTimer = Math.max(player.hpShowTimer || 0, 2.2);
+    healed = true;
+  }
+  for (const u of units) {
+    if (u.hp > 0 && !u.dying && u.hp < u.maxHp) {
+      u.hp = Math.min(u.maxHp, u.hp + 1);
+      healed = true;
+    }
+  }
+
+  const repair = Math.max(6, Math.round(7 + Game.day * 0.9));
+  let repaired = false;
+  if (base.hp < base.maxHp) {
+    base.hp = Math.min(base.maxHp, base.hp + repair);
+    base.flash = Math.max(base.flash || 0, 0.18);
+    repaired = true;
+  }
+  for (const w of walls) {
+    if (!w.commissioned || w.buildProgress < 1 || w.hp <= 0 || w.hp >= w.maxHp) continue;
+    w.hp = Math.min(w.maxHp, w.hp + Math.ceil(repair * 0.55));
+    w.flash = Math.max(w.flash || 0, 0.16);
+    repaired = true;
+  }
+
+  if (healed || repaired) {
+    spawnParticles(base.x, groundY - 45, 20, "#9bd05a", 100, 105);
+    floaty(base.x, "Morning morale restored", "#9bd05a");
+  }
+}
+
+function startPlayerDodge(player, move) {
+  if (Game.inMine || player.onWall || (player.wallClimbT || 0) > 0.02) return false;
+  if ((player.jumpH || 0) > 1 || (player.jumpVy || 0) > 0) return false;
+  if ((player.dodgeCd || 0) > 0 || (player.dodgeT || 0) > 0) return false;
+
+  player.dodgeDir = move || player.dir || 1;
+  player.dodgeT = CFG.playerDodgeTime;
+  player.dodgeCd = CFG.playerDodgeCooldown;
+  player.dodgeNearMiss = false;
+  player.invuln = Math.max(player.invuln || 0, CFG.playerDodgeInvuln);
+  player.knock = 0;
+  player.wall = null;
+  player.onWall = false;
+  player.climbingWall = false;
+  spawnParticles(player.x - player.dodgeDir * 12, groundY - 8, 9, "#cfe6f2", 58, 38);
+  spawnParticles(player.x - player.dodgeDir * 6, groundY - 5, 5, "#6b5a45", 42, 24);
+  return true;
+}
+
+function startNightPortalWarning() {
+  const warnT = CFG.nightPortalWarningTime || 0;
+  if (warnT <= 0) return;
+  Game.nightPortalWarnT = warnT;
+  Game.spawnTimer = Math.max(Game.spawnTimer || 0, warnT);
+  for (const p of state.portals) {
+    floaty(p.x, "Portal flares!", "#ff8a3d", 15);
+    spawnParticles(p.x, groundY - 60, 18, "#ff6a20", 105, 130);
+    spawnParticles(p.x, groundY - 90, 8, "#ffd060", 70, 115);
+  }
+}
+
+function updateNightPortalWarning(dt) {
+  if (!Game.isNight || (Game.nightPortalWarnT || 0) <= 0) return;
+  Game.nightPortalWarnT = Math.max(0, Game.nightPortalWarnT - dt);
+  for (const p of state.portals) {
+    if (Math.random() < 0.85) spawnParticles(p.x + rand(-26, 26), groundY - rand(18, 120), 1, "#ff6a20", 28, 54);
+    if (Math.random() < 0.25) spawnParticles(p.x + rand(-20, 20), groundY - rand(40, 150), 1, "#ffd060", 18, 75);
+  }
+}
+
+function grantDodgeRiposte(player, enemy) {
+  player.dodgeNearMiss = true;
+  player.riposteT = CFG.dodgeRiposteTime || 3;
+  player.attackCd = 0;
+  player.dodgeCd = Math.min(player.dodgeCd || 0, 0.35);
+  Game.momentumTimer = Math.max(Game.momentumTimer || 0, 2.2);
+  Game.momentumLevel = Math.max(Game.momentumLevel || 0, 1);
+  floaty(player.x, "Riposte!", "#ffd23e", 18);
+  spawnParticles(player.x, groundY - 38, 14, "#ffd23e", 84, 92);
+  spawnParticles(enemy.x, groundY - 22 + (enemy.fy || 0), 7, "#cfe6f2", 48, 65);
+}
+
+function checkDodgeRiposte(player) {
+  if (player.dodgeNearMiss || Game.inMine) return;
+  const range = CFG.dodgeRiposteRange || 76;
+  for (const e of state.enemies) {
+    if (e.fleeing || e.dying || e.hp <= 0) continue;
+    if (dist(player.x, e.x) < range) {
+      grantDodgeRiposte(player, e);
+      return;
+    }
+  }
+}
 
 function nearestPlayerWallAccess(player) {
   let best = null, bd = 1e9;
@@ -160,23 +270,48 @@ function updatePlayer(dt) {
   const { player } = state;
   const left=keys["a"]||keys["arrowleft"], right=keys["d"]||keys["arrowright"], sprint=keys["shift"];
   const up=keys["w"]||keys["arrowup"], down=keys["s"]||keys["arrowdown"];
+  const dodgeHeld=keys["x"]||keys["control"];
   const speed=sprint?CFG.playerSprint:CFG.playerSpeed;
   let move=0; if (left) move-=1; if (right) move+=1;
-  player.vx=move*speed;
+  player.dodgeCd = Math.max(0, (player.dodgeCd || 0) - dt);
+  if (dodgeHeld && !player.dodgeLatch) startPlayerDodge(player, move);
+  player.dodgeLatch = !!dodgeHeld;
+
+  const dodging = (player.dodgeT || 0) > 0;
+  if (dodging) {
+    player.dodgeT = Math.max(0, player.dodgeT - dt);
+    const t = CFG.playerDodgeTime > 0 ? player.dodgeT / CFG.playerDodgeTime : 0;
+    const dodgeSpeed = CFG.playerDodgeSpeed * (0.45 + 0.55 * t);
+    player.vx = (player.dodgeDir || player.dir || 1) * dodgeSpeed;
+    player.dir = player.dodgeDir || player.dir || 1;
+    player.invuln = Math.max(player.invuln || 0, 0.08);
+    if (Math.random() < 0.55) spawnParticles(player.x - player.dir * 16, groundY - 6, 1, "#c9b48a", 24, 15);
+  } else {
+    player.vx=move*speed;
+    if (move!==0) player.dir=move;
+  }
+
   if (Game.inMine) player.x=clamp(player.x+player.vx*dt, state.mineActiveLeft+24, state.mineActiveRight-24);
   else player.x=clamp(player.x+player.vx*dt, 120, CFG.worldWidth-120);
-  if (move!==0) player.dir=move;
-  const strideTarget = move!==0 ? (sprint?16:10) : 0;
+  if (dodging) checkDodgeRiposte(player);
+
+  const strideTarget = dodging ? 20 : move!==0 ? (sprint?16:10) : 0;
   player.strideRate = (player.strideRate||0) + (strideTarget-(player.strideRate||0))*Math.min(1,dt*8);
   player.gallop += dt*player.strideRate;
-  if (move!==0) {
+  if (move!==0 || dodging) {
     const bounce = (0.5-0.5*Math.cos(player.gallop*4))*2.6;
     player.bob += (bounce-player.bob)*Math.min(1,dt*14);
   }
   else player.bob*=Math.exp(-9*dt);
-  if (player.knock) { player.x=clamp(player.x+player.knock*dt,120,CFG.worldWidth-120); player.knock*=0.86; if (Math.abs(player.knock)<6) player.knock=0; }
-  const climbing = updatePlayerWallClimb(player, dt, up, down);
-  if (!climbing && (keys[" "] || keys["space"]) && player.jumpH <= 0 && player.jumpVy <= 0) {
+  if (player.knock) {
+    const minX = Game.inMine ? state.mineActiveLeft + 24 : 120;
+    const maxX = Game.inMine ? state.mineActiveRight - 24 : CFG.worldWidth - 120;
+    player.x=clamp(player.x+player.knock*dt,minX,maxX);
+    player.knock*=0.86;
+    if (Math.abs(player.knock)<6) player.knock=0;
+  }
+  const climbing = dodging ? false : updatePlayerWallClimb(player, dt, up, down);
+  if (!dodging && !climbing && (keys[" "] || keys["space"]) && player.jumpH <= 0 && player.jumpVy <= 0) {
     player.jumpVy = 560;
   }
   player.jumpH += player.jumpVy * dt;
@@ -186,6 +321,7 @@ function updatePlayer(dt) {
   if (player.jumpH <= 0) { player.jumpH = 0; if (player.jumpVy < 0) player.jumpVy = 0; }
   if (player.invuln>0) player.invuln-=dt;
   if (player.hurt>0) player.hurt-=dt;
+  if (player.riposteT>0) player.riposteT-=dt;
   if (player.hpShowTimer>0) player.hpShowTimer-=dt;
   if (player.hp<player.maxHp) {
     if (!nearestEnemy(player.x,220)) {
@@ -212,6 +348,17 @@ function updateFloats(dt) {
   for (let i=floatTexts.length-1;i>=0;i--) {
     const f=floatTexts[i]; f.life-=dt; f.y+=f.vy*dt; f.vy*=0.96;
     if (f.life<=0) floatTexts.splice(i,1);
+  }
+}
+
+function updateMomentum(dt) {
+  if ((Game.killStreakTimer || 0) > 0) {
+    Game.killStreakTimer = Math.max(0, Game.killStreakTimer - dt);
+    if (Game.killStreakTimer <= 0) Game.killStreak = 0;
+  }
+  if ((Game.momentumTimer || 0) > 0) {
+    Game.momentumTimer = Math.max(0, Game.momentumTimer - dt);
+    if (Game.momentumTimer <= 0) Game.momentumLevel = 0;
   }
 }
 
@@ -296,6 +443,7 @@ function update(dt) {
   updateAnimals(dt);
   updateForestCamps(dt);
   updatePortals();
+  updateNightPortalWarning(dt);
   updateCaltrops(dt);
   updateEnemies(dt);
   updateDyingEnemies(dt);
@@ -311,6 +459,7 @@ function update(dt) {
   updateParticles(dt);
   if (Game.screenShake > 0) Game.screenShake = Math.max(0, Game.screenShake - dt * 9);
   updateFloats(dt);
+  updateMomentum(dt);
   updateSpawning(dt);
   updateNightClear();
   checkUpgrade();

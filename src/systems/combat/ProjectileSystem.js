@@ -294,7 +294,7 @@ export function updateArrows(dt) {
             }
           }
           if (e.hp <= 0) {
-            if (ar.sourceUnit) {
+            if (ar.sourceUnit?.role === "archer") {
               ar.sourceUnit.xp = (ar.sourceUnit.xp || 0) + 1;
               const xpNeeded = (ar.sourceUnit.level || 1) * 3;
               if (ar.sourceUnit.xp >= xpNeeded) {
@@ -306,7 +306,8 @@ export function updateArrows(dt) {
               const knockDir = Math.sign(e.x - ar.x) || 1;
               killEnemyWithAnimation(e, knockDir);
             } else {
-              killEnemy(e);
+              const knockDir = Math.sign(e.x - ar.x) || 1;
+              killEnemyWithAnimation(e, knockDir);
             }
           }
           if (hit) break;

@@ -24,6 +24,15 @@ function targetImpactY(target) {
   return groundY - 24 + stackY;
 }
 
+function playerMomentumDamageMultiplier() {
+  const level = (Game.momentumTimer || 0) > 0 ? (Game.momentumLevel || 0) : 0;
+  return 1 + level * 0.04;
+}
+
+function playerRiposteDamageMultiplier(player) {
+  return (player?.riposteT || 0) > 0 ? (CFG.dodgeRiposteDamageMult || 1.6) : 1;
+}
+
 // Spell damage against a bear (bears live in state.animals, not enemies).
 function damageBear(a, dmg, col) {
   const crit = applyCrit(dmg, CFG.critChance, CFG.critMultiplier);
@@ -133,7 +142,7 @@ function chainLightning(x, dmg, bounces) {
 
 export function castSpell(player, wBase, tgt) {
   const ew = effectiveWeapon(player.weapon, player.weaponUpgrades || []);
-  const dmgMult = permanentDamageMultiplier();
+  const dmgMult = permanentDamageMultiplier() * playerMomentumDamageMultiplier() * playerRiposteDamageMultiplier(player);
   const aoeR = (wBase.aoeRadius || 0) + (ew.range - wBase.range) * 0.2;
   const casterLift = entityWallLift(player) + (player.jumpH || 0);
   const casterY = groundY - 72 - casterLift;

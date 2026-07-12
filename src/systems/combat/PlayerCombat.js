@@ -126,6 +126,51 @@ function triggerIceNova(player) {
   }
 }
 
+function playerMomentumLevel() {
+  return (Game.momentumTimer || 0) > 0 ? (Game.momentumLevel || 0) : 0;
+}
+
+function playerMomentumDamageMultiplier() {
+  return 1 + playerMomentumLevel() * 0.04;
+}
+
+function playerMomentumCooldownMultiplier() {
+  return Math.max(0.76, 1 - playerMomentumLevel() * 0.045);
+}
+
+function playerRiposteDamageMultiplier(player) {
+  return (player.riposteT || 0) > 0 ? (CFG.dodgeRiposteDamageMult || 1.6) : 1;
+}
+
+function finishRiposte(player, x) {
+  if ((player.riposteT || 0) <= 0) return;
+  player.riposteT = 0;
+  Game.screenShake = Math.max(Game.screenShake || 0, 0.22);
+  spawnParticles(x, groundY - 32, 16, "#ffd23e", 95, 115);
+}
+
+function cleaveNearbyEnemies(player, primary, damage) {
+  const range = CFG.meleeCleaveRange || 84;
+  const cleaveDmg = Math.max(1, Math.round(damage * (CFG.meleeCleaveDamageFrac || 0.4)));
+  let hits = 0;
+  for (const e of state.enemies) {
+    if (e === primary || e.fleeing || e.dying || e.hp <= 0) continue;
+    if (dist(e.x, primary.x) > range) continue;
+    e.hp -= cleaveDmg;
+    e.flash = 0.12;
+    if (!ENEMY_TYPES[e.type]?.noKnockback) e.knock = (e.knock || 0) + Math.sign(e.x - player.x || 1) * 170;
+    spawnImpBlood(e, 0.75 + cleaveDmg * 0.08, groundY + (e.fy || 0) - 24);
+    spawnParticles(e.x, groundY + (e.fy || 0) - 24, 4, "#8a2a4a", 42, 56);
+    floaty(e.x, "-" + cleaveDmg, "#c88a5a");
+    hits++;
+    if (e.hp <= 0) killEnemyWithAnimation(e, Math.sign(e.x - player.x) || 1);
+  }
+  if (hits > 0) {
+    floaty(primary.x, "Cleave x" + hits, "#f2c14e");
+    spawnParticles(primary.x, groundY - 24, 10 + hits * 3, "#c88a5a", 115, 80);
+  }
+}
+
 export function updatePlayerAttack(dt) {
   const { player, enemies } = state;
   if (player.castAnim > 0) player.castAnim -= dt;
@@ -157,8 +202,9 @@ export function updatePlayerAttack(dt) {
   player.dir = Math.sign(tgt.x - player.x) || player.dir;
   player.swing = 0.32;
   const playerLift = entityWallLift(player) + (player.jumpH || 0);
+  const riposteMult = playerRiposteDamageMultiplier(player);
   if (wBase.type === "melee") {
-    const crit = applyCrit(w.dmg * permanentDamageMultiplier(), CFG.critChance, CFG.critMultiplier);
+    const crit = applyCrit(w.dmg * permanentDamageMultiplier() * playerMomentumDamageMultiplier() * riposteMult, CFG.critChance, CFG.critMultiplier);
     tgt.hp -= crit.damage; tgt.flash = 0.14; Audio.swordSwing(); Audio.hit();
     meleeWeaponImpact(player.weapon, tgt.x, groundY - 28 - playerLift);
     if (crit.isCrit) critFloaty(tgt.x, crit.damage);
@@ -177,20 +223,31 @@ export function updatePlayerAttack(dt) {
       if (!et.noKnockback) tgt.knock = (tgt.knock || 0) + Math.sign(tgt.x - player.x) * 220;
       if (tgt.hp <= 0) {
         const knockDir = Math.sign(tgt.x - player.x) || 1;
+        cleaveNearbyEnemies(player, tgt, crit.damage);
         killEnemyWithAnimation(tgt, knockDir);
       }
     }
+    finishRiposte(player, tgt.x);
   } else if (wBase.type === "ranged") {
     startArcherShoot(player);
     shootArrow(player.x, groundY - 30 - playerLift, tgt, player, player.weapon);
+    const ar = state.arrows[state.arrows.length - 1];
+    if (ar) {
+      const arrowDmg = Math.max(1, w.dmg * playerMomentumDamageMultiplier() * riposteMult);
+      ar.dmgMult = arrowDmg;
+      ar.dmg = Math.round(arrowDmg);
+      ar.playerShot = true;
+    }
+    finishRiposte(player, tgt.x);
   } else {
     player.castAnim = 0.55;
     castSpell(player, wBase, tgt);
+    finishRiposte(player, tgt.x);
   }
 
   let cooldown = w.speed;
   if (wBase.spellType === "meteor") {
     cooldown *= 2.5;
   }
-  player.attackCd = cooldown;
+  player.attackCd = cooldown * playerMomentumCooldownMultiplier();
 }

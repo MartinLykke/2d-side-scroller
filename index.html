@@ -60,9 +60,9 @@
         <h2>Crown of Embers</h2>
         <p class="tag">A small kingdom in a dark forest. Gather gold, recruit your subjects, build your walls — and survive the nightly hordes of greed.</p>
         <div class="controls">
-          <div><kbd>A</kbd>/<kbd>D</kbd> or <kbd>←</kbd><kbd>→</kbd> — ride &nbsp;·&nbsp; <kbd>Shift</kbd> — gallop &nbsp;·&nbsp; <kbd>Space</kbd> — jump</div>
+          <div><kbd>A</kbd>/<kbd>D</kbd> or <kbd>←</kbd><kbd>→</kbd> — ride &nbsp;·&nbsp; <kbd>Shift</kbd> — gallop &nbsp;·&nbsp; <kbd>Space</kbd> — jump &nbsp;·&nbsp; <kbd>X</kbd>/<kbd>Ctrl</kbd> — dodge</div>
           <div><b>Hold</b> <kbd>↓</kbd>/<kbd>S</kbd> — pay at marker / recruit vagrant</div>
-          <div><kbd>F</kbd> — pick up weapon &nbsp;·&nbsp; <kbd>I</kbd> — inventory &nbsp;·&nbsp; <kbd>B</kbd> — shop (level 4)</div>
+          <div><kbd>F</kbd> — pick up weapon &nbsp;·&nbsp; <kbd>I</kbd> — inventory &nbsp;·&nbsp; <kbd>B</kbd> — shop (level 4) &nbsp;·&nbsp; <kbd>R</kbd> — rally subjects</div>
           <div><kbd>M</kbd> — sound &nbsp;·&nbsp; <kbd>Esc</kbd> — pause/close menu &nbsp;·&nbsp; <kbd>P</kbd> — dev mode</div>
         </div>
         <div class="goal-line">🎯 Goal: Survive as many days as possible. The threat rises without end.</div>
@@ -76,7 +76,7 @@
           <button id="btn-start" class="btn primary">New game</button>
           <button id="btn-continue" class="btn hidden">Continue</button>
         </div>
-        <p class="hint">Tip: Explore the forest to find survivors. Jump over enemies to dodge.</p>
+        <p class="hint">Tip: Dodge close to enemies to prime a riposte, then strike back hard.</p>
       </div>
     </div>
 
@@ -238,6 +238,7 @@
     <div id="tc-right">
       <button class="tc-btn tc-small" id="tc-interact">⬇ Pay</button>
       <button class="tc-btn tc-small" id="tc-pickup">⚔ Pick up</button>
+      <button class="tc-btn tc-small" id="tc-dodge">Dodge</button>
       <button class="tc-btn tc-jump" id="tc-jump">↑</button>
     </div>
   </div>

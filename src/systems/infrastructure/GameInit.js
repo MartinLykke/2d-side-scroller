@@ -261,6 +261,8 @@ export function newGame() {
   state.archerSkills    = [];
   state.guardSkillPoints = 0;
   state.guardSkills     = [];
+  state.rallyCd         = 0;
+  state.rallyT          = 0;
   state.arrowRainCd     = 0;
   state.groundBows      = [];
   state.groundHammers   = [];
@@ -296,6 +298,12 @@ export function newGame() {
   Game.zoom              = 1.2;
   Game.legendaryIntro    = null;
   Game.runKills          = 0;
+  Game.killStreak        = 0;
+  Game.killStreakTimer   = 0;
+  Game.momentumLevel     = 0;
+  Game.momentumTimer     = 0;
+  Game.lastStandDay      = 0;
+  Game.nightPortalWarnT  = 0;
 
   // Seed starting population
   for (let i = 0; i < 2; i++)

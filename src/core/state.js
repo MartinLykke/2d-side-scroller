@@ -35,6 +35,12 @@ export const Game = {
   hubTransitionFromX: 0,
   runStartAnim: 0,
   inMine: false,
+  killStreak: 0,
+  killStreakTimer: 0,
+  momentumLevel: 0,
+  momentumTimer: 0,
+  lastStandDay: 0,
+  nightPortalWarnT: 0,
 };
 
 // All mutable entity arrays and per-play variables live here so every
@@ -75,6 +81,8 @@ export const state = {
   arrowRainCd: 0,
   guardSkillPoints: 0,
   guardSkills: [],
+  rallyCd: 0,
+  rallyT: 0,
   payCooldown: 0,
   payHoldTime: 0,
   lastPaidStation: null,

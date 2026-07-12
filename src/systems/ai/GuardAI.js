@@ -22,9 +22,18 @@ function grantGuardXP(u) {
   spawnParticles(u.x, groundY - 30, 8, "#f2c14e", 50, 80);
 }
 
+function lastStandActive() {
+  const base = state.base;
+  return !!(base && Game.isNight && base.hp > 0 && base.maxHp > 0 && base.hp / base.maxHp <= (CFG.lastStandBaseHpFrac || 0.34));
+}
+
+function guardDamageBonus(u) {
+  return ((u.rallyBoostT || 0) > 0 ? 1 : 0) + (lastStandActive() ? 1 : 0);
+}
+
 function guardDamageEnemy(u, foe, dmg, cooldown = 0.8) {
   if (!foe || foe.hp <= 0 || u.cooldown > 0) return false;
-  foe.hp -= dmg * permanentDamageMultiplier();
+  foe.hp -= (dmg + guardDamageBonus(u)) * permanentDamageMultiplier();
   foe.flash = 0.14;
   spawnImpBlood(foe, 0.9 + dmg * 0.3);
   u.cooldown = cooldown;

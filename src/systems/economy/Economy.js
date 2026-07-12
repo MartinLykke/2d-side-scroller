@@ -76,6 +76,18 @@ export function updatePayment(dt) {
   }
 }
 
+function playerCoinMagnetRange() {
+  const p = state.player;
+  let range = CFG.coinMagnetRange || 90;
+  if (Math.abs(p.vx || 0) > CFG.playerSpeed + 20) range += CFG.coinSprintMagnetBonus || 0;
+  if ((Game.momentumTimer || 0) > 0) {
+    const momentum = Math.min(CFG.coinMomentumMagnetBonus || 0, (Game.momentumLevel || 0) * 8);
+    range += momentum;
+  }
+  if (Game.nightCleared || (!Game.isNight && Game.time < CFG.phases.day)) range += 18;
+  return range;
+}
+
 export function updateCoins(dt) {
   const { coins, player } = state;
   for (let i = coins.length - 1; i >= 0; i--) {
@@ -88,9 +100,12 @@ export function updateCoins(dt) {
     }
     if (!!c.mine !== Game.inMine) continue; // only pick up coins on the player's layer
     const d = dist(c.x, player.x);
-    if (c.settled && d < 90 && player.coins < CFG.maxCoinsCarry) {
-      c.x += Math.sign(player.x - c.x) * 320 * dt;
-      if (d < 22) {
+    const magnetRange = playerCoinMagnetRange();
+    if (c.settled && d < magnetRange && player.coins < CFG.maxCoinsCarry) {
+      const dx = player.x - c.x;
+      const pull = 340 + Math.max(0, magnetRange - d) * 3.6;
+      c.x += Math.sign(dx) * Math.min(Math.abs(dx), pull * dt);
+      if (d < (CFG.coinPickupRange || 22)) {
         player.coins = clamp(player.coins + c.value, 0, CFG.maxCoinsCarry);
         coins.splice(i, 1);
         Audio.coin();

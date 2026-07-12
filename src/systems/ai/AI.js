@@ -1163,15 +1163,62 @@ const AI_HANDLERS = {
   miner:   minerAI,
 };
 
+function lastStandActive() {
+  const base = state.base;
+  if (!base || !Game.isNight || base.hp <= 0 || base.maxHp <= 0) return false;
+  return base.hp / base.maxHp <= (CFG.lastStandBaseHpFrac || 0.34);
+}
+
+function updateRallyTimers(dt) {
+  if ((state.rallyCd || 0) > 0) state.rallyCd = Math.max(0, state.rallyCd - dt);
+  if ((state.rallyT || 0) > 0) state.rallyT = Math.max(0, state.rallyT - dt);
+}
+
+function updateLastStandNotice(active) {
+  if (!active || Game.lastStandDay === Game.day) return;
+  Game.lastStandDay = Game.day;
+  floaty(state.base.x, "Last stand!", "#ff8a3d");
+  spawnParticles(state.base.x, groundY - 70, 24, "#ff8a3d", 140, 120);
+  Audio.horn();
+}
+
+function unitCooldownRate(u, activeLastStand) {
+  let rate = 1;
+  if ((u.rallyBoostT || 0) > 0) rate += 0.45;
+  if (activeLastStand && (u.role === "archer" || u.role === "guard")) rate += CFG.lastStandCooldownBonus || 0.35;
+  return rate;
+}
+
+function updateUnitBuffTimers(u, dt) {
+  if ((u.rallyHomeT || 0) > 0) u.rallyHomeT = Math.max(0, u.rallyHomeT - dt);
+  if ((u.rallyBoostT || 0) > 0) u.rallyBoostT = Math.max(0, u.rallyBoostT - dt);
+}
+
+function rallyUnitHome(u, dt) {
+  if ((u.rallyHomeT || 0) <= 0 || u.mine) return false;
+  const target = u.rallyTargetX ?? CFG.baseX;
+  if (dist(u.x, CFG.baseX) <= (CFG.rallyHomeRadius || 320)) return false;
+  u.panic = 0;
+  u.onWall = false;
+  u.wall = null;
+  u.guardWall = null;
+  moveToward(u, target, 156, dt);
+  return true;
+}
+
 export function updateUnits(dt) {
   const { units } = state;
   if (state.arrowRainCd > 0) state.arrowRainCd = Math.max(0, state.arrowRainCd - dt);
+  updateRallyTimers(dt);
+  const activeLastStand = lastStandActive();
+  updateLastStandNotice(activeLastStand);
   // Reset per-frame wall slot counter so archerAI can stagger archers across wall positions.
   Game.wallSlots = {};
   for (let i = units.length - 1; i >= 0; i--) {
     const u = units[i];
     const px0 = u.x;
-    u.cooldown -= dt;
+    updateUnitBuffTimers(u, dt);
+    u.cooldown -= dt * unitCooldownRate(u, activeLastStand);
     if (u.impaleCd > 0) u.impaleCd -= dt;
     if (u.caltropCd > 0) u.caltropCd -= dt;
     if (u.grappleCd > 0) u.grappleCd -= dt;
@@ -1188,6 +1235,12 @@ export function updateUnits(dt) {
     if (u.hp <= 0) { startUnitDeath(u); continue; }
     if (u.transform > 0) { u.transform -= dt; if (u.transform < 0) u.transform = 0; }
     if (u.knock) { u.x = clamp(u.x + u.knock * dt, 120, CFG.worldWidth - 120); u.knock *= 0.82; if (Math.abs(u.knock) < 6) u.knock = 0; }
+    if (rallyUnitHome(u, dt)) {
+      u.moving = Math.abs(u.x - px0) > 0.04;
+      u.moveSpeed = dt > 0 ? Math.abs(u.x - px0) / dt : 0;
+      if (u.moving) u.anim += dt * 12;
+      continue;
+    }
     const handler = AI_HANDLERS[u.role];
     if (handler) handler(u, dt);
     u.moving = Math.abs(u.x - px0) > 0.04;
@@ -1220,6 +1273,39 @@ export function triggerBarrage() {
   }
   state.arrowRainCd = ARROW_RAIN_COOLDOWN;
   Audio.bow();
+}
+
+export function triggerRoyalRally() {
+  if (Game.state !== "play") return;
+  if ((state.rallyCd || 0) > 0) {
+    const x = state.player?.x ?? state.base?.x ?? CFG.baseX;
+    floaty(x, "Rally ready in " + Math.ceil(state.rallyCd) + "s", "#cfe6f2");
+    return;
+  }
+
+  let rallied = 0;
+  const spread = 180;
+  for (const u of state.units) {
+    if (u.hp <= 0 || u.dying || u.mine) continue;
+    const side = u.x < CFG.baseX ? -1 : 1;
+    u.rallyHomeT = CFG.rallyDuration || 4.8;
+    u.rallyBoostT = (CFG.rallyDuration || 4.8) + 1.2;
+    u.rallyTargetX = CFG.baseX + side * rand(60, spread);
+    u.panic = 0;
+    u.cooldown = Math.max(0, (u.cooldown || 0) - 0.45);
+    rallied++;
+  }
+  if (!rallied) {
+    const x = state.player?.x ?? state.base?.x ?? CFG.baseX;
+    floaty(x, "No subjects to rally", "#ff8a6a");
+    return;
+  }
+
+  state.rallyT = CFG.rallyDuration || 4.8;
+  state.rallyCd = CFG.rallyCooldown || 24;
+  floaty(state.base.x, "Royal Rally! (" + rallied + ")", "#9bd05a");
+  spawnParticles(state.base.x, groundY - 58, 22, "#9bd05a", 130, 115);
+  Audio.horn();
 }
 
 export function updateCaltrops(dt) {

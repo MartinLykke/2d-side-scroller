@@ -5,7 +5,7 @@ import { UI, DEV, closeSkillTree, openSkillTree } from '../../rendering/HUD.js';
 import { tryOpenShop, handleShopKeys, currentShopList, tryBuyShopItem } from '../economy/ShopSystem.js';
 import { equipFromInventory, unequipWeapon, unequipArmor, ensureInventory } from '../economy/InventorySystem.js';
 import { applyUpgrade } from '../economy/UpgradeSystem.js';
-import { triggerBarrage } from '../ai/AI.js';
+import { triggerBarrage, triggerRoyalRally } from '../ai/AI.js';
 import { tryToggleMine } from '../world/MineSystem.js';
 import { setupDevPanel } from './DevPanel.js';
 
@@ -80,6 +80,10 @@ function handleKeydown(e) {
   }
   if (k === "q") {
     if (!e.repeat) triggerBarrage();
+    e.preventDefault(); return;
+  }
+  if (k === "r") {
+    if (!e.repeat) triggerRoyalRally();
     e.preventDefault(); return;
   }
   if (k === "f" && !Game.inventoryOpen && !Game.shopOpen) {
