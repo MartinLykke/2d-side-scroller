@@ -8,7 +8,8 @@ import { darkness, skyColors, drawStars, drawClouds, drawCelestials, drawBirds, 
 
 // Import all render modules
 import { drawGroundTexture, drawGroundDeco, drawPonds, drawEntityShadows, drawPortals, drawWalls, drawBase, drawStations, drawForestTrees, drawForestCamps, drawBuildings } from './scene/RenderWorld.js';
-import { drawVagrants, drawUnits, drawEnemies, drawAnimals } from './scene/RenderEntities.js';
+import { drawEnemies } from './scene/RenderEntities.js';
+import { drawVagrants, drawUnits, drawAnimals } from './scene/RenderUnits.js';
 import { drawCoins, drawArrows, drawLootItems, drawChests, drawGroundBows, drawGroundHammers } from './scene/RenderItems.js';
 import { drawCaltrops, drawPoisonShots, drawFirePools, drawLegendaryEffects, drawParticles, drawFloats, drawSpells, drawCampLight } from './scene/RenderEffects.js';
 import { drawWeaponPickupOverlay, drawInventoryOverlay, drawShopOverlay, drawUpgradeMenu, drawXpBar, drawLegendaryIntro } from './scene/RenderUI.js';

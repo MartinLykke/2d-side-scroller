@@ -29,7 +29,7 @@
       <div class="hud-left">
         <div id="hud-day" class="hud-pill"><span class="icon" id="hud-phase-icon">☀</span> <span id="hud-day-text">Day 1</span> · <span id="hud-phase-text">Morning</span></div>
         <div id="hud-base" class="hud-pill">🏰 <span id="hud-base-text">Camp</span></div>
-        <div id="hud-skipnight" class="hud-pill" style="display:none;cursor:pointer;pointer-events:auto;" onclick="window._skipToDusk&&window._skipToDusk()">🌆 Skip to dusk <span style="opacity:0.65">[N]</span></div>
+        <div id="hud-skipnight" class="hud-pill" style="display:none;cursor:pointer;pointer-events:auto;">🌆 Skip to dusk <span style="opacity:0.65">[N]</span></div>
       </div>
       <div class="hud-center">
         <div id="hud-objective" class="hud-objective">Build up your base and survive the night</div>
@@ -46,7 +46,7 @@
           <span class="hud-ability-name">Arrow Rain</span>
           <span id="hud-arrow-rain-cd" class="hud-ability-cd">Ready</span>
         </div>
-        <div id="hud-skillpts" class="hud-pill" style="display:none;cursor:pointer;" onclick="window._openSkillTree&&window._openSkillTree()">🏹 <span id="hud-skillpts-text">0 ep</span></div>
+        <div id="hud-skillpts" class="hud-pill" style="display:none;cursor:pointer;">🏹 <span id="hud-skillpts-text">0 ep</span></div>
       </div>
     </div>
 
@@ -105,7 +105,7 @@
           <h2 id="st-title" style="margin:0;font-size:20px;color:#f2c14e;letter-spacing:2px;">🏹 ARCHER SKILL TREE</h2>
           <div style="display:flex;align-items:center;gap:16px;">
             <span id="st-points" style="color:#9bd05a;font-size:15px;font-weight:bold;"></span>
-            <button onclick="window._closeSkillTree()" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:#c8b890;padding:4px 14px;border-radius:6px;cursor:pointer;font-size:14px;font-family:inherit;">Close ✕</button>
+            <button id="st-close-btn" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:#c8b890;padding:4px 14px;border-radius:6px;cursor:pointer;font-size:14px;font-family:inherit;">Close ✕</button>
           </div>
         </div>
         <div id="st-tabs" style="display:flex;gap:8px;margin-bottom:14px;"></div>
@@ -121,109 +121,109 @@
       <div class="dev-section">
         <div class="dev-label">Gold &amp; Embers</div>
         <div class="dev-row">
-          <button class="dev-btn" onclick="DEV.addCoins(10)">+10 🪙</button>
-          <button class="dev-btn" onclick="DEV.addCoins(50)">+50 🪙</button>
-          <button class="dev-btn" onclick="DEV.give1000Gold()">+1000 🪙</button>
+          <button class="dev-btn" data-dev="coins10">+10 🪙</button>
+          <button class="dev-btn" data-dev="coins50">+50 🪙</button>
+          <button class="dev-btn" data-dev="coins1000">+1000 🪙</button>
         </div>
         <div class="dev-row">
-          <button class="dev-btn" onclick="DEV.addEmbers(10)">+10 🔥</button>
-          <button class="dev-btn" onclick="DEV.addEmbers(50)">+50 🔥</button>
-          <button class="dev-btn" onclick="DEV.addEmbers(500)">+500 🔥</button>
-          <button class="dev-btn dev-danger" onclick="DEV.resetUpgrades()">Reset upgrades</button>
+          <button class="dev-btn" data-dev="embers10">+10 🔥</button>
+          <button class="dev-btn" data-dev="embers50">+50 🔥</button>
+          <button class="dev-btn" data-dev="embers500">+500 🔥</button>
+          <button class="dev-btn dev-danger" data-dev="resetUpgrades">Reset upgrades</button>
         </div>
       </div>
 
       <div class="dev-section">
         <div class="dev-label">Time</div>
         <div class="dev-row">
-          <button class="dev-btn" onclick="DEV.skipToNight()">→ Night 🌙</button>
-          <button class="dev-btn" onclick="DEV.skipToDay()">→ Day ☀</button>
-          <button class="dev-btn dev-danger" onclick="DEV.skipToDay10()">Day 10 ☠</button>
-          <button class="dev-btn dev-danger" onclick="DEV.skipToDay15()">Day 15 ☠</button>
-          <button class="dev-btn dev-danger" onclick="DEV.skipToDay20()">Day 20 ☠</button>
+          <button class="dev-btn" data-dev="night">→ Night 🌙</button>
+          <button class="dev-btn" data-dev="day">→ Day ☀</button>
+          <button class="dev-btn dev-danger" data-dev="day10">Day 10 ☠</button>
+          <button class="dev-btn dev-danger" data-dev="day15">Day 15 ☠</button>
+          <button class="dev-btn dev-danger" data-dev="day20">Day 20 ☠</button>
         </div>
       </div>
 
       <div class="dev-section">
         <div class="dev-label">Base &amp; Healing</div>
         <div class="dev-row">
-          <button class="dev-btn" onclick="DEV.upgradeBase()">Upgrade base ⬆</button>
-          <button class="dev-btn" onclick="DEV.healAll()">Full heal 💚</button>
-          <button class="dev-btn dev-danger" onclick="DEV.maxBaseLevel()">Max base 🏰</button>
-          <button class="dev-btn dev-danger" onclick="DEV.maxWallLevels()">Max walls 🧱</button>
+          <button class="dev-btn" data-dev="upgradeBase">Upgrade base ⬆</button>
+          <button class="dev-btn" data-dev="healAll">Full heal 💚</button>
+          <button class="dev-btn dev-danger" data-dev="maxBase">Max base 🏰</button>
+          <button class="dev-btn dev-danger" data-dev="maxWalls">Max walls 🧱</button>
         </div>
       </div>
 
       <div class="dev-section">
         <div class="dev-label">Spawn enemy</div>
         <div class="dev-row">
-          <button class="dev-btn" onclick="DEV.spawnEnemyNearBase('imp')">Imp</button>
-          <button class="dev-btn" onclick="DEV.spawnEnemyNearBase('fireImp')">Flying Imp</button>
-          <button class="dev-btn" onclick="DEV.spawnEnemyNearBase('emberBrute')">Ember Brute</button>
-          <button class="dev-btn" onclick="DEV.spawnEnemyNearBase('ashPriest')">Ash Priest</button>
-          <button class="dev-btn" onclick="DEV.spawn8ImpsRight()">8x Imp</button>
-          <button class="dev-btn" onclick="DEV.spawnFireDragonBoss()">🐉 Dragon</button>
-          <button class="dev-btn" onclick="DEV.spawnMagmaGolemBoss()">Magma Colossus</button>
-          <button class="dev-btn dev-danger" onclick="DEV.killAll()">💀 Kill all</button>
+          <button class="dev-btn" data-dev="imp">Imp</button>
+          <button class="dev-btn" data-dev="fireImp">Flying Imp</button>
+          <button class="dev-btn" data-dev="emberBrute">Ember Brute</button>
+          <button class="dev-btn" data-dev="ashPriest">Ash Priest</button>
+          <button class="dev-btn" data-dev="8imp">8x Imp</button>
+          <button class="dev-btn" data-dev="dragon">🐉 Dragon</button>
+          <button class="dev-btn" data-dev="magmaGolem">Magma Colossus</button>
+          <button class="dev-btn dev-danger" data-dev="killAll">💀 Kill all</button>
         </div>
       </div>
 
       <div class="dev-section">
         <div class="dev-label">Spawn unit</div>
         <div class="dev-row">
-          <button class="dev-btn" onclick="DEV.spawnUnit('archer')">🏹</button>
-          <button class="dev-btn" onclick="DEV.spawnUnit('builder')">🔨</button>
-          <button class="dev-btn" onclick="DEV.spawnUnit('farmer')">🌾</button>
-          <button class="dev-btn" onclick="DEV.spawnUnit('guard')">🛡️</button>
-          <button class="dev-btn" onclick="DEV.spawnUnit('miner')">⛏️</button>
+          <button class="dev-btn" data-dev="unitArcher">🏹</button>
+          <button class="dev-btn" data-dev="unitBuilder">🔨</button>
+          <button class="dev-btn" data-dev="unitFarmer">🌾</button>
+          <button class="dev-btn" data-dev="unitGuard">🛡️</button>
+          <button class="dev-btn" data-dev="unitMiner">⛏️</button>
         </div>
       </div>
 
       <div class="dev-section">
         <div class="dev-label">Level units</div>
         <div class="dev-row">
-          <button class="dev-btn" onclick="DEV.levelUpUnits('archer',1)">🏹 +1 lvl</button>
-          <button class="dev-btn" onclick="DEV.levelUpUnits('archer',5)">🏹 +5 lvl</button>
-          <button class="dev-btn" onclick="DEV.levelUpUnits('guard',1)">🛡️ +1 lvl</button>
-          <button class="dev-btn" onclick="DEV.levelUpUnits('guard',5)">🛡️ +5 lvl</button>
+          <button class="dev-btn" data-dev="archerLvl1">🏹 +1 lvl</button>
+          <button class="dev-btn" data-dev="archerLvl5">🏹 +5 lvl</button>
+          <button class="dev-btn" data-dev="guardLvl1">🛡️ +1 lvl</button>
+          <button class="dev-btn" data-dev="guardLvl5">🛡️ +5 lvl</button>
         </div>
         <div class="dev-row">
-          <button class="dev-btn" onclick="DEV.addSkillPoints(5)">+5 skill pts</button>
-          <button class="dev-btn dev-danger" onclick="DEV.grantArcherSkills()">🏹 All skills</button>
+          <button class="dev-btn" data-dev="skillPts5">+5 skill pts</button>
+          <button class="dev-btn dev-danger" data-dev="archerAllSkills">🏹 All skills</button>
         </div>
       </div>
 
       <div class="dev-section">
         <div class="dev-label">Spawn animal</div>
         <div class="dev-row">
-          <button class="dev-btn" onclick="DEV.spawnAnimalNearBase('deer')">🦌 Deer</button>
-          <button class="dev-btn" onclick="DEV.spawnAnimalNearBase('rabbit')">🐇 Rabbit</button>
-          <button class="dev-btn" onclick="DEV.spawnAnimalNearBase('duck')">🦆 Duck</button>
-          <button class="dev-btn dev-danger" onclick="DEV.spawnAnimalNearBase('bear')">🐻 Bear</button>
+          <button class="dev-btn" data-dev="deer">🦌 Deer</button>
+          <button class="dev-btn" data-dev="rabbit">🐇 Rabbit</button>
+          <button class="dev-btn" data-dev="duck">🦆 Duck</button>
+          <button class="dev-btn dev-danger" data-dev="bear">🐻 Bear</button>
         </div>
       </div>
 
       <div class="dev-section">
         <div class="dev-label">Player &amp; Weapons</div>
         <div class="dev-row">
-          <button class="dev-btn" id="dev-god-btn" onclick="DEV.toggleGodMode()">God mode: ⚫ OFF</button>
-          <button class="dev-btn dev-danger" onclick="window._enterDeathHub&&window._enterDeathHub('Dev test: the crown fell between worlds.')">Death hub</button>
+          <button class="dev-btn" id="dev-god-btn" data-dev="godMode">God mode: ⚫ OFF</button>
+          <button class="dev-btn dev-danger" data-dev="deathHub">Death hub</button>
         </div>
         <div class="dev-row" id="dev-weapon-buttons">
-          <button class="dev-btn dev-danger" onclick="DEV.dropWeapon()">Drop</button>
+          <button class="dev-btn dev-danger" data-dev="dropWeapon">Drop</button>
         </div>
         <div class="dev-label" style="margin-top:6px;">Armor grants</div>
         <div class="dev-row" id="dev-armor-buttons">
-          <button class="dev-btn dev-danger" onclick="DEV.removeArmor()">Remove armor</button>
+          <button class="dev-btn dev-danger" data-dev="removeArmor">Remove armor</button>
         </div>
       </div>
 
       <div class="dev-section">
         <div class="dev-label">Game speed</div>
         <div class="dev-row">
-          <button class="dev-btn dev-speed-btn dev-active" id="dev-spd-1" onclick="DEV.setSpeed(1)">×1</button>
-          <button class="dev-btn dev-speed-btn" id="dev-spd-2" onclick="DEV.setSpeed(2)">×2</button>
-          <button class="dev-btn dev-speed-btn" id="dev-spd-4" onclick="DEV.setSpeed(4)">×4</button>
+          <button class="dev-btn dev-speed-btn dev-active" id="dev-spd-1" data-dev="speed1">×1</button>
+          <button class="dev-btn dev-speed-btn" id="dev-spd-2" data-dev="speed2">×2</button>
+          <button class="dev-btn dev-speed-btn" id="dev-spd-4" data-dev="speed4">×4</button>
         </div>
       </div>
     </div>

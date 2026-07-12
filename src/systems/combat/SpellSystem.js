@@ -10,6 +10,20 @@ import { ENEMY_TYPES } from '../../config/enemies.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { entityWallLift } from '../../entities/Wall.js';
 
+function spellGravity(spellType) {
+  return spellType === "meteor" ? 650 : spellType === "waterjet" ? 80 : 280;
+}
+
+function targetImpactY(target) {
+  const targetType = target?.type && ENEMY_TYPES[target.type];
+  if (targetType?.flying) return groundY + (target.fy || -80);
+
+  const stackY = target?.type === "imp" && target.aiState === "stacking" && target.impStackY !== undefined
+    ? target.impStackY
+    : (target?.fy || 0);
+  return groundY - 24 + stackY;
+}
+
 // Spell damage against a bear (bears live in state.animals, not enemies).
 function damageBear(a, dmg, col) {
   const crit = applyCrit(dmg, CFG.critChance, CFG.critMultiplier);
@@ -72,7 +86,7 @@ function chainLightning(x, dmg, bounces) {
   }
   if (!nearest) return;
 
-  const enemyDrawY = groundY - 24;
+  const enemyDrawY = targetImpactY(nearest);
 
   let curX = x;
   let curY = enemyDrawY;
@@ -127,7 +141,7 @@ export function castSpell(player, wBase, tgt) {
   const tgtIsBear = tgt.type === "bear" && state.animals.includes(tgt);
 
   if (wBase.spellType === "lightning") {
-    const enemyY = groundY - 24;
+    const enemyY = targetImpactY(tgt);
     if (tgtIsBear) {
       damageBear(tgt, ew.dmg * dmgMult, wBase.col);
       Audio.spell();
@@ -178,9 +192,11 @@ export function castSpell(player, wBase, tgt) {
   let startX = player.x;
   let startY = casterY;
   let targetX = tgt.x;
-  let targetY = groundY - 28;
+  let targetY = targetImpactY(tgt);
   let spd = wBase.spellType === "waterjet" ? 480 : 330;
   let life = 2.2;
+  let vx;
+  let vy;
 
   if (wBase.spellType === "meteor") {
     const dir = Math.sign(tgt.x - player.x) || 1;
@@ -188,16 +204,25 @@ export function castSpell(player, wBase, tgt) {
     startY = groundY - 1500;
     spd = 650;
     targetX = tgt.x + (210 * dir);
+    targetY = groundY - 28;
     life = 4.0;
+    const ang = Math.atan2(targetY - startY, targetX - startX);
+    vx = Math.cos(ang) * spd;
+    vy = Math.sin(ang) * spd;
+  } else {
+    const grav = spellGravity(wBase.spellType || "arcane");
+    const dx = targetX - startX;
+    const dy = targetY - startY;
+    const flightTime = Math.max(0.12, Math.hypot(dx, dy) / spd);
+    vx = dx / flightTime;
+    vy = (dy - 0.5 * grav * flightTime * flightTime) / flightTime;
   }
-
-  const ang = Math.atan2(targetY - startY, targetX - startX);
 
   state.spells.push({
     x: startX,
     y: startY,
-    vx: Math.cos(ang) * spd,
-    vy: Math.sin(ang) * spd,
+    vx,
+    vy,
     spellType: wBase.spellType || "arcane",
     dmg: ew.dmg * dmgMult,
     life: life,
@@ -218,7 +243,7 @@ export function updateSpells(dt) {
     sp.x += sp.vx * dt;
     sp.y += sp.vy * dt;
     sp.age = (sp.age || 0) + dt;
-    const grav = sp.spellType === "meteor" ? 650 : sp.spellType === "waterjet" ? 80 : 280;
+    const grav = spellGravity(sp.spellType);
     sp.vy += grav * dt;
     sp.life -= dt;
 
@@ -239,7 +264,7 @@ export function updateSpells(dt) {
     for (const e of enemies) {
       if (e.fleeing) continue;
       const et = ENEMY_TYPES[e.type];
-      const ey = groundY + (e.fy || 0) - 24;
+      const ey = targetImpactY(e);
       if (dist(sp.x, e.x) < et.w * 0.75 && Math.abs(sp.y - ey) < 44) {
         e.hp -= sp.dmg; e.flash = 0.14; Audio.hit();
         if (sp.spellType === "meteor") {

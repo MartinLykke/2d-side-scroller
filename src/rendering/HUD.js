@@ -3,6 +3,7 @@ import { WEAPONS, RARITY_COL, RARITY_NAME } from '../config/weapons.js';
 import { ARMORS, ARMOR_RARITY_COL, ARMOR_RARITY_NAME } from '../config/armor.js';
 import { dist, clamp, rand } from '../util/math.js';
 import { Game, state } from '../core/state.js';
+import { inject, provide } from '../core/services.js';
 import { Audio } from '../systems/infrastructure/Audio.js';
 import { spawnEnemy, spawnFireDragon, spawnBoss, planNight, floaty, spawnParticles } from '../systems/world/SpawnSystem.js';
 import { pick } from '../util/math.js';
@@ -151,9 +152,6 @@ export function closeSkillTree() {
   if (Game.state === "pause") Game.state = "play";
 }
 
-window._closeSkillTree = closeSkillTree;
-window._openSkillTree  = openSkillTree;
-window._skipToDusk = () => UI.skipToDusk();
 
 function phaseName() {
   const t=Game.time;
@@ -336,7 +334,7 @@ function renderDevArmorButtons() {
   if (removeButton) row.appendChild(removeButton);
 }
 
-// ---- Dev tools (exposed on window so inline onclick= buttons work) ----
+// ---- Dev tools ----
 export const DEV = {
   godMode:   false,
   speedMult: 1,
@@ -402,14 +400,13 @@ export const DEV = {
 
   upgradeBase() {
     if (Game.state!=="play"||state.base.level>=CFG.maxBaseLevel) return;
-    // call the upgradeBase exported from game.js via window
-    window._upgradeBase?.();
+    inject('upgradeBase')?.();
   },
 
   maxBaseLevel() {
     if (Game.state!=="play") return;
     while (state.base.level < CFG.maxBaseLevel) {
-      window._upgradeBase?.();
+      inject('upgradeBase')?.();
     }
     floaty(state.base.x, "🏰 Max level reached!", "#f2c14e");
   },
@@ -501,7 +498,7 @@ export const DEV = {
 
   toggleGodMode() {
     this.godMode=!this.godMode;
-    window._DEV_GOD_MODE=this.godMode;
+    provide('godMode', this.godMode);
     const btn=document.getElementById("dev-god-btn");
     btn.textContent="God mode: "+(this.godMode?"🟢 ON":"⚫ OFF");
     btn.classList.toggle("dev-active",this.godMode);
@@ -516,7 +513,7 @@ export const DEV = {
 
   giveWeapon(weaponId) {
     if (Game.state!=="play") return;
-    window._pickupWeapon?.(weaponId);
+    inject('pickupWeapon')?.(weaponId);
   },
 
   giveArmor(armorId) {
@@ -592,7 +589,8 @@ export const DEV = {
 
 };
 
-// Expose DEV globally so index.html onclick= attributes still work
-window.DEV = DEV;
 renderDevWeaponButtons();
 renderDevArmorButtons();
+
+// Keep the documented dev-console entry point while UI events are wired by DevPanel.js.
+window.DEV = DEV;

@@ -2,6 +2,7 @@ import { CFG } from '../../config/config.js';
 import { clamp, dist, rand } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
+import { inject } from '../../core/services.js';
 import { Audio } from '../infrastructure/Audio.js';
 import { spawnCoin, spawnParticles } from '../world/SpawnSystem.js';
 
@@ -25,7 +26,7 @@ function paymentBatchSize(station) {
 
 export function updatePayment(dt) {
   const { player, stations } = state;
-  const keys = window._KEYS || {};
+  const keys = inject('keys') || {};
   state.payCooldown -= dt;
 
   if (player.onWall || (player.wallClimbT || 0) > 0.02) {

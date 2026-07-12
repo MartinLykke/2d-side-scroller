@@ -4,6 +4,7 @@ import { ARMORS, ARMOR_RARITY_COL, ARMOR_RARITY_NAME, armorBlockChance } from '.
 import { ENEMY_TYPES } from '../../config/enemies.js';
 import { ctx, W, H, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
+import { inject, provide } from '../../core/services.js';
 import { roundedRect, drawHeart } from '../DrawHelpers.js';
 import { drawWeaponModel, drawArmorModel, drawHeldWeapon, WEAPON_TYPE_LABEL } from '../ItemRender.js';
 import { drawPlayer as drawPlayerBody } from '../sprites/Player.js';
@@ -15,7 +16,7 @@ const GOLD = "#f2c14e";
 const PARCH = "#f0e6cf";
 const MUTED = "rgba(200,190,170,0.72)";
 
-function mouse() { return window._mouse || { x: -9999, y: -9999 }; }
+function mouse() { return inject('mouse') || { x: -9999, y: -9999 }; }
 function inRect(m, r) { return r && m.x >= r.x && m.x <= r.x + r.w && m.y >= r.y && m.y <= r.y + r.h; }
 
 function panel(x, y, w, h, r = 16) {
@@ -265,7 +266,7 @@ function drawEquipSlot(r, item, label, hovered) {
 }
 
 export function drawInventoryOverlay() {
-  if (!Game.inventoryOpen) { window._invRects = null; return; }
+  if (!Game.inventoryOpen) { provide('invRects', null); return; }
   const { player } = state;
   if (!player) return;
   const m = mouse();
@@ -399,7 +400,7 @@ export function drawInventoryOverlay() {
     ctx.fillText("+" + hiddenCount + " more stored…", gridX, gridY + rows * (cell + 6) + 12);
   }
 
-  window._invRects = { weapon: weaponRect, armor: armorRect, cells, cols };
+  provide('invRects', { weapon: weaponRect, armor: armorRect, cells, cols });
 
   // tooltips last, on top of everything
   if (hoveredItem) drawItemTooltip(hoveredItem, m.x, m.y);
@@ -423,7 +424,7 @@ function statDelta(cur, next, invert = false) {
 }
 
 export function drawShopOverlay() {
-  if (!Game.shopOpen) { window._shopRects = null; return; }
+  if (!Game.shopOpen) { provide('shopRects', null); return; }
   const { player } = state;
   if (!player) return;
   const m = mouse();
@@ -601,7 +602,7 @@ export function drawShopOverlay() {
     ctx.fillText("Nothing for sale in this tab yet.", px0 + panelW / 2, dy + detailH / 2);
   }
 
-  window._shopRects = { tabs, cells, buy: buyRect };
+  provide('shopRects', { tabs, cells, buy: buyRect });
   if (hoveredShopItem) drawItemTooltip(hoveredShopItem, m.x, m.y);
   ctx.restore();
 }

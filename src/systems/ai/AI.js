@@ -14,6 +14,10 @@ import { nearestChoppableTree, chopTree, nearestLog, deliverLog, pondAt, nearest
 import { minerAI } from '../world/MineSystem.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { addSkillPoints } from '../economy/SkillSystem.js';
+import { archerAI as archerRoleAI } from './ArcherAI.js';
+import { builderAI as builderRoleAI } from './BuilderAI.js';
+import { farmerAI as farmerRoleAI } from './FarmerAI.js';
+import { guardAI as guardRoleAI } from './GuardAI.js';
 
 function hasSkill(id) { return state.archerSkills.includes(id); }
 
@@ -1151,11 +1155,11 @@ function assignFixedSide(u) {
 
 // Dispatch table replaces the if/else chain in updateUnits.
 const AI_HANDLERS = {
-  archer:  archerAI,
-  builder: builderAI,
-  farmer:  farmerAI,
+  archer:  archerRoleAI,
+  builder: builderRoleAI,
+  farmer:  farmerRoleAI,
   peasant: peasantAI,
-  guard:   guardAI,
+  guard:   guardRoleAI,
   miner:   minerAI,
 };
 

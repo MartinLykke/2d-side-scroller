@@ -132,6 +132,20 @@ export function spawnEnemy(type, portal) {
     poisonCd: t.rangedShoot ? rand(1, t.shootInterval || 5) : undefined,
     nightWave: Game.isNight,
   };
+  if (type === "ashPriest") {
+    Object.assign(enemy, {
+      ashReady: false,
+      ashScorchCd: rand(1.2, 3.2),
+      ashWardCd: rand(1.5, 4.2),
+      ashBurstCd: rand(2.0, 4.4),
+      ashChannelT: 0,
+      ashChannelMax: 0.72,
+      ashCastFlash: 0,
+      ashWardFlash: 0,
+      ashBurstFlash: 0,
+      attackKind: "",
+    });
+  }
   state.enemies.push(enemy);
   return enemy;
 }

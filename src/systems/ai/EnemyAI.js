@@ -3,6 +3,7 @@ import { ENEMY_TYPES } from '../../config/enemies.js';
 import { clamp, lerp, dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
+import { inject } from '../../core/services.js';
 import { Audio } from '../infrastructure/Audio.js';
 import { spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js';
 import { meleeHitPlayer, damagePlayer } from '../combat/PlayerCombat.js';
@@ -1321,7 +1322,7 @@ export function updateEnemies(dt) {
         e.chargeT = (e.chargeT || 0) + dt;
         e.x += e.chargeDir * t.speed * 3.2 * dt;
         if (Math.random() < 0.6) spawnParticles(e.x - e.chargeDir * 10, groundY - 6, 2, "#ff6a20", 40, 40);
-        const hitPlayer = !Game.inMine && dist(e.x, player.x) < 34 && player.invuln <= 0 && !window._DEV_GOD_MODE;
+        const hitPlayer = !Game.inMine && dist(e.x, player.x) < 34 && player.invuln <= 0 && !inject('godMode');
         if (hitPlayer) {
           meleeHitPlayer(e, { ...t, meleeDmg: (t.meleeDmg || 1) + 1 }, 340);
           e.charging = false;
@@ -1385,6 +1386,8 @@ export function updateEnemies(dt) {
       continue;
     }
 
+    if (e.type === "ashPriest" && updateAshPriest(e, t, dt)) continue;
+
     if (e.type === "imp" && updateImp(e, t, dt)) continue;
 
     const side = e.x < CFG.baseX ? -1 : 1;
@@ -1429,7 +1432,7 @@ export function updateEnemies(dt) {
       } else if (e.aiState === "attacking") {
         // Windup phase: stop moving, wait before attacking
         if (e.stateTimer <= 0) {
-          if (d < 30 && playerCombatLift() <= 4 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
+          if (d < 30 && playerCombatLift() <= 4 && player.invuln <= 0 && !inject('godMode')) {
             const hadCoins = player.coins > 0;
             if (meleeHitPlayer(e, t, 230) && hadCoins) e.carry++;
             changeState(e, "recovery", 0.4);
@@ -1553,7 +1556,7 @@ function updateLocEnemy(e, t, dt) {
       if (e.stateTimer <= 0) changeState(e, "chasing", 0);
     } else if (e.aiState === "attacking") {
       if (e.stateTimer <= 0) {
-        if (dp < 32 && playerCombatLift() <= 4 && player.invuln <= 0 && !window._DEV_GOD_MODE) {
+        if (dp < 32 && playerCombatLift() <= 4 && player.invuln <= 0 && !inject('godMode')) {
           changeState(e, "recovery", 0.4);
           e.attackCd = 1.0;
           meleeHitPlayer(e, t, 220);

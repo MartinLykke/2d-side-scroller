@@ -1,17 +1,27 @@
 import { state, Game } from '../../core/state.js';
 import { canvas, W, H } from '../../core/canvas.js';
-import { UI, closeSkillTree, openSkillTree } from '../../rendering/HUD.js';
+import { inject, provide } from '../../core/services.js';
+import { UI, DEV, closeSkillTree, openSkillTree } from '../../rendering/HUD.js';
 import { tryOpenShop, handleShopKeys, currentShopList, tryBuyShopItem } from '../economy/ShopSystem.js';
 import { equipFromInventory, unequipWeapon, unequipArmor, ensureInventory } from '../economy/InventorySystem.js';
 import { applyUpgrade } from '../economy/UpgradeSystem.js';
 import { triggerBarrage } from '../ai/AI.js';
 import { tryToggleMine } from '../world/MineSystem.js';
+import { setupDevPanel } from './DevPanel.js';
 
 export function setupInputHandlers() {
   // UI buttons
   document.getElementById("btn-start").addEventListener("click", ()=>Game.start(false));
   document.getElementById("btn-continue").addEventListener("click", ()=>Game.start(true));
   document.getElementById("btn-restart").addEventListener("click", ()=>Game.start(false));
+
+  // HUD buttons
+  document.getElementById("hud-skipnight").addEventListener("click", () => UI.skipToDusk());
+  document.getElementById("hud-skillpts").addEventListener("click", () => openSkillTree());
+  document.getElementById("st-close-btn").addEventListener("click", () => closeSkillTree());
+
+  // Dev panel
+  setupDevPanel();
 
   // Difficulty buttons
   document.querySelectorAll('.diff-btn').forEach(btn => {
@@ -28,13 +38,14 @@ export function setupInputHandlers() {
   canvas.addEventListener("wheel", handleWheel, { passive: false });
 
   // Mouse position for canvas-drawn UI (inventory/shop hover + tooltips)
-  window._mouse = { x: -9999, y: -9999 };
+  const mouse = { x: -9999, y: -9999 };
+  provide('mouse', mouse);
   canvas.addEventListener("mousemove", (e) => {
     const rect = canvas.getBoundingClientRect();
-    window._mouse.x = (e.clientX - rect.left) * (W / rect.width);
-    window._mouse.y = (e.clientY - rect.top) * (H / rect.height);
+    mouse.x = (e.clientX - rect.left) * (W / rect.width);
+    mouse.y = (e.clientY - rect.top) * (H / rect.height);
   });
-  canvas.addEventListener("mouseleave", () => { window._mouse.x = -9999; window._mouse.y = -9999; });
+  canvas.addEventListener("mouseleave", () => { mouse.x = -9999; mouse.y = -9999; });
 
   // Inventory + shop item clicks
   canvas.addEventListener("mousedown", handleCanvasClick);
@@ -43,7 +54,7 @@ export function setupInputHandlers() {
 function handleKeydown(e) {
   const k = e.key.toLowerCase();
   if (k === "m") UI.toggleMute();
-  if (k === "p") window.DEV?.toggle();
+  if (k === "p") DEV.toggle();
   if (k === "escape") {
     if (Game.skillTreeOpen) { closeSkillTree(); return; }
     Game.inventoryOpen = false; Game.shopOpen = false; Game.upgradeMenuOpen = false;
@@ -105,7 +116,7 @@ function handleCanvasClick(e) {
 }
 
 function handleInventoryClick(mx, my) {
-  const R = window._invRects;
+  const R = inject('invRects');
   if (!R || !state.player) return;
   if (hitRect(mx, my, R.weapon) && state.player.weapon) { unequipWeapon(); return; }
   if (hitRect(mx, my, R.armor) && state.player.armor)   { unequipArmor(); return; }
@@ -119,7 +130,7 @@ function handleInventoryClick(mx, my) {
 }
 
 function handleShopClick(mx, my) {
-  const R = window._shopRects;
+  const R = inject('shopRects');
   if (!R) return;
   for (const tr of R.tabs || []) {
     if (hitRect(mx, my, tr)) { Game.shopTab = tr.tab; Game.shopIdx = 0; return; }

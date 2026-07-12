@@ -5,6 +5,7 @@ import { ENEMY_TYPES } from '../../config/enemies.js';
 import { dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
+import { inject } from '../../core/services.js';
 import { Audio } from '../infrastructure/Audio.js';
 import { spawnGoldReward, spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js';
 import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js';
@@ -69,7 +70,7 @@ function meleeWeaponImpact(weaponId, x, y) {
 // can't be hit right now (mine, i-frames, god mode, already dead).
 export function damagePlayer(rawDmg, opts = {}) {
   const { player } = state;
-  if (Game.inMine || player.hp <= 0 || player.invuln > 0 || window._DEV_GOD_MODE) return null;
+  if (Game.inMine || player.hp <= 0 || player.invuln > 0 || inject('godMode')) return null;
   const armor = player.armor ? ARMORS[player.armor] : null;
   const def = armor ? (armor.defense || 0) : 0;
   let dmg = Math.max(1, Math.round(rawDmg - def / 3));

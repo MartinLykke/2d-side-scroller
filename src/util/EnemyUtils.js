@@ -2,6 +2,7 @@ import { ENEMY_TYPES } from '../config/enemies.js';
 import { WEAPONS } from '../config/weapons.js';
 import { groundY } from '../core/canvas.js';
 import { Game, state } from '../core/state.js';
+import { inject } from '../core/services.js';
 import { spawnGoldReward, spawnParticles } from '../systems/world/SpawnSystem.js';
 import { Audio } from '../systems/infrastructure/Audio.js';
 import { registerEnemyKill } from '../systems/infrastructure/RoguelikeSystem.js';
@@ -66,7 +67,8 @@ export function killEnemyWithAnimation(e, knockDirection = 0) {
 
   Audio.enemyDie();
   registerEnemyKill(t.reward);
-  if (window._addXP) window._addXP(t.reward * 8);
+  const addXP = inject('addXP');
+  if (addXP) addXP(t.reward * 8);
 
   if (t.legendary && state.legendaryBoss === e) {
     state.legendaryBoss = null;

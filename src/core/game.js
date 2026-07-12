@@ -35,22 +35,22 @@ import { newGame, buildStations } from '../systems/infrastructure/GameInit.js';
 import { initMeta, enterDeathHub, updateHub, updateHubTransition, renderHub } from '../systems/infrastructure/RoguelikeSystem.js';
 import { updateLootItems, updateWeaponPickup, updateChests, updateLootPhysics, setPickupWeapon as setLootPickupWeapon } from '../systems/economy/LootSystem.js';
 import { setupInputHandlers } from '../systems/input/InputHandler.js';
+import { provide } from './services.js';
 
 // Setup callbacks between modules to avoid circular dependencies
 setBuildStations(buildStations);
 setShopPickupWeapon(pickupWeapon);
 setLootPickupWeapon(pickupWeapon);
-// Make keys and shop data available to other systems via window
-window._KEYS = keys;
-window._DEV_GOD_MODE = false;
-window._floaty = floaty;
-window._WEAPON_SHOP = WEAPON_SHOP;
-window._ARMOR_SHOP  = ARMOR_SHOP;
 
-window._upgradeBase = upgradeBase;
-window._pickupWeapon = pickupWeapon;
-window._addXP = addXP;
-window._enterDeathHub = enterDeathHub;
+provide('keys', keys);
+provide('godMode', false);
+provide('floaty', floaty);
+provide('weaponShop', WEAPON_SHOP);
+provide('armorShop', ARMOR_SHOP);
+provide('upgradeBase', upgradeBase);
+provide('pickupWeapon', pickupWeapon);
+provide('addXP', addXP);
+provide('enterDeathHub', enterDeathHub);
 
 // ---------- Update ----------
 function updateTime(dt) {

@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Smoke Tests - Crown of Embers</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #171717; color: #ddd; font: 14px/1.55 Consolas, monospace; padding: 20px; }
+  h1 { color: #f2c14e; margin: 0 0 4px; font-size: 19px; }
+  .subtitle { color: #999; margin: 0 0 16px; }
+  #controls { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+  button { background: #2d4f2d; color: #eee; border: 1px solid #4a8a4a; padding: 6px 14px; border-radius: 4px; cursor: pointer; font: inherit; }
+  button:disabled { opacity: 0.55; cursor: wait; }
+  #summary { color: #aaa; }
+  .test { max-width: 980px; display: flex; gap: 12px; align-items: center; padding: 6px 10px; margin: 2px 0; border-left: 3px solid #555; background: rgba(255,255,255,0.03); }
+  .test.pass { border-color: #4a4; }
+  .test.fail { border-color: #b44; }
+  .test.skip { border-color: #aa4; }
+  .name { flex: 1; }
+  .detail { color: #888; max-width: 460px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .status { width: 58px; text-align: right; font-weight: bold; }
+  .pass .status { color: #7d7; }
+  .fail .status { color: #e88; }
+  .skip .status { color: #dd7; }
+  .fixture, .game-frame { position: absolute; left: -10000px; top: 0; width: 1px; height: 1px; overflow: hidden; }
+</style>
+</head>
+<body>
+<h1>Smoke Tests</h1>
+<p class="subtitle">Crown of Embers - lightweight browser smoke suite</p>
+<div id="controls">
+  <button id="run-btn">Run All Tests</button>
+  <span id="summary"></span>
+</div>
+<div id="results"></div>
+
+<!-- Minimal DOM fixture for modules that touch canvas/HUD at import time. -->
+<div class="fixture" aria-hidden="true">
+  <canvas id="game"></canvas>
+  <div id="hud"></div>
+  <div id="prompt"></div>
+  <div id="start-screen"></div>
+  <div id="end-screen"></div>
+  <div id="pause-screen"></div>
+  <div id="skill-tree-screen"></div>
+  <div id="st-branches"></div>
+  <div id="st-ultimates"></div>
+  <div id="st-points"></div>
+  <div id="st-title"></div>
+  <div id="st-tabs"></div>
+  <div id="hud-day-text"></div>
+  <div id="hud-phase-text"></div>
+  <div id="hud-phase-icon"></div>
+  <div id="hud-base"></div>
+  <div id="hud-base-text"></div>
+  <div id="hud-skipnight"></div>
+  <div id="hud-coins-text"></div>
+  <div id="hud-hp"></div>
+  <div id="hud-hp-text"></div>
+  <div id="hud-pop"></div>
+  <div id="hud-pop-text"></div>
+  <div id="hud-arch-text"></div>
+  <div id="hud-build-text"></div>
+  <div id="hud-objective"></div>
+  <div id="hud-weapon"></div>
+  <div id="hud-weapon-text"></div>
+  <div id="hud-armor"></div>
+  <div id="hud-armor-text"></div>
+  <div id="hud-skillpts"></div>
+  <div id="hud-skillpts-text"></div>
+  <div id="hud-arrow-rain"></div>
+  <div id="hud-arrow-rain-cd"></div>
+  <div id="hud-arrow-rain-fill"></div>
+  <div id="dev-panel"></div>
+  <button id="dev-god-btn"></button>
+  <button id="dev-spd-1" class="dev-speed-btn"></button>
+  <button id="dev-spd-2" class="dev-speed-btn"></button>
+  <button id="dev-spd-4" class="dev-speed-btn"></button>
+  <div id="dev-weapon-buttons"><button class="dev-danger"></button></div>
+  <div id="dev-armor-buttons"><button class="dev-danger"></button></div>
+</div>
+
+<script type="module">
+const results = document.getElementById("results");
+const summary = document.getElementById("summary");
+const runButton = document.getElementById("run-btn");
+
+let passed = 0;
+let failed = 0;
+let skipped = 0;
+let total = 0;
+
+function log(name, ok, detail = "") {
+  total++;
+  const status = ok === null ? "skip" : ok ? "pass" : "fail";
+  if (ok === true) passed++;
+  else if (ok === false) failed++;
+  else skipped++;
+
+  const row = document.createElement("div");
+  row.className = `test ${status}`;
+  row.innerHTML = `<span class="name">${name}</span>`
+    + (detail ? `<span class="detail">${detail}</span>` : "")
+    + `<span class="status">${status.toUpperCase()}</span>`;
+  results.appendChild(row);
+}
+
+function updateSummary() {
+  summary.textContent = `${passed} passed, ${failed} failed, ${skipped} skipped, ${total} total`;
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function testModuleImports() {
+  const modules = [
+    ["state", "./src/core/state.js"],
+    ["services", "./src/core/services.js"],
+    ["config", "./src/config/config.js"],
+    ["weapons", "./src/config/weapons.js"],
+    ["armor", "./src/config/armor.js"],
+    ["enemies", "./src/config/enemies.js"],
+    ["Player", "./src/entities/Player.js"],
+    ["Unit", "./src/entities/Unit.js"],
+    ["Wall", "./src/entities/Wall.js"],
+    ["SaveSystem", "./src/systems/infrastructure/SaveSystem.js"],
+    ["ShopSystem", "./src/systems/economy/ShopSystem.js"],
+    ["SpawnSystem", "./src/systems/world/SpawnSystem.js"],
+    ["Economy", "./src/systems/economy/Economy.js"],
+    ["AI", "./src/systems/ai/AI.js"],
+    ["AIHelpers", "./src/systems/ai/AIHelpers.js"],
+    ["ArcherAI", "./src/systems/ai/ArcherAI.js"],
+    ["BuilderAI", "./src/systems/ai/BuilderAI.js"],
+    ["FarmerAI", "./src/systems/ai/FarmerAI.js"],
+    ["GuardAI", "./src/systems/ai/GuardAI.js"],
+    ["EnemyAI", "./src/systems/ai/EnemyAI.js"],
+    ["EnemyShared", "./src/systems/ai/EnemyShared.js"],
+    ["EnemyTargeting", "./src/systems/ai/EnemyTargeting.js"],
+    ["ImpCombatAI", "./src/systems/ai/ImpCombatAI.js"],
+    ["ImpWallAI", "./src/systems/ai/ImpWallAI.js"],
+  ];
+
+  for (const [name, path] of modules) {
+    try {
+      await import(path);
+      log(`Import: ${name}`, true);
+    } catch (e) {
+      log(`Import: ${name}`, false, e.message);
+    }
+  }
+}
+
+async function testConfigData() {
+  try {
+    const { CFG } = await import("./src/config/config.js");
+    log("Config: world/base numbers", Number.isFinite(CFG.worldWidth) && Number.isFinite(CFG.baseX), `world=${CFG.worldWidth}, base=${CFG.baseX}`);
+    log("Config: day phases ordered", CFG.phases.day < CFG.phases.dusk && CFG.phases.dusk < CFG.phases.night);
+
+    const { WEAPONS } = await import("./src/config/weapons.js");
+    const weaponCount = Object.keys(WEAPONS || {}).length;
+    log("Config: weapons loaded", weaponCount > 0, `${weaponCount} weapons`);
+
+    const { ARMORS } = await import("./src/config/armor.js");
+    const armorCount = Object.keys(ARMORS || {}).length;
+    log("Config: armor loaded", armorCount > 0, `${armorCount} armor pieces`);
+
+    const { ENEMY_TYPES } = await import("./src/config/enemies.js");
+    log("Config: enemies loaded", Object.keys(ENEMY_TYPES || {}).length > 0, Object.keys(ENEMY_TYPES || {}).join(", "));
+  } catch (e) {
+    log("Config: data loading", false, e.message);
+  }
+}
+
+async function testFactoriesAndServices() {
+  try {
+    const { provide, inject } = await import("./src/core/services.js");
+    provide("smokeValue", 42);
+    log("Services: provide/inject", inject("smokeValue") === 42);
+  } catch (e) {
+    log("Services: provide/inject", false, e.message);
+  }
+
+  try {
+    const { makePlayer } = await import("./src/entities/Player.js");
+    const p = makePlayer();
+    log("Player: factory shape", p && Number.isFinite(p.x) && p.hp > 0 && Array.isArray(p.inventory), `hp=${p.hp}`);
+  } catch (e) {
+    log("Player: factory", false, e.message);
+  }
+
+  try {
+    const { makeUnit } = await import("./src/entities/Unit.js");
+    for (const role of ["archer", "builder", "farmer", "guard", "miner"]) {
+      const u = makeUnit(role, 4500);
+      log(`Unit: ${role}`, u.role === role && Number.isFinite(u.x), `hp=${u.hp}`);
+    }
+  } catch (e) {
+    log("Unit: factory", false, e.message);
+  }
+
+  try {
+    const { makeWall } = await import("./src/entities/Wall.js");
+    const w = makeWall({ x: 4000, side: -1 });
+    log("Wall: factory shape", w.x === 4000 && w.side === -1 && w.level === 0 && !w.commissioned);
+  } catch (e) {
+    log("Wall: factory", false, e.message);
+  }
+}
+
+async function testGameBoot() {
+  const saveKey = "kingdom_embers_save_v1";
+  const metaKey = "kingdom_embers_meta_v1";
+  const oldSave = localStorage.getItem(saveKey);
+  const oldMeta = localStorage.getItem(metaKey);
+  let iframe = null;
+
+  try {
+    iframe = document.createElement("iframe");
+    iframe.className = "game-frame";
+    iframe.src = `./index.html?smoke=${Date.now()}`;
+    document.body.appendChild(iframe);
+
+    await new Promise((resolve, reject) => {
+      iframe.onload = resolve;
+      iframe.onerror = () => reject(new Error("iframe load failed"));
+      setTimeout(() => reject(new Error("iframe load timeout")), 8000);
+    });
+
+    const win = iframe.contentWindow;
+    await sleep(1200);
+
+    log("Boot: canvas exists", !!win.document.getElementById("game"));
+    log("Boot: DEV global exists", !!win.DEV && typeof win.DEV.addCoins === "function");
+
+    const startButton = win.document.getElementById("btn-start");
+    if (!startButton || !win.DEV) {
+      log("Boot: startable", false, "missing start button or DEV");
+      return;
+    }
+
+    startButton.click();
+    await sleep(1200);
+    log("Boot: start button clicked", true);
+
+    const actions = [
+      ["DEV: addCoins", () => win.DEV.addCoins(100)],
+      ["DEV: toggleGodMode", () => { win.DEV.toggleGodMode(); win.DEV.toggleGodMode(); }],
+      ["DEV: healAll", () => win.DEV.healAll()],
+      ["DEV: setSpeed", () => { win.DEV.setSpeed(2); win.DEV.setSpeed(1); }],
+      ["DEV: spawn archer", () => win.DEV.spawnUnit("archer")],
+      ["DEV: spawn imp", () => win.DEV.spawnEnemyNearBase("imp")],
+      ["DEV: killAll", () => win.DEV.killAll()],
+      ["DEV: skipToNight", () => win.DEV.skipToNight()],
+      ["DEV: skipToDay", () => win.DEV.skipToDay()],
+      ["DEV: upgradeBase", () => { win.DEV.addCoins(1000); win.DEV.upgradeBase(); }],
+      ["DEV: give/drop weapon", () => { win.DEV.giveWeapon("short_bow"); win.DEV.dropWeapon(); }],
+    ];
+
+    for (const [name, action] of actions) {
+      try {
+        action();
+        await sleep(120);
+        log(name, true);
+      } catch (e) {
+        log(name, false, e.message);
+      }
+    }
+
+    await sleep(1400);
+    const saveData = win.localStorage.getItem(saveKey);
+    log("Save: autosave present", !!saveData, saveData ? `${saveData.length} chars` : "no save");
+    if (saveData) {
+      const parsed = JSON.parse(saveData);
+      log("Save: valid fields", typeof parsed.day === "number" && typeof parsed.hp === "number" && typeof parsed.px === "number",
+        `day=${parsed.day}, hp=${parsed.hp}, x=${parsed.px}`);
+    }
+  } catch (e) {
+    log("Boot: iframe run", false, e.message);
+  } finally {
+    if (iframe) iframe.remove();
+    if (oldSave === null) localStorage.removeItem(saveKey); else localStorage.setItem(saveKey, oldSave);
+    if (oldMeta === null) localStorage.removeItem(metaKey); else localStorage.setItem(metaKey, oldMeta);
+  }
+}
+
+async function runAll() {
+  passed = failed = skipped = total = 0;
+  results.innerHTML = "";
+  summary.textContent = "Running...";
+  runButton.disabled = true;
+
+  await testModuleImports();
+  updateSummary();
+  await testConfigData();
+  updateSummary();
+  await testFactoriesAndServices();
+  updateSummary();
+  await testGameBoot();
+  updateSummary();
+
+  runButton.disabled = false;
+  document.title = `Smoke Tests - ${passed}/${total} passed`;
+}
+
+runButton.addEventListener("click", runAll);
+</script>
+</body>
+</html>

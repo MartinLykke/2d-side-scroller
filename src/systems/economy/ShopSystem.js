@@ -1,4 +1,5 @@
 import { state, Game } from '../../core/state.js';
+import { inject } from '../../core/services.js';
 import { WEAPONS } from '../../config/weapons.js';
 import { ARMORS } from '../../config/armor.js';
 import { dist } from '../../util/math.js';
@@ -92,7 +93,7 @@ export function isShopItemOwned(item) {
 
 export function tryBuyShopItem(item) {
   if (!item) return;
-  const floaty = window._floaty;
+  const floaty = inject('floaty');
   if (isShopItemOwned(item)) {
     if (floaty) floaty(state.player.x, "Already owned", "#c8c8c8");
     return;
