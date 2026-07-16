@@ -1,6 +1,7 @@
 import { clamp, lerp } from '../../util/math.js';
 import { ctx, groundY } from '../../core/canvas.js';
 import { state } from '../../core/state.js';
+import { visibleWorldBounds } from '../Viewport.js';
 
 // ---------------------------------------------------------------------------
 // Procedural forest game: deer and rabbit.
@@ -518,150 +519,329 @@ function drawDuck(a) {
 }
 
 // ---------------- Bear ----------------
-const BEAR = { body: "#5a4028", dark: "#463020", belly: "#6e5236", muzzle: "#8a6a48", claw: "#2c2018", eye: "#1a120a" };
+// Big shaggy grizzly, roughly twice the bulk of a human. Authored facing +x
+// with the origin at (a.x, groundY): ground is y=0, up is negative y.
+// AI drives it via a.moving (actually covering ground this frame), a.charging,
+// and a.attackAnim/attackDur/strikeAt (windup → paw lands at the strike frame).
+const BEAR = {
+  coat: "#4e3a25", coatDark: "#382a19", shag: "#2e2213",
+  nose: "#16100a", eye: "#100b06", eyeHighlight: "#c7ad86",
+  claw: "#d9cfba", mouth: "#42120b", teeth: "#e6ddc8",
+};
+
+// Deterministic per-tuft jitter so the shaggy edges don't flicker per frame
+function tuftJitter(i) {
+  const s = Math.sin(i * 127.1 + 311.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+
+// Soft fur fringe hanging below (sign=1) or lifting above (sign=-1) the
+// line from (x0,y0) to (x1,y1).
+function furFringe(x0, y0, x1, y1, len, sign, color, seed) {
+  const n = Math.max(4, Math.round(Math.abs(x1 - x0) / 5.5));
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.lineWidth = Math.max(1.1, Math.min(2.4, len * 0.24));
+  ctx.globalAlpha *= 0.82;
+  for (let i = 0; i < n; i++) {
+    const mid = (i + 0.5) / n;
+    const bx = lerp(x0, x1, mid), by = lerp(y0, y1, mid);
+    const l = len * (0.42 + tuftJitter(i + seed) * 0.42);
+    const sway = (tuftJitter(i + seed + 31) - 0.5) * 3.2;
+    const curl = (tuftJitter(i + seed + 67) - 0.5) * 2.2;
+    ctx.beginPath();
+    ctx.moveTo(bx - sway * 0.15, by);
+    ctx.quadraticCurveTo(
+      bx + curl,
+      by + sign * l * 0.52,
+      bx + sway,
+      by + sign * l
+    );
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// Short downward strokes over the flank that read as hanging fur
+const BEAR_FLANK_FUR = [
+  [-32, 2, 6], [-22, 7, 7], [-10, 3, 7], [2, 8, 6], [12, 4, 6],
+  [-26, -6, 6], [-14, -3, 6], [0, -7, 6], [10, -5, 5], [20, 0, 5],
+];
+
+// One articulated leg: haunch → joint → broad paw. Hind legs hock backward,
+// front legs bend slightly forward.
+function bearLeg(topX, topY, footX, footY, front, color) {
+  const kx = (topX + footX) / 2 + (front ? 3 : -5);
+  const ky = (topY + footY) / 2 + 3;
+  ctx.strokeStyle = color; ctx.lineCap = "round";
+  ctx.lineWidth = 11;
+  ctx.beginPath(); ctx.moveTo(topX, topY); ctx.lineTo(kx, ky); ctx.stroke();
+  ctx.lineWidth = 8;
+  ctx.beginPath(); ctx.moveTo(kx, ky); ctx.lineTo(footX, footY - 3); ctx.stroke();
+  ctx.lineCap = "butt";
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.ellipse(footX + 2, footY - 2.6, 6, 3, 0, 0, Math.PI * 2); ctx.fill();
+}
+
+// Front limb hanging curled against the chest while the bear rears up
+function bearTuckedLeg(sx, sy, color) {
+  ctx.strokeStyle = color; ctx.lineCap = "round";
+  ctx.lineWidth = 10;
+  ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(sx + 6, sy + 9); ctx.stroke();
+  ctx.lineWidth = 7.5;
+  ctx.beginPath(); ctx.moveTo(sx + 6, sy + 9); ctx.lineTo(sx + 2, sy + 16); ctx.stroke();
+  ctx.lineCap = "butt";
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.ellipse(sx + 1.5, sy + 17, 4.5, 3, 0.4, 0, Math.PI * 2); ctx.fill();
+}
+
+// Low-slung head: heavy brow, short snout, small ears — menace over detail.
+// jaw 0..1 opens the mouth; alert deepens the eye socket; earsBack flattens ears.
+function drawBearHead(hx, hy, jaw, alert, earsBack) {
+  // prominent round ears riding the domed crown
+  ctx.fillStyle = BEAR.coatDark;
+  const earY = hy - 9.5 + earsBack * 3;
+  ctx.beginPath(); ctx.arc(hx - 5.5, earY, 3.9, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(hx + 2.5, earY - 0.5 + earsBack, 3.6, 0, Math.PI * 2); ctx.fill();
+
+  // broad skull with a short, deep, blunt muzzle — no rat taper
+  ctx.fillStyle = BEAR.coat;
+  ctx.beginPath();
+  ctx.moveTo(hx - 10, hy - 5.5);
+  ctx.quadraticCurveTo(hx - 4, hy - 10.5, hx + 4, hy - 9.5);   // domed crown
+  ctx.quadraticCurveTo(hx + 10, hy - 8.5, hx + 13, hy - 4);    // brow into the muzzle
+  ctx.quadraticCurveTo(hx + 15.5, hy - 1.5, hx + 15.5, hy + 1); // steep blunt nose front
+  ctx.lineTo(hx + 15, hy + 3.5);
+  ctx.quadraticCurveTo(hx + 9, hy + 6, hx + 3, hy + 6);        // deep upper jaw
+  ctx.quadraticCurveTo(hx - 8, hy + 7.5, hx - 11, hy + 1);     // heavy cheek and jowl
+  ctx.closePath();
+  ctx.fill();
+  // jaw scruff
+  furFringe(hx - 9, hy + 6, hx + 3, hy + 6.2, 4, 1, BEAR.shag, 57);
+
+  // nose
+  ctx.fillStyle = BEAR.nose;
+  ctx.beginPath(); ctx.ellipse(hx + 14, hy + 0.4, 2.6, 2.2, 0.25, 0, Math.PI * 2); ctx.fill();
+
+  if (jaw > 0.05) {
+    const drop = jaw * 6.5;
+    // open gape with a couple of fangs
+    ctx.fillStyle = BEAR.mouth;
+    ctx.beginPath();
+    ctx.moveTo(hx + 3, hy + 5);
+    ctx.quadraticCurveTo(hx + 9, hy + 4.4, hx + 15, hy + 3.3);
+    ctx.lineTo(hx + 12, hy + 4.5 + drop);
+    ctx.quadraticCurveTo(hx + 6, hy + 5.5 + drop, hx + 3, hy + 4.8 + drop * 0.6);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = BEAR.teeth;
+    ctx.beginPath(); ctx.moveTo(hx + 13.6, hy + 3.5); ctx.lineTo(hx + 12.4, hy + 6.4); ctx.lineTo(hx + 11.2, hy + 3.8); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(hx + 11.6, hy + 4.4 + drop); ctx.lineTo(hx + 10.6, hy + 1.6 + drop); ctx.lineTo(hx + 9.4, hy + 4.6 + drop); ctx.closePath(); ctx.fill();
+    // lower jaw
+    ctx.strokeStyle = BEAR.coat; ctx.lineWidth = 3.6; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(hx + 2, hy + 5.4); ctx.quadraticCurveTo(hx + 7, hy + 5.8 + drop, hx + 12.5, hy + 4.8 + drop); ctx.stroke();
+    ctx.lineCap = "butt";
+  } else {
+    // shut: a single grim mouth line
+    ctx.strokeStyle = BEAR.nose; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(hx + 13.5, hy + 3); ctx.quadraticCurveTo(hx + 9, hy + 4.8, hx + 5, hy + 4.6) ; ctx.stroke();
+  }
+
+  // heavy brow over a small sunken eye
+  ctx.strokeStyle = BEAR.coatDark; ctx.lineWidth = 2.2;
+  ctx.beginPath(); ctx.moveTo(hx + 1.5, hy - 6); ctx.lineTo(hx + 7, hy - 4.2); ctx.stroke();
+  if (alert) {
+    ctx.fillStyle = "rgba(0,0,0,0.18)";
+    ctx.beginPath(); ctx.ellipse(hx + 5, hy - 2.5, 3.2, 2.3, -0.2, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.fillStyle = BEAR.eye;
+  ctx.beginPath(); ctx.ellipse(hx + 5, hy - 2.6, 1.35, 1.05, -0.15, 0, Math.PI * 2); ctx.fill();
+  ctx.save();
+  ctx.fillStyle = BEAR.eyeHighlight;
+  ctx.globalAlpha *= 0.55;
+  ctx.beginPath(); ctx.arc(hx + 5.35, hy - 2.95, 0.32, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
 
 function drawBear(a) {
   const t = performance.now() / 1000;
   const chase = a.state === "chase" && !a.dying;
-  const walk = a.state === "walk" && !a.dying;
+  const charging = chase && a.charging > 0;
+  const moving = !!a.moving && !a.dying;
+  const gallop = chase && moving;
   const dp = a.dying ? ease(Math.min(a.deathT / 1.3, 1)) : 0;
-  // New attack logic: a quick swiping motion
-  const atk = a.attackAnim > 0 ? Math.sin(ease(a.attackAnim / 0.4) * Math.PI * 1.5) : 0; // Makes the strike more dynamic
-  const rear = a.attackAnim > 0 ? Math.sin(ease(a.attackAnim / 0.4) * Math.PI) * 0.3 : 0; // Slight lift of the body
+
+  // Swipe phases, timed to the AI: rear up until the strike frame, then the
+  // paw slams down through the arc and the body drops with it.
+  const dur = a.attackDur || 0.55;
+  const strikeP = 1 - (a.strikeAt || 0.26) / dur;
+  const ap = a.attackAnim > 0 && !a.dying ? 1 - a.attackAnim / dur : 0;
+  let rear = 0, swipe = 0;
+  if (ap > 0) {
+    if (ap < strikeP) {
+      rear = ease(ap / strikeP);
+      swipe = -1.1 * rear;                                   // paw cocked up and back
+    } else {
+      const s = (ap - strikeP) / (1 - strikeP);
+      rear = 1 - ease(Math.min(1, s * 1.7));
+      swipe = -1.1 + ease(Math.min(1, s * 1.25)) * 2.1;      // slashes down through
+    }
+  }
 
   ctx.save();
-  ctx.translate(a.x, 0);
+  ctx.translate(a.x, groundY);
   if (a.dir < 0) ctx.scale(-1, 1);
   ctx.globalAlpha = fadeAlpha(a);
 
+  // soft ground shadow sells the bulk
+  ctx.fillStyle = "rgba(0,0,0,0.22)";
+  ctx.beginPath(); ctx.ellipse(2, -1, 42 - rear * 8, 5, 0, 0, Math.PI * 2); ctx.fill();
+
   const g = a.anim;
-  const lope = chase ? Math.abs(Math.sin(g * 0.9)) * 3 * (1 - dp) : 0;
-  const roll = walk ? Math.sin(g * 0.8) * 0.9 : 0;
-  const sniff = a.dying ? 0 : ease(a.eatDown || 0);
+  const bound = gallop ? Math.abs(Math.sin(g * 0.9)) * (charging ? 8 : 6) : 0;
+  const walkRoll = !chase && moving ? Math.sin(g * 1.5) * 1.4 : 0;
+  const breathe = !moving && ap === 0 && !a.dying ? Math.sin(t * 1.7) * 0.9 : 0;
+  const sniff = a.dying || chase || ap > 0 ? 0 : ease(a.eatDown || 0);
 
-  // Justeret bodyY for kortere ben
-  const baseGround = groundY - 6; // The bear sits closer to the ground
-  const bodyY = lerp(baseGround - 14 - lope + roll - rear * 15, groundY - 5, dp);
-  const bodyRot = -rear * 0.5 + dp * 0.4;
+  // torso center height; sinks onto the ground when dying
+  const torsoY = lerp(-37 - bound + walkRoll + breathe * 0.6 + (charging ? 5 : 0), -17, dp);
+  const hip = { x: -26, y: torsoY + 6 };
 
-  // --- legs: SHORTER AND THICKER ---
-  if (dp < 1) {
-    const fold = dp * 6;
-    ctx.strokeStyle = BEAR.dark; ctx.lineWidth = 7; ctx.lineCap = "round"; // Tykkere ben
-    // Definér benpositioner (x, fase)
-    const legPositions = [[9, 0], [11, Math.PI], [-7, Math.PI], [-9, 0]];
+  // ---- leg poses ----
+  // Walk: 4-beat amble with real lift and plant. Gallop: hind pair drives,
+  // front pair reaches. Dying: legs fold under the body.
+  const legPose = (base, front, near) => {
+    if (dp > 0) return { footX: base * 0.7, footY: -2 - dp * 3 };
+    let footX = base, lift = 0;
+    if (gallop) {
+      const ph = (front ? 2.4 : 0) + (near ? 0.25 : 0);
+      footX = base + Math.sin(g * 0.9 + ph) * (front ? 11 : 12);
+      lift = Math.max(0, Math.cos(g * 0.9 + ph)) * 9;
+    } else if (moving) {
+      const ph = front ? (near ? Math.PI * 1.5 : Math.PI * 0.5) : (near ? Math.PI : 0);
+      footX = base + Math.sin(g * 1.5 + ph) * 7;
+      lift = Math.max(0, Math.cos(g * 1.5 + ph)) * 4.5;
+    }
+    return { footX, footY: -lift };
+  };
+  const hindFar = legPose(-30, false, false);
+  const hindNear = legPose(-21, false, true);
+  const frontFar = legPose(26, true, false);
+  const frontNear = legPose(17, true, true);
 
-    for (let i = 0; i < legPositions.length; i++) {
-      const [ax, phase] = legPositions[i];
-      let footX = ax, lift = 0, fPhase = phase;
+  // far hind leg, planted outside the rear-up rotation
+  bearLeg(hip.x - 3, hip.y, hindFar.footX, hindFar.footY, false, BEAR.coatDark);
 
-      if (chase) {
-        const sw = Math.sin(g * 2.2 + fPhase);
-        footX = ax + sw * 5;
-        lift = Math.max(0, -Math.cos(g * 2.2 + fPhase)) * 3;
-      } else if (walk) {
-        footX = ax + Math.sin(g * 1.8 + fPhase) * 2.5;
-      }
+  // ---- body group: rears up around the hip during a swipe ----
+  ctx.save();
+  ctx.translate(hip.x, hip.y);
+  ctx.rotate(-rear * 0.5 + (gallop ? Math.sin(g * 0.9) * 0.05 : 0) + (charging ? 0.06 : 0) + dp * 0.15);
+  ctx.translate(-hip.x, -hip.y);
 
-      const front = ax > 0;
-      // Front legs are not lifted at all during normal walking/running, only when attacking
-      const z = front ? groundY - lift - fold : groundY - lift - fold;
+  // far front leg
+  if (rear > 0.05) bearTuckedLeg(24, torsoY + 2, BEAR.coatDark);
+  else bearLeg(24, torsoY + 4, frontFar.footX, frontFar.footY, true, BEAR.coatDark);
 
+  // shaggy under-layer, slightly bigger and darker than the coat
+  ctx.fillStyle = BEAR.coatDark;
+  ctx.beginPath(); ctx.ellipse(-24, torsoY + 1, 19, 15, 0.1, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, torsoY + 0.5, 27, 16.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(15, torsoY - 8, 15, 12, -0.15, 0, Math.PI * 2); ctx.fill();
+  // back-line fur wisps over the rump and hump
+  furFringe(-40, torsoY - 7, -12, torsoY - 14, 6, -1, BEAR.coatDark, 17);
+  furFringe(-12, torsoY - 14, 24, torsoY - 17, 6, -1, BEAR.coatDark, 71);
+
+  // main coat: rump low, heavy shoulder hump, deep chest
+  ctx.fillStyle = BEAR.coat;
+  ctx.beginPath(); ctx.ellipse(-24, torsoY, 17.5, 14, 0.1, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, torsoY - 1, 25, 15, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(14, torsoY - 10, 13.5, 10, -0.15, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(24, torsoY + 2, 12, 11.5, 0, 0, Math.PI * 2); ctx.fill();
+  // stubby tail tuft
+  ctx.fillStyle = BEAR.coatDark;
+  ctx.beginPath(); ctx.ellipse(-41, torsoY - 3, 3.5, 4.5, 0.5, 0, Math.PI * 2); ctx.fill();
+
+  // hanging belly shag
+  furFringe(-36, torsoY + 11, 28, torsoY + 12, 8, 1, BEAR.shag, 3);
+  // flank fur strokes
+  ctx.strokeStyle = "rgba(0,0,0,0.18)"; ctx.lineWidth = 1.2; ctx.lineCap = "round";
+  for (const [fx, fy, fl] of BEAR_FLANK_FUR) {
+    ctx.beginPath();
+    ctx.moveTo(fx, torsoY + fy);
+    ctx.quadraticCurveTo(fx - 1, torsoY + fy + fl * 0.6, fx - 3, torsoY + fy + fl);
+    ctx.stroke();
+  }
+  ctx.lineCap = "butt";
+
+  // ---- neck + head ----
+  const carried = { x: 42, y: torsoY - 4 };
+  let head;
+  if (a.dying) head = { x: lerp(carried.x, 40, dp), y: lerp(carried.y, -9, dp) };
+  else if (charging) head = { x: 46, y: torsoY + 2 };
+  else head = { x: lerp(carried.x, 46, sniff), y: lerp(carried.y, -10, sniff) };
+
+  ctx.fillStyle = BEAR.coat;
+  ctx.beginPath();
+  ctx.moveTo(16, torsoY - 15);
+  ctx.quadraticCurveTo(30, torsoY - 13, head.x - 2, head.y - 6);
+  ctx.lineTo(head.x + 2, head.y + 5);
+  ctx.quadraticCurveTo(28, torsoY + 9, 20, torsoY + 11);
+  ctx.closePath(); ctx.fill();
+  // throat ruff
+  furFringe(26, torsoY + 8, head.x - 2, head.y + 5, 6, 1, BEAR.shag, 41);
+
+  // roaring during the swipe, snarling when squared up or charging
+  const jaw = ap > 0 ? rear
+    : chase && !moving ? 0.55 + Math.sin(t * 2.2) * 0.12
+    : charging ? 0.45 : 0;
+  drawBearHead(head.x, head.y, jaw, chase || ap > 0, charging ? 1 : 0);
+
+  // ---- near front limb: swipe arm while attacking, normal leg otherwise ----
+  if (ap > 0) {
+    ctx.save();
+    ctx.translate(18, torsoY - 2);
+    ctx.rotate(swipe);
+    // motion-blur arc through the fast part of the slash
+    if (ap >= strikeP && ap < strikeP + 0.3) {
+      ctx.strokeStyle = "rgba(255,255,255,0.16)"; ctx.lineWidth = 7;
+      ctx.beginPath(); ctx.arc(0, 0, 33, -0.9 - swipe, 0.4, false); ctx.stroke();
+    }
+    ctx.strokeStyle = BEAR.coat; ctx.lineCap = "round";
+    ctx.lineWidth = 12;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(16, 6); ctx.stroke();
+    ctx.lineWidth = 9;
+    ctx.beginPath(); ctx.moveTo(16, 6); ctx.lineTo(30, 9); ctx.stroke();
+    ctx.lineCap = "butt";
+    ctx.fillStyle = BEAR.coatDark;
+    ctx.beginPath(); ctx.ellipse(31, 9.5, 6.5, 4.5, 0.3, 0, Math.PI * 2); ctx.fill();
+    // splayed claws
+    ctx.strokeStyle = BEAR.claw; ctx.lineWidth = 2; ctx.lineCap = "round";
+    for (let c = 0; c < 4; c++) {
+      const ca = -0.35 + c * 0.3;
       ctx.beginPath();
-      // Hofte/skulder til fod
-      ctx.moveTo(ax * 0.7, bodyY + 2);
-      ctx.lineTo(footX, z);
+      ctx.moveTo(31 + Math.cos(ca) * 6, 9.5 + Math.sin(ca) * 4.5);
+      ctx.lineTo(31 + Math.cos(ca) * 14, 9.5 + Math.sin(ca) * 11);
       ctx.stroke();
     }
     ctx.lineCap = "butt";
-  }
-
-  // --- body: med skulderhump ---
-  ctx.save();
-  ctx.translate(0, bodyY); ctx.rotate(-bodyRot);
-  ctx.fillStyle = BEAR.body;
-  ctx.beginPath(); ctx.ellipse(0, 0, 17, 9.5, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(5, -6.5, 7.5, 5, -0.15, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = BEAR.belly;
-  ctx.beginPath(); ctx.ellipse(0, 4, 11, 4.5, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = BEAR.dark;
-  ctx.beginPath(); ctx.arc(-16.5, -2, 2.2, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-
-  // --- head ---
-  const upHead = { x: 19, y: bodyY - 8 };
-  const downHead = { x: 21, y: baseGround - 6 };
-  const head = a.dying
-    ? { x: lerp(upHead.x, 14, dp), y: lerp(upHead.y, baseGround - 6, dp) }
-    : { x: lerp(upHead.x, downHead.x, sniff * (1 - atk)), y: lerp(upHead.y, downHead.y, sniff * (1 - atk)) };
-
-  // thick neck
-  ctx.strokeStyle = BEAR.body; ctx.lineWidth = 8; ctx.lineCap = "round";
-  ctx.beginPath(); ctx.moveTo(11, bodyY - 3); ctx.lineTo(head.x - 3, head.y + 1); ctx.stroke();
-  ctx.lineCap = "butt";
-
-  // skull + muzzle
-  ctx.fillStyle = BEAR.body;
-  ctx.beginPath(); ctx.arc(head.x, head.y, 5.2, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = BEAR.muzzle;
-  ctx.beginPath(); ctx.ellipse(head.x + 5, head.y + 1.5, 3.4, 2.3, 0.1, 0, Math.PI * 2); ctx.fill();
-  // nose
-  ctx.fillStyle = BEAR.eye;
-  ctx.beginPath(); ctx.arc(head.x + 7.8, head.y + 1, 1.1, 0, Math.PI * 2); ctx.fill();
-  // eye
-  ctx.fillStyle = chase ? "#7a1a10" : BEAR.eye;
-  ctx.beginPath(); ctx.arc(head.x + 1.5, head.y - 1.5, 1, 0, Math.PI * 2); ctx.fill();
-  // round ears
-  ctx.fillStyle = BEAR.body;
-  ctx.beginPath(); ctx.arc(head.x - 2.5, head.y - 4.5, 2, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(head.x + 1.5, head.y - 5.2, 2, 0, Math.PI * 2); ctx.fill();
-
-  // --- NEW: Attack arm with claw (drawn separately so it can swing) ---
-  if (a.attackAnim > 0) {
-    ctx.save();
-    // Flyt transformationspunktet til skulderen
-    ctx.translate(7, bodyY - 2);
-    // Rotate the arm based on 'atk' (0 -> 1.5 PI)
-    ctx.rotate(atk * 1.8 - 0.5);
-
-    // Overarm
-    ctx.strokeStyle = BEAR.body; ctx.lineWidth = 7; ctx.lineCap = "round";
-    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(12, 0); ctx.stroke();
-
-    // Forearm and paw
-    ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(22, 5); ctx.stroke();
-
-    // Claws (protruding from the paw)
-    if (atk > 0.5) {
-        ctx.strokeStyle = BEAR.claw; ctx.lineWidth = 2;
-        const clawLen = 6 + Math.sin(atk*Math.PI)*3;
-        for (let c = 0; c < 3; c++) {
-            ctx.beginPath();
-            ctx.moveTo(22 + c*1, 5 + c*0.5);
-            ctx.lineTo(22 + clawLen + c*0.5, 8 + c*1);
-            ctx.stroke();
-        }
-    }
     ctx.restore();
+  } else if (rear > 0.05) {
+    bearTuckedLeg(15, torsoY + 3, BEAR.coat);
   } else {
-      // Standard front legs (when not attacking)
-      ctx.strokeStyle = BEAR.dark; ctx.lineWidth = 7; ctx.lineCap = "round";
-      const baseFrontLegX = 8;
-      const fPhase = 0; // fixed phase when not running
-      const fX = chase ? baseFrontLegX + Math.sin(g * 2.2 + fPhase)*5 : baseFrontLegX;
-      const fZ = chase ? groundY - Math.max(0, -Math.cos(g * 2.2 + fPhase))*3 : groundY;
-
-      ctx.beginPath();
-      ctx.moveTo(baseFrontLegX*0.7, bodyY + 2);
-      ctx.lineTo(fX, fZ);
-      ctx.stroke();
+    bearLeg(16, torsoY + 5, frontNear.footX, frontNear.footY, true, BEAR.coat);
   }
+
+  ctx.restore(); // end body group
+
+  // near hind leg in front of the body
+  bearLeg(hip.x + 5, hip.y + 1, hindNear.footX, hindNear.footY, false, BEAR.coat);
 
   // hit flash
   if (a.flash > 0) {
     ctx.globalAlpha = Math.min(1, a.flash * 5) * 0.55 * fadeAlpha(a);
     ctx.fillStyle = "#ffffff";
-    ctx.beginPath(); ctx.ellipse(2, bodyY - 2, 20, 13, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(4, torsoY - 3, 38, 22, 0, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = fadeAlpha(a);
   }
 
@@ -669,11 +849,11 @@ function drawBear(a) {
 
   // hp bar
   if (!a.dying && a.hp !== undefined && a.hp < a.maxHp) {
-    const w = 30, frac = Math.max(0, a.hp / a.maxHp);
+    const w = 40, frac = Math.max(0, a.hp / a.maxHp);
     ctx.fillStyle = "rgba(0,0,0,0.5)";
-    ctx.fillRect(a.x - w / 2, baseGround - 42, w, 3.5);
+    ctx.fillRect(a.x - w / 2, groundY - 78, w, 4);
     ctx.fillStyle = frac > 0.4 ? "#9bd05a" : "#c1453b";
-    ctx.fillRect(a.x - w / 2, baseGround - 42, w * frac, 3.5);
+    ctx.fillRect(a.x - w / 2, groundY - 78, w * frac, 4);
   }
 }
 
@@ -699,8 +879,10 @@ function drawStuckArrows(a) {
 }
 
 export function drawAnimals() {
+  const view = visibleWorldBounds(180);
   for (const a of state.animals) {
     if (!a.alive) continue;
+    if (a.x < view.left || a.x > view.right) continue;
     if (a.type === "deer") drawDeer(a);
     else if (a.type === "bear") drawBear(a);
     else if (a.type === "duck") drawDuck(a);

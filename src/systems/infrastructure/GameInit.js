@@ -45,6 +45,10 @@ function reinforceDefenseCost() {
   return CFG.reinforceCostBase + Game.day * CFG.reinforceCostPerDay;
 }
 
+function wallMaxHp(level) {
+  return CFG.wallHp[level] + (Game.permanentWallHpBonus || 0);
+}
+
 function baseStationCost(base) {
   // Once the castle stands (lvl 4+), repairs take priority over further expansion.
   if (base.level >= 4 && repairDefenseCost() > 0) return repairDefenseCost();
@@ -212,10 +216,10 @@ export function buildStations() {
       },
       onPaid:()=>{
         if (!w.commissioned) {
-          w.commissioned=true; w.level=1; w.maxHp=CFG.wallHp[1]; w.hp=0; w.buildProgress=0;
+          w.commissioned=true; w.level=1; w.maxHp=wallMaxHp(1); w.hp=0; w.buildProgress=0;
           addXP(15);
         } else if (w.level < 5) {
-          w.level++; w.maxHp=CFG.wallHp[w.level];
+          w.level++; w.maxHp=wallMaxHp(w.level);
           w.buildProgress=clamp(w.hp/w.maxHp,0.2,1);
           addXP(20);
         }
@@ -253,6 +257,8 @@ export function newGame() {
   // Timers and flags
   state.pendingHammers  = 0;
   state.pendingFarmers  = 0;
+  Game.permanentBaseHpBonus = 0;
+  Game.permanentWallHpBonus = 0;
   state.farmBuilt       = false;
   state.farmLevel       = 0;
   state.poisonShots     = [];
@@ -270,6 +276,7 @@ export function newGame() {
   state.chests          = [];
   state.legendaryBoss   = null;
   state.legendaryEffects= [];
+  state.aegisStrikes    = [];
   state.spells          = [];
   state.weaponPickup    = null;
   state.payCooldown     = 0;

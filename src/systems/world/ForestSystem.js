@@ -35,9 +35,11 @@ function pickCampX() {
 }
 
 function makeForestTree(x, r = Math.random) {
+  // A handful of ancient giants tower over the canopy
+  const ancient = r() < 0.14;
   return {
     x,
-    tree: makeTree(x, 170 + r() * 80, r, { harvestable: true }),
+    tree: makeTree(x, ancient ? 280 + r() * 100 : 170 + r() * 80, r, { harvestable: true }),
     marked: false, chopped: false, beingChopped: false,
     chopProgress: 0,
     falling: false, fallDir: r() < 0.5 ? -1 : 1, fallAngle: 0, fallT: 0,

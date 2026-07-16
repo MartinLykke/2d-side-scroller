@@ -2,7 +2,9 @@ import { CFG } from '../../config/config.js';
 import { dist } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
-import { spawnParticles, floaty as showFloaty } from '../world/SpawnSystem.js';
+import { floaty as showFloaty } from '../world/SpawnSystem.js';
+import { entityWallLift } from '../../entities/Wall.js';
+import { spawnHumanBlood } from '../../util/EnemyUtils.js';
 
 export function floaty(x, text, color) {
   if (typeof text === "string" && text.includes("Unders")) return;
@@ -78,16 +80,41 @@ export function nearestGroundCoin(x, range) {
 
 export function startUnitDeath(u) {
   if (u.dying) return;
+  const overkill = Math.max(0, -(u.hp || 0));
+  const violence = Math.min(3.8, Math.sqrt(overkill / Math.max(1, u.maxHp || 5)) * 2.35 + Math.sqrt(overkill) * 0.18);
+  const lift = entityWallLift(u) + (u.grappleLiftY || 0);
+  const deathDir = u.combatTarget ? Math.sign(u.x - u.combatTarget.x) || 1 : (u.knock ? Math.sign(u.knock) || 1 : (u.dir || 1));
+  const heavy = u.role === "guard";
+  const airborne = lift > 16 || violence > 1.4;
   u.dying = true;
   u.deathT = 0;
-  u.deathDuration = u.role === "guard" ? 1.45 : 1.25;
-  u.deathDir = u.combatTarget ? Math.sign(u.x - u.combatTarget.x) || 1 : (u.dir || 1);
-  u.deathSpin = (u.deathDir < 0 ? -1 : 1) * (u.role === "guard" ? 1.0 : 0.85);
-  u.knock = (u.knock || 0) + u.deathDir * (u.role === "guard" ? 70 : 95);
+  u.deathDuration = (heavy ? 1.65 : 1.38) + violence * 0.22 + lift / 260;
+  u.deathKind = lift > 16 ? "fallFromWall" : violence > 2.4 ? "violentThrow" : heavy ? "guardCollapse" : u.role === "archer" ? "archerCollapse" : "workerCollapse";
+  u.deathDir = deathDir;
+  u.deathSpin = (deathDir < 0 ? -1 : 1) * (heavy ? 0.8 : 1.05 + violence * 0.28);
+  u.deathFy = -lift;
+  u.deathVy = airborne ? -(heavy ? 34 : 54) - violence * (heavy ? 22 : 42) : 0;
+  u.deathGravity = heavy ? 760 : 820;
+  u.deathAngle = 0;
+  u.deathRestAngle = deathDir * (heavy ? 1.18 : 1.48);
+  u.deathAngVel = u.deathSpin * (airborne ? 3.2 + violence * 0.75 : 1.45);
+  u.deathBounces = 0;
+  u.deathFriction = Math.max(2, 4.7 - violence * 0.45);
+  u.overkillViolence = violence;
+  u.knock = (u.knock || 0) + deathDir * ((heavy ? 58 : 82) + violence * (heavy ? 34 : 62));
   u.moving = false;
   u.working = false;
+  u.grapple = null;
+  u.grappleLiftY = 0;
+  u.onWall = false;
+  u.wall = null;
+  u.guardWall = null;
+  u.climbingWall = false;
+  u.carryLog = false;
   u.combatTarget = null;
-  spawnParticles(u.x, groundY - 30, u.role === "guard" ? 12 : 8, "#7a1f1f", 70, 80);
+  spawnHumanBlood(u, 1.05 + violence * 0.7 + (heavy ? 0.2 : 0), deathDir, groundY - lift - 30);
+  if (violence > 1.6 || lift > 40) spawnHumanBlood(u, 0.7 + violence * 0.35, -deathDir, groundY - lift - 22);
+  Game.screenShake = Math.max(Game.screenShake || 0, Math.min(0.28, 0.06 + violence * 0.055 + lift / 900));
 }
 
 export function getArcherSideCounts() {

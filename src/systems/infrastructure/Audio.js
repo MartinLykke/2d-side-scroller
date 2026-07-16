@@ -224,6 +224,16 @@ export const Audio = {
 
   // --- Game sound effects ---
 
+  chirp() {
+    if (!this.ctx || !this.enabled) return;
+    // quick two-note songbird flutter as a startled bird takes off
+    const base = 2300 + Math.random() * 900;
+    this._pitchOsc(base, base * 1.45, 0.06, 'sine', 0.045);
+    setTimeout(() => {
+      if (this.ctx && this.enabled) this._pitchOsc(base * 1.2, base * 0.85, 0.08, 'sine', 0.035);
+    }, 70 + Math.random() * 50);
+  },
+
   coin() {
     if (!this.ctx || !this.enabled) return;
     // Metallic chime with harmonics

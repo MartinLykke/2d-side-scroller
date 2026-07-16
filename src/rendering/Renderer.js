@@ -4,14 +4,14 @@ import { Game, state } from '../core/state.js';
 import { entityWallLift } from '../entities/Wall.js';
 import { drawPlayer as drawPlayerBody } from './sprites/Player.js';
 import { drawHeldWeapon } from './ItemRender.js';
-import { darkness, skyColors, drawStars, drawClouds, drawCelestials, drawBirds, getTrees, drawHills, drawTreeLayer, drawLowFog, drawAmbientFront, drawLevelUpBeams, biomeAt, FX, windSway } from './Effects.js';
+import { darkness, skyColors, drawStars, drawClouds, drawCelestials, drawBirds, drawWildBirds, getTrees, drawHills, drawTreeLayer, drawLowFog, drawAmbientFront, drawLevelUpBeams, biomeAt, FX, windSway } from './Effects.js';
 
 // Import all render modules
 import { drawGroundTexture, drawGroundDeco, drawPonds, drawEntityShadows, drawPortals, drawWalls, drawBase, drawStations, drawForestTrees, drawForestCamps, drawBuildings } from './scene/RenderWorld.js';
 import { drawEnemies } from './scene/RenderEntities.js';
 import { drawVagrants, drawUnits, drawAnimals } from './scene/RenderUnits.js';
 import { drawCoins, drawArrows, drawLootItems, drawChests, drawGroundBows, drawGroundHammers } from './scene/RenderItems.js';
-import { drawCaltrops, drawPoisonShots, drawFirePools, drawLegendaryEffects, drawParticles, drawFloats, drawSpells, drawCampLight } from './scene/RenderEffects.js';
+import { drawCaltrops, drawPoisonShots, drawFirePools, drawLegendaryEffects, drawAegisStrikes, drawParticles, drawFloats, drawSpells, drawCampLight } from './scene/RenderEffects.js';
 import { drawWeaponPickupOverlay, drawInventoryOverlay, drawShopOverlay, drawUpgradeMenu, drawXpBar, drawLegendaryIntro } from './scene/RenderUI.js';
 import { drawMineCutaway } from './scene/RenderMine.js';
 import { drawHeart } from './DrawHelpers.js';
@@ -24,8 +24,15 @@ function drawWeaponSwingArc(x, player) {
   const lift = entityWallLift(player);
   const baseY = groundY - 40 - (player.bob||0) - (player.jumpH||0) - lift;
   const WEAPON_ARC = {
+    rusty_sword:  { col:"#9a9aa2", glow:null,      r:44, sw:4, a:0.5 },
+    dagger:       { col:"#d0d0d8", glow:null,      r:34, sw:3, a:0.55 },
+    sword:        { col:"#d8d8e0", glow:null,      r:50, sw:4, a:0.6 },
+    longsword:    { col:"#e0e0f0", glow:"#ffffff", r:58, sw:5, a:0.65 },
+    war_axe:      { col:"#d8c078", glow:null,      r:44, sw:6, a:0.7 },
+    war_hammer:   { col:"#a8a8b8", glow:null,      r:40, sw:8, a:0.7 },
+    spear:        { col:"#e8dcb0", glow:null,      r:72, sw:3, a:0.7 },
     flame_sword:  { col:"#ff7730", glow:"#ffcc40", r:52, sw:6, a:0.8 },
-    gilded_spear: { col:"#f2c14e", glow:"#ffffff", r:66, sw:4, a:0.85 },
+    gilded_spear: { col:"#f2c14e", glow:"#ffffff", r:78, sw:4, a:0.85 },
     shadow_axe:   { col:"#aa44cc", glow:"#ff88ff", r:48, sw:7, a:0.75 },
     kings_sword:  { col:"#f2c14e", glow:"#ffffff", r:60, sw:8, a:0.9 },
     thunder_blade:{ col:"#cc66ff", glow:"#aaaaff", r:56, sw:7, a:0.9 },
@@ -36,13 +43,104 @@ function drawWeaponSwingArc(x, player) {
   if (!arc) return;
   ctx.save();
   ctx.translate(x, 0);
+  if (w.includes("spear")) { drawSpearThrustFX(dir, baseY, arc, prog); ctx.restore(); return; }
+  if (w.includes("axe"))   { drawAxeChopFX(dir, baseY, arc, prog); ctx.restore(); return; }
   const startA = dir > 0 ? -Math.PI*0.7 : Math.PI*0.3;
   const endA   = dir > 0 ? Math.PI*0.1  : Math.PI*1.1;
   const sweepEnd = startA + (endA - startA) * (1 - prog);
+  if (arc.glow) {
+    // soft light bleed behind the blade streak
+    ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=prog*arc.a*0.35;
+    ctx.strokeStyle=arc.glow; ctx.lineWidth=arc.sw+6; ctx.lineCap="round";
+    ctx.beginPath(); ctx.arc(0,baseY,arc.r,startA,sweepEnd); ctx.stroke();
+    ctx.restore();
+  }
   ctx.save(); ctx.globalAlpha=prog*arc.a*0.9;
   ctx.strokeStyle=arc.col; ctx.lineWidth=arc.sw; ctx.lineCap="round";
   ctx.beginPath(); ctx.arc(0,baseY,arc.r,startA,sweepEnd); ctx.stroke();
+  // trailing edge highlight so the sweep reads as motion
+  ctx.globalAlpha=prog*arc.a*0.55;
+  ctx.strokeStyle="#ffffff"; ctx.lineWidth=Math.max(1.2,arc.sw*0.35);
+  ctx.beginPath(); ctx.arc(0,baseY,arc.r,sweepEnd-0.32*prog,sweepEnd); ctx.stroke();
   ctx.restore();
+  ctx.restore();
+}
+
+// Spear attack visual: forward speed-line streaks with a bright point at the
+// tip, keyed to the thrust window of the held-weapon animation.
+function drawSpearThrustFX(dir, baseY, arc, prog) {
+  const attackP = 1 - prog;
+  const t = clamp((attackP - 0.3) / 0.35, 0, 1);
+  if (t <= 0) return;
+  const a = Math.sin(Math.min(1, t * 1.25) * Math.PI);
+  const y = baseY + 14;
+  const reach = arc.r + 26;
+  const tipX = dir * (14 + t * reach);
+  if (arc.glow) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = a * arc.a * 0.4;
+    ctx.strokeStyle = arc.glow; ctx.lineWidth = arc.sw + 5; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(dir * 10, y); ctx.lineTo(tipX, y); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.save();
+  ctx.globalAlpha = a * arc.a * 0.9;
+  ctx.strokeStyle = arc.col; ctx.lineWidth = arc.sw; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(dir * (14 + t * reach * 0.35), y); ctx.lineTo(tipX, y); ctx.stroke();
+  // flanking speed lines
+  ctx.globalAlpha = a * arc.a * 0.5;
+  ctx.lineWidth = Math.max(1, arc.sw * 0.5);
+  ctx.beginPath(); ctx.moveTo(dir * (6 + t * reach * 0.25), y - 5); ctx.lineTo(dir * (10 + t * reach * 0.8), y - 5); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(dir * (6 + t * reach * 0.25), y + 5); ctx.lineTo(dir * (10 + t * reach * 0.8), y + 5); ctx.stroke();
+  // bright point at the tip
+  ctx.globalAlpha = a * arc.a * 0.8;
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath(); ctx.arc(tipX, y, Math.max(1.5, arc.sw * 0.5), 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// Axe attack visual: a steep overhead crescent keyed to the drop phase of the
+// chop, with a small impact flash low in front on follow-through.
+function drawAxeChopFX(dir, baseY, arc, prog) {
+  const attackP = 1 - prog;
+  const t = clamp((attackP - 0.42) / 0.3, 0, 1);
+  if (t <= 0) return;
+  const e = t * t * (3 - 2 * t);
+  const fade = attackP > 0.72 ? clamp(1 - (attackP - 0.72) / 0.28, 0, 1) : 1;
+  // Continuous angles so the partial sweep interpolates cleanly; the mirrored
+  // sweep must run anticlockwise to still pass over the top of the head.
+  const a0 = dir > 0 ? -Math.PI * 0.82 : -Math.PI * 0.18;
+  const a1 = dir > 0 ? Math.PI * 0.18 : -Math.PI * 1.18;
+  const sweepEnd = a0 + (a1 - a0) * e;
+  const ccw = dir < 0;
+  if (arc.glow) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = fade * arc.a * 0.35;
+    ctx.strokeStyle = arc.glow; ctx.lineWidth = arc.sw + 6; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.arc(0, baseY, arc.r, a0, sweepEnd, ccw); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.save();
+  ctx.globalAlpha = fade * arc.a * 0.9;
+  ctx.strokeStyle = arc.col; ctx.lineWidth = arc.sw; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.arc(0, baseY, arc.r, a0, sweepEnd, ccw); ctx.stroke();
+  // leading edge highlight so the drop reads as motion
+  ctx.globalAlpha = fade * arc.a * 0.55;
+  ctx.strokeStyle = "#ffffff"; ctx.lineWidth = Math.max(1.2, arc.sw * 0.35);
+  ctx.beginPath(); ctx.arc(0, baseY, arc.r, sweepEnd + (ccw ? 0.3 : -0.3) * e, sweepEnd, ccw); ctx.stroke();
+  // impact flash where the head lands
+  if (t >= 1) {
+    const ix = dir * arc.r * Math.cos(Math.PI * 0.18);
+    const iy = baseY + arc.r * Math.sin(Math.PI * 0.18);
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = fade * arc.a * 0.7;
+    ctx.strokeStyle = arc.glow || "#ffffff"; ctx.lineWidth = 1.6;
+    for (let k = 0; k < 4; k++) {
+      const sa = -Math.PI * 0.15 - k * 0.5 + dir * 0.2;
+      ctx.beginPath();
+      ctx.moveTo(ix + Math.cos(sa) * 4, iy + Math.sin(sa) * 4);
+      ctx.lineTo(ix + Math.cos(sa) * (9 + fade * 4), iy + Math.sin(sa) * (9 + fade * 4));
+      ctx.stroke();
+    }
+  }
   ctx.restore();
 }
 
@@ -130,12 +228,12 @@ export function render() {
   const _skx=_sk>0?(Math.random()-0.5)*_sk*12:0, _sky=_sk>0?(Math.random()-0.5)*_sk*7:0;
   ctx.save();
   ctx.translate(W/2+_skx, groundY+_sky); ctx.scale(zoom,zoom); ctx.translate(-W/2-Game.cam,-groundY);
-  drawGroundTexture(dark); drawGroundDeco(dark); drawPonds(dark); drawMineCutaway(drawPlayer, dark); drawForestCamps(dark); drawForestTrees(dark);
+  drawGroundTexture(dark); drawGroundDeco(dark); drawPonds(dark); drawMineCutaway(drawPlayer, dark); drawForestCamps(dark); drawForestTrees(dark); drawWildBirds();
   drawEntityShadows(); drawPortals(dark); drawWalls(dark); drawBuildings(dark); drawBase(dark);
   drawStations(); drawCoins(); drawGroundBows(); drawGroundHammers(); drawLootItems(); drawChests();
   drawAnimals(); drawVagrants(); drawCaltrops(); drawFirePools(); drawUnits(); drawEnemies(dark); drawLegendaryEffects();
   if (!Game.inMine) drawPlayer(dark);
-  drawArrows(); drawPoisonShots(); drawSpells(); drawLevelUpBeams(); drawParticles(); drawCampLight(dark); drawFloats();
+  drawArrows(); drawPoisonShots(); drawSpells(); drawAegisStrikes(); drawLevelUpBeams(); drawParticles(); drawCampLight(dark); drawFloats();
   ctx.restore();
 
   drawLowFog(dark,bi); drawAmbientFront(dark,bi);

@@ -1,0 +1,249 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="mobile-web-app-capable" content="yes" />
+<title>Kingdom â€” Crown of Embers</title>
+<link rel="stylesheet" href="style.css" />
+<style>
+.diff-select { display:flex; align-items:center; gap:8px; margin:14px 0 10px; justify-content:center; }
+.diff-label  { color:#a09078; font-size:13px; }
+.diff-btn    { background:rgba(255,255,255,0.07); border:1px solid rgba(200,180,120,0.3); color:#c8b890;
+               padding:5px 18px; border-radius:6px; cursor:pointer; font-size:13px; font-family:inherit;
+               transition:background 0.15s, border-color 0.15s; }
+.diff-btn:hover    { background:rgba(255,255,255,0.13); }
+.diff-btn.diff-active { background:rgba(242,193,78,0.18); border-color:#f2c14e; color:#f2c14e; font-weight:bold; }
+.diff-btn[data-diff="easy"].diff-active   { background:rgba(155,208,90,0.18); border-color:#9bd05a; color:#9bd05a; }
+.diff-btn[data-diff="hard"].diff-active   { background:rgba(220,80,60,0.18);  border-color:#e05040; color:#e05040; }
+</style>
+</head>
+<body>
+  <div id="game-wrap">
+    <canvas id="game"></canvas>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+      <div class="hud-left">
+        <div id="hud-day" class="hud-pill"><span class="icon" id="hud-phase-icon">â˜€</span> <span id="hud-day-text">Day 1</span> Â· <span id="hud-phase-text">Morning</span></div>
+        <div id="hud-base" class="hud-pill">ðŸ° <span id="hud-base-text">Camp</span></div>
+        <div id="hud-skipnight" class="hud-pill" style="display:none;cursor:pointer;pointer-events:auto;" onclick="window._skipToDusk&&window._skipToDusk()">ðŸŒ† Skip to dusk <span style="opacity:0.65">[N]</span></div>
+      </div>
+      <div class="hud-center">
+        <div id="hud-objective" class="hud-objective">Build up your base and survive the night</div>
+      </div>
+      <div class="hud-right">
+        <div id="hud-coins" class="hud-pill big">ðŸª™ <span id="hud-coins-text">0</span></div>
+        <div id="hud-hp" class="hud-pill">â¤ <span id="hud-hp-text">5/5</span></div>
+        <div id="hud-weapon" class="hud-pill">âš” <span id="hud-weapon-text">No weapon</span></div>
+        <div id="hud-armor" class="hud-pill">ðŸ›¡ <span id="hud-armor-text">No armor</span></div>
+        <div id="hud-pop" class="hud-pill">ðŸ‘¥ <span id="hud-pop-text">0</span> Â· ðŸ¹ <span id="hud-arch-text">0</span> Â· ðŸ”¨ <span id="hud-build-text">0</span></div>
+        <div id="hud-arrow-rain" class="hud-pill hud-ability hidden">
+          <span id="hud-arrow-rain-fill" class="hud-ability-fill"></span>
+          <span class="hud-ability-key">Q</span>
+          <span class="hud-ability-name">Arrow Rain</span>
+          <span id="hud-arrow-rain-cd" class="hud-ability-cd">Ready</span>
+        </div>
+        <div id="hud-skillpts" class="hud-pill" style="display:none;cursor:pointer;" onclick="window._openSkillTree&&window._openSkillTree()">ðŸ¹ <span id="hud-skillpts-text">0 ep</span></div>
+      </div>
+    </div>
+
+    <!-- contextual prompt -->
+    <div id="prompt" class="hidden"></div>
+
+    <!-- Start screen -->
+    <div id="start-screen" class="overlay">
+      <div class="overlay-card">
+        <h1>K I N G D O M</h1>
+        <h2>Crown of Embers</h2>
+        <p class="tag">A small kingdom in a dark forest. Gather gold, recruit your subjects, build your walls â€” and survive the nightly hordes of greed.</p>
+        <div class="controls">
+          <div><kbd>A</kbd>/<kbd>D</kbd> or <kbd>â†</kbd><kbd>â†’</kbd> â€” ride &nbsp;Â·&nbsp; <kbd>Shift</kbd> â€” gallop &nbsp;Â·&nbsp; <kbd>Space</kbd> â€” jump</div>
+          <div><b>Hold</b> <kbd>â†“</kbd>/<kbd>S</kbd> â€” pay at marker / recruit vagrant</div>
+          <div><kbd>F</kbd> â€” pick up weapon &nbsp;Â·&nbsp; <kbd>I</kbd> â€” inventory &nbsp;Â·&nbsp; <kbd>B</kbd> â€” shop (level 4)</div>
+          <div><kbd>M</kbd> â€” sound &nbsp;Â·&nbsp; <kbd>Esc</kbd> â€” pause/close menu &nbsp;Â·&nbsp; <kbd>P</kbd> â€” dev mode</div>
+        </div>
+        <div class="goal-line">ðŸŽ¯ Goal: Survive as many days as possible. The threat rises without end.</div>
+        <div class="diff-select">
+          <span class="diff-label">Difficulty:</span>
+          <button class="diff-btn" data-diff="easy">Easy</button>
+          <button class="diff-btn diff-active" data-diff="normal">Normal</button>
+          <button class="diff-btn" data-diff="hard">Hard</button>
+        </div>
+        <div class="btn-row">
+          <button id="btn-start" class="btn primary">New game</button>
+          <button id="btn-continue" class="btn hidden">Continue</button>
+        </div>
+        <p class="hint">Tip: Explore the forest to find survivors. Jump over enemies to dodge.</p>
+      </div>
+    </div>
+
+    <!-- End screen -->
+    <div id="end-screen" class="overlay hidden">
+      <div class="overlay-card">
+        <h1 id="end-title">The kingdom fell</h1>
+        <p id="end-text" class="tag"></p>
+        <div class="btn-row">
+          <button id="btn-restart" class="btn primary">Play again</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="pause-screen" class="overlay hidden">
+      <div class="overlay-card small">
+        <h1>Pause</h1>
+        <p class="tag">Press <kbd>Esc</kbd> to continue</p>
+      </div>
+    </div>
+
+    <!-- Skill Tree (toggle with K) -->
+    <div id="skill-tree-screen" class="hidden" style="position:absolute;inset:0;background:rgba(8,5,18,0.88);display:flex;align-items:center;justify-content:center;z-index:120;font-family:inherit;">
+      <div id="skill-tree-card" style="background:rgba(20,14,30,0.97);border:1.5px solid rgba(200,170,100,0.35);border-radius:14px;padding:28px 32px;max-width:720px;width:95%;color:#d4c8a8;position:relative;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+          <h2 id="st-title" style="margin:0;font-size:20px;color:#f2c14e;letter-spacing:2px;">ðŸ¹ ARCHER SKILL TREE</h2>
+          <div style="display:flex;align-items:center;gap:16px;">
+            <span id="st-points" style="color:#9bd05a;font-size:15px;font-weight:bold;"></span>
+            <button onclick="window._closeSkillTree()" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.2);color:#c8b890;padding:4px 14px;border-radius:6px;cursor:pointer;font-size:14px;font-family:inherit;">Close âœ•</button>
+          </div>
+        </div>
+        <div id="st-tabs" style="display:flex;gap:8px;margin-bottom:14px;"></div>
+        <div id="st-branches" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:18px;"></div>
+        <div id="st-ultimates" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;padding-top:14px;border-top:1px solid rgba(200,170,100,0.2);"></div>
+        <p style="margin:12px 0 0;font-size:11px;color:#7a6a50;text-align:center;">Press <kbd style="background:rgba(255,255,255,0.1);padding:1px 6px;border-radius:3px;">K</kbd> to open/close the skill tree</p>
+      </div>
+    </div>
+
+    <!-- Dev Tools Panel (toggle with P) -->
+    <div id="dev-panel" class="hidden">
+      <div class="dev-header">ðŸ›  Dev Tools &nbsp;<kbd>P</kbd></div>
+      <div class="dev-section">
+        <div class="dev-label">Gold &amp; Embers</div>
+        <div class="dev-row">
+          <button class="dev-btn" onclick="DEV.addCoins(10)">+10 ðŸª™</button>
+          <button class="dev-btn" onclick="DEV.addCoins(50)">+50 ðŸª™</button>
+          <button class="dev-btn" onclick="DEV.give1000Gold()">+1000 ðŸª™</button>
+        </div>
+        <div class="dev-row">
+          <button class="dev-btn" onclick="DEV.addEmbers(10)">+10 ðŸ”¥</button>
+          <button class="dev-btn" onclick="DEV.addEmbers(50)">+50 ðŸ”¥</button>
+          <button class="dev-btn" onclick="DEV.addEmbers(500)">+500 ðŸ”¥</button>
+          <button class="dev-btn dev-danger" onclick="DEV.resetUpgrades()">Reset upgrades</button>
+        </div>
+      </div>
+
+      <div class="dev-section">
+        <div class="dev-label">Time</div>
+        <div class="dev-row">
+          <button class="dev-btn" onclick="DEV.skipToNight()">â†’ Night ðŸŒ™</button>
+          <button class="dev-btn" onclick="DEV.skipToDay()">â†’ Day â˜€</button>
+          <button class="dev-btn dev-danger" onclick="DEV.skipToDay10()">Day 10 â˜ </button>
+          <button class="dev-btn dev-danger" onclick="DEV.skipToDay15()">Day 15 â˜ </button>
+          <button class="dev-btn dev-danger" onclick="DEV.skipToDay20()">Day 20 â˜ </button>
+        </div>
+      </div>
+
+      <div class="dev-section">
+        <div class="dev-label">Base &amp; Healing</div>
+        <div class="dev-row">
+          <button class="dev-btn" onclick="DEV.upgradeBase()">Upgrade base â¬†</button>
+          <button class="dev-btn" onclick="DEV.healAll()">Full heal ðŸ’š</button>
+          <button class="dev-btn dev-danger" onclick="DEV.maxBaseLevel()">Max base ðŸ°</button>
+          <button class="dev-btn dev-danger" onclick="DEV.maxWallLevels()">Max walls ðŸ§±</button>
+        </div>
+      </div>
+
+      <div class="dev-section">
+        <div class="dev-label">Spawn enemy</div>
+        <div class="dev-row">
+          <button class="dev-btn" onclick="DEV.spawnEnemyNearBase('imp')">Imp</button>
+          <button class="dev-btn" onclick="DEV.spawnEnemyNearBase('fireImp')">Flying Imp</button>
+          <button class="dev-btn" onclick="DEV.spawnEnemyNearBase('emberBrute')">Ember Brute</button>
+          <button class="dev-btn" onclick="DEV.spawnEnemyNearBase('ashPriest')">Ash Priest</button>
+          <button class="dev-btn" onclick="DEV.spawn8ImpsRight()">8x Imp</button>
+          <button class="dev-btn" onclick="DEV.spawnFireDragonBoss()">ðŸ‰ Dragon</button>
+          <button class="dev-btn" onclick="DEV.spawnMagmaGolemBoss()">Magma Colossus</button>
+          <button class="dev-btn dev-danger" onclick="DEV.killAll()">ðŸ’€ Kill all</button>
+        </div>
+      </div>
+
+      <div class="dev-section">
+        <div class="dev-label">Spawn unit</div>
+        <div class="dev-row">
+          <button class="dev-btn" onclick="DEV.spawnUnit('archer')">ðŸ¹</button>
+          <button class="dev-btn" onclick="DEV.spawnUnit('builder')">ðŸ”¨</button>
+          <button class="dev-btn" onclick="DEV.spawnUnit('farmer')">ðŸŒ¾</button>
+          <button class="dev-btn" onclick="DEV.spawnUnit('guard')">ðŸ›¡ï¸</button>
+          <button class="dev-btn" onclick="DEV.spawnUnit('miner')">â›ï¸</button>
+        </div>
+      </div>
+
+      <div class="dev-section">
+        <div class="dev-label">Level units</div>
+        <div class="dev-row">
+          <button class="dev-btn" onclick="DEV.levelUpUnits('archer',1)">ðŸ¹ +1 lvl</button>
+          <button class="dev-btn" onclick="DEV.levelUpUnits('archer',5)">ðŸ¹ +5 lvl</button>
+          <button class="dev-btn" onclick="DEV.levelUpUnits('guard',1)">ðŸ›¡ï¸ +1 lvl</button>
+          <button class="dev-btn" onclick="DEV.levelUpUnits('guard',5)">ðŸ›¡ï¸ +5 lvl</button>
+        </div>
+        <div class="dev-row">
+          <button class="dev-btn" onclick="DEV.addSkillPoints(5)">+5 skill pts</button>
+          <button class="dev-btn dev-danger" onclick="DEV.grantArcherSkills()">ðŸ¹ All skills</button>
+        </div>
+      </div>
+
+      <div class="dev-section">
+        <div class="dev-label">Spawn animal</div>
+        <div class="dev-row">
+          <button class="dev-btn" onclick="DEV.spawnAnimalNearBase('deer')">ðŸ¦Œ Deer</button>
+          <button class="dev-btn" onclick="DEV.spawnAnimalNearBase('rabbit')">ðŸ‡ Rabbit</button>
+          <button class="dev-btn" onclick="DEV.spawnAnimalNearBase('duck')">ðŸ¦† Duck</button>
+          <button class="dev-btn dev-danger" onclick="DEV.spawnAnimalNearBase('bear')">ðŸ» Bear</button>
+        </div>
+      </div>
+
+      <div class="dev-section">
+        <div class="dev-label">Player &amp; Weapons</div>
+        <div class="dev-row">
+          <button class="dev-btn" id="dev-god-btn" onclick="DEV.toggleGodMode()">God mode: âš« OFF</button>
+          <button class="dev-btn dev-danger" onclick="window._enterDeathHub&&window._enterDeathHub('Dev test: the crown fell between worlds.')">Death hub</button>
+        </div>
+        <div class="dev-row" id="dev-weapon-buttons">
+          <button class="dev-btn dev-danger" onclick="DEV.dropWeapon()">Drop</button>
+        </div>
+        <div class="dev-label" style="margin-top:6px;">Armor grants</div>
+        <div class="dev-row" id="dev-armor-buttons">
+          <button class="dev-btn dev-danger" onclick="DEV.removeArmor()">Remove armor</button>
+        </div>
+      </div>
+
+      <div class="dev-section">
+        <div class="dev-label">Game speed</div>
+        <div class="dev-row">
+          <button class="dev-btn dev-speed-btn dev-active" id="dev-spd-1" onclick="DEV.setSpeed(1)">Ã—1</button>
+          <button class="dev-btn dev-speed-btn" id="dev-spd-2" onclick="DEV.setSpeed(2)">Ã—2</button>
+          <button class="dev-btn dev-speed-btn" id="dev-spd-4" onclick="DEV.setSpeed(4)">Ã—4</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile touch controls -->
+  <div id="touch-controls" class="hidden">
+    <div id="tc-left">
+      <button class="tc-btn" id="tc-move-left">â—€</button>
+      <button class="tc-btn" id="tc-move-right">â–¶</button>
+    </div>
+    <div id="tc-right">
+      <button class="tc-btn tc-small" id="tc-interact">â¬‡ Pay</button>
+      <button class="tc-btn tc-small" id="tc-pickup">âš” Pick up</button>
+      <button class="tc-btn tc-jump" id="tc-jump">â†‘</button>
+    </div>
+  </div>
+
+  <script>window.requestAnimationFrame = cb => setTimeout(() => cb(performance.now()), 16);</script>
+  <script type="module" src="src/core/game.js"></script>
+</body>
+</html>
+

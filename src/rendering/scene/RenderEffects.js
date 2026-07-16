@@ -2,6 +2,7 @@ import { clamp } from '../../util/math.js';
 import { ctx, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { FX } from '../Effects.js';
+import { visibleWorldBounds } from '../Viewport.js';
 
 // Caltrop drawn as a small snap trap: two jagged jaws on a base plate.
 // open: 1 = armed/open (jaws lie flat), 0 = snapped shut.
@@ -48,8 +49,10 @@ function drawTrapJaws(x, y, open, rot) {
 export function drawCaltrops() {
   if (!state.caltrops || !state.caltrops.length) return;
   const T = performance.now() / 1000;
+  const view = visibleWorldBounds(80);
   ctx.save();
   for (const c of state.caltrops) {
+    if (c.x < view.left || c.x > view.right) continue;
     let open = 1, alpha = 1, y = groundY - 3, rot = 0;
 
     if (c.state === "fall") {
@@ -90,7 +93,9 @@ export function drawCaltrops() {
 export function drawFirePools() {
   if (!state.firePools || !state.firePools.length) return;
   const T = performance.now() / 1000;
+  const view = visibleWorldBounds(220);
   for (const p of state.firePools) {
+    if (p.x < view.left || p.x > view.right) continue;
     const fade = Math.min(1, p.life / 1.2) * Math.min(1, (p.maxLife - p.life) / 0.3 + 0.2);
     ctx.save();
     // molten puddle
@@ -127,7 +132,11 @@ export function drawFirePools() {
 
 export function drawPoisonShots() {
   if (!state.poisonShots || !state.poisonShots.length) return;
+  const view = visibleWorldBounds(90);
   for (const s of state.poisonShots) {
+    const shotVisible = s.x >= view.left && s.x <= view.right;
+    const landVisible = s.landX >= view.left && s.landX <= view.right;
+    if (!shotVisible && !landVisible) continue;
     const age = Math.max(0, 1 - s.life / 1.8);
     ctx.save(); ctx.globalAlpha = 0.25 + 0.2 * age;
     ctx.strokeStyle = "#88cc44"; ctx.lineWidth = 2;
@@ -149,8 +158,10 @@ export function drawPoisonShots() {
 }
 
 export function drawLegendaryEffects() {
+  const view = visibleWorldBounds(260);
   for (const ef of state.legendaryEffects) {
     if (ef.type !== "ring") continue;
+    if (ef.x + (ef.radius || 0) < view.left || ef.x - (ef.radius || 0) > view.right) continue;
     const alpha = Math.max(0, ef.life / ef.totalLife);
     ctx.save();
     ctx.globalAlpha = alpha * 0.75;
@@ -169,11 +180,107 @@ export function drawLegendaryEffects() {
   }
 }
 
+// Crown Aegis strikes: a crackling golden bolt lashing from the beacon above
+// the keep down onto the smitten enemy, with an impact flash and a ground
+// ring marking the splash radius. Purely visual — entries expire by age.
+export function drawAegisStrikes() {
+  const arr = state.aegisStrikes;
+  if (!arr || !arr.length) return;
+  const now = performance.now() / 1000;
+  const view = visibleWorldBounds(280);
+  for (let i = arr.length - 1; i >= 0; i--) {
+    const s = arr[i];
+    const age = now - s.born;
+    if (age > s.life) { arr.splice(i, 1); continue; }
+    const xMin = Math.min(s.x1, s.x2) - (s.r || 0);
+    const xMax = Math.max(s.x1, s.x2) + (s.r || 0);
+    if (xMax < view.left || xMin > view.right) continue;
+    const k = age / s.life;
+    const fade = 1 - k;
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    // jagged bolt drawn in three passes: outer glow, gold body, white-hot core
+    const segs = 7;
+    for (const [w, col, a] of [
+      [10, "rgba(255,140,40,1)", 0.3],
+      [4.5, "rgba(255,208,96,1)", 0.75],
+      [1.8, "rgba(255,246,214,1)", 1],
+    ]) {
+      ctx.globalAlpha = fade * a;
+      ctx.strokeStyle = col;
+      ctx.lineWidth = w * (1 - k * 0.55);
+      ctx.beginPath();
+      ctx.moveTo(s.x1, s.y1);
+      for (let j = 1; j < segs; j++) {
+        const p = j / segs;
+        const off = Math.sin(s.seed * 17 + j * 5.3 + k * 7) * 14 * Math.sin(p * Math.PI);
+        ctx.lineTo(s.x1 + (s.x2 - s.x1) * p + off, s.y1 + (s.y2 - s.y1) * p);
+      }
+      ctx.lineTo(s.x2, s.y2);
+      ctx.stroke();
+    }
+    ctx.lineCap = "butt";
+    // impact flash blooming out from the strike point
+    const fr = 16 + k * 44;
+    const ig = ctx.createRadialGradient(s.x2, s.y2, 2, s.x2, s.y2, fr);
+    ig.addColorStop(0, `rgba(255,240,190,${0.85 * fade})`);
+    ig.addColorStop(0.5, `rgba(255,160,50,${0.4 * fade})`);
+    ig.addColorStop(1, "rgba(255,110,20,0)");
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = ig;
+    ctx.beginPath(); ctx.arc(s.x2, s.y2, fr, 0, Math.PI * 2); ctx.fill();
+    // shock ring expanding to the splash radius on the ground
+    ctx.globalAlpha = fade * 0.65;
+    ctx.strokeStyle = "#f2c14e";
+    ctx.lineWidth = 2.5 * fade + 0.5;
+    ctx.beginPath();
+    ctx.ellipse(s.x2, groundY - 5, 10 + k * (s.r - 10), (10 + k * (s.r - 10)) * 0.28, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 export function drawParticles(mineLayer = false) {
+  const view = visibleWorldBounds(120);
   for (const p of state.particles) {
     if (!!p.mine !== mineLayer) continue;
-    ctx.globalAlpha=p.fly?1:clamp(p.life*1.5,0,1);
-    ctx.fillStyle=p.color; ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);
+    if (p.x < view.left || p.x > view.right) continue;
+    const alpha = p.fly ? 1 : (p.maxLife ? clamp(p.life / p.maxLife, 0, 1) : clamp(p.life * 1.5, 0, 1));
+    ctx.globalAlpha = alpha * (p.alpha ?? 1);
+    ctx.fillStyle = p.color;
+    if (p.stain && p.settled) {
+      ctx.save();
+      ctx.globalAlpha *= 0.72;
+      ctx.translate(p.x, p.y + (p.stainYOffset || 0));
+      ctx.rotate(p.rot || 0);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, p.size * (p.sx || 1.9), p.size * (p.sy || 0.45), 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    } else if (p.streak) {
+      ctx.save();
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = p.size;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x - (p.vx || 0) * 0.035, p.y - (p.vy || 0) * 0.035);
+      ctx.stroke();
+      ctx.restore();
+    } else if (p.rot !== undefined || p.kind === "chunk") {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot || 0);
+      ctx.fillRect(-p.size * 0.7, -p.size * 0.45, p.size * 1.4, p.size * 0.9);
+      ctx.restore();
+    } else if (p.shape === "circle") {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillRect(p.x-p.size/2,p.y-p.size/2,p.size,p.size);
+    }
   }
   ctx.globalAlpha=1;
 }
@@ -181,8 +288,10 @@ export function drawParticles(mineLayer = false) {
 export function drawFloats(mineLayer = false) {
   ctx.textAlign="center";
   let lastSz = 0;
+  const view = visibleWorldBounds(180);
   for (const f of state.floatTexts) {
     if (!!f.mine !== mineLayer) continue;
+    if (f.x < view.left || f.x > view.right) continue;
     const sz = f.size || 15;
     ctx.globalAlpha=clamp(f.life,0,1);
     if (f.crit) {
@@ -211,8 +320,10 @@ export function drawFloats(mineLayer = false) {
 export function drawSpells() {
   if (!state.spells || !state.spells.length) return;
   const t = performance.now() / 1000;
+  const view = visibleWorldBounds(260);
 
   for (const sp of state.spells) {
+    if (sp.x < view.left || sp.x > view.right) continue;
     ctx.save();
     ctx.translate(sp.x, sp.y);
     const age = sp.age || 0;
@@ -319,21 +430,67 @@ export function drawSpells() {
       }
 
       case "waterjet": {
-        ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.6;
-        const wg=ctx.createRadialGradient(0,0,5,0,0,25);
-        wg.addColorStop(0,"rgba(180,255,255,0.9)"); wg.addColorStop(1,"rgba(20,100,220,0)");
-        ctx.fillStyle=wg; ctx.beginPath(); ctx.arc(0,0,25,0,Math.PI*2); ctx.fill(); ctx.restore();
+        const ang = Math.atan2(sp.vy, sp.vx);
+        ctx.save();
+        ctx.rotate(ang);
 
-        ctx.fillStyle="#1a90d8"; ctx.beginPath(); ctx.arc(0,0,12,0,Math.PI*2); ctx.fill();
-        ctx.fillStyle="#80eeff"; ctx.beginPath(); ctx.arc(-4,-4,6,0,Math.PI*2); ctx.fill();
-        ctx.fillStyle="#ffffff"; ctx.beginPath(); ctx.arc(-3,-3,3,0,Math.PI*2); ctx.fill();
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = 0.48;
+        const wake = ctx.createLinearGradient(-58, 0, 20, 0);
+        wake.addColorStop(0, "rgba(38, 148, 210, 0)");
+        wake.addColorStop(0.45, "rgba(66, 190, 240, 0.36)");
+        wake.addColorStop(1, "rgba(214, 252, 255, 0.92)");
+        ctx.fillStyle = wake;
+        const wobble = Math.sin(t * 18 + age * 12) * 2;
+        ctx.beginPath();
+        ctx.moveTo(22, 0);
+        ctx.bezierCurveTo(10, -8, -18, -12 + wobble, -52, -5);
+        ctx.lineTo(-52, 5);
+        ctx.bezierCurveTo(-18, 12 - wobble, 10, 8, 22, 0);
+        ctx.fill();
+        ctx.restore();
 
-        ctx.save(); ctx.globalCompositeOperation="lighter";
-        for (let ri=0;ri<3;ri++) {
-          const rp=(age*4+ri*0.33)%1, rr=12+rp*20, ra=0.5*(1-rp);
-          ctx.globalAlpha=ra; ctx.strokeStyle="#80d8ff"; ctx.lineWidth=2.5;
-          ctx.beginPath(); ctx.arc(0,0,rr,0,Math.PI*2); ctx.stroke();
+        ctx.save();
+        ctx.globalAlpha = 0.86;
+        const core = ctx.createLinearGradient(-42, 0, 18, 0);
+        core.addColorStop(0, "rgba(36, 128, 205, 0.05)");
+        core.addColorStop(0.45, "rgba(38, 156, 220, 0.72)");
+        core.addColorStop(1, "rgba(170, 244, 255, 0.98)");
+        ctx.fillStyle = core;
+        ctx.beginPath();
+        ctx.moveTo(18, 0);
+        ctx.bezierCurveTo(4, -5.5, -20, -7.5, -42, -3.2);
+        ctx.lineTo(-42, 3.2);
+        ctx.bezierCurveTo(-20, 7.5, 4, 5.5, 18, 0);
+        ctx.fill();
+        ctx.restore();
+
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.strokeStyle = "rgba(232, 255, 255, 0.82)";
+        ctx.lineWidth = 2.2;
+        ctx.lineCap = "round";
+        for (let wi = 0; wi < 2; wi++) {
+          const off = wi ? 3.4 : -2.7;
+          ctx.globalAlpha = wi ? 0.55 : 0.72;
+          ctx.beginPath();
+          ctx.moveTo(-38, off * 0.45);
+          ctx.quadraticCurveTo(-16, off + Math.sin(t * 13 + wi) * 1.6, 14, off * 0.2);
+          ctx.stroke();
         }
+        ctx.globalAlpha = 0.95;
+        ctx.fillStyle = "#efffff";
+        ctx.beginPath(); ctx.ellipse(14, 0, 6.5, 3.8, 0, 0, Math.PI * 2); ctx.fill();
+        for (let di = 0; di < 6; di++) {
+          const dp = (age * 5.4 + di * 0.19) % 1;
+          const dx = -18 - dp * 44;
+          const dy = Math.sin(t * 9 + di * 1.7) * (3 + di % 2 * 2);
+          ctx.globalAlpha = 0.55 * (1 - dp);
+          ctx.beginPath(); ctx.arc(dx, dy, 1.3 + (di % 3) * 0.4, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+
         ctx.restore();
         break;
       }
@@ -399,10 +556,14 @@ export function drawSpells() {
 
 export function drawCampLight(dark) {
   const { base } = state;
-  for (const s of FX.smoke) { const k=s.t/s.life; ctx.globalAlpha=(1-k)*0.16; ctx.fillStyle="rgba(58,54,58,1)"; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill(); }
+  const view = visibleWorldBounds(280);
+  for (const s of FX.smoke) {
+    if (s.x < view.left || s.x > view.right) continue;
+    const k=s.t/s.life; ctx.globalAlpha=(1-k)*0.16; ctx.fillStyle="rgba(58,54,58,1)"; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill();
+  }
   ctx.globalAlpha=1;
   const warm=Math.max(dark,Game.isNight?0.55:0)*0.95;
-  if (warm>0.05) {
+  if (warm>0.05 && base && base.x >= view.left && base.x <= view.right) {
     ctx.save(); ctx.globalCompositeOperation="lighter";
     const fl=FX.flicker, R=240*fl;
     const g=ctx.createRadialGradient(base.x,groundY-30,10,base.x,groundY-30,R);
@@ -410,6 +571,9 @@ export function drawCampLight(dark) {
     ctx.fillStyle=g; ctx.fillRect(base.x-R,groundY-30-R,R*2,R*2); ctx.restore();
   }
   ctx.save(); ctx.globalCompositeOperation="lighter";
-  for (const e of FX.embers) { const k=e.t/e.life; ctx.globalAlpha=1-k; ctx.fillStyle=`rgba(255,${(170-90*k)|0},60,1)`; ctx.fillRect(e.x,e.y,e.s,e.s); }
+  for (const e of FX.embers) {
+    if (e.x < view.left || e.x > view.right) continue;
+    const k=e.t/e.life; ctx.globalAlpha=1-k; ctx.fillStyle=`rgba(255,${(170-90*k)|0},60,1)`; ctx.fillRect(e.x,e.y,e.s,e.s);
+  }
   ctx.restore(); ctx.globalAlpha=1;
 }

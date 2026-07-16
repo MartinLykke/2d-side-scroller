@@ -24,7 +24,9 @@ export function saveGame() {
       walls: walls.map(w => ({ commissioned: w.commissioned, level: w.level, hp: w.hp, maxHp: w.maxHp, buildProgress: w.buildProgress })),
       buildings: (state.buildings || []).map(b => ({ built: b.built, level: b.level })),
       forestTrees: forestTrees.map(t => ({ marked: t.marked, chopped: t.chopped, chopProgress: t.chopProgress, lying: t.lying || !!t.carriedBy, regrowTimer: t.regrowTimer || 0 })),
-      units: units.map(u => ({ role: u.role, x: u.x, archerName: u.archerName, level: u.level, xp: u.xp })),
+      units: units
+        .filter(u => !u.dying && u.hp > 0)
+        .map(u => ({ role: u.role, x: u.x, archerName: u.archerName, level: u.level, xp: u.xp })),
       vagrants: vagrants.length,
       farm: state.farmBuilt,
       farmLevel: state.farmLevel,

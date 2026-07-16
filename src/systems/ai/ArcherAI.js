@@ -21,9 +21,9 @@ function archerShoot(u, x, h, tgt) {
   const arrowBonus = ((u.rallyBoostT || 0) > 0 ? 1 : 0) + (lastStandActive() ? 1 : 0);
 
   if (skills.includes("heavy_ballista")) {
-    shootArrow(x, h, tgt, u);
+    shootArrow(x, h, tgt, u, null, { projectileSpeed: 620, lifePadding: 0.6 });
     const arr = state.arrows[state.arrows.length - 1];
-    if (arr) { arr.ballista = true; arr.vx *= 0.55; arr.vy *= 0.55; arr.pierce = 3; arr.dmgMult = 5 + arrowBonus; }
+    if (arr) { arr.ballista = true; arr.pierce = 3; arr.dmgMult = 5 + arrowBonus; }
     u.shotCount = 0; u.charged = false; u.powerTimer = 0;
     return;
   }
@@ -363,7 +363,14 @@ export function archerAI(u, dt) {
       }
     }
 
-    if (wallDefending) {
+    const canShootBoss = d < 580 && u.cooldown <= 0;
+
+    if (canShootBoss) {
+      const shootH = u.onWall && u.wall && overWallPlatform(u.wall, u.x) ? wallHeight(u.wall) + 16 : 40;
+      archerShoot(u, u.x, groundY - shootH, lb);
+      u.cooldown = hasSkill("heavy_ballista") ? 2.2 : 0.75;
+      u.smokeReveal = 0.5;
+    } else if (wallDefending) {
       const side = u.fixedSide || (u.x < CFG.baseX ? -1 : 1);
       const post = assignArcherPost(u, side, dt);
       moveToward(u, post, 84, dt);
@@ -375,13 +382,6 @@ export function archerAI(u, dt) {
       } else if (d > idealDist + 40) {
         moveToward(u, lb.x, 84, dt);
       }
-    }
-
-    if (d < 580 && u.cooldown <= 0) {
-      const shootH = u.onWall && u.wall && overWallPlatform(u.wall, u.x) ? wallHeight(u.wall) + 16 : 40;
-      archerShoot(u, u.x, groundY - shootH, lb);
-      u.cooldown = hasSkill("heavy_ballista") ? 2.2 : 0.75;
-      u.smokeReveal = 0.5;
     }
     return;
   }
@@ -410,11 +410,6 @@ export function archerAI(u, dt) {
 
     const sideFoe = nearestThreatOnSide(u.x, ARCHER_NIGHT_SIGHT, side);
 
-    if (!sideFoe || dist(u.x, sideFoe.x) > 150) {
-      if (tryStartGrapple(u, u.wall, post)) return;
-      moveToward(u, post, Game.isNight ? 84 : 65, dt);
-    }
-
     if (sideFoe && u.cooldown <= 0) {
       const shootH = u.onWall && u.wall && overWallPlatform(u.wall, u.x) ? wallHeight(u.wall) + 16 : 40;
       archerShoot(u, u.x, groundY - shootH, sideFoe);
@@ -428,6 +423,16 @@ export function archerAI(u, dt) {
         shootArrow(u.x, groundY - shootH, prey, u);
         u.cooldown = 1.6;
         u.dir = Math.sign(prey.x - u.x) || u.dir;
+      } else {
+        if (!sideFoe || dist(u.x, sideFoe.x) > 150) {
+          if (tryStartGrapple(u, u.wall, post)) return;
+          moveToward(u, post, Game.isNight ? 84 : 65, dt);
+        }
+      }
+    } else {
+      if (!sideFoe || dist(u.x, sideFoe.x) > 150) {
+        if (tryStartGrapple(u, u.wall, post)) return;
+        moveToward(u, post, Game.isNight ? 84 : 65, dt);
       }
     }
   }
@@ -438,11 +443,12 @@ export function archerAI(u, dt) {
       u.onWall = false; u.wall = null;
       if (tryPlaceCaltrop(u, tooClose)) return;
       u.dir = Math.sign(u.x - tooClose.x) || u.dir;
-      u.x += u.dir * 100 * dt;
       if (u.cooldown <= 0) {
         archerShoot(u, u.x, groundY-36, tooClose);
         u.cooldown = hasSkill("heavy_ballista") ? 2.2 : 1.0;
         u.smokeReveal = 0.5;
+      } else {
+        u.x += u.dir * 100 * dt;
       }
       return;
     }
@@ -454,18 +460,21 @@ export function archerAI(u, dt) {
         const d = dist(u.x, prey.x);
         if (prey.type === "bear") {
           u.dir = Math.sign(prey.x - u.x) || u.dir;
-          if (d < 250) u.x += Math.sign(u.x - prey.x) * 110 * dt;
-          else if (d > 380) moveToward(u, prey.x, 58, dt);
           if (d < 430 && u.cooldown <= 0) {
             shootArrow(u.x, groundY - 36, prey, u);
             u.cooldown = 1.6;
+          } else if (d < 250) {
+            u.x += Math.sign(u.x - prey.x) * 110 * dt;
+          } else if (d > 380) {
+            moveToward(u, prey.x, 58, dt);
           }
         } else {
           u.dir = Math.sign(prey.x - u.x) || u.dir;
-          if (d > 330) moveToward(u, prey.x, 58, dt);
           if (d < ARCHER_HUNT_SHOOT_RANGE && u.cooldown <= 0) {
             shootArrow(u.x, groundY - 36, prey, u);
             u.cooldown = 1.6;
+          } else if (d > 330) {
+            moveToward(u, prey.x, 58, dt);
           }
         }
         separateFromArchers(u, dt);
@@ -484,11 +493,12 @@ export function archerAI(u, dt) {
       u.onWall = false; u.wall = null;
       const d = dist(u.x, closeFoe.x);
       if (d > 240) {
-        moveToward(u, closeFoe.x, 64, dt);
         if (u.cooldown <= 0) {
           archerShoot(u, u.x, groundY-36, closeFoe);
           u.cooldown = hasSkill("heavy_ballista") ? 2.2 : 1.2;
           u.smokeReveal = 0.5;
+        } else {
+          moveToward(u, closeFoe.x, 64, dt);
         }
       } else {
         if (d < 200 && tryPlaceCaltrop(u, closeFoe)) return;

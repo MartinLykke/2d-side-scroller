@@ -153,6 +153,16 @@ function updateCrownAegis(dt) {
   if (!best) { base.aegisTimer = 0.25; return; }
   const bt = ENEMY_TYPES[best.type];
   const ey = bt && bt.flying ? groundY + (best.fy || -80) : groundY - 24;
+  // golden bolt lashing out from the Crown Aegis beacon above the keep
+  const now = performance.now() / 1000;
+  state.aegisStrikes.push({
+    x1: base.x, y1: groundY - 266,
+    x2: best.x, y2: ey,
+    born: now, life: 0.45,
+    seed: Math.random() * 100,
+    r: CFG.aegisRadius,
+  });
+  base.aegisFlashUntil = now + 0.35;
   // pillar of embers falling from the sky onto the strike point
   for (let i = 0; i < 7; i++)
     spawnParticles(best.x + rand(-10, 10), ey - i * 24, 4, i % 2 ? "#ffd060" : "#ff6a20", 45, 60);
@@ -160,12 +170,14 @@ function updateCrownAegis(dt) {
   for (const e of state.enemies) {
     if (e.fleeing || e.dying) continue;
     if (Math.abs(e.x - best.x) > CFG.aegisRadius) continue;
-    e.hp -= CFG.aegisDamage; e.flash = 0.15;
+    // full smite on the chosen target; enemies caught in the blast only take splash
+    const dmg = e === best ? CFG.aegisDamage : CFG.aegisSplashDamage;
+    e.hp -= dmg; e.flash = 0.15;
     e.burn = Math.max(e.burn || 0, 3);
     e.burnTick = 1;
     e.burnDmg = Math.max(e.burnDmg || 0, 1);
     e.ignited = true;
-    floaty(e.x, "-" + CFG.aegisDamage + "👑", "#f2c14e");
+    floaty(e.x, "-" + dmg + "👑", "#f2c14e");
     if (e.hp <= 0) killEnemy(e);
   }
   Game.screenShake = Math.max(Game.screenShake, 0.3);

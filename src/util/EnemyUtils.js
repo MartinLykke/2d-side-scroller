@@ -9,6 +9,236 @@ import { registerEnemyKill } from '../systems/infrastructure/RoguelikeSystem.js'
 
 const PORTAL_GUARDIAN_WEAPON_DROP_CHANCE = 0.25;
 const PORTAL_GUARDIAN_WEAPON_RARITIES = [1, 2, 3];
+const MAX_DEATH_PARTICLES = 700;
+
+const DEFAULT_DEATH_PROFILE = {
+  blood: ["#5a0710", "#7a1020", "#b12835"],
+  chunks: ["#401012", "#6a1a18", "#9a2d24"],
+  mass: 1,
+};
+
+const ENEMY_DEATH_PROFILES = {
+  imp: {
+    blood: ["#4b0710", "#7a1020", "#b12835"],
+    chunks: ["#3a070c", "#6d1a16", "#b8422a"],
+    mass: 0.72,
+  },
+  fireImp: {
+    blood: ["#4b0710", "#8a1a18", "#c43a24"],
+    chunks: ["#431018", "#7a1c14", "#ff6a20"],
+    ember: true,
+    mass: 0.62,
+  },
+  emberBrute: {
+    blood: ["#3a0706", "#6a1710", "#a83620"],
+    chunks: ["#2a0a08", "#5a1a10", "#8a3018"],
+    ember: true,
+    mass: 2.15,
+  },
+  ashPriest: {
+    blood: ["#3a070b", "#64121a", "#8a2a30"],
+    chunks: ["#2a1d1f", "#412225", "#7a3230"],
+    ash: true,
+    mass: 1.08,
+  },
+  fireDragon: {
+    blood: ["#3a0706", "#7a1408", "#b02a18"],
+    chunks: ["#351008", "#7a1408", "#d64a20"],
+    ember: true,
+    mass: 5.2,
+  },
+  magmaGolem: {
+    gore: false,
+    blood: ["#ff6a20", "#ffd060", "#3a2a26"],
+    chunks: ["#211918", "#3a2a26", "#6b5a45", "#ff6a20"],
+    lava: true,
+    mass: 7,
+  },
+};
+
+const HUMAN_BLOOD = ["#5a0710", "#8a1f1f", "#c1453b"];
+
+function randRange(a, b) {
+  return a + Math.random() * (b - a);
+}
+
+function pick(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function clamp(v, a, b) {
+  return v < a ? a : v > b ? b : v;
+}
+
+function deathProfile(e) {
+  return ENEMY_DEATH_PROFILES[e?.type] || DEFAULT_DEATH_PROFILE;
+}
+
+function pushDeathParticle(p) {
+  const life = p.life ?? randRange(0.35, 0.9);
+  const overflow = state.particles.length + 1 - MAX_DEATH_PARTICLES;
+  if (overflow > 0) state.particles.splice(0, overflow);
+  state.particles.push({ ...p, life, maxLife: p.maxLife || life });
+}
+
+function deathImpactY(e, t, y = null) {
+  if (y !== null && y !== undefined) return y;
+  const fy = e?.fy || 0;
+  const h = t?.dragon ? t.w * 0.35 : t?.golem ? t.w * 0.56 : Math.min(54, (t?.w || 24) * 0.78);
+  return groundY + fy - h;
+}
+
+function spawnBloodSpray(x, y, dir = 1, power = 1, colors = HUMAN_BLOOD, opts = {}) {
+  const d = dir || 1;
+  const count = Math.ceil(opts.count ?? (5 + power * 4));
+  const speed = opts.speed ?? (70 + power * 58);
+  const up = opts.up ?? (85 + power * 45);
+  for (let i = 0; i < count; i++) {
+    const forward = Math.random() < (opts.forwardBias ?? 0.78) ? d : -d;
+    const vx = forward * randRange(speed * 0.25, speed) + randRange(-speed * 0.24, speed * 0.24);
+    const vy = randRange(-up, -up * 0.12);
+    const stain = Math.random() < (opts.stainChance ?? 0.46);
+    pushDeathParticle({
+      x: x + randRange(-4, 4),
+      y: y + randRange(-5, 5),
+      vx, vy,
+      color: pick(colors),
+      size: randRange(1.4, 3.2 + power * 0.35),
+      gravity: opts.gravity ?? 520,
+      drag: 0.75,
+      groundY: groundY - randRange(0, 2.5),
+      stain,
+      stainLife: randRange(1.5, 3.6 + power * 0.3),
+      stainScale: randRange(1.35, 2.25),
+      streak: power > 0.75 && Math.random() < 0.55,
+      rot: randRange(0, Math.PI),
+      spin: randRange(-7, 7),
+      life: randRange(0.45, 0.95 + power * 0.12),
+    });
+  }
+}
+
+function spawnGroundBlood(x, dir = 1, power = 1, colors = HUMAN_BLOOD, count = 4) {
+  const d = dir || 1;
+  for (let i = 0; i < count; i++) {
+    pushDeathParticle({
+      x: x + d * randRange(4, 22 + power * 24) + randRange(-18, 18),
+      y: groundY - randRange(0, 1.5),
+      vx: 0, vy: 0,
+      color: pick(colors),
+      size: randRange(2.6, 6.4 + power * 1.8),
+      stain: true,
+      settled: true,
+      sx: randRange(1.4, 2.8),
+      sy: randRange(0.25, 0.58),
+      rot: randRange(-0.25, 0.25),
+      life: randRange(2.0, 4.6 + power * 0.5),
+      alpha: randRange(0.52, 0.84),
+    });
+  }
+}
+
+function spawnDeathChunks(x, y, dir = 1, power = 1, profile = DEFAULT_DEATH_PROFILE, count = 5) {
+  const colors = profile.chunks || profile.blood || DEFAULT_DEATH_PROFILE.chunks;
+  const d = dir || 1;
+  for (let i = 0; i < count; i++) {
+    const speed = randRange(45, 105 + power * 55);
+    pushDeathParticle({
+      x: x + randRange(-6, 6),
+      y: y + randRange(-8, 6),
+      vx: d * randRange(speed * 0.2, speed) + randRange(-speed * 0.6, speed * 0.45),
+      vy: randRange(-(85 + power * 55), -25),
+      color: pick(colors),
+      size: randRange(2.4, 5.2 + power * 0.9),
+      kind: "chunk",
+      gravity: profile.lava ? 620 : 560,
+      drag: 0.45,
+      groundY: groundY - randRange(0, 2),
+      bounce: profile.lava ? 0.18 : 0.24,
+      rot: randRange(0, Math.PI),
+      spin: randRange(-10, 10),
+      life: randRange(0.75, 1.65 + power * 0.15),
+    });
+  }
+}
+
+function overkillViolence(overkill, maxHp) {
+  if (overkill <= 0) return 0;
+  const hp = Math.max(1, maxHp || 1);
+  return clamp(Math.sqrt(overkill / hp) * 2.2 + Math.sqrt(overkill) * 0.18, 0, 5);
+}
+
+function violenceTier(violence) {
+  if (violence >= 3.25) return 3;
+  if (violence >= 1.45) return 2;
+  if (violence >= 0.45) return 1;
+  return 0;
+}
+
+function chooseDeathKind(e, t, violence, tier) {
+  if (t.golem) return tier >= 2 ? "golemShatter" : "golemCollapse";
+  if (t.dragon) return tier >= 2 ? "dragonCrash" : "dragonFall";
+  if (e.type === "fireImp") return tier >= 2 ? "wingShear" : "wingFold";
+  if (e.type === "emberBrute") return tier >= 2 ? "heavySlam" : "heavyKneel";
+  if (e.type === "ashPriest") return tier >= 3 ? "ashBurst" : tier >= 1 ? "ashSpin" : "ashFold";
+  if (tier >= 3) return "impBurst";
+  if (tier >= 2) return "impLaunch";
+  if (tier >= 1) return "impFallBack";
+  return Math.random() < 0.5 ? "impCrumple" : "impFallBack";
+}
+
+function spawnEnemyDeathEffects(e, t, profile, violence, tier) {
+  const y = deathImpactY(e, t);
+  const dir = e.deathDir || (e.dir ? -e.dir : 1);
+  const power = 1 + violence * 0.58;
+  if (profile.gore === false) {
+    spawnDeathChunks(e.x, y, dir, power, profile, 12 + Math.floor(violence * 4));
+    spawnParticles(e.x, y, 16 + Math.floor(violence * 6), "#ff6a20", 130 + violence * 30, 130 + violence * 38);
+    spawnParticles(e.x, groundY - 8, 14 + Math.floor(violence * 3), "#3a2a26", 170 + violence * 45, 62);
+    return;
+  }
+  spawnBloodSpray(e.x, y, dir, power, profile.blood, {
+    count: 8 + Math.floor(violence * 5),
+    speed: 80 + violence * 58,
+    up: 90 + violence * 46,
+  });
+  spawnBloodSpray(e.x, y + 9, -dir, power * 0.55, profile.blood, {
+    count: 4 + Math.floor(violence * 2),
+    speed: 45 + violence * 24,
+    up: 54 + violence * 20,
+    forwardBias: 0.56,
+  });
+  spawnGroundBlood(e.x, dir, power, profile.blood, 3 + tier * 2);
+  if (tier >= 2) spawnDeathChunks(e.x, y, dir, power, profile, 3 + tier * 2);
+  if (tier >= 3) {
+    spawnBloodSpray(e.x, y - 4, dir, power * 1.15, profile.blood, {
+      count: 12,
+      speed: 160 + violence * 50,
+      up: 130 + violence * 45,
+      stainChance: 0.35,
+    });
+  }
+  if (profile.ember) {
+    spawnParticles(e.x, y, 8 + Math.floor(violence * 4), "#ff6a20", 70 + violence * 30, 100 + violence * 40);
+    spawnParticles(e.x, y - 5, 4 + Math.floor(violence * 2), "#ffd060", 45 + violence * 20, 115);
+  }
+  if (profile.ash) {
+    spawnParticles(e.x, y, 12 + Math.floor(violence * 3), "#3a2a26", 100 + violence * 30, 70 + violence * 20);
+  }
+}
+
+export function spawnHumanBlood(u, intensity = 1, dir = 0, y = null) {
+  if (!u) return;
+  const d = dir || (u.dir ? -u.dir : 1);
+  const yy = y ?? (groundY - 30);
+  const power = Math.max(0.45, intensity);
+  spawnBloodSpray(u.x, yy, d, power, HUMAN_BLOOD, {
+    count: Math.ceil(5 + power * 4),
+    speed: 58 + power * 44,
+    up: 70 + power * 36,
+  });
+  if (power > 1.05) spawnGroundBlood(u.x, d, power, HUMAN_BLOOD, Math.ceil(2 + power * 1.3));
+}
 
 function rollPortalGuardianWeaponDrop(e) {
   if (Math.random() > PORTAL_GUARDIAN_WEAPON_DROP_CHANCE) return;
@@ -19,12 +249,24 @@ function rollPortalGuardianWeaponDrop(e) {
 }
 
 export function spawnImpBlood(e, intensity = 1, y = null) {
-  if (!e || e.type !== "imp") return;
-  const yy = y ?? (groundY + (e.fy || 0) - 24);
+  if (!e) return;
+  const t = ENEMY_TYPES[e.type];
+  const profile = deathProfile(e);
+  const yy = deathImpactY(e, t, y);
   const power = Math.max(0.4, intensity);
-  spawnParticles(e.x, yy, Math.ceil(5 * power), "#7a1020", 35 + power * 26, 36 + power * 32);
-  spawnParticles(e.x, yy + 4, Math.ceil(3 * power), "#b12835", 24 + power * 20, 24 + power * 24);
-  if (power > 1.4) spawnParticles(e.x, yy + 8, Math.ceil(2 * power), "#4b0710", 18 + power * 18, 18 + power * 16);
+  if (profile.gore === false) {
+    if (power > 0.8) spawnDeathChunks(e.x, yy, e.dir || 1, power * 0.45, profile, Math.ceil(2 + power));
+    if (power > 1.2) spawnParticles(e.x, yy, Math.ceil(3 * power), "#ff6a20", 34 + power * 12, 38 + power * 20);
+    return;
+  }
+  const dir = e.lastHitDir || (e.combatTarget ? Math.sign(e.x - e.combatTarget.x) || 1 : (e.dir ? -e.dir : 1));
+  spawnBloodSpray(e.x, yy, dir, power * 0.6, profile.blood, {
+    count: Math.ceil(3 + power * 3),
+    speed: 36 + power * 28,
+    up: 42 + power * 26,
+    stainChance: 0.34,
+  });
+  if (power > 1.35) spawnGroundBlood(e.x, dir, power * 0.55, profile.blood, Math.ceil(power));
 }
 
 function registerMomentumKill(e, t) {
@@ -50,39 +292,62 @@ function registerMomentumKill(e, t) {
 export function killEnemyWithAnimation(e, knockDirection = 0) {
   if (e.dying) return;
   const t = ENEMY_TYPES[e.type];
+  const profile = deathProfile(e);
   const overkill = Math.max(0, -(e.hp || 0));
-  const violence = Math.min(4, Math.sqrt(overkill) / 2.2);
-  const brutal = violence > 1.25;
-  // Mass factor relative to an imp: heavy enemies topple, light ones tumble
-  const light = 1 / Math.sqrt((t.w || 22) / 22);
+  const violence = overkillViolence(overkill, e.maxHp || t.hp);
+  const tier = violenceTier(violence);
+  const deathKind = chooseDeathKind(e, t, violence, tier);
+  const mass = profile.mass || Math.max(0.55, (t.w || 22) / 22);
+  const light = 1 / Math.sqrt(mass);
+  const dir = knockDirection || (e.dir ? -e.dir : 1);
 
-  // Start death animation (ragdoll: rotation integrated with angular velocity + bounces)
+  // Start death animation. Overkill controls the tier: stumble, tumble, launch, rupture.
   e.dying = true;
   e.deathT = 0;
-  e.deathDuration = (t.boss ? 1.7 : 1.05) + violence * 0.32;
-  e.deathKind = brutal || Math.random() < 0.45 ? "impFallBack" : "impCrumple";
-  e.deathDir = knockDirection || (e.dir ? -e.dir : 1);
-  e.deathSpin = (e.deathDir < 0 ? -1 : 1) * (0.85 + Math.random() * 0.35 + violence * 1.7);
-  e.knock = e.deathDir * (110 + Math.random() * 70 + violence * 210) * light;
-  e.deathVy = (e.deathKind === "impFallBack" ? -(120 + Math.random() * 70 + violence * 110) : -(45 + Math.random() * 40)) * light;
+  e.deathDuration = (t.boss ? 1.85 : 1.08) + violence * 0.3;
+  e.deathKind = deathKind;
+  e.deathDir = dir;
+  e.deathSpin = (dir < 0 ? -1 : 1) * (0.72 + Math.random() * 0.42 + violence * 1.08);
+  e.knock = dir * (deathKind === "golemCollapse" || deathKind === "golemShatter" ? 16 + violence * 12 : 82 + Math.random() * 52 + violence * 175) * light;
   e.deathAngle = 0;
-  e.deathAngVel = e.deathSpin * (e.deathKind === "impFallBack" ? 3.2 : 1.9) * (1 + violence * 0.5) * light;
+  e.deathRestAngle = (dir < 0 ? -1 : 1) * (deathKind === "heavyKneel" || deathKind === "golemCollapse" ? 0.82 : 1.58);
+  e.deathAngVel = e.deathSpin * (deathKind === "impCrumple" || deathKind === "heavyKneel" ? 1.4 : 2.8 + tier * 0.85) * light;
   e.deathBounces = 0;
   e.flash = 0;
   if (t.flying) {
-    e.deathDuration = Math.max(e.deathDuration, (e.fy !== undefined ? Math.abs(e.fy) : 80) / 260 + 0.35);
-  }
-  e.deathGravity = 420 + violence * 55;
-  e.deathFriction = Math.max(1.8, 5.5 - violence * 0.75);
-  e.overkillViolence = violence;
-
-  // Spawn blood particles
-  if (e.type === "imp") {
-    spawnImpBlood(e, 2.2 + violence * 1.6);
-    if (violence > 1.2) spawnImpBlood(e, 1.4 + violence, groundY + (e.fy || 0) - 12);
+    e.deathVy = deathKind === "wingFold" ? 58 + violence * 38 : 96 + violence * 62;
+    e.deathGravity = 560 + violence * 90;
+    e.deathDuration = Math.max(e.deathDuration, Math.abs(e.fy || -90) / 230 + 0.72 + violence * 0.12);
+  } else if (deathKind === "heavyKneel" || deathKind === "golemCollapse") {
+    e.deathVy = -(26 + violence * 18) * light;
+    e.deathGravity = 660 + violence * 55;
+  } else if (deathKind === "heavySlam" || deathKind === "golemShatter") {
+    e.deathVy = -(70 + violence * 32) * light;
+    e.deathGravity = 760 + violence * 85;
+  } else if (deathKind === "impCrumple" || deathKind === "ashFold") {
+    e.deathVy = -(26 + Math.random() * 22 + violence * 16) * light;
+    e.deathGravity = 620 + violence * 42;
   } else {
-    spawnParticles(e.x, groundY - 24, 15 + Math.floor(violence * 7), "#8a1a2a", 120 + violence * 55, 140 + violence * 60);
-    spawnParticles(e.x, groundY - 20, 8 + Math.floor(violence * 4), "#aa3a4a", 80 + violence * 40, 100 + violence * 45);
+    e.deathVy = -(92 + Math.random() * 58 + violence * 72) * light;
+    e.deathGravity = 690 + violence * 76;
+  }
+  if (t.flying) {
+    e.deathAngVel *= deathKind === "wingShear" || deathKind === "dragonCrash" ? 1.55 : 1.15;
+  }
+  if (t.boss) {
+    e.deathDuration += 0.55;
+    e.deathAngVel *= t.golem ? 0.32 : 0.55;
+  }
+  e.deathFriction = Math.max(1.45, 5.3 - violence * 0.68);
+  e.overkillViolence = violence;
+  e.deathTier = tier;
+  e.deathFadeStart = tier >= 3 ? 0.5 : 0.76;
+  e.deathBurstAt = tier >= 3 && !t.boss && profile.gore !== false ? randRange(0.16, 0.28) : 0;
+  if (deathKind === "golemShatter") e.deathBurstAt = randRange(0.32, 0.5);
+
+  spawnEnemyDeathEffects(e, t, profile, violence, tier);
+  if (violence > 0.4 || t.boss) {
+    Game.screenShake = Math.max(Game.screenShake || 0, Math.min(t.boss ? 0.9 : 0.55, 0.1 + violence * 0.1 + (t.boss ? 0.38 : 0)));
   }
 
   Audio.enemyDie();
@@ -123,12 +388,38 @@ export function updateDyingEnemies(dt) {
     if (e.dying) {
       e.deathT += dt;
       const et = t[e.type];
+      const profile = deathProfile(e);
       if (e.flash > 0) e.flash -= dt;
 
       // Drop coins once during animation
       if (e.shouldDropCoins && e.deathT > 0.1) {
         spawnGoldReward(e.x, et.reward, et.boss ? "boss" : "enemy", { fromY: groundY - 28, spreadX: 22, vx: 80, vyMin: 120, vyMax: 260 });
         e.shouldDropCoins = false;
+      }
+
+      if (e.deathBurstAt && !e.deathBurstDone && e.deathT >= e.deathBurstAt) {
+        e.deathBurstDone = true;
+        const y = deathImpactY(e, et);
+        if (profile.gore === false) {
+          spawnDeathChunks(e.x, y, e.deathDir || 1, 1.6 + (e.overkillViolence || 0), profile, 14 + Math.floor((e.overkillViolence || 0) * 4));
+          spawnParticles(e.x, y, 22, "#ff6a20", 190, 170);
+        } else {
+          spawnBloodSpray(e.x, y, e.deathDir || 1, 1.3 + (e.overkillViolence || 0) * 0.65, profile.blood, {
+            count: 14 + Math.floor((e.overkillViolence || 0) * 5),
+            speed: 150 + (e.overkillViolence || 0) * 55,
+            up: 130 + (e.overkillViolence || 0) * 45,
+          });
+          spawnDeathChunks(e.x, y, e.deathDir || 1, 1 + (e.overkillViolence || 0) * 0.5, profile, 5 + Math.floor((e.overkillViolence || 0) * 2));
+        }
+      }
+
+      if ((e.overkillViolence || 0) > 1 && profile.gore !== false && Math.random() < dt * (2 + (e.overkillViolence || 0))) {
+        spawnBloodSpray(e.x, deathImpactY(e, et), e.deathDir || 1, 0.55 + (e.overkillViolence || 0) * 0.12, profile.blood, {
+          count: 1,
+          speed: 34 + (e.overkillViolence || 0) * 14,
+          up: 40,
+          stainChance: 0.7,
+        });
       }
 
       // Ragdoll physics during death (all enemy types)
@@ -148,8 +439,17 @@ export function updateDyingEnemies(dt) {
             e.deathAngVel = (e.deathAngVel || 0) * 0.5;
             e.knock = (e.knock || 0) * 0.6;
             e.deathDuration = Math.max(e.deathDuration, e.deathT + 0.55);
-            if (e.type === "imp") spawnImpBlood(e, 0.5, groundY - 6);
-            else spawnParticles(e.x, groundY - 10, 5, "#8a1a2a", 60, 60);
+            if (profile.gore === false) {
+              spawnDeathChunks(e.x, groundY - 10, e.deathDir || 1, 0.75, profile, 5);
+              spawnParticles(e.x, groundY - 8, 7, "#3a2a26", 75, 42);
+            } else {
+              spawnBloodSpray(e.x, groundY - 10, e.deathDir || 1, 0.8 + (e.overkillViolence || 0) * 0.12, profile.blood, {
+                count: 4 + Math.floor((e.overkillViolence || 0) * 1.5),
+                speed: 58,
+                up: 42,
+              });
+              spawnGroundBlood(e.x, e.deathDir || 1, 0.9 + (e.overkillViolence || 0) * 0.15, profile.blood, 2);
+            }
           } else {
             e.deathVy = 0;
             e.deathAngVel = (e.deathAngVel || 0) * 0.3;
@@ -158,8 +458,7 @@ export function updateDyingEnemies(dt) {
       } else {
         // On the ground: rotation settles toward the nearest lying-flat angle, sliding stops
         const a = e.deathAngle || 0;
-        const bias = (e.deathAngVel || e.deathSpin || 1) >= 0 ? 0.12 : -0.12;
-        const rest = (Math.round((a + bias) / Math.PI - 0.5) + 0.5) * Math.PI + (bias > 0 ? 0.06 : -0.06);
+        const rest = e.deathRestAngle ?? ((e.deathAngVel || e.deathSpin || 1) >= 0 ? Math.PI * 0.5 : -Math.PI * 0.5);
         e.deathAngle = a + (rest - a) * Math.min(1, 9 * dt);
         e.deathAngVel = (e.deathAngVel || 0) * Math.max(0, 1 - 8 * dt);
         if (e.knock) e.knock *= Math.max(0, 1 - 7 * dt);

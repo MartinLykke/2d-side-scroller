@@ -1,5 +1,6 @@
 import { clamp } from '../../util/math.js';
 import { WEAPONS, RARITY_COL, RARITY_NAME, effectiveWeapon } from '../../config/weapons.js';
+import { UPGRADE_TIERS } from '../../config/weaponUpgrades.js';
 import { ARMORS, ARMOR_RARITY_COL, ARMOR_RARITY_NAME, armorBlockChance } from '../../config/armor.js';
 import { ENEMY_TYPES } from '../../config/enemies.js';
 import { ctx, W, H, groundY } from '../../core/canvas.js';
@@ -73,7 +74,8 @@ function upgradeSummary(u) {
   if (u.effect.dmg)        return "+" + u.effect.dmg + " damage";
   if (u.effect.range)      return "+" + u.effect.range + " range";
   if (u.effect.speedBonus) return "+" + Math.round(u.effect.speedBonus * 100) + "% speed";
-  return "special";
+  if (u.effect.critBonus)  return "+" + Math.round(u.effect.critBonus * 100) + "% crit";
+  return UPGRADE_TIERS[u.tier]?.name.toLowerCase() || "special";
 }
 
 // ---------- Tooltip ----------
@@ -93,7 +95,7 @@ function drawItemTooltip(item, mx, my) {
     lines.push({ t: "Attack time: " + eff.speed + "s" + (eff.speed < w.speed ? "  (faster)" : ""), c: "#6ab4ff" });
     if (upgs.length) {
       lines.push({ t: "Upgrades:", c: MUTED, gap: 4 });
-      for (const u of upgs) lines.push({ t: "• " + u.name + " — " + upgradeSummary(u), c: "#9bd05a" });
+      for (const u of upgs) lines.push({ t: "• " + u.name + " — " + upgradeSummary(u), c: UPGRADE_TIERS[u.tier]?.col || "#9bd05a" });
     }
   } else {
     const a = ARMORS[item.armorId];
@@ -615,40 +617,110 @@ export function drawUpgradeMenu() {
   if (!player || !player.weapon) return;
   const w = WEAPONS[player.weapon], rc = RARITY_COL[w.rarity];
   const cx = W / 2, cy = H / 2;
+  const t = performance.now() / 1000;
   ctx.save();
-  ctx.fillStyle = "rgba(6,4,14,0.9)"; ctx.fillRect(0, 0, W, H);
+  // dark backdrop with a soft violet vignette so the pick feels like a reveal
+  ctx.fillStyle = "rgba(6,4,14,0.92)"; ctx.fillRect(0, 0, W, H);
+  const vg = ctx.createRadialGradient(cx, cy - 40, 60, cx, cy - 40, Math.max(W, H) * 0.55);
+  vg.addColorStop(0, "rgba(60,40,90,0.28)"); vg.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+
   ctx.textAlign = "center";
-  ctx.font = "bold 20px Trebuchet MS"; ctx.fillStyle = "#f2c14e";
-  ctx.fillText("⬆ Level " + player.level + "! Choose an upgrade", cx, cy - 158);
+  ctx.font = "bold 22px Trebuchet MS"; ctx.fillStyle = "#f2c14e";
+  ctx.fillText("⬆ Level " + player.level + "! Choose an upgrade", cx, cy - 196);
+  // the weapon itself floats beneath the title, wearing its enchant glow
+  ctx.save();
+  ctx.translate(cx, cy - 150 + Math.sin(t * 1.8) * 3);
+  drawWeaponModel(player.weapon, 1.15, { glow: 0.15, upgrades: player.weaponUpgrades });
+  ctx.restore();
   ctx.font = "13px Trebuchet MS"; ctx.fillStyle = rc;
-  const upgs = (player.weaponUpgrades || []).length;
-  ctx.fillText(w.name + " · Lvl " + weaponLevel(player.weaponUpgrades) + "  →  Lvl " + (weaponLevel(player.weaponUpgrades) + 1), cx, cy - 132);
-  const cardW = 185, cardH = 168, gap = 14;
+  const lvl = weaponLevel(player.weaponUpgrades);
+  ctx.fillText(w.name + " · Lvl " + lvl + "  →  Lvl " + (lvl + 1), cx, cy - 108);
+
+  const cardW = 200, cardH = 224, gap = 18;
   const totalW = opts.length * cardW + (opts.length - 1) * gap;
   const sx = cx - totalW / 2;
   const curEff = effectiveWeapon(player.weapon, player.weaponUpgrades || []);
   for (let i = 0; i < opts.length; i++) {
-    const opt = opts[i], ox = sx + i * (cardW + gap), oy = cy - 78, sel = i === Game.upgradeIdx;
+    const opt = opts[i], sel = i === Game.upgradeIdx;
+    const tier = UPGRADE_TIERS[opt.tier] ? opt.tier : "rare";
+    const tdef = UPGRADE_TIERS[tier];
+    const isLegend = tier === "legendary";
+    const pulse = isLegend ? 0.5 + 0.5 * Math.sin(t * 3.2) : 0;
+    const ox = sx + i * (cardW + gap), oy = cy - 88 - (sel ? 6 : 0);
     const nxtEff = effectiveWeapon(player.weapon, [...(player.weaponUpgrades || []), opt]);
+
+    // card body with a tier-colored aura
+    ctx.save();
+    if (sel || isLegend) {
+      ctx.shadowColor = tdef.col;
+      ctx.shadowBlur = sel ? 26 : 12 + pulse * 12;
+    }
     roundedRect(ox, oy, cardW, cardH, 12);
-    ctx.fillStyle = sel ? "rgba(242,193,78,0.16)" : "rgba(255,255,255,0.04)"; ctx.fill();
-    ctx.strokeStyle = sel ? "#f2c14e" : "rgba(200,180,120,0.22)"; ctx.lineWidth = sel ? 2 : 1; ctx.stroke();
+    ctx.fillStyle = sel ? "rgba(30,24,50,0.98)" : "rgba(16,12,30,0.96)";
+    ctx.fill();
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = sel ? 0.12 : 0.05;
+    ctx.fillStyle = tdef.col;
+    roundedRect(ox, oy, cardW, cardH, 12); ctx.fill();
+    ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = sel ? 1 : 0.55 + pulse * 0.45;
+    ctx.strokeStyle = tdef.col;
+    ctx.lineWidth = sel ? 2.5 : isLegend ? 2 : 1.2;
+    roundedRect(ox, oy, cardW, cardH, 12); ctx.stroke();
+    ctx.restore();
+
+    // legendary cards twinkle
+    if (isLegend) {
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      for (let k = 0; k < 5; k++) {
+        const a = Math.sin(t * 2.4 + k * 2.1) * 0.5 + 0.5;
+        const px2 = ox + 14 + ((k * 47.3) % (cardW - 28));
+        const py2 = oy + 34 + ((k * 71.7) % (cardH - 48));
+        ctx.globalAlpha = a * 0.5;
+        ctx.fillStyle = "#ffe9a0";
+        ctx.beginPath(); ctx.arc(px2, py2, 1.2 + a, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
+
     ctx.textAlign = "center";
-    ctx.font = "bold 12px Trebuchet MS";
-    ctx.fillStyle = sel ? "#f2c14e" : "#907860";
-    ctx.fillText("[" + (i + 1) + "]", ox + cardW / 2, oy + 22);
+    // tier banner
+    ctx.font = "bold 11px Trebuchet MS"; ctx.fillStyle = tdef.col;
+    ctx.fillText(isLegend ? "★ LEGENDARY ★" : tdef.name.toUpperCase(), ox + cardW / 2, oy + 20);
+    ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(ox + 16, oy + 27); ctx.lineTo(ox + cardW - 16, oy + 27); ctx.stroke();
+    // key hint + name
+    ctx.font = "bold 10px Trebuchet MS"; ctx.fillStyle = sel ? "#f2c14e" : "#907860";
+    ctx.fillText("[" + (i + 1) + "]", ox + cardW / 2, oy + 41);
     ctx.font = "bold 15px Trebuchet MS";
-    ctx.fillStyle = sel ? "#f0e6cf" : "#c8b890";
-    ctx.fillText(opt.name, ox + cardW / 2, oy + 50);
-    ctx.font = "11px Trebuchet MS"; ctx.fillStyle = "rgba(200,190,170,0.72)";
-    ctx.fillText(opt.desc, ox + cardW / 2, oy + 70);
-    let yy = oy + 96;
-    if (opt.effect.dmg)        { ctx.fillStyle = "#9bd05a"; ctx.font = "12px Trebuchet MS"; ctx.fillText("Damage: " + curEff.dmg + " → " + nxtEff.dmg, ox + cardW / 2, yy); yy += 20; }
-    if (opt.effect.speedBonus) { ctx.fillStyle = "#6ab4ff"; ctx.font = "12px Trebuchet MS"; ctx.fillText("Speed: " + curEff.speed + " → " + nxtEff.speed + "x", ox + cardW / 2, yy); yy += 20; }
-    if (opt.effect.range)      { ctx.fillStyle = "#f2c14e"; ctx.font = "12px Trebuchet MS"; ctx.fillText("Range: " + curEff.range + " → " + nxtEff.range + " px", ox + cardW / 2, yy); yy += 20; }
+    ctx.fillStyle = sel ? "#f0e6cf" : "#d8c8a8";
+    ctx.fillText(opt.name, ox + cardW / 2, oy + 61);
+    let yy = oy + 77;
+    if (opt.unique || opt.ultimate) {
+      ctx.font = "italic 10px Trebuchet MS"; ctx.fillStyle = rc;
+      ctx.fillText(opt.ultimate ? "◆ " + w.name + " ultimate" : "◆ " + w.name + " only", ox + cardW / 2, yy);
+      yy += 15;
+    }
+    // wrapped description
+    ctx.fillStyle = "rgba(205,195,175,0.82)";
+    for (const ln of wrapText(opt.desc, cardW - 28, "11px Trebuchet MS").slice(0, 5)) {
+      ctx.fillText(ln, ox + cardW / 2, yy); yy += 14;
+    }
+    // stat deltas pinned to the card bottom
+    const statLines = [];
+    if (opt.effect.dmg)        statLines.push(["Damage: " + curEff.dmg + " → " + nxtEff.dmg, "#9bd05a"]);
+    if (opt.effect.speedBonus) statLines.push(["Speed: " + curEff.speed + "s → " + nxtEff.speed + "s", "#6ab4ff"]);
+    if (opt.effect.range)      statLines.push(["Range: " + curEff.range + " → " + nxtEff.range + " px", "#f2c14e"]);
+    if (opt.effect.critBonus)  statLines.push(["Crit: +" + Math.round(opt.effect.critBonus * 100) + "%", "#ff8a5a"]);
+    let sy = oy + cardH - 14 - (statLines.length - 1) * 17;
+    ctx.font = "12px Trebuchet MS";
+    for (const [txt, col] of statLines) { ctx.fillStyle = col; ctx.fillText(txt, ox + cardW / 2, sy); sy += 17; }
   }
   ctx.textAlign = "center"; ctx.font = "11px Trebuchet MS"; ctx.fillStyle = "rgba(180,180,180,0.45)";
-  ctx.fillText("◀▶ navigate  ·  E/Enter select  ·  1/2/3 direct  ·  Esc cancel", cx, cy + cardH / 2 + 46);
+  ctx.fillText("◀▶ navigate  ·  E/Enter select  ·  1/2/3 direct  ·  Esc cancel", cx, cy - 88 + cardH + 30);
   ctx.restore();
 }
 
@@ -675,6 +747,38 @@ function drawLegendaryBossHead(intro, cx, cy, size) {
   if (!t) return;
   const T = performance.now() / 1000;
   const w = size, col = t.color, eye = t.eye;
+  if (intro.bossType === "magmaGolem") {
+    // Match the in-world redesign: a narrow furnace rift and one severe visor
+    // read far more threatening than the generic pair of round boss eyes.
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.24 + 0.12 * Math.sin(T * 2.4);
+    const glow = ctx.createRadialGradient(cx, cy, 3, cx, cy, w * 1.08);
+    glow.addColorStop(0, "rgba(255,125,35,0.78)"); glow.addColorStop(1, "rgba(120,10,0,0)");
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.ellipse(cx, cy, w * 0.9, w * 1.04, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    ctx.save();
+    ctx.fillStyle = "#101318";
+    ctx.beginPath();
+    ctx.moveTo(cx - w * 0.42, cy + w * 0.44); ctx.lineTo(cx - w * 0.48, cy - w * 0.14);
+    ctx.lineTo(cx - w * 0.24, cy - w * 0.58); ctx.lineTo(cx + w * 0.16, cy - w * 0.62);
+    ctx.lineTo(cx + w * 0.44, cy - w * 0.2); ctx.lineTo(cx + w * 0.36, cy + w * 0.46); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#333b44";
+    ctx.beginPath();
+    ctx.moveTo(cx - w * 0.33, cy + w * 0.39); ctx.lineTo(cx - w * 0.36, cy - w * 0.08);
+    ctx.lineTo(cx - w * 0.16, cy - w * 0.48); ctx.lineTo(cx + w * 0.11, cy - w * 0.52);
+    ctx.lineTo(cx + w * 0.3, cy - w * 0.14); ctx.lineTo(cx + w * 0.25, cy + w * 0.39); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#090b0e";
+    ctx.beginPath(); ctx.moveTo(cx - w * 0.19, cy - w * 0.3); ctx.lineTo(cx + w * 0.22, cy - w * 0.34); ctx.lineTo(cx + w * 0.16, cy - w * 0.21); ctx.lineTo(cx - w * 0.15, cy - w * 0.17); ctx.closePath(); ctx.fill();
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.82 + 0.16 * Math.sin(T * 7);
+    ctx.fillStyle = "#ffad48";
+    ctx.beginPath(); ctx.moveTo(cx - w * 0.13, cy - w * 0.265); ctx.lineTo(cx + w * 0.17, cy - w * 0.292); ctx.lineTo(cx + w * 0.12, cy - w * 0.232); ctx.lineTo(cx - w * 0.1, cy - w * 0.208); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#f45a21";
+    ctx.beginPath(); ctx.moveTo(cx - w * 0.055, cy - w * 0.1); ctx.lineTo(cx + w * 0.055, cy - w * 0.04); ctx.lineTo(cx + w * 0.02, cy + w * 0.26); ctx.lineTo(cx - w * 0.05, cy + w * 0.14); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    ctx.restore();
+    return;
+  }
   ctx.save(); ctx.globalCompositeOperation = "lighter";
   const ag = ctx.createRadialGradient(cx, cy, 4, cx, cy, w * 1.1);
   ag.addColorStop(0, eye); ag.addColorStop(1, "rgba(0,0,0,0)");

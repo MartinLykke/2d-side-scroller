@@ -74,6 +74,7 @@ export const CFG = {
   aegisRange: 620,
   aegisInterval: 3.0,
   aegisDamage: 6,
+  aegisSplashDamage: 2,   // reduced damage to enemies caught near the primary target
   aegisRadius: 80,
 };
 

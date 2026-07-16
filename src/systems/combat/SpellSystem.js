@@ -1,4 +1,5 @@
 import { WEAPONS, effectiveWeapon } from '../../config/weapons.js';
+import { mergeUpgradeEffects } from '../../config/weaponUpgrades.js';
 import { CFG } from '../../config/config.js';
 import { dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
@@ -12,6 +13,15 @@ import { entityWallLift } from '../../entities/Wall.js';
 
 function spellGravity(spellType) {
   return spellType === "meteor" ? 650 : spellType === "waterjet" ? 80 : 280;
+}
+
+function playerTomeCastOrigin(player, pulse = 0) {
+  const dir = player.dir || 1;
+  const lift = entityWallLift(player) + (player.jumpH || 0) + (player.bob || 0);
+  return {
+    x: player.x + dir * (18 + pulse * 8),
+    y: groundY - 31 - pulse * 5 - lift,
+  };
 }
 
 function targetImpactY(target) {
@@ -68,25 +78,135 @@ function dealAoE(x, dmg, radius, col) {
   spawnParticles(x, groundY - 10, 14, col, 100, 90);
 }
 
+function projectileDir(sp) {
+  const speed = Math.hypot(sp.vx || 0, sp.vy || 0) || 1;
+  return { x: (sp.vx || 0) / speed, y: (sp.vy || 0) / speed };
+}
+
+function spawnWaterDroplet(x, y, color) {
+  spawnParticles(x, y, 1, color, 1, 1);
+  return state.particles[state.particles.length - 1] || null;
+}
+
+function spawnWaterSpray(x, y, n, dirX, dirY, intensity = 1) {
+  const sideX = -dirY;
+  const sideY = dirX;
+  const colors = ["#4ab8e8", "#7fdcff", "#d8fbff"];
+  for (let i = 0; i < n; i++) {
+    const p = spawnWaterDroplet(x + rand(-3, 3), y + rand(-3, 3), colors[(Math.random() * colors.length) | 0]);
+    if (!p) continue;
+    const back = rand(26, 82) * intensity;
+    const side = rand(-34, 34) * intensity;
+    p.vx = -dirX * back + sideX * side + rand(-8, 8);
+    p.vy = -dirY * back + sideY * side + rand(-8, 8);
+    p.life = rand(0.22, 0.52);
+    p.size = rand(1.1, 2.8);
+  }
+}
+
+function spawnWaterBurst(x, y, n, dirX, dirY, intensity = 1) {
+  const sideX = -dirY;
+  const sideY = dirX;
+  const colors = ["#2f9ed8", "#65d8ff", "#c8f7ff", "#ffffff"];
+  for (let i = 0; i < n; i++) {
+    const p = spawnWaterDroplet(x + rand(-5, 5), y + rand(-5, 5), colors[(Math.random() * colors.length) | 0]);
+    if (!p) continue;
+    const forward = rand(18, 94) * intensity;
+    const side = rand(-110, 110) * intensity;
+    p.vx = dirX * forward + sideX * side + rand(-18, 18);
+    p.vy = dirY * forward + sideY * side - rand(28, 115) * intensity;
+    p.life = rand(0.26, 0.7);
+    p.size = rand(1.4, 3.7);
+  }
+}
+
 function meteorCrashImpact(sp, x, y = groundY - 8) {
   const impactY = Math.min(y, groundY - 8);
+  const icy = sp.iceMeteor;
   const crash = { ...sp, x };
   spellGroundImpact(crash);
   spellEnemyImpact({ ...sp, spellType: "meteor" }, x, impactY);
-  spawnParticles(x, impactY, 34, "#ff8840", 180, 180);
-  spawnParticles(x, impactY + 6, 26, "#3a2418", 210, 120);
-  spawnParticles(x, groundY - 5, 20, "#1d1510", 240, 45);
-  spawnParticles(x, groundY - 18, 12, "#ffd060", 150, 170);
+  spawnParticles(x, impactY, 34, icy ? "#bfefff" : "#ff8840", 180, 180);
+  spawnParticles(x, impactY + 6, 26, icy ? "#7ab8d8" : "#3a2418", 210, 120);
+  spawnParticles(x, groundY - 5, 20, icy ? "#4a7a9a" : "#1d1510", 240, 45);
+  spawnParticles(x, groundY - 18, 12, icy ? "#ffffff" : "#ffd060", 150, 170);
   for (let k = -1; k <= 1; k += 2) {
-    spawnParticles(x + k * 18, groundY - 6, 10, "#5b3a22", 190, 38);
-    spawnParticles(x + k * 34, groundY - 4, 6, "#ff6a20", 170, 30);
+    spawnParticles(x + k * 18, groundY - 6, 10, icy ? "#a8d8ee" : "#5b3a22", 190, 38);
+    spawnParticles(x + k * 34, groundY - 4, 6, icy ? "#e8fbff" : "#ff6a20", 170, 30);
   }
-  if (!state.firePools) state.firePools = [];
-  state.firePools.push({ x, r: Math.max(24, (sp.aoeRadius || 70) * 0.45), life: 2.2, maxLife: 2.2, tick: rand(0.3, 0.7), ph: rand(0, 6) });
+  // an icy comet quenches instead of igniting the ground
+  if (!icy) {
+    if (!state.firePools) state.firePools = [];
+    state.firePools.push({ x, r: Math.max(24, (sp.aoeRadius || 70) * 0.45), life: 2.2, maxLife: 2.2, tick: rand(0.3, 0.7), ph: rand(0, 6) });
+  }
   Game.screenShake = Math.max(Game.screenShake, 0.95);
 }
 
-function chainLightning(x, dmg, bounces) {
+// Upgrade riders carried by a spell, applied around an impact point:
+// lingering burns, clinging chill, freezing comets, gravity wells, burning
+// ground and fission orbs.
+function applySpellField(sp, x, y) {
+  const r = Math.max(sp.aoeRadius || 0, 60);
+  const hasStatus = sp.burnDps || sp.frostS || sp.iceMeteor || sp.pull;
+  if (hasStatus) {
+    for (const e of state.enemies) {
+      if (e.fleeing || e.dying || e.hp <= 0) continue;
+      const d = dist(e.x, x);
+      if (d > r) continue;
+      if (sp.burnDps) {
+        e.burn = Math.max(e.burn || 0, 3);
+        e.burnTick = 1;
+        e.burnDmg = Math.max(e.burnDmg || 0, sp.burnDps);
+        e.ignited = true;
+      }
+      if (sp.frostS) {
+        e.frost = Math.max(e.frost || 0, sp.frostS);
+        if (Math.random() < 0.6) spawnParticles(e.x, groundY - 26, 3, "#bfefff", 30, 50);
+      }
+      if (sp.iceMeteor) {
+        e.frost = Math.max(e.frost || 0, 4);
+        e.rooted = Math.max(e.rooted || 0, 2);
+        spawnParticles(e.x, groundY - 26, 6, "#bfefff", 40, 60);
+      }
+      if (sp.pull && d > 8 && !ENEMY_TYPES[e.type]?.noKnockback) {
+        e.knock = (e.knock || 0) - Math.sign(e.x - x) * 280;
+      }
+    }
+  }
+  if (sp.pull) {
+    spawnParticles(x, y ?? groundY - 20, 16, sp.col, r * 0.8, 90);
+    Game.screenShake = Math.max(Game.screenShake, 0.25);
+  }
+  if (sp.firePool && !sp.iceMeteor) {
+    if (!state.firePools) state.firePools = [];
+    state.firePools.push({ x, r: Math.max(30, r * 0.55), life: 3.5, maxLife: 3.5, tick: rand(0.3, 0.7), ph: rand(0, 6) });
+  }
+  if (sp.split && !sp.isSplitOrb) spawnSplitOrbs(sp, x, y ?? groundY - 30);
+}
+
+// Arcane Fission / Oblivion: the impact bursts into smaller orbs that arc out
+// and detonate where they land.
+function spawnSplitOrbs(sp, x, y) {
+  const n = sp.split;
+  for (let i = 0; i < n; i++) {
+    const t = n === 1 ? 0 : (i / (n - 1)) * 2 - 1; // spread -1..1
+    state.spells.push({
+      x, y: Math.min(y, groundY - 30),
+      vx: t * rand(150, 230) + rand(-30, 30),
+      vy: -rand(200, 330),
+      spellType: sp.spellType,
+      dmg: Math.max(1, Math.round(sp.dmg * 0.4)),
+      life: 1.5,
+      col: sp.col,
+      aoeRadius: Math.max(30, (sp.aoeRadius || 60) * 0.5),
+      age: 0,
+      isSplitOrb: true,
+    });
+  }
+  spawnParticles(x, y, 12, sp.col, 60, 100);
+}
+
+export function chainLightning(x, dmg, bounces) {
   if (bounces <= 0) return;
   let nearest = null, nd = 250;
   for (const e of state.enemies) {
@@ -142,10 +262,10 @@ function chainLightning(x, dmg, bounces) {
 
 export function castSpell(player, wBase, tgt) {
   const ew = effectiveWeapon(player.weapon, player.weaponUpgrades || []);
+  const fx = mergeUpgradeEffects(player.weaponUpgrades || []);
   const dmgMult = permanentDamageMultiplier() * playerMomentumDamageMultiplier() * playerRiposteDamageMultiplier(player);
-  const aoeR = (wBase.aoeRadius || 0) + (ew.range - wBase.range) * 0.2;
-  const casterLift = entityWallLift(player) + (player.jumpH || 0);
-  const casterY = groundY - 72 - casterLift;
+  const aoeR = (wBase.aoeRadius || 0) + (ew.range - wBase.range) * 0.2 + (fx.aoeBonus || 0);
+  const castOrigin = playerTomeCastOrigin(player);
 
   const tgtIsBear = tgt.type === "bear" && state.animals.includes(tgt);
 
@@ -189,17 +309,43 @@ export function castSpell(player, wBase, tgt) {
       currentY = nextY;
     }
 
-    chainLightning(tgt.x, ew.dmg * dmgMult, 1);
+    chainLightning(tgt.x, ew.dmg * dmgMult, 1 + (fx.chainBonus || 0));
+
+    // Tempest: the sky answers twice — a second bolt hunts another enemy
+    if (fx.extraBolt) {
+      let second = null, sd = ew.range;
+      for (const e of state.enemies) {
+        if (e === tgt || e.fleeing || e.dying || e.hp <= 0) continue;
+        const d = dist(player.x, e.x);
+        if (d < sd) { sd = d; second = e; }
+      }
+      if (second) {
+        const ey2 = targetImpactY(second);
+        for (let yy = groundY - 700; yy < ey2; yy += 12) {
+          spawnParticles(second.x + rand(-8, 8), yy, 1, "#ffffff", 5, 5);
+          if (Math.random() < 0.35) spawnParticles(second.x + rand(-14, 14), yy, 1, "#ccccff", 10, 8);
+        }
+        const crit2 = applyCrit(ew.dmg * dmgMult * 0.8, CFG.critChance, CFG.critMultiplier);
+        second.hp -= crit2.damage;
+        second.flash = 0.14;
+        spawnImpBlood(second, 1 + ew.dmg * 0.06, ey2);
+        if (crit2.isCrit) critFloaty(second.x, crit2.damage);
+        else floaty(second.x, "-" + crit2.damage, wBase.col);
+        spellEnemyImpact({ spellType: "lightning" }, second.x, ey2);
+        chainLightning(second.x, ew.dmg * dmgMult * 0.8, 1 + (fx.chainBonus || 0));
+        if (second.hp <= 0) killEnemy(second);
+      }
+    }
 
     if (!tgtIsBear && tgt.hp <= 0) killEnemy(tgt);
 
-    spawnParticles(player.x, casterY, 10, wBase.col, 50, 70);
+    castBurstFX(wBase, castOrigin.x, castOrigin.y, player.dir || 1, 0);
     Audio.spell();
     return;
   }
 
-  let startX = player.x;
-  let startY = casterY;
+  let startX = castOrigin.x;
+  let startY = castOrigin.y;
   let targetX = tgt.x;
   let targetY = targetImpactY(tgt);
   let spd = wBase.spellType === "waterjet" ? 480 : 330;
@@ -227,7 +373,7 @@ export function castSpell(player, wBase, tgt) {
     vy = (dy - 0.5 * grav * flightTime * flightTime) / flightTime;
   }
 
-  state.spells.push({
+  const spell = {
     x: startX,
     y: startY,
     vx,
@@ -238,9 +384,26 @@ export function castSpell(player, wBase, tgt) {
     col: wBase.col,
     aoeRadius: aoeR,
     age: 0,
-  });
+    // upgrade riders resolved on impact
+    burnDps: fx.spellBurn || 0,
+    frostS: fx.spellFrost || 0,
+    firePool: !!fx.firePool,
+    split: fx.splitOrbs || 0,
+    pull: !!fx.singularity,
+    iceMeteor: !!fx.meteorIce && wBase.spellType === "meteor",
+  };
+  state.spells.push(spell);
 
-  spawnParticles(player.x, casterY, 10, wBase.col, 50, 70);
+  // Double Up: a twin meteor trails the first, landing a beat behind it
+  if (wBase.spellType === "meteor" && fx.meteorDouble) {
+    const dir = Math.sign(tgt.x - player.x) || 1;
+    state.spells.push({ ...spell, x: startX - 90 * dir, y: startY - 140, life: life + 0.4 });
+  }
+
+  {
+    const d = projectileDir({ vx, vy });
+    castBurstFX(wBase, castOrigin.x, castOrigin.y, d.x, d.y);
+  }
   Audio.spell();
 }
 
@@ -264,6 +427,7 @@ export function updateSpells(dt) {
         if (sp.spellType === "meteor") meteorCrashImpact(sp, sp.x, groundY - 8);
         else spellGroundImpact(sp);
         dealAoE(sp.x, sp.dmg, sp.aoeRadius, sp.col);
+        applySpellField(sp, sp.x, groundY - 20);
         Audio.explosion();
       }
       spells.splice(i, 1);
@@ -287,6 +451,7 @@ export function updateSpells(dt) {
         }
         spawnImpBlood(e, 1 + sp.dmg * 0.08, ey);
         if (!et.noKnockback) e.knock = (e.knock || 0) + Math.sign(e.x - sp.vx) * 140;
+        applySpellField(sp, e.x, ey);
         if (e.hp <= 0 && !e.dying) killEnemy(e);
         else if (sp.aoeRadius > 0 && sp.spellType !== "meteor") dealAoE(sp.x, Math.max(1, Math.floor(sp.dmg * 0.65)), sp.aoeRadius, sp.col);
         if (sp.spellType === "lightning") chainLightning(sp.x, sp.dmg, 1);
@@ -296,8 +461,8 @@ export function updateSpells(dt) {
     if (!hit) {
       for (const a of state.animals) {
         if (a.type !== "bear" || !a.alive || a.dying) continue;
-        const ay = groundY + (a.fy || 0) - 24;
-        if (dist(sp.x, a.x) < 30 && Math.abs(sp.y - ay) < 44) {
+        const ay = groundY + (a.fy || 0) - 34;
+        if (dist(sp.x, a.x) < 40 && Math.abs(sp.y - ay) < 56) {
           Audio.hit();
           if (sp.spellType === "meteor") {
             meteorCrashImpact(sp, a.x, ay);
@@ -307,6 +472,7 @@ export function updateSpells(dt) {
             damageBear(a, sp.dmg, sp.col);
             if (sp.aoeRadius > 0) dealAoE(sp.x, Math.max(1, Math.floor(sp.dmg * 0.65)), sp.aoeRadius, sp.col);
           }
+          applySpellField(sp, a.x, ay);
           hit = true; break;
         }
       }
@@ -320,25 +486,62 @@ function spellTrail(sp) {
     case "fireball":
       if (Math.random() < 0.7) spawnParticles(sp.x, sp.y, 1, "#ff6a20", 12, 10);
       if (Math.random() < 0.3) spawnParticles(sp.x, sp.y, 1, "#ffcc60", 6, 14);
+      if (Math.random() < 0.25) spawnParticles(sp.x, sp.y, 1, "#3a3a44", 8, 22); // smoke wisp
       break;
     case "meteor":
+      if (sp.iceMeteor) {
+        // frozen comet: crystalline shards and a misty vapor tail
+        spawnParticles(sp.x, sp.y, 2, "#bfefff", 18, 14);
+        if (Math.random() < 0.5) spawnParticles(sp.x, sp.y, 1, "#7ab8d8", 22, 10);
+        if (Math.random() < 0.4) spawnParticles(sp.x, sp.y, 1, "#ffffff", 14, 20);
+        break;
+      }
       spawnParticles(sp.x, sp.y, 2, "#ff7730", 18, 14);
       if (Math.random() < 0.5) spawnParticles(sp.x, sp.y, 1, "#554432", 22, 10);
+      if (Math.random() < 0.45) spawnParticles(sp.x, sp.y, 1, "#2a2a30", 18, 24); // smoke column
+      if (Math.random() < 0.3) spawnParticles(sp.x, sp.y, 1, "#ffd060", 12, 18);  // shed embers
       break;
     case "waterjet":
-      if (Math.random() < 0.5) spawnParticles(sp.x, sp.y, 1, "#4ab8e8", 14, 8);
+      {
+        const d = projectileDir(sp);
+        if (Math.random() < 0.8) spawnWaterSpray(sp.x - d.x * 12, sp.y - d.y * 12, 2, d.x, d.y, 0.75);
+        if (Math.random() < 0.3) spawnWaterSpray(sp.x - d.x * 22, sp.y - d.y * 22, 1, d.x, d.y, 1.0);
+      }
       break;
     case "arcane":
       if (Math.random() < 0.6) spawnParticles(sp.x, sp.y, 1, "#cc44ff", 16, 14);
       if (Math.random() < 0.3) spawnParticles(sp.x, sp.y, 1, "#ff88ff", 8, 18);
+      if (Math.random() < 0.2) spawnParticles(sp.x, sp.y, 1, "#ffffff", 6, 20);   // glittering motes
       break;
     case "shadow":
       if (Math.random() < 0.6) spawnParticles(sp.x, sp.y, 1, "#660099", 12, 8);
       if (Math.random() < 0.3) spawnParticles(sp.x, sp.y, 1, "#aa44cc", 8, 12);
+      if (Math.random() < 0.25) spawnParticles(sp.x, sp.y, 1, "#110018", 14, 6);  // inky residue
       break;
     case "void":
       if (Math.random() < 0.7) spawnParticles(sp.x, sp.y, 1, "#9922ff", 14, 12);
       if (Math.random() < 0.4) spawnParticles(sp.x, sp.y, 1, "#550088", 20, 8);
+      if (Math.random() < 0.2) spawnParticles(sp.x, sp.y, 1, "#ffffff", 8, 16);   // star flecks
+      break;
+  }
+}
+
+// Burst of magic at the caster's hands, flavored per school.
+function castBurstFX(wBase, x, y, dirX = 1, dirY = 0) {
+  spawnParticles(x, y, 10, wBase.col, 50, 70);
+  switch (wBase.spellType) {
+    case "fireball":  spawnParticles(x, y, 5, "#ffcc60", 35, 60); break;
+    case "waterjet":  spawnWaterBurst(x, y, 8, dirX, dirY, 0.55); break;
+    case "lightning": spawnParticles(x, y, 6, "#ffffff", 40, 85); break;
+    case "meteor":
+      spawnParticles(x, y, 6, "#ffd060", 40, 70);
+      Game.screenShake = Math.max(Game.screenShake, 0.12);
+      break;
+    case "arcane":    spawnParticles(x, y, 5, "#ff88ff", 35, 65); break;
+    case "shadow":    spawnParticles(x, y, 5, "#440066", 35, 45); break;
+    case "void":
+      spawnParticles(x, y, 6, "#ddaaff", 40, 70);
+      spawnParticles(x, y, 3, "#ffffff", 25, 80);
       break;
   }
 }
@@ -358,8 +561,11 @@ function spellEnemyImpact(sp, x, y) {
       Game.screenShake = Math.max(Game.screenShake, 0.4);
       break;
     case "waterjet":
-      spawnParticles(x, y, 12, "#4ab8e8", 80, 90);
-      spawnParticles(x, y, 6, "#a0e8ff", 50, 60);
+      {
+        const d = projectileDir(sp);
+        spawnWaterBurst(x, y, 22, d.x, d.y, 1.0);
+        spawnParticles(x, y, 8, "#d8fbff", 42, 80);
+      }
       break;
     case "lightning":
       spawnParticles(x, y, 14, "#ccccff", 80, 110);
@@ -403,8 +609,11 @@ function spellGroundImpact(sp) {
       Game.screenShake = Math.max(Game.screenShake, 0.65);
       break;
     case "waterjet":
-      spawnParticles(sp.x, groundY - 8, 18, "#4ab8e8", 110, 100);
-      spawnParticles(sp.x, groundY - 8, 10, "#a0e8ff", 70, 70);
+      {
+        const d = projectileDir(sp);
+        spawnWaterBurst(sp.x, groundY - 8, 28, d.x, Math.min(d.y, -0.15), 1.05);
+        spawnParticles(sp.x, groundY - 8, 10, "#d8fbff", 95, 75);
+      }
       break;
     case "arcane":
       spawnParticles(sp.x, groundY - 8, 20, "#cc44ff", 100, 130);

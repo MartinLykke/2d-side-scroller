@@ -298,11 +298,9 @@ function updatePlayer(dt) {
   const strideTarget = dodging ? 20 : move!==0 ? (sprint?16:10) : 0;
   player.strideRate = (player.strideRate||0) + (strideTarget-(player.strideRate||0))*Math.min(1,dt*8);
   player.gallop += dt*player.strideRate;
-  if (move!==0 || dodging) {
-    const bounce = (0.5-0.5*Math.cos(player.gallop*4))*2.6;
-    player.bob += (bounce-player.bob)*Math.min(1,dt*14);
-  }
-  else player.bob*=Math.exp(-9*dt);
+  // Walk bob is animated inside the sprite (torso/head only, feet planted);
+  // translating the whole body here doubled the motion and caused sub-pixel shimmer.
+  player.bob*=Math.exp(-9*dt);
   if (player.knock) {
     const minX = Game.inMine ? state.mineActiveLeft + 24 : 120;
     const maxX = Game.inMine ? state.mineActiveRight - 24 : CFG.worldWidth - 120;
@@ -337,9 +335,45 @@ function updateParticles(dt) {
   const { particles } = state;
   for (let i=particles.length-1;i>=0;i--) {
     const p=particles[i];
-    if (p.fly) { p.t+=dt/p.life; p.x=lerp(p.fromX,p.toX,clamp(p.t,0,1)); p.y=lerp(p.fromY,p.toY,clamp(p.t,0,1))-Math.sin(clamp(p.t,0,1)*Math.PI)*50; if (p.t>=1) particles.splice(i,1); continue; }
-    p.life-=dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=240*dt;
-    if (p.life<=0) particles.splice(i,1);
+    if (p.fly) {
+      p.t += dt / p.life;
+      const t = clamp(p.t, 0, 1);
+      p.x = lerp(p.fromX, p.toX, t);
+      p.y = lerp(p.fromY, p.toY, t) - Math.sin(t * Math.PI) * 50;
+      if (p.t >= 1) { particles[i] = particles[particles.length - 1]; particles.pop(); }
+      continue;
+    }
+    p.life-=dt;
+    if (p.rot !== undefined) p.rot += (p.spin || 0) * dt;
+    if (p.settled) {
+      if (p.life<=0) { particles[i] = particles[particles.length - 1]; particles.pop(); }
+      continue;
+    }
+    p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=(p.gravity ?? 240)*dt;
+    if (p.drag) {
+      const d = Math.max(0, 1 - p.drag * dt);
+      p.vx *= d;
+      p.vy *= Math.max(0, 1 - p.drag * 0.22 * dt);
+      if (Math.abs(p.vx) < 0.5) p.vx = 0;
+    }
+    if (p.groundY !== undefined && p.y >= p.groundY) {
+      p.y = p.groundY;
+      if (p.bounce && Math.abs(p.vy) > 90) {
+        p.vy = -p.vy * p.bounce;
+        p.vx *= 0.68;
+        p.bounce *= 0.5;
+      } else if (p.stain) {
+        p.settled = true;
+        p.vx = 0; p.vy = 0;
+        p.life = Math.max(p.life, p.stainLife || 1.8);
+        p.maxLife = Math.max(p.maxLife || 0, p.life);
+        p.size *= p.stainScale || 1.6;
+      } else {
+        p.vx *= 0.35;
+        p.vy = 0;
+      }
+    }
+    if (p.life<=0) { particles[i] = particles[particles.length - 1]; particles.pop(); }
   }
 }
 
@@ -347,7 +381,7 @@ function updateFloats(dt) {
   const { floatTexts } = state;
   for (let i=floatTexts.length-1;i>=0;i--) {
     const f=floatTexts[i]; f.life-=dt; f.y+=f.vy*dt; f.vy*=0.96;
-    if (f.life<=0) floatTexts.splice(i,1);
+    if (f.life<=0) { floatTexts[i] = floatTexts[floatTexts.length - 1]; floatTexts.pop(); }
   }
 }
 
@@ -485,6 +519,7 @@ Game.start = function(continueGame) {
   UI.startScreen.classList.add("hidden");
   UI.endScreen.classList.add("hidden");
   UI.hud.classList.remove("hidden");
+  UI.refresh();
 };
 
 Game.togglePause = function() {
@@ -571,15 +606,26 @@ function drawDeathOverlay() {
 
 // ---------- Main loop ----------
 let last = performance.now();
+let uiRefreshElapsed = 1;
 function loop(now) {
-  let dt = (now - last) / 1000;
+  const frameDt = Math.max(0, (now - last) / 1000);
   last = now;
-  dt = clamp(dt, 0, 0.05);
+  let dt = clamp(frameDt, 0, 0.05);
+  DEV.updateFps(frameDt);
 
   const gdt = dt * DEV.speedMult;
   updateFXEffects(gdt);
 
-  if (Game.state === "play") { if (!Game.upgradeMenuOpen) update(gdt); UI.refresh(); }
+  if (Game.state === "play") {
+    if (!Game.upgradeMenuOpen) update(gdt);
+    uiRefreshElapsed += frameDt;
+    if (uiRefreshElapsed >= 0.08) {
+      uiRefreshElapsed = 0;
+      UI.refresh();
+    }
+  } else {
+    uiRefreshElapsed = 1;
+  }
   if (Game.state === "hub") {
     updateHub(gdt, startRunFromPortal);
     UI.hud.classList.add("hidden");

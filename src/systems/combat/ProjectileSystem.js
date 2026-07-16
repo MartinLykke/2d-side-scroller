@@ -44,6 +44,10 @@ function arrowTrail(ar) {
   } else if (ar.weaponId === "dragons_bow") {
     spawnParticles(ar.x, ar.y, 2, "#ff6820", 15, 12);
     if (Math.random() < 0.4) spawnParticles(ar.x, ar.y, 1, "#ffcc40", 8, 8);
+  } else if (ar.weaponId === "crossbow") {
+    if (Math.random() < 0.4) spawnParticles(ar.x, ar.y, 1, "#c8ccd4", 8, 5); // bolt slipstream
+  } else if (ar.weaponId === "long_bow") {
+    if (Math.random() < 0.25) spawnParticles(ar.x, ar.y, 1, "#e8e0c8", 6, 5); // faint air streak
   }
 }
 
@@ -83,10 +87,11 @@ function stickArrowInAnimal(a, ar) {
   if (!a.stuckArrows) a.stuckArrows = [];
   if (a.stuckArrows.length >= 5) a.stuckArrows.shift();
   const airborne = (a.fy || 0) < -10; // duck hit mid-flight: arrow rides the body down
+  const stickSpan = a.type === "bear" ? 24 : 12;
   a.stuckArrows.push({
-    x: clamp(ar.x - a.x, -12, 12),
+    x: clamp(ar.x - a.x, -stickSpan, stickSpan),
     rel: airborne,
-    y: airborne ? -10 : groundY - (a.type === "bear" ? 26 : 14),
+    y: airborne ? -10 : groundY - (a.type === "bear" ? 36 : 14),
     a: Math.atan2(ar.vy, ar.vx),
     weaponId: ar.weaponId || null,
     t: stuckArrowLife(),
@@ -119,14 +124,15 @@ function enemyDrawYOffset(e) {
   return e.type === "imp" && e.aiState === "stacking" && e.impStackY !== undefined ? e.impStackY : (e.fy || 0);
 }
 
-export function shootArrow(x, y, target, sourceUnit = null, weaponId = null) {
+export function shootArrow(x, y, target, sourceUnit = null, weaponId = null, opts = {}) {
   const targetType = target.type && ENEMY_TYPES[target.type];
   const airborne = (targetType && targetType.flying) || (target.fy || 0) < -10; // flying enemy or a duck on the wing
   const tx = target.x, ty = airborne ? groundY + (target.fy || -80) : groundY - 24;
   const dx = tx - x, dy = ty - y;
   const dist_h = Math.hypot(dx, dy);
 
-  const flightTime = Math.max(0.12, dist_h / 400);
+  const projectileSpeed = opts.projectileSpeed || (weaponId === "crossbow" ? 620 : 400);
+  const flightTime = Math.max(0.12, dist_h / projectileSpeed);
   const gravity = 420;
 
   let vx = dx / flightTime;
@@ -156,7 +162,7 @@ export function shootArrow(x, y, target, sourceUnit = null, weaponId = null) {
     vx: vx,
     vy: vy,
     target,
-    life: 1.2,
+    life: opts.lifePadding !== undefined ? flightTime + opts.lifePadding : 1.2,
     hitKind: "enemy",
     sourceUnit,
     weaponId,
@@ -173,6 +179,7 @@ export function shootArrow(x, y, target, sourceUnit = null, weaponId = null) {
   if (weaponId === "dark_bow") spawnParticles(x, y, 8, "#880099", 40, 60);
   else if (weaponId === "void_bow") spawnParticles(x, y, 6, "#9933ff", 30, 50);
   else if (weaponId === "dragons_bow") { spawnParticles(x, y, 10, "#ff6620", 50, 80); spawnParticles(x, y, 5, "#ffcc40", 30, 60); }
+  else if (weaponId === "crossbow") spawnParticles(x, y, 4, "#c8ccd4", 35, 30); // string snap kick
 }
 
 export function updateArrows(dt) {
@@ -190,6 +197,17 @@ export function updateArrows(dt) {
     if (ar.delay > 0) {
       ar.delay -= dt;
       if (ar.delay <= 0) { ar.delay = 0; Audio.bow(); }
+      // Update arrow position during draw delay to track player/archer movement
+      if (ar.sourceUnit) {
+        ar.x = ar.sourceUnit.x;
+        if (ar.sourceUnit === player) {
+          const lift = entityWallLift(player) + (player.jumpH || 0);
+          ar.y = groundY - 30 - lift;
+        } else if (ar.sourceUnit.role === "archer") {
+          const lift = entityWallLift(ar.sourceUnit) + (ar.sourceUnit.jumpH || 0);
+          ar.y = groundY - 30 - lift;
+        }
+      }
       continue;
     }
     ar.x += ar.vx * dt; ar.y += ar.vy * dt; ar.vy += 420 * dt;
@@ -218,7 +236,7 @@ export function updateArrows(dt) {
             e.hunterMark = 5;
           }
           const baseDmg = ((ar.dmgMult ? Math.round(ar.dmgMult) : 1) + markBonus) * permanentDamageMultiplier();
-          const crit = applyCrit(baseDmg, CFG.critChance, CFG.critMultiplier);
+          const crit = applyCrit(baseDmg, CFG.critChance + (ar.critBonus || 0), CFG.critMultiplier);
           stickArrowInEnemy(e, ar, enemyDrawY);
           e.hp -= crit.damage; e.flash = 0.12; Audio.hit();
           if (crit.isCrit) critFloaty(e.x, crit.damage);
@@ -260,10 +278,48 @@ export function updateArrows(dt) {
             spawnParticles(e.x, enemyDrawY, 10, "#ff2200", 70, 90);
             spawnParticles(e.x, enemyDrawY, 8, "#ffdd60", 50, 100);
             Game.screenShake = Math.max(Game.screenShake, 0.55);
+          } else if (ar.weaponId === "crossbow") {
+            spawnParticles(e.x, enemyDrawY, 7, "#c8ccd4", 55, 55);
+            spawnParticles(e.x, enemyDrawY, 4, "#8a2a4a", 40, 45);
+            Game.screenShake = Math.max(Game.screenShake, 0.1);
+          } else if (ar.weaponId === "long_bow") {
+            spawnParticles(e.x, enemyDrawY, 5, "#8a2a4a", 40, 50);
+            spawnParticles(e.x, enemyDrawY, 3, "#e8e0c8", 25, 40);
           } else {
             spawnParticles(e.x, enemyDrawY, 4, "#8a2a4a");
           }
           if (ar.ballista) { spawnParticles(e.x, enemyDrawY, 14, "#cc8840", 90, 100); spawnParticles(e.x, enemyDrawY, 8, "#9aa2ae", 70, 60); Game.screenShake = Math.max(Game.screenShake, 0.4); if (!et.noKnockback) e.knock = (e.knock||0) + (Math.sign(ar.vx) || 1) * 500; }
+          // Upgrade: Dragon's Roar / Null Point — the arrow detonates on impact
+          if (ar.explosiveR) {
+            const cols = ar.weaponId === "void_bow" ? ["#9933ff", "#ddaaff"] : ["#ff6820", "#ffcc40"];
+            const burstDmg = Math.max(1, Math.round((ar.dmg || 1) * (ar.explosiveFrac || 0.8)));
+            spawnParticles(ar.x, enemyDrawY, 18, cols[0], ar.explosiveR, 110);
+            spawnParticles(ar.x, enemyDrawY, 10, cols[1], ar.explosiveR * 0.6, 130);
+            Game.screenShake = Math.max(Game.screenShake, 0.35);
+            Audio.explosion();
+            for (const ne of enemies) {
+              if (ne === e || ne.fleeing || ne.dying || ne.hp <= 0) continue;
+              if (dist(ne.x, ar.x) > ar.explosiveR) continue;
+              ne.hp -= burstDmg;
+              ne.flash = 0.12;
+              spawnImpBlood(ne, 0.7, groundY + (ne.fy || 0) - 24);
+              floaty(ne.x, "-" + burstDmg, cols[0]);
+              if (ne.hp <= 0) killEnemyWithAnimation(ne, Math.sign(ne.x - ar.x) || 1);
+            }
+          }
+          // Upgrade: Event Horizon — the impact tears a rift that drags enemies in
+          if (ar.gravityChance && Math.random() < ar.gravityChance) {
+            spawnParticles(ar.x, enemyDrawY, 14, "#9933ff", 60, 80);
+            spawnParticles(ar.x, enemyDrawY, 8, "#ddaaff", 30, 100);
+            for (const ne of enemies) {
+              if (ne === e || ne.fleeing || ne.dying || ne.hp <= 0) continue;
+              const d = dist(ne.x, ar.x);
+              if (d > 150 || d < 8) continue;
+              if (!ENEMY_TYPES[ne.type]?.noKnockback) ne.knock = (ne.knock || 0) - Math.sign(ne.x - ar.x) * 260;
+              spawnParticles(ne.x, groundY + (ne.fy || 0) - 24, 3, "#9933ff", 20, 30);
+            }
+            Game.screenShake = Math.max(Game.screenShake, 0.2);
+          }
           if (ar.pierce > 0) {
             if (!ar._hitEnemies) ar._hitEnemies = new Set();
             ar._hitEnemies.add(e);
@@ -306,6 +362,18 @@ export function updateArrows(dt) {
               const knockDir = Math.sign(e.x - ar.x) || 1;
               killEnemyWithAnimation(e, knockDir);
             } else {
+              // Soul Reaper / golden fortune: player arrow kills pay off
+              if (ar.playerShot) {
+                if (ar.healOnKill && player.hp < player.maxHp && Math.random() < ar.healOnKill) {
+                  player.hp = Math.min(player.maxHp, player.hp + 1);
+                  floaty(player.x, "+1❤", "#7be87b");
+                  spawnParticles(player.x, groundY - 40, 8, "#7be87b", 40, 70);
+                }
+                if (ar.goldOnKill && Math.random() < ar.goldOnKill) {
+                  const g = spawnGoldReward(e.x, 2, "hunt", { spreadX: 12, fromY: groundY - 24, vyMin: 120, vyMax: 200 });
+                  if (g > 0) floaty(e.x + 14, "+" + g + "🪙", "#f2c14e");
+                }
+              }
               const knockDir = Math.sign(e.x - ar.x) || 1;
               killEnemyWithAnimation(e, knockDir);
             }
@@ -318,8 +386,8 @@ export function updateArrows(dt) {
     if (!hit && ar.hitKind === "enemy") {
       for (const a of animals) {
         const airborne = (a.fy || 0) < -10;
-        const inY = airborne ? Math.abs(ar.y - (groundY + a.fy)) < 24 : ar.y > groundY - 36;
-        if (a.alive && !a.dying && dist(ar.x, a.x) < (a.type === "bear" ? 24 : 16) && inY) {
+        const inY = airborne ? Math.abs(ar.y - (groundY + a.fy)) < 24 : ar.y > groundY - (a.type === "bear" ? 62 : 36);
+        if (a.alive && !a.dying && dist(ar.x, a.x) < (a.type === "bear" ? 34 : 16) && inY) {
           stickArrowInAnimal(a, ar);
           if (a.type === "bear") {
             // Bears are tough: they take arrow damage instead of dying outright

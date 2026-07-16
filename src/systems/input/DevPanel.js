@@ -10,6 +10,8 @@ export function setupDevPanel() {
     if (el) el.addEventListener("click", handler);
   };
 
+  bind("#dev-close", () => DEV.toggle());
+
   // Gold & Embers
   bind('[data-dev="coins10"]',     () => DEV.addCoins(10));
   bind('[data-dev="coins50"]',     () => DEV.addCoins(50));
@@ -18,6 +20,7 @@ export function setupDevPanel() {
   bind('[data-dev="embers50"]',    () => DEV.addEmbers(50));
   bind('[data-dev="embers500"]',   () => DEV.addEmbers(500));
   bind('[data-dev="resetUpgrades"]', () => DEV.resetUpgrades());
+  bind('[data-dev="clearLeaderboard"]', () => DEV.clearLeaderboard());
 
   // Time
   bind('[data-dev="night"]',   () => DEV.skipToNight());

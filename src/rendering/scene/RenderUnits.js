@@ -2,6 +2,7 @@ import { ctx, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { roundedRect, legs, drawArm, drawHpBar } from '../DrawHelpers.js';
 import { entityWallLift } from '../../entities/Wall.js';
+import { visibleWorldBounds } from '../Viewport.js';
 import { drawArcher } from '../sprites/Archer.js';
 import { drawBuilder } from '../sprites/Builder.js';
 import { drawVillager } from '../sprites/Villager.js';
@@ -57,7 +58,9 @@ function drawHumanoid(x, anim, bodyCol, headCol, tool, dir, moving) {
 }
 
 export function drawVagrants() {
+  const view = visibleWorldBounds(90);
   for (const v of state.vagrants) {
+    if (v.x < view.left || v.x > view.right) continue;
     drawVillager(v, v.vx >= 0 ? 1 : -1, Math.abs(v.vx) > 1);
   }
 }
@@ -135,15 +138,17 @@ function drawPowerCharge(u, lift) {
 }
 
 export function drawUnits() {
+  const view = visibleWorldBounds(220);
   for (const u of state.units) {
     if (u.mine) continue;
+    if (u.x < view.left || u.x > view.right) continue;
     let body="#3a3550", head="#caa483", tool=null;
     if (u.role==="archer")  { body="#2f5040"; tool="bow"; }
     else if (u.role==="builder") { body="#6a4a28"; tool="hammer"; }
     else if (u.role==="farmer")  { body="#5a6a2a"; tool="scythe"; }
     else if (u.role==="guard")   { body="#3a4a5a"; head="#b09a7a"; }
-    let wallLift = entityWallLift(u);
-    if (u.grapple) wallLift = u.grappleLiftY || 0;
+    let wallLift = u.dying ? Math.max(0, -(u.deathFy || 0)) : entityWallLift(u);
+    if (!u.dying && u.grapple) wallLift = u.grappleLiftY || 0;
 
     const shadowAlpha = u.role === "archer" && state.archerSkills.includes("master_shadows") && Game.isNight && (u.smokeReveal || 0) <= 0 ? 0.32 : 1;
     ctx.save();
@@ -152,10 +157,14 @@ export function drawUnits() {
     if (u.dying) {
       const p = Math.min((u.deathT || 0) / (u.deathDuration || 1.25), 1);
       const ease = 1 - Math.pow(1 - p, 3);
-      ctx.globalAlpha *= Math.max(0.25, 1 - Math.max(0, p - 0.72) / 0.28);
+      const fadeStart = u.deathKind === "fallFromWall" ? 0.82 : 0.72;
+      ctx.globalAlpha *= Math.max(0.2, 1 - Math.max(0, p - fadeStart) / Math.max(0.18, 1 - fadeStart));
       ctx.translate(u.x, groundY);
-      ctx.rotate((u.deathSpin || 1) * ease * (u.role === "guard" ? 1.35 : 1.55));
-      ctx.translate(-u.x, -groundY + ease * 3);
+      const angle = u.deathAngle !== undefined ? u.deathAngle : (u.deathRestAngle || (u.deathSpin || 1) * 1.35) * ease;
+      ctx.rotate(angle);
+      const squash = (u.deathKind === "guardCollapse" ? 0.08 : 0.05) * ease;
+      ctx.scale(1 + squash, 1 - squash);
+      ctx.translate(-u.x, -groundY + ease * (u.role === "guard" ? 5 : 3));
     }
 
     if (u.role === "archer") {

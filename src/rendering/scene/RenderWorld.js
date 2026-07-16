@@ -3,6 +3,7 @@ import { CFG, STATIONS_X } from '../../config/config.js';
 import { ctx, W, H, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { FX, biomeAt, getGroundTex, getDeco, windGust, windSway, drawTree, makeTree } from '../Effects.js';
+import { visibleWorldBounds } from '../Viewport.js';
 import { wallHeight, wallRenderWidth, wallBackDir, wallPlatformDepth } from '../../entities/Wall.js';
 import { groundShadow, roundedRect, stoneCol, stoneLt, woodCol, litWindow, drawHpBar } from '../DrawHelpers.js';
 import { ENEMY_TYPES } from '../../config/enemies.js';
@@ -15,7 +16,7 @@ function overPond(x, margin = 0) {
 }
 
 export function drawGroundTexture(dark) {
-  const tex=getGroundTex(), camL=Game.cam-30, camR=Game.cam+W+30;
+  const tex=getGroundTex(), view=visibleWorldBounds(30), camL=view.left, camR=view.right;
   for (const p of tex.patches) {
     if (p.x<camL||p.x>camR) continue;
     const b=biomeAt(p.x), col=lerpColor(p.light?shade(b.gT,1.16):shade(b.gT,0.8),[12,14,22],dark);
@@ -102,12 +103,66 @@ function drawDeco(it, b, dark) {
       ctx.fillStyle=rgb(lerpColor([200,200,190],[60,60,70],dark)); ctx.fillRect(x-1.2*s,groundY-6*s,2.4*s,6*s);
       ctx.fillStyle=b.deco==="swamp"?"#9a6a3a":"#c34b3a"; ctx.beginPath(); ctx.ellipse(x,groundY-6*s,4*s,3*s,0,Math.PI,0); ctx.fill();
       ctx.fillStyle="rgba(255,255,255,0.6)"; ctx.beginPath(); ctx.arc(x-1.5*s,groundY-7*s,0.7*s,0,Math.PI*2); ctx.fill(); break; }
+    case "tallgrass": {
+      // waist-high grass clump with nodding seed heads
+      const col=lerpColor(shade(b.gT,0.8),[12,18,16],dark);
+      const hi=lerpColor(shade(b.gT,1.3),[30,42,32],dark);
+      ctx.lineWidth=1.6*s;
+      for (let i=-2;i<=2;i++) {
+        const h=(21-Math.abs(i)*3)*s, bx=x+i*2.8*s;
+        ctx.strokeStyle=rgb(i%2?col:hi);
+        ctx.beginPath(); ctx.moveTo(bx,groundY+1);
+        ctx.quadraticCurveTo(bx+sway*0.7,groundY-h*0.55,bx+i*1.5*s+sway*1.4,groundY-h);
+        ctx.stroke();
+      }
+      ctx.fillStyle=withA(lerpColor(shade(b.gT,1.5),[52,58,44],dark),0.9);
+      for (const i of [-1,1]) {
+        const h=(21-Math.abs(i)*3)*s;
+        ctx.beginPath(); ctx.ellipse(x+i*1.5*s+sway*1.4,groundY-h,1.2*s,3*s,sway*0.03,0,Math.PI*2); ctx.fill();
+      } break; }
+    case "bush": {
+      // low leafy shrub, sometimes berry-laden
+      const dcol=lerpColor(shade(b.gT,0.5),[10,14,14],dark);
+      const lcol=lerpColor(shade(b.gT,0.95),[20,28,24],dark);
+      ctx.fillStyle=rgb(dcol);
+      ctx.beginPath();
+      ctx.arc(x-6*s,groundY-4*s,5.5*s,0,Math.PI*2);
+      ctx.arc(x+5*s,groundY-4*s,6*s,0,Math.PI*2);
+      ctx.arc(x,groundY-8*s,6.5*s,0,Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle=rgb(lcol);
+      ctx.beginPath();
+      ctx.arc(x-4*s,groundY-8*s,4*s,0,Math.PI*2);
+      ctx.arc(x+3*s,groundY-9.5*s,3.6*s,0,Math.PI*2);
+      ctx.fill();
+      if (it.berry) {
+        ctx.fillStyle=rgb(lerpColor([204,62,72],[72,26,34],dark));
+        for (let i=0;i<5;i++) {
+          ctx.beginPath();
+          ctx.arc(x+Math.sin(i*2.1+x)*6*s,groundY-4*s-((i*7+(x|0))%6)*s,1.1*s,0,Math.PI*2);
+          ctx.fill();
+        }
+      } break; }
+    case "sapling": {
+      // young tree pushing up through the undergrowth
+      ctx.strokeStyle=rgb(lerpColor([96,72,46],[26,22,18],dark)); ctx.lineWidth=1.8*s;
+      ctx.beginPath(); ctx.moveTo(x,groundY+1);
+      ctx.quadraticCurveTo(x+sway*0.4,groundY-9*s,x+sway,groundY-17*s); ctx.stroke();
+      ctx.fillStyle=rgb(lerpColor(shade(b.gT,0.9),[16,24,20],dark));
+      ctx.beginPath();
+      ctx.arc(x+sway,groundY-19*s,4.6*s,0,Math.PI*2);
+      ctx.arc(x+sway-3*s,groundY-15*s,3.2*s,0,Math.PI*2);
+      ctx.arc(x+sway+3.4*s,groundY-15.5*s,3*s,0,Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle=rgb(lerpColor(shade(b.gT,1.25),[30,40,30],dark));
+      ctx.beginPath(); ctx.arc(x+sway-1*s,groundY-20*s,2.4*s,0,Math.PI*2); ctx.fill();
+      break; }
   }
   ctx.lineCap="butt";
 }
 
 export function drawGroundDeco(dark) {
-  const items=getDeco().items, camL=Game.cam-40, camR=Game.cam+W+40;
+  const items=getDeco().items, view=visibleWorldBounds(40), camL=view.left, camR=view.right;
   const px=state.player?state.player.x:null;
   for (const it of items) {
     if (it.x<camL||it.x>camR) continue;
@@ -135,7 +190,7 @@ export function drawPonds(dark) {
   const ponds = state.ponds;
   if (!ponds || !ponds.length) return;
   const t = performance.now() / 1000;
-  const camL = Game.cam - 80, camR = Game.cam + W + 80;
+  const view = visibleWorldBounds(80), camL = view.left, camR = view.right;
 
   for (const p of ponds) {
     if (p.x + p.hw < camL || p.x - p.hw > camR) continue;
@@ -571,17 +626,21 @@ function drawFlag(x, color) {
 
 export function drawEntityShadows() {
   const { player, units, vagrants, enemies, animals } = state;
-  if (player && !Game.inMine) groundShadow(player.x,22,0.24);
-  for (const u of units)   { if (!u.mine) groundShadow(u.x,11,0.2); }
-  for (const v of vagrants) groundShadow(v.x,11,0.2);
-  for (const e of enemies)  groundShadow(e.x,ENEMY_TYPES[e.type].w*0.7,0.22);
-  for (const a of animals)  if (a.alive) groundShadow(a.x,10,0.18);
+  const view = visibleWorldBounds(160);
+  const seen = x => x >= view.left && x <= view.right;
+  if (player && !Game.inMine && seen(player.x)) groundShadow(player.x,22,0.24);
+  for (const u of units)   { if (!u.mine && seen(u.x)) groundShadow(u.x,11,0.2); }
+  for (const v of vagrants) { if (seen(v.x)) groundShadow(v.x,11,0.2); }
+  for (const e of enemies)  { if (seen(e.x)) groundShadow(e.x,ENEMY_TYPES[e.type].w*0.7,0.22); }
+  for (const a of animals)  if (a.alive && seen(a.x)) groundShadow(a.x,10,0.18);
 }
 
 export function drawPortals(dark) {
   const T = performance.now() / 1000;
+  const view = visibleWorldBounds(190);
   for (const p of state.portals) {
     const x = p.x;
+    if (x < view.left || x > view.right) continue;
     const glow = Game.isNight ? 1 : 0.4;
     const gateW = 52, gateH = 140, archH = 34;
     const pillarW = 14;
@@ -787,7 +846,7 @@ function drawLog(x, dir, len) {
 
 export function drawForestTrees(dark) {
   const haze = hazeColor(dark);
-  const camL = Game.cam - 60, camR = Game.cam + W + 60;
+  const view = visibleWorldBounds(220), camL = view.left, camR = view.right;
   for (const ft of state.forestTrees) {
     if (ft.x < camL || ft.x > camR) continue;
     if (ft.chopped || ft.carriedBy) continue;
@@ -850,7 +909,7 @@ export function drawForestTrees(dark) {
 }
 
 export function drawForestCamps(dark) {
-  const camL = Game.cam - 200, camR = Game.cam + W + 200;
+  const view = visibleWorldBounds(260), camL = view.left, camR = view.right;
   const t = performance.now() / 1000;
   const fl = (FX && FX.flicker) || 1;
   const SKIN = "#d3ac82";
@@ -1073,13 +1132,17 @@ function drawWallPlatform(w, h, flash) {
 
 export function drawWalls(dark) {
   const night=dark>0.25;
+  const view = visibleWorldBounds(170);
   for (const w of state.walls) {
     const x=w.x;
+    if (x < view.left || x > view.right) continue;
     if (!w.commissioned) { drawFlag(x,"#6fb3d6"); continue; }
     const h=wallHeight(w)*(0.3+0.7*clamp(w.buildProgress,0,1));
     const WW=w.level>=5?96:wallRenderWidth(w);
     if (w.flash>0) w.flash-=0.016;
+    if (w.golemImpact>0) w.golemImpact=Math.max(0,w.golemImpact-0.016);
     const flash=w.flash>0;
+    const golemImpact=w.golemImpact||0;
     const stoneColors=["","#7a5a36","#6b6b78","#555568","#484458","#3a3448"];
     const col=flash?"#e8d8a8":(stoneColors[w.level]||"#7a5a36");
     groundShadow(x,WW*0.7,0.26);
@@ -1197,6 +1260,35 @@ export function drawWalls(dark) {
         drawTorch(x, platY2-2);
       }
     }
+    // Siege hits leave a brief molten fracture at the enemy-facing edge. It
+    // makes the Colossus's ram and double-fist crush read as wall impacts,
+    // rather than as a generic damage flash somewhere in the world.
+    if (golemImpact>0.01) {
+      const kind=w.golemImpactKind||'ram';
+      const p=Math.min(1,golemImpact/(kind==='crush'?0.42:0.32));
+      const faceX=x+w.side*(WW*0.5-1);
+      const crackY=groundY-h*(kind==='crush'?0.74:0.48);
+      ctx.save();
+      ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=p*0.72;
+      const glow=ctx.createRadialGradient(faceX,crackY,1,faceX,crackY,WW*0.58);
+      glow.addColorStop(0,'rgba(255,228,150,0.9)');
+      glow.addColorStop(0.28,'rgba(255,98,24,0.52)');
+      glow.addColorStop(1,'rgba(150,20,0,0)');
+      ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(faceX,crackY,WW*0.58,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#ffb04a';
+      for (let k=0;k<3;k++) {
+        const sx=faceX+w.side*(6+k*7), sy=crackY+(k-1)*7;
+        ctx.beginPath(); ctx.arc(sx,sy,2.2-k*0.28,0,Math.PI*2); ctx.fill();
+      }
+      ctx.restore();
+      ctx.save(); ctx.globalAlpha=p*0.86;
+      ctx.strokeStyle='#59200f'; ctx.lineWidth=2; ctx.lineCap='round';
+      for (let k=0;k<3;k++) {
+        const y=crackY+(k-1)*h*0.1;
+        ctx.beginPath(); ctx.moveTo(faceX+w.side*2,y); ctx.lineTo(faceX-w.side*(WW*(0.24+k*0.07)),y+(k-1)*5); ctx.stroke();
+      }
+      ctx.restore();
+    }
     drawHpBar(x,groundY-h-18,WW+6,w.hp/w.maxHp,"#9bd05a");
   }
 }
@@ -1250,13 +1342,25 @@ function drawCastleRegalia(x, lvl, dark) {
   // Royal Capital: the Crown Aegis beacon burns above the keep
   if (lvl>=7) {
     const t=performance.now()/1000;
+    // flare the beacon for a beat after each Crown Aegis strike
+    const flare=state.base&&state.base.aegisFlashUntil?Math.max(0,Math.min(1,(state.base.aegisFlashUntil-t)/0.35)):0;
     const fy=groundY-266+Math.sin(t*2.2)*2.5;
-    const flick=Math.sin(t*7)*2+Math.sin(t*11)*1.2;
+    const flick=Math.sin(t*7)*2+Math.sin(t*11)*1.2+flare*22;
     const g=ctx.createRadialGradient(x,fy,2,x,fy,26+flick);
     g.addColorStop(0,"rgba(255,220,120,0.8)");
     g.addColorStop(0.5,"rgba(255,140,50,0.3)");
     g.addColorStop(1,"rgba(255,100,20,0)");
     ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,fy,26+flick,0,Math.PI*2); ctx.fill();
+    if (flare>0) {
+      // white-hot discharge core while the strike bolt is in the air
+      ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=flare*0.85;
+      const fg=ctx.createRadialGradient(x,fy,1,x,fy,16+flare*14);
+      fg.addColorStop(0,"rgba(255,255,235,1)");
+      fg.addColorStop(0.5,"rgba(255,214,110,0.7)");
+      fg.addColorStop(1,"rgba(255,150,40,0)");
+      ctx.fillStyle=fg; ctx.beginPath(); ctx.arc(x,fy,16+flare*14,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
     // flame core: teardrop with a gold heart
     ctx.fillStyle="#ff8a30";
     ctx.beginPath(); ctx.moveTo(x,fy-13-flick*0.5);
@@ -1679,11 +1783,13 @@ function drawShopBuilding(x) {
 }
 
 export function drawStations() {
-  drawBowStation(STATIONS_X.bow);
-  if (state.base && state.base.level >= 2) drawHammerStation(STATIONS_X.hammer);
+  const view = visibleWorldBounds(180);
+  const seen = x => x >= view.left && x <= view.right;
+  if (seen(STATIONS_X.bow)) drawBowStation(STATIONS_X.bow);
+  if (state.base && state.base.level >= 2 && seen(STATIONS_X.hammer)) drawHammerStation(STATIONS_X.hammer);
   const farmLvl = state.farmLevel || 0;
-  if (state.base.level >= 2 && farmLvl === 0) drawFlag(STATIONS_X.farm, "#9bd05a");
-  if (farmLvl >= 1) {
+  if (state.base.level >= 2 && farmLvl === 0 && seen(STATIONS_X.farm)) drawFlag(STATIONS_X.farm, "#9bd05a");
+  if (farmLvl >= 1 && seen(STATIONS_X.farm)) {
     const fx = STATIONS_X.farm;
     ctx.fillStyle="#6a4a28"; ctx.fillRect(fx-34,groundY-6,68,6);
     ctx.fillStyle="#9bd05a"; for (let i=0;i<6;i++) ctx.fillRect(fx-30+i*11,groundY-16,4,11);
@@ -1716,10 +1822,10 @@ export function drawStations() {
       ctx.restore();
     }
   }
-  if (state.base && state.base.level >= 2) drawShopBuilding(STATIONS_X.shop);
-  if (state.base && state.base.level >= 3) drawGuardStation(STATIONS_X.guard);
-  if (state.base && state.base.level >= 3 && !state.mineBuilt) drawFlag(STATIONS_X.mine, "#d8b46a");
-  if (state.mineBuilt) drawMineEntrance(STATIONS_X.mine);
+  if (state.base && state.base.level >= 2 && seen(STATIONS_X.shop)) drawShopBuilding(STATIONS_X.shop);
+  if (state.base && state.base.level >= 3 && seen(STATIONS_X.guard)) drawGuardStation(STATIONS_X.guard);
+  if (state.base && state.base.level >= 3 && !state.mineBuilt && seen(STATIONS_X.mine)) drawFlag(STATIONS_X.mine, "#d8b46a");
+  if (state.mineBuilt && seen(STATIONS_X.mine)) drawMineEntrance(STATIONS_X.mine);
 }
 
 function drawMineEntrance(x) {
@@ -2022,8 +2128,10 @@ function drawBallista(b, night) {
 export function drawBuildings(dark) {
   const night = dark > 0.25;
   const baseLvl = state.base ? state.base.level : 1;
+  const view = visibleWorldBounds(210);
   for (const b of (state.buildings || [])) {
     if (baseLvl < b.unlock) continue;
+    if (b.x < view.left || b.x > view.right) continue;
     if (!b.built) {
       if (b.needsClearing && !b.cleared) { drawClearingHint(b.x); continue; }
       const flagCol = b.type==="tower" ? "#c98a4a" : b.type==="lumber" ? "#8a9a5a" : b.type==="ballista" ? "#c1453b" : "#8fd8ff";

@@ -8,10 +8,11 @@ import { makeUnit } from '../../entities/Unit.js';
 import { addSkillPoints } from '../economy/SkillSystem.js';
 
 const META_KEY = "kingdom_embers_meta_v1";
+const LEADERBOARD_MAX_ENTRIES = 5;
 const HUB = {
-  width: 3000,
+  width: 4300,
   spawnX: 520,
-  portalX: 2640,
+  portalX: 3940,
 };
 const HUB_TRANSITION_TIME = 1.15;
 const HUB_UPGRADE_LABELS = {
@@ -28,6 +29,15 @@ const HUB_UPGRADE_LABELS = {
   stone_oath: "Starting walls",
   crowned_camp: "Base lvl 2",
   ghost_bow: "Short bow",
+  builder_cache: "Hammer cache",
+  armory_token: "Starter armor",
+  war_banner: "Starting guard",
+  relic_compass: "Loot rarity",
+  dawn_masonry: "Fortified start",
+  blood_moon: "Bigger hordes",
+  hungry_portals: "Faster portals",
+  ashen_elites: "Elite enemies",
+  iron_hide: "Enemy vitality",
 };
 
 export const META_UPGRADES = [
@@ -174,24 +184,234 @@ export const META_UPGRADES = [
     icon: "HERO",
     cost: () => 115,
   },
+  {
+    id: "builder_cache",
+    tier: "relic",
+    name: "Smith's Cache",
+    desc: "+1 loose hammer at camp start per rank",
+    max: 2,
+    x: 2550,
+    color: "#f2a230",
+    icon: "HAMMER",
+    cost: lvl => 38 + lvl * 32,
+  },
+  {
+    id: "armory_token",
+    tier: "relic",
+    name: "Armory Writ",
+    desc: "start with leather armor, then chainmail",
+    max: 2,
+    x: 2660,
+    color: "#9ecbff",
+    icon: "ARMOR",
+    cost: lvl => 44 + lvl * 42,
+  },
+  {
+    id: "war_banner",
+    tier: "relic",
+    name: "War Banner",
+    desc: "+1 guard at run start per rank",
+    max: 2,
+    x: 2770,
+    color: "#ffcf5a",
+    icon: "GUARD",
+    cost: lvl => 58 + lvl * 48,
+  },
+  {
+    id: "relic_compass",
+    tier: "relic",
+    name: "Relic Compass",
+    desc: "+1 location loot rarity per rank",
+    max: 2,
+    x: 2880,
+    color: "#d9e8ff",
+    icon: "LOOT",
+    cost: lvl => 66 + lvl * 54,
+  },
+  {
+    id: "dawn_masonry",
+    tier: "relic",
+    name: "Dawn Masonry",
+    desc: "+18 base HP and +10 wall HP per rank",
+    max: 3,
+    x: 2990,
+    color: "#c6c6d8",
+    icon: "FORT",
+    cost: lvl => 50 + lvl * 40,
+  },
+  {
+    id: "blood_moon",
+    tier: "curse",
+    name: "Blood Moon Pact",
+    desc: "+12% night horde size and +8% embers per rank",
+    max: 5,
+    x: 3270,
+    color: "#ff5d6c",
+    icon: "HORDE",
+    cost: lvl => 30 + lvl * 24,
+  },
+  {
+    id: "hungry_portals",
+    tier: "curse",
+    name: "Hungry Portals",
+    desc: "portals spawn 10% faster and +6% embers per rank",
+    max: 4,
+    x: 3380,
+    color: "#ff8a3d",
+    icon: "PORTAL",
+    cost: lvl => 34 + lvl * 28,
+  },
+  {
+    id: "ashen_elites",
+    tier: "curse",
+    name: "Ashen Elites",
+    desc: "more elite enemies and +6% embers per rank",
+    max: 4,
+    x: 3490,
+    color: "#b9a7ff",
+    icon: "ELITE",
+    cost: lvl => 38 + lvl * 30,
+  },
+  {
+    id: "iron_hide",
+    tier: "curse",
+    name: "Iron Hide",
+    desc: "+10% enemy HP and +7% embers per rank",
+    max: 4,
+    x: 3600,
+    color: "#c6c6d8",
+    icon: "HARD",
+    cost: lvl => 42 + lvl * 34,
+  },
 ];
 
 function defaultMeta() {
-  return { embers: 0, upgrades: {}, totalRuns: 0, bestDay: 1, totalKills: 0, lastReward: 0, lastDay: 1, lastKills: 0 };
+  return {
+    embers: 0,
+    upgrades: {},
+    totalRuns: 0,
+    bestDay: 1,
+    totalKills: 0,
+    lastReward: 0,
+    lastDay: 1,
+    lastKills: 0,
+    leaderboard: [],
+    lastLeaderboardEntryId: null,
+    lastLeaderboardRank: 0,
+  };
+}
+
+function scoreValue(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function compareLeaderboardEntries(a, b) {
+  return (b.score - a.score)
+    || (b.day - a.day)
+    || (b.kills - a.kills)
+    || (b.reward - a.reward)
+    || (a.timestamp - b.timestamp);
+}
+
+function normalizeLeaderboard(entries) {
+  if (!Array.isArray(entries)) return [];
+  return entries
+    .map((entry, i) => {
+      if (!entry || typeof entry !== "object") return null;
+      const score = Math.max(0, Math.floor(scoreValue(entry.score)));
+      if (score <= 0) return null;
+      const timestamp = Math.max(0, Math.floor(scoreValue(entry.timestamp, Date.now())));
+      return {
+        id: typeof entry.id === "string" && entry.id ? entry.id : `legacy-${timestamp}-${i}`,
+        score,
+        day: Math.max(1, Math.floor(scoreValue(entry.day, 1))),
+        kills: Math.max(0, Math.floor(scoreValue(entry.kills))),
+        reward: Math.max(0, Math.floor(scoreValue(entry.reward))),
+        baseLevel: Math.max(1, Math.floor(scoreValue(entry.baseLevel, 1))),
+        coins: Math.max(0, Math.floor(scoreValue(entry.coins))),
+        run: Math.max(1, Math.floor(scoreValue(entry.run, i + 1))),
+        timestamp,
+      };
+    })
+    .filter(Boolean)
+    .sort(compareLeaderboardEntries)
+    .slice(0, LEADERBOARD_MAX_ENTRIES);
+}
+
+function currentRunScore(reward) {
+  const day = Math.max(1, Math.floor(Game.day || 1));
+  const dayProgress = Math.max(0, day - 1) + clamp(Game.time || 0, 0, 1);
+  const kills = Math.max(0, Math.floor(Game.runKills || 0));
+  const baseLevel = Math.max(1, Math.floor(state.base?.level || 1));
+  const coins = Math.max(0, Math.floor(state.player?.coins || 0));
+  const embers = Math.max(0, Math.floor(reward || 0));
+  const baseProgress = Math.max(0, baseLevel - 1);
+  return Math.max(0, Math.floor(dayProgress * 900 + kills * 40 + baseProgress * 240 + coins * 2 + embers * 12));
+}
+
+function makeLeaderboardEntry(runNumber, reward) {
+  const timestamp = Date.now();
+  return {
+    id: `run-${timestamp}-${Math.floor(Math.random() * 100000)}`,
+    score: currentRunScore(reward),
+    day: Math.max(1, Math.floor(Game.day || 1)),
+    kills: Math.max(0, Math.floor(Game.runKills || 0)),
+    reward: Math.max(0, Math.floor(reward || 0)),
+    baseLevel: Math.max(1, Math.floor(state.base?.level || 1)),
+    coins: Math.max(0, Math.floor(state.player?.coins || 0)),
+    run: Math.max(1, Math.floor(runNumber || 1)),
+    timestamp,
+  };
+}
+
+function recordLeaderboardRun(meta, reward, runNumber) {
+  const leaderboard = normalizeLeaderboard(meta.leaderboard);
+  const entry = makeLeaderboardEntry(runNumber, reward);
+  const qualifies = leaderboard.length === 0
+    || leaderboard.some(old => entry.score > old.score);
+
+  meta.lastLeaderboardEntryId = null;
+  meta.lastLeaderboardRank = 0;
+
+  if (!qualifies) {
+    meta.leaderboard = leaderboard;
+    return 0;
+  }
+
+  meta.leaderboard = normalizeLeaderboard([...leaderboard, entry]);
+  const rank = meta.leaderboard.findIndex(old => old.id === entry.id) + 1;
+  if (rank > 0) {
+    meta.lastLeaderboardEntryId = entry.id;
+    meta.lastLeaderboardRank = rank;
+  }
+  return rank;
+}
+
+function formatLeaderboardScore(score) {
+  return Math.max(0, Math.floor(scoreValue(score))).toLocaleString("en-US");
 }
 
 export function loadMeta() {
   try {
     const raw = localStorage.getItem(META_KEY);
     if (!raw) return defaultMeta();
-    return { ...defaultMeta(), ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    const meta = { ...defaultMeta(), ...(parsed && typeof parsed === "object" ? parsed : {}) };
+    meta.leaderboard = normalizeLeaderboard(meta.leaderboard);
+    return meta;
   } catch (e) {
     return defaultMeta();
   }
 }
 
 export function saveMeta(meta = Game.meta) {
-  try { localStorage.setItem(META_KEY, JSON.stringify(meta || defaultMeta())); } catch (e) {}
+  try {
+    const next = { ...defaultMeta(), ...(meta || {}) };
+    next.leaderboard = normalizeLeaderboard(next.leaderboard);
+    if (meta) meta.leaderboard = next.leaderboard;
+    localStorage.setItem(META_KEY, JSON.stringify(next));
+  } catch (e) {}
 }
 
 export function initMeta() {
@@ -208,7 +428,40 @@ export function permanentDamageMultiplier() {
 }
 
 export function permanentRewardMultiplier() {
-  return 1 + metaLevel("ember") * 0.10;
+  return 1
+    + metaLevel("ember") * 0.10
+    + metaLevel("blood_moon") * 0.08
+    + metaLevel("hungry_portals") * 0.06
+    + metaLevel("ashen_elites") * 0.06
+    + metaLevel("iron_hide") * 0.07;
+}
+
+export function permanentBaseHpBonus() {
+  return metaLevel("dawn_masonry") * 18;
+}
+
+export function permanentWallHpBonus() {
+  return metaLevel("dawn_masonry") * 10;
+}
+
+export function nightQuotaMetaMultiplier() {
+  return 1 + metaLevel("blood_moon") * 0.12;
+}
+
+export function portalSpawnIntervalMultiplier() {
+  return Math.max(0.48, 1 - metaLevel("hungry_portals") * 0.10);
+}
+
+export function eliteChanceBonus() {
+  return metaLevel("ashen_elites") * 0.035;
+}
+
+export function locationThreatMultiplier() {
+  return 1 + metaLevel("ashen_elites") * 0.18;
+}
+
+export function enemyVitalityMultiplier() {
+  return 1 + metaLevel("iron_hide") * 0.10;
 }
 
 export function applyPermanentUpgrades(player) {
@@ -220,17 +473,27 @@ export function applyPermanentUpgrades(player) {
 }
 
 export function applyPermanentWorldUpgrades() {
+  Game.permanentBaseHpBonus = permanentBaseHpBonus();
+  Game.permanentWallHpBonus = permanentWallHpBonus();
+
   const baseLevel = metaLevel("crowned_camp") > 0 ? 2 : 1;
   if (state.base && baseLevel > state.base.level) {
     state.base.level = baseLevel;
     state.base.maxHp = CFG.baseMaxHp[baseLevel];
     state.base.hp = state.base.maxHp;
   }
+  if (state.base && Game.permanentBaseHpBonus > 0) {
+    state.base.maxHp += Game.permanentBaseHpBonus;
+    state.base.hp += Game.permanentBaseHpBonus;
+  }
 
   if (state.player) {
     state.player.coins += metaLevel("moon_cache") * 12;
     if (metaLevel("ghost_bow") > 0) state.player.weapon = "short_bow";
+    const armorRank = metaLevel("armory_token");
+    if (armorRank > 0) state.player.armor = armorRank > 1 ? "chainmail" : "leather_cap";
   }
+  Game.rarityBonus = (Game.rarityBonus || 0) + metaLevel("relic_compass");
 
   const extraVagrants = metaLevel("wanderer_lantern");
   for (let i = 0; i < extraVagrants; i++) {
@@ -248,6 +511,11 @@ export function applyPermanentWorldUpgrades() {
     state.groundBows.push({ x: CFG.baseX - 160 - i * 36, claimed: false });
   }
 
+  const hammers = metaLevel("builder_cache");
+  for (let i = 0; i < hammers; i++) {
+    state.groundHammers.push({ x: CFG.baseX + 170 + i * 34, claimed: false });
+  }
+
   const skillPoints = metaLevel("oath_sparks");
   addSkillPoints("archer", skillPoints);
   addSkillPoints("guard", skillPoints);
@@ -260,11 +528,18 @@ export function applyPermanentWorldUpgrades() {
     state.units.push(archer, builder);
   }
 
+  const guards = metaLevel("war_banner");
+  for (let i = 0; i < guards; i++) {
+    const guard = makeUnit("guard", CFG.baseX + 130 + i * 38);
+    guard.level = 1;
+    state.units.push(guard);
+  }
+
   if (metaLevel("stone_oath") > 0 && state.walls?.length >= 4) {
     for (const w of [state.walls[0], state.walls[2]]) {
       w.commissioned = true;
       w.level = 1;
-      w.maxHp = CFG.wallHp[1];
+      w.maxHp = CFG.wallHp[1] + (Game.permanentWallHpBonus || 0);
       w.hp = w.maxHp;
       w.buildProgress = 1;
     }
@@ -287,13 +562,15 @@ export function finishRunReward() {
 export function enterDeathHub(message = "") {
   const meta = Game.meta || loadMeta();
   const reward = finishRunReward();
+  const runNumber = (meta.totalRuns || 0) + 1;
   meta.embers = (meta.embers || 0) + reward;
-  meta.totalRuns = (meta.totalRuns || 0) + 1;
+  meta.totalRuns = runNumber;
   meta.bestDay = Math.max(meta.bestDay || 1, Game.day || 1);
   meta.totalKills = (meta.totalKills || 0) + (Game.runKills || 0);
   meta.lastReward = reward;
   meta.lastDay = Game.day || 1;
   meta.lastKills = Game.runKills || 0;
+  recordLeaderboardRun(meta, reward, runNumber);
   Game.meta = meta;
   saveMeta(meta);
 
@@ -736,6 +1013,351 @@ function drawNpc(x) {
   ctx.restore();
 }
 
+function drawRelicFlame(x, y, s, color, t) {
+  const lean = Math.sin(t * 5.2 + x) * s * 0.9;
+  ctx.beginPath();
+  ctx.moveTo(x, y + s * 7);
+  ctx.quadraticCurveTo(x - s * 5 + lean, y - s * 1, x, y - s * 10);
+  ctx.quadraticCurveTo(x + s * 6 + lean, y - s * 1, x, y + s * 7);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.7)";
+  ctx.beginPath();
+  ctx.moveTo(x, y + s * 3);
+  ctx.quadraticCurveTo(x - s * 2 + lean * 0.4, y - s * 1, x, y - s * 5);
+  ctx.quadraticCurveTo(x + s * 2 + lean * 0.4, y - s * 1, x, y + s * 3);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawUpgradeRelic(upg, lvl, maxed, affordable, spin, t) {
+  const color = maxed ? "#ffe2a0" : upg.color;
+  const lit = maxed || affordable;
+  const iconAlpha = lit ? 1 : 0.74;
+  ctx.save();
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.rotate(t * 0.58 + upg.x * 0.01);
+  ctx.strokeStyle = color + (lit ? "99" : "55");
+  ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  ctx.moveTo(0, -25); ctx.lineTo(20, 0); ctx.lineTo(0, 25); ctx.lineTo(-20, 0); ctx.closePath();
+  ctx.stroke();
+  ctx.strokeStyle = color + "44";
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 25, 8, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 0, 8, 25, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  for (let i = 0; i < 4; i++) {
+    const a = i * Math.PI / 2 + t * 0.9;
+    ctx.fillStyle = i < lvl ? color : "rgba(255,255,255,0.18)";
+    ctx.beginPath();
+    ctx.arc(Math.cos(a) * 27, Math.sin(a) * 9, 1.4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  ctx.fillStyle = "rgba(10,9,18,0.78)";
+  ctx.strokeStyle = color + (lit ? "aa" : "66");
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(0, -25);
+  ctx.lineTo(18, -11);
+  ctx.lineTo(19, 12);
+  ctx.lineTo(0, 25);
+  ctx.lineTo(-19, 12);
+  ctx.lineTo(-18, -11);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = lit ? 0.32 + Math.abs(spin) * 0.16 : 0.18;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(0, -20);
+  ctx.lineTo(14, -8);
+  ctx.lineTo(0, 0);
+  ctx.lineTo(-14, -8);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  ctx.globalAlpha = iconAlpha;
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 2;
+
+  switch (upg.id) {
+    case "heart":
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(0, 13);
+      ctx.bezierCurveTo(-19, 0, -16, -15, -5, -12);
+      ctx.bezierCurveTo(-1, -11, 0, -7, 0, -6);
+      ctx.bezierCurveTo(0, -7, 2, -11, 6, -12);
+      ctx.bezierCurveTo(17, -15, 20, 0, 0, 13);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,238,238,0.7)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(-7, -5); ctx.quadraticCurveTo(-1, -1, 0, 8); ctx.stroke();
+      break;
+    case "blade":
+      ctx.save();
+      ctx.rotate(-0.58);
+      ctx.fillStyle = "#dfe8f2";
+      ctx.beginPath();
+      ctx.moveTo(0, -19); ctx.lineTo(6, 5); ctx.lineTo(0, 15); ctx.lineTo(-6, 5); ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 1.4; ctx.stroke();
+      ctx.strokeStyle = "#fff6c8"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(0, 12); ctx.stroke();
+      ctx.strokeStyle = "#84613a"; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(-9, 8); ctx.lineTo(9, 8); ctx.stroke();
+      ctx.strokeStyle = "#5b3928"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(0, 8); ctx.lineTo(0, 21); ctx.stroke();
+      ctx.restore();
+      break;
+    case "purse":
+      ctx.fillStyle = "#8a5630";
+      ctx.beginPath();
+      ctx.moveTo(-12, -3); ctx.quadraticCurveTo(-19, 9, -9, 17); ctx.lineTo(9, 17);
+      ctx.quadraticCurveTo(19, 9, 12, -3); ctx.quadraticCurveTo(6, 2, 0, 2); ctx.quadraticCurveTo(-6, 2, -12, -3);
+      ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 1.4; ctx.stroke();
+      ctx.strokeStyle = "#d8a64c"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-11, -5); ctx.quadraticCurveTo(0, -10, 11, -5); ctx.stroke();
+      ctx.fillStyle = "#f2c14e";
+      for (const x of [-5, 2, 8]) { ctx.beginPath(); ctx.arc(x, 8 + (x % 2), 3, 0, Math.PI * 2); ctx.fill(); }
+      break;
+    case "ember":
+      ctx.fillStyle = "#f2c14e";
+      ctx.beginPath();
+      ctx.moveTo(-15, 5); ctx.lineTo(-14, -4); ctx.lineTo(-8, -12); ctx.lineTo(-4, -4);
+      ctx.lineTo(0, -15); ctx.lineTo(4, -4); ctx.lineTo(8, -12); ctx.lineTo(14, -4); ctx.lineTo(15, 5);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#ffe9a3"; ctx.fillRect(-15, 4, 30, 4);
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      drawRelicFlame(0, 6, 1.05, "#8fd8ff", t);
+      ctx.restore();
+      break;
+    case "regen":
+      ctx.fillStyle = "#162c2b";
+      ctx.beginPath(); ctx.ellipse(0, 10, 16, 6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = "#9bd05a";
+      ctx.beginPath(); ctx.ellipse(0, 7, 11, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#dce6ff";
+      ctx.beginPath(); ctx.arc(-2, -8, 10, -1.2, 1.45 * Math.PI); ctx.fill();
+      ctx.fillStyle = "rgba(10,9,18,0.86)";
+      ctx.beginPath(); ctx.arc(3, -11, 10, -1.2, 1.45 * Math.PI); ctx.fill();
+      break;
+    case "wanderer_lantern":
+      ctx.strokeStyle = color; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, -9, 10, Math.PI, 0); ctx.stroke();
+      ctx.fillStyle = "#211a28"; ctx.fillRect(-10, -8, 20, 22);
+      ctx.strokeStyle = "#7b6a8d"; ctx.strokeRect(-10, -8, 20, 22);
+      ctx.fillStyle = "#2e2737"; ctx.fillRect(-13, -12, 26, 5);
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      const lg = ctx.createRadialGradient(0, 3, 1, 0, 3, 16);
+      lg.addColorStop(0, "rgba(255,244,190,0.9)");
+      lg.addColorStop(1, color + "00");
+      ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(0, 3, 16, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = "#fff2bc"; ctx.fillRect(-3, -3, 6, 11);
+      break;
+    case "grave_bow":
+      ctx.strokeStyle = color; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(-12, -18); ctx.quadraticCurveTo(8, 0, -12, 18); ctx.stroke();
+      ctx.strokeStyle = "rgba(230,255,238,0.75)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(-12, -18); ctx.lineTo(-12, 18); ctx.stroke();
+      ctx.strokeStyle = "#d8f6ff"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-15, 0); ctx.lineTo(13, 0); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(7, -4); ctx.moveTo(13, 0); ctx.lineTo(7, 4); ctx.stroke();
+      break;
+    case "oath_sparks":
+      ctx.fillStyle = "#241c2b";
+      ctx.beginPath(); ctx.moveTo(-15, 14); ctx.lineTo(15, 14); ctx.lineTo(11, -5); ctx.lineTo(-11, -5); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 1.3; ctx.stroke();
+      ctx.strokeStyle = "rgba(255,255,255,0.45)"; ctx.lineWidth = 1;
+      for (const x of [-6, 0, 6]) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + 3, 9); ctx.stroke(); }
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      drawRelicFlame(-7, -8, 0.75, "#ff9bd2", t);
+      drawRelicFlame(7, -8, 0.75, "#b9a7ff", t + 0.7);
+      ctx.restore();
+      break;
+    case "moon_cache":
+      ctx.fillStyle = "#24324c";
+      ctx.fillRect(-15, -1, 30, 17);
+      ctx.fillStyle = "#304161";
+      ctx.fillRect(-17, -7, 34, 8);
+      ctx.strokeStyle = "#d9e8ff"; ctx.lineWidth = 1.4; ctx.strokeRect(-15, -1, 30, 17);
+      ctx.fillStyle = "#f2c14e";
+      for (const x of [-8, 0, 8]) { ctx.beginPath(); ctx.arc(x, -9, 3.2, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = "#d9e8ff";
+      ctx.beginPath(); ctx.arc(0, 6, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#24324c";
+      ctx.beginPath(); ctx.arc(3, 4, 5, 0, Math.PI * 2); ctx.fill();
+      break;
+    case "old_crew":
+      for (const x of [-7, 8]) {
+        ctx.fillStyle = x < 0 ? "#7fd6a4" : "#d9c38f";
+        ctx.beginPath(); ctx.arc(x, -8, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(x - 7, 12); ctx.quadraticCurveTo(x, -1, x + 7, 12); ctx.closePath(); ctx.fill();
+      }
+      ctx.strokeStyle = "#ffcf5a"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-18, 15); ctx.quadraticCurveTo(0, 20, 18, 15); ctx.stroke();
+      ctx.fillStyle = "#ffcf5a"; ctx.fillRect(-8, 13, 16, 3);
+      break;
+    case "stone_oath":
+      ctx.fillStyle = "#8f8f9f";
+      for (let row = 0; row < 3; row++) {
+        const y = -7 + row * 8;
+        const offset = row % 2 ? -7 : 0;
+        for (let i = 0; i < 3; i++) {
+          ctx.fillRect(offset - 16 + i * 14, y, 12, 6);
+          ctx.strokeStyle = "#393746"; ctx.lineWidth = 0.8; ctx.strokeRect(offset - 16 + i * 14, y, 12, 6);
+        }
+      }
+      ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(-19, 18); ctx.lineTo(19, 18); ctx.stroke();
+      break;
+    case "crowned_camp":
+      ctx.fillStyle = "#72523a";
+      ctx.beginPath(); ctx.moveTo(-18, 15); ctx.lineTo(0, -10); ctx.lineTo(18, 15); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 1.4; ctx.stroke();
+      ctx.fillStyle = "#241827";
+      ctx.beginPath(); ctx.moveTo(-5, 15); ctx.lineTo(0, 0); ctx.lineTo(6, 15); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#f2c14e";
+      ctx.beginPath(); ctx.moveTo(-8, -13); ctx.lineTo(-5, -19); ctx.lineTo(0, -14); ctx.lineTo(5, -19); ctx.lineTo(8, -13); ctx.closePath(); ctx.fill();
+      break;
+    case "ghost_bow":
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = "rgba(210,248,255,0.52)";
+      ctx.beginPath(); ctx.arc(4, -4, 11, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = "rgba(10,20,35,0.85)";
+      ctx.beginPath(); ctx.ellipse(5, -5, 5, 6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(-14, -18); ctx.quadraticCurveTo(8, 0, -14, 18); ctx.stroke();
+      ctx.strokeStyle = "#d8f6ff"; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(-14, -18); ctx.lineTo(-14, 18); ctx.moveTo(-19, 1); ctx.lineTo(15, -5); ctx.stroke();
+      break;
+    case "builder_cache":
+      ctx.save();
+      ctx.rotate(-0.62);
+      ctx.fillStyle = "#6f4a2a";
+      ctx.fillRect(-3, -4, 6, 25);
+      ctx.fillStyle = "#c8a060";
+      ctx.fillRect(-13, -13, 26, 10);
+      ctx.strokeStyle = color; ctx.lineWidth = 1.3; ctx.strokeRect(-13, -13, 26, 10);
+      ctx.restore();
+      ctx.fillStyle = "#f2a230";
+      ctx.beginPath(); ctx.arc(9, 10, 3, 0, Math.PI * 2); ctx.fill();
+      break;
+    case "armory_token":
+      ctx.fillStyle = "#27344a";
+      ctx.beginPath();
+      ctx.moveTo(0, -17); ctx.lineTo(15, -10); ctx.lineTo(12, 9); ctx.quadraticCurveTo(0, 19, -12, 9); ctx.lineTo(-15, -10); ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.stroke();
+      ctx.strokeStyle = "#dfe8f2"; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(0, -13); ctx.lineTo(0, 14); ctx.moveTo(-9, -5); ctx.quadraticCurveTo(0, 1, 9, -5); ctx.stroke();
+      break;
+    case "war_banner":
+      ctx.strokeStyle = "#d9c38f"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-9, 18); ctx.lineTo(-9, -18); ctx.stroke();
+      ctx.fillStyle = "#7d2530";
+      ctx.beginPath(); ctx.moveTo(-8, -17); ctx.lineTo(15, -12); ctx.lineTo(10, 3); ctx.lineTo(-8, -2); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.moveTo(1, -11); ctx.lineTo(5, -5); ctx.lineTo(1, 1); ctx.lineTo(-3, -5); ctx.closePath(); ctx.fill();
+      break;
+    case "relic_compass":
+      ctx.fillStyle = "#1b2235";
+      ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+      ctx.strokeStyle = "rgba(255,255,255,0.4)"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = "#ffcf5a";
+      ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(5, 3); ctx.lineTo(0, 0); ctx.lineTo(-5, 3); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#8fd8ff";
+      ctx.beginPath(); ctx.moveTo(0, 12); ctx.lineTo(5, -3); ctx.lineTo(0, 0); ctx.lineTo(-5, -3); ctx.closePath(); ctx.fill();
+      break;
+    case "dawn_masonry":
+      ctx.fillStyle = "#777486";
+      ctx.fillRect(-16, 3, 32, 15);
+      ctx.fillStyle = "#8c899c";
+      for (let i = 0; i < 3; i++) ctx.fillRect(-15 + i * 11, -7, 9, 9);
+      ctx.strokeStyle = "#34313e"; ctx.lineWidth = 1;
+      ctx.strokeRect(-16, 3, 32, 15);
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = "#ffe28a";
+      ctx.beginPath(); ctx.arc(0, -14, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      break;
+    case "blood_moon":
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = "#ff5d6c";
+      ctx.beginPath(); ctx.arc(0, -1, 16, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = "rgba(10,9,18,0.88)";
+      ctx.beginPath(); ctx.arc(7, -5, 15, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#ffd0d6"; ctx.lineWidth = 1.3;
+      ctx.beginPath(); ctx.arc(0, -1, 16, 0.32 * Math.PI, 1.68 * Math.PI); ctx.stroke();
+      break;
+    case "hungry_portals":
+      ctx.strokeStyle = color; ctx.lineWidth = 2.4;
+      ctx.beginPath(); ctx.moveTo(-15, 15); ctx.quadraticCurveTo(0, -21, 15, 15); ctx.stroke();
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = "#ffd0a0"; ctx.lineWidth = 1.3;
+      for (let i = 0; i < 3; i++) {
+        ctx.beginPath(); ctx.ellipse(0, 1, 5 + i * 4, 12 + i * 2, t * 0.4 + i, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.restore();
+      break;
+    case "ashen_elites":
+      ctx.fillStyle = "#2a2033";
+      ctx.beginPath(); ctx.moveTo(-14, 7); ctx.lineTo(-8, -14); ctx.lineTo(0, -18); ctx.lineTo(8, -14); ctx.lineTo(14, 7); ctx.lineTo(6, 17); ctx.lineTo(-6, 17); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = "#ffd060";
+      ctx.beginPath(); ctx.arc(-5, 0, 2, 0, Math.PI * 2); ctx.arc(5, 0, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#d8d1ff"; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(-10, -10); ctx.lineTo(-19, -17); ctx.moveTo(10, -10); ctx.lineTo(19, -17); ctx.stroke();
+      break;
+    case "iron_hide":
+      ctx.fillStyle = "#555b67";
+      ctx.beginPath();
+      ctx.moveTo(0, -18); ctx.lineTo(14, -9); ctx.lineTo(12, 9); ctx.quadraticCurveTo(0, 18, -12, 9); ctx.lineTo(-14, -9); ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.stroke();
+      ctx.strokeStyle = "#e7edf6"; ctx.lineWidth = 1;
+      for (const x of [-5, 0, 5]) { ctx.beginPath(); ctx.moveTo(x, -10); ctx.lineTo(x, 9); ctx.stroke(); }
+      break;
+    default:
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.moveTo(0, -17); ctx.lineTo(13, 0); ctx.lineTo(0, 17); ctx.lineTo(-13, 0); ctx.closePath(); ctx.fill();
+      break;
+  }
+
+  ctx.globalAlpha = 1;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.strokeStyle = "rgba(255,255,255,0.36)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(-13, -17);
+  ctx.quadraticCurveTo(-4, -23, 10, -16);
+  ctx.stroke();
+  ctx.restore();
+  ctx.restore();
+}
+
 function drawAltar(upg) {
   const lvl = metaLevel(upg.id);
   const maxed = lvl >= upg.max;
@@ -774,7 +1396,7 @@ function drawAltar(upg) {
     ctx.beginPath(); ctx.moveTo(px, -25.5); ctx.lineTo(px + 2.6, -22.5); ctx.lineTo(px, -19.5); ctx.lineTo(px - 2.6, -22.5); ctx.closePath(); ctx.fill();
   }
 
-  // gem glow
+  // relic glow
   const gy = -76 + Math.sin(t * 2 + upg.x * 0.6) * 3;
   ctx.save(); ctx.globalCompositeOperation = "lighter";
   ctx.globalAlpha = maxed ? 0.2 : (affordable ? pulse + 0.18 : pulse * 0.55);
@@ -783,17 +1405,11 @@ function drawAltar(upg) {
   ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(0, gy, 40, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 
-  // floating gem, spinning on its axis
+  // floating relic: each upgrade now has a readable object, with the old shine kept as a rotating seal.
   const spin = Math.sin(t * 1.9 + upg.x * 0.3);
   ctx.save();
   ctx.translate(0, gy);
-  ctx.scale(Math.max(0.18, Math.abs(spin)), 1);
-  ctx.fillStyle = maxed ? "#e9ddb1" : upg.color;
-  ctx.beginPath(); ctx.moveTo(0, -17); ctx.lineTo(13, 0); ctx.lineTo(0, 17); ctx.lineTo(-13, 0); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = "rgba(255,255,255,0.45)";
-  ctx.beginPath(); ctx.moveTo(0, -17); ctx.lineTo(13, 0); ctx.lineTo(0, 0); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = "rgba(255,255,255,0.6)"; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(0, -17); ctx.lineTo(13, 0); ctx.lineTo(0, 17); ctx.lineTo(-13, 0); ctx.closePath(); ctx.stroke();
+  drawUpgradeRelic(upg, lvl, maxed, affordable, spin, t);
   ctx.restore();
 
   if (maxed) {
@@ -836,7 +1452,7 @@ function drawAltar(upg) {
   // name + cost tag when the player is near
   if (near) {
     ctx.fillStyle = "rgba(10,9,18,0.82)";
-    const label = maxed ? upg.name : `${upg.name} · ${cost}`;
+    const label = maxed ? upg.name : `${upg.name} - ${cost}`;
     ctx.font = "bold 12px sans-serif";
     const tw = ctx.measureText(label).width + 18;
     ctx.fillRect(-tw / 2, gy - 58, tw, 20);
@@ -850,9 +1466,31 @@ function drawAltar(upg) {
 }
 
 const HUB_TIERS = [
-  { text: "BASIC", hint: "Stats and embers", x0: 575, x1: 1145, cx: 860, color: "#9bd05a" },
-  { text: "EPIC", hint: "Run-start bonuses", x0: 1265, x1: 1725, cx: 1495, color: "#b9a7ff" },
-  { text: "LEGENDARY", hint: "Big starting advantages", x0: 1885, x1: 2345, cx: 2115, color: "#f2c14e" },
+  {
+    rank: "I",
+    title: "EMBER FOUNDATIONS",
+    x0: 575, x1: 1145, cx: 860, width: 316, color: "#9bd05a",
+  },
+  {
+    rank: "II",
+    title: "WAYFARER OATHS",
+    x0: 1265, x1: 1725, cx: 1495, width: 304, color: "#b9a7ff",
+  },
+  {
+    rank: "III",
+    title: "ROYAL LEGACIES",
+    x0: 1885, x1: 2345, cx: 2115, width: 316, color: "#f2c14e",
+  },
+  {
+    rank: "IV",
+    title: "CROWN RELICS",
+    x0: 2490, x1: 3050, cx: 2770, width: 316, color: "#d9e8ff",
+  },
+  {
+    rank: "V",
+    title: "DREAD PACTS",
+    x0: 3210, x1: 3660, cx: 3435, width: 300, color: "#ff5d6c",
+  },
 ];
 
 function drawBrazier(x, color, t) {
@@ -909,36 +1547,73 @@ function drawTierPlazas() {
     drawBrazier(tier.x0 - 46, tier.color, t);
     drawBrazier(tier.x1 + 46, tier.color, t);
 
-    // hanging banner sign
-    const by = groundY - 196 + Math.sin(t * 1.4 + tier.cx) * 2;
-    ctx.strokeStyle = "rgba(255,255,255,0.16)"; ctx.lineWidth = 1.5;
+    // carved tier directory
+    const bw = tier.width || 304;
+    const bh = 78;
+    const bx = tier.cx - bw / 2;
+    const by = groundY - 222 + Math.sin(t * 1.1 + tier.cx) * 1.4;
+
+    ctx.fillStyle = "#151220";
     ctx.beginPath();
-    ctx.moveTo(tier.cx - 90, by - 16); ctx.lineTo(tier.cx - 66, by + 2);
-    ctx.moveTo(tier.cx + 90, by - 16); ctx.lineTo(tier.cx + 66, by + 2);
-    ctx.stroke();
-    ctx.fillStyle = "rgba(12,10,20,0.85)";
-    ctx.fillRect(tier.cx - 92, by, 184, 42);
-    ctx.beginPath();
-    ctx.moveTo(tier.cx - 92, by + 42); ctx.lineTo(tier.cx - 70, by + 42); ctx.lineTo(tier.cx - 92, by + 54); ctx.closePath();
-    ctx.moveTo(tier.cx + 92, by + 42); ctx.lineTo(tier.cx + 70, by + 42); ctx.lineTo(tier.cx + 92, by + 54); ctx.closePath();
+    ctx.moveTo(bx + 18, by + 12);
+    ctx.quadraticCurveTo(tier.cx, by - 14, bx + bw - 18, by + 12);
+    ctx.lineTo(bx + bw, by + bh - 14);
+    ctx.lineTo(bx + bw - 18, by + bh);
+    ctx.lineTo(bx + 18, by + bh);
+    ctx.lineTo(bx, by + bh - 14);
+    ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = tier.color + "88"; ctx.lineWidth = 1.5;
-    ctx.strokeRect(tier.cx - 92, by, 184, 42);
-    ctx.strokeStyle = tier.color + "33";
-    ctx.strokeRect(tier.cx - 86, by + 4, 172, 34);
+    ctx.fillStyle = "rgba(255,255,255,0.05)";
+    ctx.beginPath();
+    ctx.moveTo(bx + 22, by + 14);
+    ctx.quadraticCurveTo(tier.cx, by - 5, bx + bw - 22, by + 14);
+    ctx.lineTo(bx + bw - 32, by + 28);
+    ctx.lineTo(bx + 32, by + 28);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = tier.color + "99"; ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(bx + 18, by + 12);
+    ctx.quadraticCurveTo(tier.cx, by - 14, bx + bw - 18, by + 12);
+    ctx.lineTo(bx + bw, by + bh - 14);
+    ctx.lineTo(bx + bw - 18, by + bh);
+    ctx.lineTo(bx + 18, by + bh);
+    ctx.lineTo(bx, by + bh - 14);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.strokeStyle = tier.color + "33"; ctx.lineWidth = 1;
+    ctx.strokeRect(bx + 9, by + 24, bw - 18, bh - 34);
+
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    const rg = ctx.createRadialGradient(tier.cx, by + 26, 3, tier.cx, by + 26, bw * 0.45);
+    rg.addColorStop(0, tier.color + "33");
+    rg.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = rg;
+    ctx.beginPath(); ctx.ellipse(tier.cx, by + 36, bw * 0.45, 34, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = "#211b2d";
+    ctx.beginPath(); ctx.arc(bx + 28, by + 34, 15, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = tier.color + "aa"; ctx.lineWidth = 1.3; ctx.stroke();
+    ctx.fillStyle = tier.color;
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillText(tier.rank, bx + 28, by + 38);
+
     ctx.save(); ctx.globalCompositeOperation = "lighter";
     ctx.fillStyle = tier.color;
-    ctx.font = "bold 14px sans-serif";
-    ctx.fillText(tier.text, tier.cx, by + 18);
+    ctx.font = "bold 15px sans-serif";
+    ctx.fillText(tier.title, tier.cx + 14, by + 43, bw - 78);
     ctx.restore();
-    ctx.fillStyle = "#d8d1bf";
-    ctx.font = "10px sans-serif";
-    ctx.fillText(tier.hint, tier.cx, by + 33);
-    // side ornaments
-    ctx.fillStyle = tier.color;
-    for (const s of [-1, 1]) {
-      const ox = tier.cx + s * 104;
-      ctx.beginPath(); ctx.moveTo(ox, by + 13); ctx.lineTo(ox + 4, by + 20); ctx.lineTo(ox, by + 27); ctx.lineTo(ox - 4, by + 20); ctx.closePath(); ctx.fill();
+
+    ctx.strokeStyle = tier.color + "55"; ctx.lineWidth = 1;
+    for (let i = 0; i < 5; i++) {
+      const rx = bx + 50 + i * ((bw - 72) / 4);
+      ctx.beginPath();
+      ctx.moveTo(rx - 4, by + bh - 10);
+      ctx.lineTo(rx, by + bh - 15);
+      ctx.lineTo(rx + 4, by + bh - 10);
+      ctx.stroke();
     }
   }
   ctx.restore();
@@ -962,6 +1637,174 @@ function drawBluePortal(x) {
     ctx.ellipse(0, -70, 24 + i * 10 + Math.sin(t * 2 + i) * 3, 48 + i * 5, t * 0.3 + i, 0, Math.PI * 2);
     ctx.stroke();
   }
+  ctx.restore();
+}
+
+function ledgerPanelPath(x, y, w, h, r = 14) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawLedgerCrown(x, y, s, t) {
+  ctx.save();
+  ctx.translate(x, y + Math.sin(t * 2.4) * 1.4);
+  ctx.scale(s, s);
+  ctx.rotate(Math.sin(t * 1.7) * 0.05);
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const glow = ctx.createRadialGradient(0, -2, 2, 0, -2, 22);
+  glow.addColorStop(0, "rgba(255,226,150,0.58)");
+  glow.addColorStop(1, "rgba(255,160,50,0)");
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(0, -2, 22, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = "#f2c14e";
+  ctx.beginPath();
+  ctx.moveTo(-13, 6); ctx.lineTo(-12, -3); ctx.lineTo(-7, -11); ctx.lineTo(-3, -3);
+  ctx.lineTo(0, -14); ctx.lineTo(3, -3); ctx.lineTo(7, -11); ctx.lineTo(12, -3); ctx.lineTo(13, 6);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#ffe9a3";
+  ctx.fillRect(-13, 4, 26, 3);
+  ctx.fillStyle = "#8fd8ff";
+  ctx.beginPath(); ctx.arc(0, -1, 2.1, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawHubLeaderboard() {
+  const entries = normalizeLeaderboard(Game.meta?.leaderboard || []);
+  const t = Game.hubT || 0;
+  const w = 362;
+  const rowH = 36;
+  const h = 94 + Math.max(1, entries.length) * rowH;
+  const x = HUB.spawnX;
+  const y = groundY - h - 96 - h * 0.3 + Math.sin(t * 1.15) * 5;
+  const left = -w / 2;
+  const lastId = Game.meta?.lastLeaderboardEntryId;
+  const lastRank = Game.meta?.lastLeaderboardRank || 0;
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.textBaseline = "alphabetic";
+
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.beginPath(); ctx.ellipse(0, h + 67, w * 0.33, 13, 0, 0, Math.PI * 2); ctx.fill();
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const aura = ctx.createRadialGradient(0, h * 0.46, 20, 0, h * 0.46, w * 0.72);
+  aura.addColorStop(0, "rgba(143,216,255,0.2)");
+  aura.addColorStop(0.5, "rgba(242,193,78,0.08)");
+  aura.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = aura;
+  ctx.beginPath(); ctx.ellipse(0, h * 0.48, w * 0.74, h * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  ctx.strokeStyle = "rgba(143,216,255,0.28)";
+  ctx.lineWidth = 1.1;
+  for (const sx of [-w * 0.34, w * 0.34]) {
+    ctx.beginPath();
+    ctx.moveTo(sx, -20 + Math.sin(t * 1.8 + sx) * 2);
+    ctx.quadraticCurveTo(sx * 0.95, -6, sx * 0.88, 14);
+    ctx.stroke();
+  }
+
+  const body = ctx.createLinearGradient(0, 0, 0, h);
+  body.addColorStop(0, "rgba(18,18,31,0.86)");
+  body.addColorStop(0.55, "rgba(9,13,24,0.78)");
+  body.addColorStop(1, "rgba(12,10,18,0.88)");
+  ledgerPanelPath(left, 0, w, h, 18);
+  ctx.fillStyle = body;
+  ctx.fill();
+  ctx.strokeStyle = "rgba(143,216,255,0.74)";
+  ctx.lineWidth = 1.6;
+  ctx.stroke();
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.strokeStyle = "rgba(242,193,78,0.28)";
+  ctx.lineWidth = 1;
+  ledgerPanelPath(left + 8, 8, w - 16, h - 16, 14);
+  ctx.stroke();
+  for (let i = 0; i < 10; i++) {
+    const a = t * 0.35 + i * Math.PI * 0.2;
+    const px = Math.cos(a) * (w * 0.44);
+    const py = h * 0.48 + Math.sin(a * 1.7) * (h * 0.38);
+    ctx.fillStyle = i % 2 ? "rgba(143,216,255,0.5)" : "rgba(242,193,78,0.42)";
+    ctx.beginPath(); ctx.arc(px, py, 1.1 + (i % 3) * 0.35, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+
+  drawLedgerCrown(left + 32, 31, 0.72, t);
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#f2c14e";
+  ctx.font = "600 17px Georgia, serif";
+  ctx.fillText("EMBER LEDGER", left + 58, 30);
+  ctx.fillStyle = lastRank > 0 ? "#ffe9a3" : "#9fdfff";
+  ctx.font = "10px sans-serif";
+  const sub = lastRank > 0 ? `NEW ENTRY - RANK ${lastRank}` : "TOP RUNS ETCHED IN ASH";
+  ctx.fillText(sub, left + 60, 48, w - 82);
+
+  ctx.strokeStyle = "rgba(143,216,255,0.26)";
+  ctx.beginPath();
+  ctx.moveTo(left + 20, 62);
+  ctx.lineTo(left + w - 20, 62);
+  ctx.stroke();
+
+  const top = 74;
+  if (entries.length === 0) {
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#cfc6b0";
+    ctx.font = "12px sans-serif";
+    ctx.fillText("No runs are etched yet", 0, top + 23);
+    ctx.restore();
+    return;
+  }
+
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    const rowTop = top + i * rowH;
+    const isNew = entry.id === lastId;
+    const isFirst = i === 0;
+    const rowAlpha = isNew ? 0.2 + Math.sin(t * 5.5) * 0.06 : (isFirst ? 0.12 : 0.065);
+
+    ledgerPanelPath(left + 14, rowTop - 2, w - 28, rowH - 6, 8);
+    ctx.fillStyle = isNew ? `rgba(242,193,78,${rowAlpha})` : `rgba(143,216,255,${rowAlpha})`;
+    ctx.fill();
+    ctx.strokeStyle = isNew ? "rgba(255,226,150,0.72)" : "rgba(143,216,255,0.22)";
+    ctx.lineWidth = isNew ? 1.2 : 0.8;
+    ctx.stroke();
+
+    ctx.textAlign = "center";
+    ctx.fillStyle = isFirst ? "#ffe9a3" : "#8fd8ff";
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillText(`#${i + 1}`, left + 35, rowTop + 18);
+
+    ctx.textAlign = "left";
+    ctx.fillStyle = isNew ? "#fff1b8" : "#f7eed4";
+    ctx.font = "bold 14px sans-serif";
+    ctx.fillText(formatLeaderboardScore(entry.score), left + 64, rowTop + 15, 128);
+    ctx.fillStyle = "#bfb7a6";
+    ctx.font = "10px sans-serif";
+    ctx.fillText(`Day ${entry.day}  ${entry.kills} slain  Base ${entry.baseLevel}`, left + 64, rowTop + 29, 190);
+
+    ctx.textAlign = "right";
+    ctx.fillStyle = isNew ? "#ffe9a3" : "#9fdfff";
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillText(`+${entry.reward}`, left + w - 28, rowTop + 15);
+    ctx.fillStyle = "#8fddff";
+    ctx.font = "9px sans-serif";
+    ctx.fillText("embers", left + w - 28, rowTop + 28);
+  }
+
   ctx.restore();
 }
 
@@ -1085,6 +1928,7 @@ export function renderHub() {
   for (let x = 220; x < HUB.width; x += 180) {
     ctx.beginPath(); ctx.moveTo(x, groundY + 8); ctx.lineTo(x + 70, groundY + 22); ctx.stroke();
   }
+  drawHubLeaderboard();
   drawNpc(430);
   drawTierPlazas();
   for (const upg of META_UPGRADES) drawAltar(upg);

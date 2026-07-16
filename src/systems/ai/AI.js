@@ -7,7 +7,7 @@ import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
 import { spawnParticles, spawnGoldCoins, spawnGoldReward, floaty as showFloaty } from '../world/SpawnSystem.js';
 import { shootArrow, killEnemy, damagePlayer } from '../combat/Combat.js';
-import { killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js';
+import { killEnemyWithAnimation, spawnImpBlood, spawnHumanBlood } from '../../util/EnemyUtils.js';
 import { wallHeight, wallStandX, wallBackDir, wallRenderWidth, wallPlatformDepth, overWallPlatform, entityWallLift } from '../../entities/Wall.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { nearestChoppableTree, chopTree, nearestLog, deliverLog, pondAt, nearestPond } from '../world/ForestSystem.js';
@@ -31,9 +31,9 @@ function archerShoot(u, x, h, tgt) {
 
   // Heavy Ballista overrides everything
   if (skills.includes("heavy_ballista")) {
-    shootArrow(x, h, tgt, u);
+    shootArrow(x, h, tgt, u, null, { projectileSpeed: 620, lifePadding: 0.6 });
     const arr = state.arrows[state.arrows.length - 1];
-    if (arr) { arr.ballista = true; arr.vx *= 0.55; arr.vy *= 0.55; arr.pierce = 3; arr.dmgMult = 5; }
+    if (arr) { arr.ballista = true; arr.pierce = 3; arr.dmgMult = 5; }
     u.shotCount = 0; u.charged = false; u.powerTimer = 0;
     return;
   }
@@ -1114,16 +1114,41 @@ function guardAI(u, dt) {
 
 function startUnitDeath(u) {
   if (u.dying) return;
+  const overkill = Math.max(0, -(u.hp || 0));
+  const violence = Math.min(3.8, Math.sqrt(overkill / Math.max(1, u.maxHp || 5)) * 2.35 + Math.sqrt(overkill) * 0.18);
+  const lift = entityWallLift(u) + (u.grappleLiftY || 0);
+  const deathDir = u.combatTarget ? Math.sign(u.x - u.combatTarget.x) || 1 : (u.knock ? Math.sign(u.knock) || 1 : (u.dir || 1));
+  const heavy = u.role === "guard";
+  const airborne = lift > 16 || violence > 1.4;
   u.dying = true;
   u.deathT = 0;
-  u.deathDuration = u.role === "guard" ? 1.45 : 1.25;
-  u.deathDir = u.combatTarget ? Math.sign(u.x - u.combatTarget.x) || 1 : (u.dir || 1);
-  u.deathSpin = (u.deathDir < 0 ? -1 : 1) * (u.role === "guard" ? 1.0 : 0.85);
-  u.knock = (u.knock || 0) + u.deathDir * (u.role === "guard" ? 70 : 95);
+  u.deathDuration = (heavy ? 1.65 : 1.38) + violence * 0.22 + lift / 260;
+  u.deathKind = lift > 16 ? "fallFromWall" : violence > 2.4 ? "violentThrow" : heavy ? "guardCollapse" : u.role === "archer" ? "archerCollapse" : "workerCollapse";
+  u.deathDir = deathDir;
+  u.deathSpin = (deathDir < 0 ? -1 : 1) * (heavy ? 0.8 : 1.05 + violence * 0.28);
+  u.deathFy = -lift;
+  u.deathVy = airborne ? -(heavy ? 34 : 54) - violence * (heavy ? 22 : 42) : 0;
+  u.deathGravity = heavy ? 760 : 820;
+  u.deathAngle = 0;
+  u.deathRestAngle = deathDir * (heavy ? 1.18 : 1.48);
+  u.deathAngVel = u.deathSpin * (airborne ? 3.2 + violence * 0.75 : 1.45);
+  u.deathBounces = 0;
+  u.deathFriction = Math.max(2, 4.7 - violence * 0.45);
+  u.overkillViolence = violence;
+  u.knock = (u.knock || 0) + deathDir * ((heavy ? 58 : 82) + violence * (heavy ? 34 : 62));
   u.moving = false;
   u.working = false;
+  u.grapple = null;
+  u.grappleLiftY = 0;
+  u.onWall = false;
+  u.wall = null;
+  u.guardWall = null;
+  u.climbingWall = false;
+  u.carryLog = false;
   u.combatTarget = null;
-  spawnParticles(u.x, groundY - 30, u.role === "guard" ? 12 : 8, "#7a1f1f", 70, 80);
+  spawnHumanBlood(u, 1.05 + violence * 0.7 + (heavy ? 0.2 : 0), deathDir, groundY - lift - 30);
+  if (violence > 1.6 || lift > 40) spawnHumanBlood(u, 0.7 + violence * 0.35, -deathDir, groundY - lift - 22);
+  Game.screenShake = Math.max(Game.screenShake || 0, Math.min(0.28, 0.06 + violence * 0.055 + lift / 900));
 }
 
 function getArcherSideCounts() {
@@ -1228,7 +1253,40 @@ export function updateUnits(dt) {
     if (u.strike > 0) u.strike -= dt;
     if (u.dying) {
       u.deathT += dt;
-      if (u.knock) { u.x = clamp(u.x + u.knock * dt, 120, CFG.worldWidth - 120); u.knock *= Math.max(0, 1 - 5 * dt); if (Math.abs(u.knock) < 2) u.knock = 0; }
+      const violence = u.overkillViolence || 0;
+      if (u.knock) {
+        u.x = clamp(u.x + u.knock * dt, 120, CFG.worldWidth - 120);
+        u.knock *= Math.max(0, 1 - (u.deathFriction || 4.2) * dt);
+        if (Math.abs(u.knock) < 2) u.knock = 0;
+      }
+      const falling = (u.deathFy || 0) < 0 || (u.deathVy || 0) < 0;
+      if (falling) {
+        u.deathVy = (u.deathVy || 0) + (u.deathGravity || 800) * dt;
+        u.deathFy = Math.min(0, (u.deathFy || 0) + u.deathVy * dt);
+        u.deathAngle = (u.deathAngle || 0) + (u.deathAngVel || 0) * dt;
+        if ((u.deathFy || 0) >= 0) {
+          u.deathFy = 0;
+          if (u.deathVy > 170 && (u.deathBounces || 0) < 1 && violence > 1.2) {
+            u.deathVy = -u.deathVy * 0.24;
+            u.deathBounces = (u.deathBounces || 0) + 1;
+            u.deathAngVel = (u.deathAngVel || 0) * 0.45;
+            u.knock = (u.knock || 0) * 0.48;
+            u.deathDuration = Math.max(u.deathDuration || 1.25, u.deathT + 0.48);
+            spawnHumanBlood(u, 0.75 + violence * 0.22, u.deathDir || 1, groundY - 10);
+          } else {
+            u.deathVy = 0;
+            u.deathAngVel = (u.deathAngVel || 0) * 0.24;
+            spawnHumanBlood(u, 0.45 + violence * 0.12, u.deathDir || 1, groundY - 12);
+          }
+        }
+      } else {
+        const rest = u.deathRestAngle || ((u.deathDir || 1) * 1.35);
+        u.deathAngle = (u.deathAngle || 0) + (rest - (u.deathAngle || 0)) * Math.min(1, 8 * dt);
+        u.deathAngVel = (u.deathAngVel || 0) * Math.max(0, 1 - 8 * dt);
+      }
+      if (violence > 1.35 && Math.random() < dt * (1.4 + violence)) {
+        spawnHumanBlood(u, 0.38 + violence * 0.08, u.deathDir || 1, groundY + (u.deathFy || 0) - 25);
+      }
       if (u.deathT >= (u.deathDuration || 1.25)) units.splice(i, 1);
       continue;
     }
@@ -1490,7 +1548,14 @@ export function nearestAnimal(x, range) {
 // Bear: territorial predator. Chases and mauls any friendly character
 // (player, units, vagrants) in sight. Ignores enemies entirely — and they
 // ignore it, since it lives in the animals array, not the enemies array.
-const BEAR_WALL_STOP = 34;
+const BEAR_WALL_STOP = 46;
+// Swipe timing: the paw lands partway through the animation, so a windup is
+// visible and prey can still dodge. The sprite reads these off the animal
+// (attackDur / strikeAt are stamped on it in bearBeginStrike).
+const BEAR_ATTACK_DUR = 0.55;
+const BEAR_STRIKE_AT = 0.26;   // remaining anim time when the paw lands
+const BEAR_REACH = 52;         // horizontal paw reach
+const BEAR_AIR_REACH = 42;     // swipe height — a well-timed jump clears it
 
 function activeBearWall(w) {
   return w.commissioned && w.hp > 0 && w.buildProgress >= 1;
@@ -1547,28 +1612,88 @@ function collapseBearWall(w) {
   spawnParticles(w.x, groundY - 30, 16, "#caa46a", 80, 80);
 }
 
+// Start a swipe: the bear plants itself, rears, and the paw lands at
+// BEAR_STRIKE_AT — damage happens in bearResolveStrike, not here.
+function bearBeginStrike(a, target, wall) {
+  a.charging = 0;
+  a.attackCd = 1.6;
+  a.attackAnim = BEAR_ATTACK_DUR;
+  a.attackDur = BEAR_ATTACK_DUR;
+  a.strikeAt = BEAR_STRIKE_AT;
+  a.strikeTarget = target || null;
+  a.strikeWall = wall || null;
+  a.struck = false;
+}
+
+function bearResolveStrike(a) {
+  const { player, vagrants } = state;
+  const target = a.strikeTarget, wall = a.strikeWall;
+  a.strikeTarget = a.strikeWall = null;
+
+  if (wall) {
+    if (!activeBearWall(wall) || dist(a.x, wall.x) > BEAR_WALL_STOP + 16) return;
+    wall.hp -= 2;
+    wall.flash = 0.15;
+    spawnParticles(wall.x, groundY - 30, 5, "#caa46a", 38, 42);
+    floaty(wall.x, "-2", "#caa46a");
+    Audio.hit();
+    if (wall.hp <= 0) collapseBearWall(wall);
+    return;
+  }
+  if (!target) return;
+  if (dist(target.x, a.x) > BEAR_REACH + 18) return; // prey slipped out of the arc
+
+  if (target === player) {
+    if (player.hp <= 0 || Game.inMine) return;
+    // The swipe only reaches so high — an airborne player is out of range
+    if ((player.jumpH || 0) + entityWallLift(player) > BEAR_AIR_REACH) return;
+    damagePlayer(1, { knock: Math.sign(player.x - a.x) * 190 });
+    Audio.hit();
+  } else if (target.hp !== undefined) {
+    if (entityWallLift(target) > BEAR_AIR_REACH) return;
+    target.hp -= 2; target.panic = 1;
+    spawnParticles(target.x, groundY - 40, 6, "#c1453b");
+    Audio.hit();
+  } else {
+    // Vagrants have no hp — one swipe scares them off for good
+    const idx = vagrants.indexOf(target);
+    if (idx !== -1) {
+      const corpse = makeUnit("peasant", target.x);
+      corpse.dir = target.vx ? Math.sign(target.vx) || 1 : (target.dir || 1);
+      corpse.hp = -2;
+      corpse.maxHp = 5;
+      corpse.knock = Math.sign(target.x - a.x || 1) * 120;
+      state.units.push(corpse);
+      startUnitDeath(corpse);
+      vagrants.splice(idx, 1);
+      Audio.hit();
+    }
+  }
+}
+
 function bearAttackWall(a, wall, dt) {
   a.state = "chase";
   a.dir = Math.sign(wall.x - a.x) || a.dir;
-  a.anim += dt * 9;
-  if (dist(a.x, bearWallStopX(wall, a.x)) > 5) moveBear(a, a.dir * 130 * dt);
-  if (dist(a.x, wall.x) > BEAR_WALL_STOP + 10 || a.attackCd > 0) return;
-
-  a.charging = 0;
-  a.attackCd = 1.4;
-  a.attackAnim = 0.4;
-  wall.hp -= 2;
-  wall.flash = 0.15;
-  spawnParticles(wall.x, groundY - 30, 5, "#caa46a", 38, 42);
-  floaty(wall.x, "-2", "#caa46a");
-  Audio.hit();
-  if (wall.hp <= 0) collapseBearWall(wall);
+  if (a.attackAnim <= 0 && dist(a.x, bearWallStopX(wall, a.x)) > 5) {
+    a.anim += dt * 9;
+    a.moving = true;
+    moveBear(a, a.dir * 130 * dt);
+  }
+  if (dist(a.x, wall.x) > BEAR_WALL_STOP + 10 || a.attackCd > 0 || a.attackAnim > 0) return;
+  bearBeginStrike(a, null, wall);
 }
 
 function updateBear(a, dt) {
   const { player, units, vagrants } = state;
   a.attackCd -= dt;
-  if (a.attackAnim > 0) a.attackAnim -= dt;
+  a.moving = false;
+  if (a.attackAnim > 0) {
+    a.attackAnim -= dt;
+    if (!a.struck && a.attackAnim <= (a.strikeAt || BEAR_STRIKE_AT)) {
+      a.struck = true;
+      bearResolveStrike(a);
+    }
+  }
   if (a.flash > 0) a.flash -= dt;
 
   // Sight: wider once already aggroed so victims can't juke it easily
@@ -1591,44 +1716,41 @@ function updateBear(a, dt) {
     }
 
     a.state = "chase";
-    a.dir = Math.sign(target.x - a.x) || a.dir;
-    if (a.charging > 0) {
+    if (a.attackAnim > 0) {
+      // Planted mid-swipe — no movement, no run cycle
+    } else if (a.charging > 0) {
       // Burst of speed that runs down kiting archers
+      a.dir = Math.sign(target.x - a.x) || a.dir;
       a.charging -= dt;
       a.anim += dt * 16;
+      a.moving = true;
       moveBear(a, a.dir * 330 * dt);
       spawnParticles(a.x - a.dir * 20, groundY - 8, 1, "#8a7a5c");
-    } else {
+    } else if (td > BEAR_REACH - 8) {
+      a.dir = Math.sign(target.x - a.x) || a.dir;
       a.anim += dt * 9;
-      if (td > 30) moveBear(a, a.dir * 130 * dt);
+      a.moving = true;
+      moveBear(a, a.dir * 130 * dt);
       // Wind up a charge when prey is near but out of paw reach
-      if (td > 70 && td < 260 && a.chargeCd <= 0) {
+      if (td > 100 && td < 260 && a.chargeCd <= 0) {
         a.charging = 0.6;
         a.chargeCd = 4.5;
       }
+    } else {
+      // Squared up over its prey: stand and fight instead of jogging in place
+      a.dir = Math.sign(target.x - a.x) || a.dir;
+      a.anim += dt * 2;
     }
-    if (td < 36 && a.attackCd <= 0) {
-      a.charging = 0;
-      a.attackCd = 1.4;
-      a.attackAnim = 0.4;
-      Audio.hit();
-      if (target === player) {
-        damagePlayer(1, { knock: Math.sign(player.x - a.x) * 160 });
-      } else if (target.hp !== undefined) {
-        target.hp -= 2; target.panic = 1;
-        spawnParticles(target.x, groundY - 40, 6, "#c1453b");
-      } else {
-        // Vagrants have no hp — one swipe scares them off for good
-        const idx = vagrants.indexOf(target);
-        if (idx !== -1) { vagrants.splice(idx, 1); spawnParticles(target.x, groundY - 40, 8, "#c1453b"); }
-      }
+    if (td < BEAR_REACH && a.attackCd <= 0 && a.attackAnim <= 0) {
+      bearBeginStrike(a, target, null);
     }
   } else if (a.state === "chase") {
     a.state = "graze"; a.stateT = rand(2, 4); a.charging = 0;
   } else if (a.state === "walk") {
     a.stateT -= dt;
     a.anim += dt * 5;
-    if (moveBear(a, a.dir * 26 * dt)) {
+    a.moving = true;
+    if (moveBear(a, a.dir * 30 * dt)) {
       a.dir *= -1;
       a.state = "graze";
       a.stateT = rand(2, 4);

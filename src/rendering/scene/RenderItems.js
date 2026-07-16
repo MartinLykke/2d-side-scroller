@@ -1,9 +1,10 @@
 import { clamp, dist } from '../../util/math.js';
 import { WEAPONS, RARITY_COL } from '../../config/weapons.js';
-import { ctx, W, H, groundY } from '../../core/canvas.js';
-import { Game, state } from '../../core/state.js';
+import { ctx, groundY } from '../../core/canvas.js';
+import { state } from '../../core/state.js';
 import { groundShadow } from '../DrawHelpers.js';
 import { drawWeaponModel } from '../ItemRender.js';
+import { visibleWorldBounds } from '../Viewport.js';
 
 const STUCK_ARROW_FADE_TIME = 0.55;
 
@@ -38,8 +39,10 @@ function drawStuckArrowShaft(ar, alpha) {
 
 export function drawCoins(mineLayer = false) {
   const t=performance.now();
+  const view = visibleWorldBounds(80);
   for (const c of state.coins) {
     if (!!c.mine !== mineLayer) continue;
+    if (c.x < view.left || c.x > view.right) continue;
     const v = c.value || 1;
     // Tier look: 1 = small gold, 5 = larger amber with rim, 10+ = big pale-gold with glow ring
     const sc = v >= 10 ? 1.6 : v >= 5 ? 1.3 : 1;
@@ -65,13 +68,53 @@ export function drawCoins(mineLayer = false) {
 
 export function drawArrows() {
   const t = performance.now() / 1000;
+  const view = visibleWorldBounds(300);
   for (const ar of state.arrows) {
     if (ar.delay > 0) continue; // still nocked on the archer's bow
+    if (ar.x < view.left || ar.x > view.right) continue;
     const ang = ar.stuck ? (ar.frozenAngle || 0) : Math.atan2(ar.vy,ar.vx);
     ctx.save(); ctx.translate(ar.x,ar.y); ctx.rotate(ang);
     const wid = ar.weaponId;
     if (ar.stuck) {
       drawStuckArrowShaft(ar, stuckArrowAlpha(ar));
+      ctx.restore();
+      continue;
+    }
+    if (ar.magma) {
+      // The colossus throws dense, cracked chunks of the mountain — not a
+      // generic fireball. The short ash wake keeps the projectile readable at
+      // speed without making it look weightless.
+      const spin = t * 8 + ar.x * 0.012;
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.42 + 0.12 * Math.sin(t * 11 + ar.x);
+      const wake = ctx.createLinearGradient(-42, 0, 9, 0);
+      wake.addColorStop(0, "rgba(125,18,0,0)");
+      wake.addColorStop(0.58, "rgba(244,75,24,0.2)");
+      wake.addColorStop(1, "rgba(255,174,64,0.62)");
+      ctx.fillStyle = wake;
+      ctx.beginPath(); ctx.ellipse(-18, 0, 28, 6.5, 0, 0, Math.PI * 2); ctx.fill();
+      const glow = ctx.createRadialGradient(0, 0, 3, 0, 0, 19);
+      glow.addColorStop(0, "rgba(255,96,22,0.34)");
+      glow.addColorStop(0.4, "rgba(224,55,14,0.3)");
+      glow.addColorStop(1, "rgba(130,15,0,0)");
+      ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(0, 0, 19, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.save(); ctx.rotate(spin);
+      ctx.fillStyle = "#0b0e12";
+      ctx.beginPath();
+      ctx.moveTo(-12, -8); ctx.lineTo(2, -13); ctx.lineTo(13, -5); ctx.lineTo(11, 8);
+      ctx.lineTo(1, 12); ctx.lineTo(-13, 6); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#3a424b";
+      ctx.beginPath();
+      ctx.moveTo(-8, -7); ctx.lineTo(2, -10); ctx.lineTo(9, -4); ctx.lineTo(5, 3);
+      ctx.lineTo(-2, 1); ctx.lineTo(-9, 6); ctx.lineTo(-10, 0); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = "#080a0d"; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.88;
+      ctx.strokeStyle = "#f45a21"; ctx.lineWidth = 1.55; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(-6, 1); ctx.lineTo(-1, -2); ctx.lineTo(3, 2); ctx.lineTo(7, -1); ctx.stroke();
+      ctx.strokeStyle = "rgba(255,229,152,0.75)"; ctx.lineWidth = 0.65; ctx.stroke();
+      ctx.restore();
+      ctx.restore();
       ctx.restore();
       continue;
     }
@@ -191,13 +234,28 @@ export function drawArrows() {
       ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.45;
       ctx.strokeStyle="#ff8820"; ctx.lineWidth=1;
       for (let k=0;k<4;k++) { const bx=-5-k*4; const fl=Math.sin(t*20+k)*3; ctx.beginPath(); ctx.moveTo(bx,0); ctx.lineTo(bx-2,-4+fl); ctx.stroke(); } ctx.restore();
+    } else if (wid === "crossbow") {
+      // Stubby iron-tipped bolt with a faint slipstream
+      ctx.save(); ctx.globalAlpha=0.3;
+      ctx.strokeStyle="#c8ccd4"; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(-16,0); ctx.lineTo(-7,0); ctx.stroke();
+      ctx.restore();
+      ctx.strokeStyle="#4a3a26"; ctx.lineWidth=2.2;
+      ctx.beginPath(); ctx.moveTo(-8,0); ctx.lineTo(4,0); ctx.stroke();
+      ctx.fillStyle="#cfd3d9";
+      ctx.beginPath(); ctx.moveTo(4,-2.2); ctx.lineTo(9,0); ctx.lineTo(4,2.2); ctx.closePath(); ctx.fill();
+      ctx.fillStyle="#8f2a24";
+      ctx.beginPath(); ctx.moveTo(-8,0); ctx.lineTo(-11,-2.2); ctx.lineTo(-7,-0.5); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-8,0); ctx.lineTo(-11,2.2); ctx.lineTo(-7,0.5); ctx.closePath(); ctx.fill();
     } else {
-      // Same arrow the archer nocks: wooden shaft, steel head, green fletching
+      // Same arrow the archer nocks: wooden shaft, steel head, fletching
+      // colored per bow (green default, crimson for the long bow)
+      const fletch = wid === "long_bow" ? "#b04a3a" : "#8fae4a";
       ctx.strokeStyle="#c9b48a"; ctx.lineWidth=1.4;
       ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(5,0); ctx.stroke();
       ctx.fillStyle="#b8bcc4";
       ctx.beginPath(); ctx.moveTo(5,-1.6); ctx.lineTo(8.5,0); ctx.lineTo(5,1.6); ctx.closePath(); ctx.fill();
-      ctx.fillStyle="#8fae4a";
+      ctx.fillStyle=fletch;
       ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(-13,-2.6); ctx.lineTo(-8.5,-0.6); ctx.closePath(); ctx.fill();
       ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(-13,2.6); ctx.lineTo(-8.5,0.6); ctx.closePath(); ctx.fill();
     }
@@ -208,7 +266,9 @@ export function drawArrows() {
 export function drawLootItems() {
   if (!state.lootItems) return;
   const t=performance.now()/1000;
+  const view = visibleWorldBounds(120);
   for (const it of state.lootItems) {
+    if (it.x < view.left || it.x > view.right) continue;
     const w=WEAPONS[it.weaponId], bob=Math.sin(t*2.5+it.x*0.01)*3;
     const yy = (it.dropY !== undefined) ? it.dropY : groundY-16+bob;
     const rc=RARITY_COL[w.rarity];
@@ -237,7 +297,9 @@ export function drawChests() {
   if (!state.chests || !state.chests.length) return;
   const t=performance.now()/1000;
   const { player } = state;
+  const view = visibleWorldBounds(140);
   for (const ch of state.chests) {
+    if (ch.x < view.left || ch.x > view.right) continue;
     const x=ch.x, bob=Math.sin(t*2+x*0.01)*2.5, yy=groundY-18+bob;
     const near=dist(x,player.x)<64, oa=ch.openAnim||0;
     groundShadow(x,14,0.22);
@@ -306,7 +368,9 @@ function purchaseFX(item, x, yy, t, color) {
 export function drawGroundBows() {
   if (!state.groundBows) return;
   const t=performance.now()/1000;
+  const view = visibleWorldBounds(120);
   for (const b of state.groundBows) {
+    if (b.x < view.left || b.x > view.right) continue;
     const bob=Math.sin(t*2.2+b.x*0.01)*2.5, yy=groundY-14+bob, alpha=b.claimed?0.35:0.7;
     groundShadow(b.x,8,0.18);
     const dropOff = purchaseFX(b, b.x, yy, t, "#9bd05a");
@@ -324,7 +388,9 @@ export function drawGroundBows() {
 export function drawGroundHammers() {
   if (!state.groundHammers) return;
   const t = performance.now()/1000;
+  const view = visibleWorldBounds(120);
   for (const h of state.groundHammers) {
+    if (h.x < view.left || h.x > view.right) continue;
     const bob = Math.sin(t*2.2+h.x*0.01)*2.5, yy = groundY-16+bob, alpha = h.claimed ? 0.35 : 0.72;
     groundShadow(h.x, 8, 0.18);
     const dropOff = purchaseFX(h, h.x, yy, t, "#f2a230");

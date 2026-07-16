@@ -1,8 +1,9 @@
 import { CFG } from '../../config/config.js';
 import { WEAPONS, effectiveWeapon } from '../../config/weapons.js';
+import { mergeUpgradeEffects, cachedUpgradeEffects } from '../../config/weaponUpgrades.js';
 import { ARMORS, ARMOR_RARITY_COL, armorBlockChance } from '../../config/armor.js';
 import { ENEMY_TYPES } from '../../config/enemies.js';
-import { dist, rand, applyCrit } from '../../util/math.js';
+import { clamp, dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { inject } from '../../core/services.js';
@@ -10,17 +11,67 @@ import { Audio } from '../infrastructure/Audio.js';
 import { spawnGoldReward, spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js';
 import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js';
 import { shootArrow } from './ProjectileSystem.js';
-import { castSpell } from './SpellSystem.js';
+import { castSpell, chainLightning } from './SpellSystem.js';
 import { startArcherShoot } from '../../rendering/sprites/Archer.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { entityWallLift } from '../../entities/Wall.js';
 
-function meleeWeaponImpact(weaponId, x, y) {
+// Per-weapon hit effects. `enemyTgt` is the struck enemy when it can carry a
+// status effect (null for animals), so themed weapons apply burns/chills/etc.
+function meleeWeaponImpact(weaponId, x, y, enemyTgt = null) {
   switch (weaponId) {
+    case "rusty_sword":
+      spawnParticles(x, y, 5, "#8a8a92", 45, 55);
+      spawnParticles(x, y, 3, "#a8703a", 35, 40); // rust flakes
+      break;
+    case "dagger":
+      spawnParticles(x, y, 4, "#d8d8e0", 55, 45);
+      spawnParticles(x, y, 2, "#ffffff", 30, 65);
+      break;
+    case "sword":
+      spawnParticles(x, y, 6, "#c8c8d0", 55, 65);
+      spawnParticles(x, y, 3, "#ffffff", 30, 80);
+      break;
+    case "longsword":
+      spawnParticles(x, y, 8, "#d0d0e0", 65, 75);
+      spawnParticles(x, y, 4, "#ffffff", 35, 90);
+      Game.screenShake = Math.max(Game.screenShake, 0.12);
+      break;
+    case "war_axe":
+      spawnParticles(x, y, 9, "#c8b068", 70, 70);
+      spawnParticles(x, y, 5, "#8a2a4a", 50, 55);
+      spawnParticles(x, y, 3, "#ffffff", 30, 75);
+      Game.screenShake = Math.max(Game.screenShake, 0.2);
+      break;
+    case "war_hammer":
+      // Ground-shaking slam: dust wave that staggers nearby enemies
+      spawnParticles(x, y, 12, "#9a9aa8", 85, 70);
+      spawnParticles(x, groundY - 8, 10, "#7a6a52", 120, 45);
+      spawnParticles(x, groundY - 6, 6, "#54483a", 150, 30);
+      for (const e of state.enemies) {
+        if (e === enemyTgt || e.fleeing || e.dying || e.hp <= 0) continue;
+        if (dist(e.x, x) < 80 && !ENEMY_TYPES[e.type]?.noKnockback) {
+          e.knock = (e.knock || 0) + Math.sign(e.x - x || 1) * 160;
+          spawnParticles(e.x, groundY - 12, 3, "#7a6a52", 60, 40);
+        }
+      }
+      Game.screenShake = Math.max(Game.screenShake, 0.4);
+      break;
+    case "spear":
+      spawnParticles(x, y, 6, "#e8dcb0", 75, 40);
+      spawnParticles(x, y, 3, "#ffffff", 40, 55);
+      break;
     case "flame_sword":
       spawnParticles(x, y, 10, "#ff7730", 70, 90);
       spawnParticles(x, y, 6, "#ffcc40", 40, 70);
       spawnParticles(x, y, 4, "#ff2200", 50, 50);
+      if (enemyTgt) {
+        // sets the target alight (same burn the fire arrows use)
+        enemyTgt.burn = Math.max(enemyTgt.burn || 0, 3);
+        enemyTgt.burnTick = 1;
+        enemyTgt.burnDmg = Math.max(enemyTgt.burnDmg || 0, 1);
+        enemyTgt.ignited = true;
+      }
       Game.screenShake = Math.max(Game.screenShake, 0.22);
       break;
     case "gilded_spear":
@@ -33,12 +84,14 @@ function meleeWeaponImpact(weaponId, x, y) {
       spawnParticles(x, y, 12, "#aa44cc", 80, 80);
       spawnParticles(x, y, 8, "#440066", 50, 50);
       spawnParticles(x, y, 4, "#ff88ff", 30, 100);
+      spawnParticles(x, y + 8, 5, "#220033", 35, 25); // dark mist pooling low
       Game.screenShake = Math.max(Game.screenShake, 0.3);
       break;
     case "thunder_blade":
       spawnParticles(x, y, 14, "#cc66ff", 90, 110);
       spawnParticles(x, y, 8, "#ffffff", 50, 140);
       spawnParticles(x, y, 6, "#aaaaff", 70, 80);
+      chainLightning(x, 5, 1); // static discharge arcs to a nearby enemy
       Game.screenShake = Math.max(Game.screenShake, 0.42);
       break;
     case "kings_sword":
@@ -52,15 +105,60 @@ function meleeWeaponImpact(weaponId, x, y) {
       spawnParticles(x, y, 14, "#ffffff", 80, 130);
       spawnParticles(x, y, 10, "#ff9940", 90, 100);
       spawnParticles(x, y, 6, "#ffcc00", 50, 170);
+      spawnParticles(x, y - 12, 8, "#fff8c0", 40, 190); // radiant flare
       Game.screenShake = Math.max(Game.screenShake, 0.6);
       break;
     case "ice_axe":
       spawnParticles(x, y, 10, "#6abaff", 70, 80);
+      spawnParticles(x, y, 6, "#bfefff", 45, 70);
       spawnParticles(x, y, 5, "#ffffff", 40, 60);
+      if (enemyTgt) enemyTgt.frost = Math.max(enemyTgt.frost || 0, 1.8); // chills the target
+      Game.screenShake = Math.max(Game.screenShake, 0.15);
       break;
     default:
       spawnParticles(x, y, 6, "#8a4a8a", 50, 60);
       break;
+  }
+}
+
+// Sparse ambient particles drifting off elemental and legendary weapons while
+// they're carried, so the fancy gear reads as magical even out of combat.
+const WEAPON_AMBIENT = {
+  flame_sword:    { rate: 5,   cols: ["#ff7730", "#ffcc40"] },
+  ice_axe:        { rate: 3,   cols: ["#bfefff", "#ffffff"] },
+  thunder_blade:  { rate: 4,   cols: ["#cc88ff", "#ffffff"] },
+  shadow_axe:     { rate: 3,   cols: ["#aa44cc", "#440066"] },
+  kings_sword:    { rate: 2.5, cols: ["#ffe9a0", "#f2c14e"] },
+  sunblade:       { rate: 5,   cols: ["#ffee80", "#ffffff"] },
+  dark_bow:       { rate: 3,   cols: ["#880099", "#aa44cc"] },
+  void_bow:       { rate: 3,   cols: ["#9933ff", "#ddaaff"] },
+  dragons_bow:    { rate: 4,   cols: ["#ff6820", "#ffcc40"] },
+  fire_tome:      { rate: 3,   cols: ["#ff6a2a", "#ffcc60"] },
+  hydro_tome:     { rate: 2.5, cols: ["#4ab8e8", "#a0e8ff"] },
+  lightning_tome: { rate: 3,   cols: ["#f0e060", "#ffffff"] },
+  meteor_tome:    { rate: 3,   cols: ["#ff8840", "#ffd060"] },
+  arcane_tome:    { rate: 3,   cols: ["#cc44ff", "#ff88ff"] },
+  shadow_tome:    { rate: 3,   cols: ["#8822cc", "#440066"] },
+  void_tome:      { rate: 4,   cols: ["#9922ff", "#ddaaff"] },
+};
+
+function updateWeaponAmbientFX(dt) {
+  const { player } = state;
+  if (!player.weapon || Game.inMine || player.hp <= 0) return;
+  const amb = WEAPON_AMBIENT[player.weapon];
+  const fx = cachedUpgradeEffects(player.weaponUpgrades);
+  const upgCols = fx._vfxCols || [];
+  if (!amb && !upgCols.length) return;
+  const lift = entityWallLift(player) + (player.jumpH || 0);
+  const handOff = WEAPONS[player.weapon].type === "melee" ? 14 : 10;
+  const handX = () => player.x + (player.dir || 1) * handOff + rand(-4, 4);
+  const handY = () => groundY - 30 - lift + rand(-8, 4);
+  if (amb && Math.random() < amb.rate * dt) {
+    spawnParticles(handX(), handY(), 1, amb.cols[Math.random() < 0.7 ? 0 : 1], 12, 22);
+  }
+  // Applied upgrades weave their own colors into the weapon's aura.
+  if (upgCols.length && Math.random() < (1.5 + fx._tierRank * 1.2) * dt) {
+    spawnParticles(handX(), handY(), 1, upgCols[Math.floor(Math.random() * upgCols.length)], 14, 26);
   }
 }
 
@@ -171,9 +269,179 @@ function cleaveNearbyEnemies(player, primary, damage) {
   }
 }
 
+// ---------- Upgrade-driven melee effects ----------
+
+// Every-hit splash (Rending Strikes, Earthshatter, Royal Decree, ...).
+function splashDamage(player, primary, damage, frac, range, col) {
+  const splashDmg = Math.max(1, Math.round(damage * frac));
+  let hits = 0;
+  for (const e of state.enemies) {
+    if (e === primary || e.fleeing || e.dying || e.hp <= 0) continue;
+    if (dist(e.x, primary.x) > range) continue;
+    e.hp -= splashDmg;
+    e.flash = 0.12;
+    if (!ENEMY_TYPES[e.type]?.noKnockback) e.knock = (e.knock || 0) + Math.sign(e.x - player.x || 1) * 140;
+    spawnImpBlood(e, 0.6 + splashDmg * 0.06, groundY + (e.fy || 0) - 24);
+    floaty(e.x, "-" + splashDmg, col);
+    hits++;
+    if (e.hp <= 0) killEnemyWithAnimation(e, Math.sign(e.x - player.x) || 1);
+  }
+  if (hits > 0) spawnParticles(primary.x, groundY - 20, 8 + hits * 3, col, 110, 70);
+}
+
+// A ground-hugging energy wave that cuts through the enemy line
+// (Knight's Oath, Solar Lance, Crownfire).
+function slashWave(player, dmg, col) {
+  const dir = player.dir || 1;
+  const reach = 190;
+  const beamDmg = Math.max(1, Math.round(dmg));
+  for (let s = 0; s < 14; s++) {
+    const px = player.x + dir * (14 + (reach - 14) * (s / 13));
+    spawnParticles(px, groundY - 26 + Math.sin(s * 1.7) * 5, 2, col, 26, 40);
+    if (s % 3 === 0) spawnParticles(px, groundY - 26, 1, "#ffffff", 14, 55);
+  }
+  for (const e of state.enemies) {
+    if (e.fleeing || e.dying || e.hp <= 0) continue;
+    const dx = (e.x - player.x) * dir;
+    if (dx < 0 || dx > reach) continue;
+    const et = ENEMY_TYPES[e.type];
+    if (et?.flying && (e.fy || -80) < -60) continue; // the wave hugs the ground
+    e.hp -= beamDmg;
+    e.flash = 0.14;
+    spawnImpBlood(e, 0.8 + beamDmg * 0.06, groundY + (e.fy || 0) - 24);
+    floaty(e.x, "-" + beamDmg, col);
+    if (!et?.noKnockback) e.knock = (e.knock || 0) + dir * 180;
+    if (e.hp <= 0) killEnemyWithAnimation(e, dir);
+  }
+  Game.screenShake = Math.max(Game.screenShake, 0.25);
+  Audio.swordSwing();
+}
+
+// Kills detonate (Phoenix Heart, Supernova).
+function killNova(x, dmg, fx) {
+  const col = fx.novaCol || "#ff7730";
+  const novaDmg = Math.max(1, Math.round(dmg * (fx.novaFrac || 0.8)));
+  spawnParticles(x, groundY - 26, 26, col, fx.novaR, 130);
+  spawnParticles(x, groundY - 26, 12, "#ffffff", fx.novaR * 0.6, 150);
+  Game.screenShake = Math.max(Game.screenShake, 0.4);
+  Audio.explosion();
+  for (const e of state.enemies) {
+    if (e.fleeing || e.dying || e.hp <= 0) continue;
+    if (dist(e.x, x) > fx.novaR) continue;
+    e.hp -= novaDmg;
+    e.flash = 0.14;
+    spawnImpBlood(e, 0.8, groundY + (e.fy || 0) - 24);
+    floaty(e.x, "-" + novaDmg, col);
+    if (e.hp <= 0) killEnemyWithAnimation(e, Math.sign(e.x - x) || 1);
+  }
+}
+
+// A bolt from the sky crashes down on the struck enemy (Thunderlord's Verdict).
+function skyBoltStrike(tgt, dmg) {
+  const et = ENEMY_TYPES[tgt.type];
+  const ey = groundY + (et?.flying ? (tgt.fy || -80) : -24);
+  for (let yy = groundY - 320; yy < ey; yy += 9) {
+    spawnParticles(tgt.x + rand(-6, 6), yy, 1, "#ffffff", 6, 6);
+    if (Math.random() < 0.4) spawnParticles(tgt.x + rand(-10, 10), yy, 1, "#ccccff", 12, 8);
+  }
+  const boltDmg = Math.max(1, Math.round(dmg * 0.8));
+  tgt.hp -= boltDmg;
+  tgt.flash = 0.16;
+  floaty(tgt.x, "-" + boltDmg + "⚡", "#eeccff");
+  Game.screenShake = Math.max(Game.screenShake, 0.35);
+  Audio.spell();
+  chainLightning(tgt.x, dmg, 2);
+}
+
+// One full melee hit resolution: damage riders, execute, splash, kill payoffs.
+function meleeStrike(player, tgt, tgtIsAnimal, wBase, fx, rawDmg, playerLift) {
+  let dmg = rawDmg;
+  if (fx.berserk && player.maxHp > 0) dmg *= 1 + fx.berserk * clamp(1 - player.hp / player.maxHp, 0, 1);
+  const chilled = !tgtIsAnimal && ((tgt.frost || 0) > 0 || (tgt.rooted || 0) > 0);
+  if (fx.shatter && chilled) dmg += fx.shatter;
+  const crit = applyCrit(dmg, CFG.critChance + (fx.critBonus || 0), CFG.critMultiplier);
+  tgt.hp -= crit.damage;
+  tgt.flash = 0.14;
+  Audio.hit();
+  meleeWeaponImpact(player.weapon, tgt.x, groundY - 28 - playerLift, tgtIsAnimal ? null : tgt);
+  if (fx.shatter && chilled) {
+    spawnParticles(tgt.x, groundY - 30, 12, "#bfefff", 80, 100);
+    floaty(tgt.x, "❄ Shatter!", "#bfefff");
+  }
+  if (crit.isCrit) critFloaty(tgt.x, crit.damage);
+  else floaty(tgt.x, "-" + crit.damage, wBase.col);
+
+  if (tgtIsAnimal) {
+    spawnParticles(tgt.x, groundY - 30, 5, "#8a2a2a");
+    if (tgt.hp <= 0) {
+      tgt.dying = true; tgt.deathT = 0;
+      spawnParticles(tgt.x, groundY - 20, 8, "#7a4a2a");
+      const reward = spawnGoldReward(tgt.x, 8, "hunt", { spreadX: 15, fromY: groundY - 20, vx: 50, vyMin: 120, vyMax: 220 });
+      if (reward > 0) floaty(tgt.x, "+" + reward + "🪙", "#f2c14e");
+    }
+    return;
+  }
+
+  if (fx.burnHit) {
+    tgt.burn = Math.max(tgt.burn || 0, 3);
+    tgt.burnTick = 1;
+    tgt.burnDmg = Math.max(tgt.burnDmg || 0, fx.burnHit);
+    tgt.ignited = true;
+  }
+  if (fx.frostHit) {
+    tgt.frost = Math.max(tgt.frost || 0, fx.frostHit);
+    spawnParticles(tgt.x, groundY - 28, 6, "#bfefff", 45, 60);
+  }
+  if (fx.rootHit && Math.random() < fx.rootHit) {
+    tgt.rooted = Math.max(tgt.rooted || 0, 1.5);
+    spawnParticles(tgt.x, groundY - 14, 8, "#8fd8ff", 26, 40);
+  }
+  spawnImpBlood(tgt, 1 + crit.damage * 0.12, groundY - 28);
+  const et = ENEMY_TYPES[tgt.type];
+  if (!et.noKnockback) tgt.knock = (tgt.knock || 0) + Math.sign(tgt.x - player.x) * (220 + (fx.knockBonus || 0));
+  if (fx.skyBolt && Math.random() < fx.skyBolt) skyBoltStrike(tgt, crit.damage);
+  if (fx.execute && tgt.hp > 0 && !et.boss && tgt.hp <= (et.hp || 6) * fx.execute) {
+    tgt.hp = 0;
+    floaty(tgt.x, "☠ Executed!", "#ff4040");
+    spawnParticles(tgt.x, groundY - 28, 14, "#ff4040", 70, 90);
+  }
+  if (fx.splashFrac) splashDamage(player, tgt, crit.damage, fx.splashFrac, fx.splashR || 90, wBase.col);
+  if (tgt.hp <= 0) {
+    const knockDir = Math.sign(tgt.x - player.x) || 1;
+    if (fx.novaR) killNova(tgt.x, crit.damage, fx);
+    if (fx.healOnKill && player.hp < player.maxHp && Math.random() < fx.healOnKill) {
+      player.hp = Math.min(player.maxHp, player.hp + 1);
+      floaty(player.x, "+1❤", "#7be87b");
+      spawnParticles(player.x, groundY - 40, 8, "#7be87b", 40, 70);
+    }
+    if (fx.goldOnKill && Math.random() < fx.goldOnKill) {
+      const g = spawnGoldReward(tgt.x, 2, "hunt", { spreadX: 12, fromY: groundY - 24, vyMin: 120, vyMax: 200 });
+      if (g > 0) floaty(tgt.x + 14, "+" + g + "🪙", "#f2c14e");
+    }
+    cleaveNearbyEnemies(player, tgt, crit.damage);
+    killEnemyWithAnimation(tgt, knockDir);
+  } else if (fx.alwaysCleave) {
+    cleaveNearbyEnemies(player, tgt, crit.damage);
+  }
+}
+
+// Copy upgrade flags onto a freshly spawned player arrow.
+function applyArrowUpgrades(ar, fx) {
+  if (fx.pierce) ar.pierce = (ar.pierce || 0) + fx.pierce;
+  if (fx.fireArrows) ar.fireArrow = true;
+  if (fx.critBonus) ar.critBonus = fx.critBonus;
+  if (fx.explosiveR) { ar.explosiveR = fx.explosiveR; ar.explosiveFrac = fx.explosiveFrac || 0.8; }
+  if (fx.gravityArrow) ar.gravityChance = fx.gravityArrow;
+  if (fx.frostHit) ar.frostArrow = true;
+  if (fx.rootHit && Math.random() < fx.rootHit) ar.rootArrow = true;
+  if (fx.healOnKill) ar.healOnKill = fx.healOnKill;
+  if (fx.goldOnKill) ar.goldOnKill = fx.goldOnKill;
+}
+
 export function updatePlayerAttack(dt) {
   const { player, enemies } = state;
   if (player.castAnim > 0) player.castAnim -= dt;
+  updateWeaponAmbientFX(dt);
   if (!player.weapon) return;
   if (Game.inMine) { if (player.swing > 0) player.swing -= dt; player.attackCd -= dt; return; }
   if (player.weapon === "short_bow" && (player.weaponUpgrades || []).some(u => u.id === "ice_explosion")) {
@@ -188,8 +456,10 @@ export function updatePlayerAttack(dt) {
   if (player.attackCd > 0) return;
   const wBase = WEAPONS[player.weapon];
   const w = effectiveWeapon(player.weapon, player.weaponUpgrades || []);
+  const fx = mergeUpgradeEffects(player.weaponUpgrades);
   let tgt = null, bd = w.range, tgtIsAnimal = false;
   for (const e of enemies) {
+    if (e.fleeing || e.dying || e.hp <= 0) continue;
     const d = dist(player.x, e.x);
     if (d < bd) { bd = d; tgt = e; tgtIsAnimal = false; }
   }
@@ -204,28 +474,18 @@ export function updatePlayerAttack(dt) {
   const playerLift = entityWallLift(player) + (player.jumpH || 0);
   const riposteMult = playerRiposteDamageMultiplier(player);
   if (wBase.type === "melee") {
-    const crit = applyCrit(w.dmg * permanentDamageMultiplier() * playerMomentumDamageMultiplier() * riposteMult, CFG.critChance, CFG.critMultiplier);
-    tgt.hp -= crit.damage; tgt.flash = 0.14; Audio.swordSwing(); Audio.hit();
-    meleeWeaponImpact(player.weapon, tgt.x, groundY - 28 - playerLift);
-    if (crit.isCrit) critFloaty(tgt.x, crit.damage);
-    else floaty(tgt.x, "-" + crit.damage, wBase.col);
-    if (tgtIsAnimal) {
-      spawnParticles(tgt.x, groundY - 30, 5, "#8a2a2a");
-      if (tgt.hp <= 0) {
-        tgt.dying = true; tgt.deathT = 0;
-        spawnParticles(tgt.x, groundY - 20, 8, "#7a4a2a");
-        const reward = spawnGoldReward(tgt.x, 8, "hunt", { spreadX: 15, fromY: groundY - 20, vx: 50, vyMin: 120, vyMax: 220 });
-        if (reward > 0) floaty(tgt.x, "+" + reward + "🪙", "#f2c14e");
-      }
-    } else {
-      spawnImpBlood(tgt, 1 + crit.damage * 0.12, groundY - 28);
-      const et = ENEMY_TYPES[tgt.type];
-      if (!et.noKnockback) tgt.knock = (tgt.knock || 0) + Math.sign(tgt.x - player.x) * 220;
-      if (tgt.hp <= 0) {
-        const knockDir = Math.sign(tgt.x - player.x) || 1;
-        cleaveNearbyEnemies(player, tgt, crit.damage);
-        killEnemyWithAnimation(tgt, knockDir);
-      }
+    Audio.swordSwing();
+    const baseDmg = w.dmg * permanentDamageMultiplier() * playerMomentumDamageMultiplier() * riposteMult;
+    meleeStrike(player, tgt, tgtIsAnimal, wBase, fx, baseDmg, playerLift);
+    // Shadow Dance: a second, slightly weaker strike blurs in behind the first.
+    if (!tgtIsAnimal && fx.doubleStrike && tgt.hp > 0 && !tgt.dying && Math.random() < fx.doubleStrike) {
+      spawnParticles(tgt.x, groundY - 30, 8, "#aa44cc", 55, 80);
+      floaty(tgt.x + 12, "x2", "#cc88ff");
+      meleeStrike(player, tgt, false, wBase, fx, baseDmg * 0.7, playerLift);
+    }
+    if (fx.beamChance && Math.random() < fx.beamChance) {
+      const beamCol = fx._vfxCols?.length ? fx._vfxCols[fx._vfxCols.length - 1] : wBase.col;
+      slashWave(player, w.dmg * (fx.beamFrac || 0.8), beamCol);
     }
     finishRiposte(player, tgt.x);
   } else if (wBase.type === "ranged") {
@@ -237,6 +497,26 @@ export function updatePlayerAttack(dt) {
       ar.dmgMult = arrowDmg;
       ar.dmg = Math.round(arrowDmg);
       ar.playerShot = true;
+      applyArrowUpgrades(ar, fx);
+    }
+    // Twin Strings / Split Nock: a second arrow streaks toward another enemy.
+    if (fx.multishot && Math.random() < fx.multishot) {
+      let second = null, sd = w.range + 120;
+      for (const e of enemies) {
+        if (e === tgt || e.fleeing || e.dying || e.hp <= 0) continue;
+        const d = dist(player.x, e.x);
+        if (d < sd) { sd = d; second = e; }
+      }
+      shootArrow(player.x, groundY - 34 - playerLift, second || tgt, player, player.weapon);
+      const ar2 = state.arrows[state.arrows.length - 1];
+      if (ar2 && ar2 !== ar) {
+        const arrowDmg = Math.max(1, w.dmg * 0.8 * playerMomentumDamageMultiplier() * riposteMult);
+        ar2.dmgMult = arrowDmg;
+        ar2.dmg = Math.round(arrowDmg);
+        ar2.playerShot = true;
+        applyArrowUpgrades(ar2, fx);
+        spawnParticles(player.x + (player.dir || 1) * 10, groundY - 34 - playerLift, 6, "#ffe9a0", 30, 50);
+      }
     }
     finishRiposte(player, tgt.x);
   } else {
@@ -247,7 +527,15 @@ export function updatePlayerAttack(dt) {
 
   let cooldown = w.speed;
   if (wBase.spellType === "meteor") {
-    cooldown *= 2.5;
+    cooldown *= fx.meteorDouble ? 3.4 : 2.5; // Double Up trades tempo for a second meteor
+  }
+  if (wBase.type === "ranged" && fx.instantReload && Math.random() < fx.instantReload) {
+    cooldown = 0.14;
+    spawnParticles(player.x, groundY - 34 - playerLift, 5, "#ffb060", 28, 40);
+  }
+  if (wBase.type === "magic" && fx.freeCast && Math.random() < fx.freeCast) {
+    cooldown = 0.1;
+    floaty(player.x, "✨ Free cast", "#ffffff");
   }
   player.attackCd = cooldown * playerMomentumCooldownMultiplier();
 }

@@ -2,6 +2,8 @@ import { clamp, lerp, lerpColor, rgb, withA, shade, hazeColor, atmo, rand, mulbe
 import { CFG } from '../config/config.js';
 import { ctx, W, H, groundY } from '../core/canvas.js';
 import { Game, state } from '../core/state.js';
+import { Audio } from '../systems/infrastructure/Audio.js';
+import { visibleWorldBounds } from './Viewport.js';
 
 // ---------- Biomes ----------
 export const BIOME_DEFS = [
@@ -84,12 +86,21 @@ export function initFX() {
                s: far ? 0.45+R()*0.5 : 0.7+R()*1.1, sp: far ? 3+R()*4 : 5+R()*9,
                o: far ? 0.22+R()*0.18 : 0.42+R()*0.4, far, puffs };
     }),
-    birds:  Array.from({length:4},  () => ({ x:R()*W, y:55+R()*180, sp:16+R()*24, ph:R()*6, dir:R()<0.5?1:-1, scale:0.7+R()*0.6 })),
-    butter: Array.from({length:2},  () => ({ x:R()*W, y:groundY-R()*120, ph:R()*6, c:["#f2c14e","#ece4d2","#d9883c","#cfe6f2","#e58fb0"][(R()*5)|0] })),
+    birds:  (() => { // sky birds travel alone or as loose skeins
+      const arr=[];
+      while (arr.length<9) {
+        const flock=R()<0.4?2+(R()*3|0):1;
+        const bx=R()*W, by=45+R()*200, sp=16+R()*24, dir=R()<0.5?1:-1, scale=0.6+R()*0.7;
+        for (let j=0;j<flock&&arr.length<9;j++)
+          arr.push({ x:bx-j*16*dir, y:by+(j%2?j*6:-j*5), sp, ph:R()*6+j*0.8, dir, scale });
+      }
+      return arr;
+    })(),
+    butter: Array.from({length:5},  () => ({ x:R()*W, y:groundY-R()*120, ph:R()*6, c:["#f2c14e","#ece4d2","#d9883c","#cfe6f2","#e58fb0"][(R()*5)|0] })),
     flies:  Array.from({length:20}, () => ({ x:R()*W, y:groundY-R()*150, ph:R()*6 })),
     dust:   Array.from({length:24}, () => ({ x:R()*W, y:R()*H, z:0.3+R()*0.7, ph:R()*6 })),
     fall:   Array.from({length:24}, () => ({ x:R()*W, y:R()*H, sp:18+R()*44, sway:2+R()*6, ph:R()*6, rot:R()*6, active:false, snow:false, color:"#9bd05a" })),
-    embers: [], smoke: [], levelUpBeams: [], flicker: 1,
+    embers: [], smoke: [], levelUpBeams: [], wildBirds: [], flicker: 1,
   };
 }
 
@@ -113,12 +124,17 @@ export function updateFX(dt) {
   for (const f of FX.flies)  { f.ph += dt; f.x += Math.sin(f.ph)*11*dt - camDelta; f.y += Math.cos(f.ph*1.3)*9*dt; f.y=clamp(f.y,groundY-165,groundY-6); if (f.x<0) f.x=W; if (f.x>W) f.x=0; }
   for (const d of FX.dust)   { d.ph += dt; d.x += (wind*d.z*0.7+Math.sin(d.ph)*4)*dt - camDelta; d.y += Math.cos(d.ph*0.7)*3*dt - 2*d.z*dt; if (d.y<0) d.y=H; if (d.y>H) d.y=0; if (d.x<0) d.x=W; if (d.x>W) d.x=0; }
 
-  const cb = biomeAt(Game.cam + W/2), falling = cb.deco==="autumn" || cb.snow;
+  const cb = biomeAt(Game.cam + W/2), heavyFall = cb.deco==="autumn" || cb.snow;
+  // deep in the woods a stray leaf drifts down now and then, whatever the biome
+  const inForest = Math.abs(Game.cam + W/2 - CFG.baseX) > 800;
+  const fallRate = heavyFall ? 0.025 : inForest ? 0.005 : 0;
   for (const p of FX.fall) {
-    if (!p.active) { if (falling && Math.random()<0.025) { p.active=true; p.x=Math.random()*W; p.y=-12; p.snow=!!cb.snow; p.color=cb.snow?"#eef4fb":cb.leaf; } continue; }
+    if (!p.active) { if (fallRate && Math.random()<fallRate) { p.active=true; p.x=Math.random()*W; p.y=-12; p.snow=!!cb.snow; p.color=cb.snow?"#eef4fb":cb.leaf; } continue; }
     p.ph+=dt; p.rot+=dt*2.4; p.y+=p.sp*dt*(p.snow?0.5:1); p.x+=(Math.sin(p.ph*2)*p.sway+wind*1.3)*dt - camDelta;
     if (p.y > H+12) p.active=false;
   }
+
+  updateWildBirds(dt);
 
   const base = state.base;
   // ember column only while an actual campfire burns at the base (lvl 1-3)
@@ -130,6 +146,129 @@ export function updateFX(dt) {
   for (let i=FX.levelUpBeams.length-1;i>=0;i--){ const b=FX.levelUpBeams[i]; b.t+=dt; if (b.t>b.life) FX.levelUpBeams.splice(i,1); }
   if (FX.embers.length>140) FX.embers.splice(0, FX.embers.length-140);
   if (FX.smoke.length>70)   FX.smoke.splice(0, FX.smoke.length-70);
+}
+
+// ---------- Wild birds ----------
+// Small songbirds perch in the forest canopy and flush when something comes
+// too close — world-space, drawn inside the camera transform among the trees.
+const WILDBIRD_COLS = [
+  { body:[110,90,72],  wing:[74,60,48],  breast:[204,134,88]  }, // robin
+  { body:[92,100,112], wing:[60,66,78],  breast:[186,190,198] }, // grey tit
+  { body:[76,72,64],   wing:[46,44,40],  breast:[218,178,80]  }, // yellowhammer
+  { body:[56,66,80],   wing:[36,42,52],  breast:[124,150,176] }, // nuthatch
+];
+
+function updateWildBirds(dt) {
+  const birds = FX.wildBirds;
+  const dark = darkness();
+  const player = state.player;
+  const view = visibleWorldBounds(500);
+  const camL = view.left, camR = view.right;
+
+  // settle new birds on standing forest trees near (but not right next to) the player
+  if (dark < 0.15 && birds.length < 7 && Math.random() < dt * 0.7 && state.forestTrees) {
+    const cand = [];
+    for (const ft of state.forestTrees) {
+      if (ft.chopped || ft.falling || ft.lying || ft.carriedBy) continue;
+      if (ft.x < camL - 500 || ft.x > camR + 500) continue;
+      if (player && Math.abs(ft.x - player.x) < 240) continue;
+      cand.push(ft);
+    }
+    if (cand.length) {
+      const ft = cand[(Math.random() * cand.length) | 0];
+      const t = ft.tree;
+      birds.push({
+        ft, mode: "perch",
+        x: ft.x + (Math.random() - 0.5) * t.w * 0.5,
+        y: groundY + 4 - t.h * (0.55 + Math.random() * 0.3),
+        dir: Math.random() < 0.5 ? -1 : 1,
+        col: WILDBIRD_COLS[(Math.random() * WILDBIRD_COLS.length) | 0],
+        ph: Math.random() * 6,
+        hopT: 2 + Math.random() * 5,
+        life: 18 + Math.random() * 22,
+        vx: 0, vy: 0, t: 0,
+      });
+    }
+  }
+
+  for (let i = birds.length - 1; i >= 0; i--) {
+    const b = birds[i];
+    b.ph += dt * (b.mode === "fly" ? 16 : 3);
+    if (b.mode === "perch") {
+      b.life -= dt;
+      b.hopT -= dt;
+      if (b.hopT <= 0) { // sidestep along the branch, sometimes turning around
+        b.hopT = 2 + Math.random() * 5;
+        b.x += (Math.random() - 0.5) * 10;
+        if (Math.random() < 0.4) b.dir *= -1;
+      }
+      const ft = b.ft;
+      const scared =
+        (player && Math.abs(player.x - b.x) < 150 && Math.abs(player.vx || 0) > 40) ||
+        (player && Math.abs(player.x - b.x) < 85) ||
+        ft.beingChopped || ft.falling || ft.chopped ||
+        (state.enemies || []).some(e => Math.abs(e.x - b.x) < 130);
+      if (scared || b.life <= 0 || dark > 0.25) {
+        b.mode = "fly";
+        b.t = 0;
+        b.dir = player && player.x > b.x ? -1 : 1; // away from the player
+        b.vx = b.dir * (110 + Math.random() * 70);
+        b.vy = -(60 + Math.random() * 45);
+        if (scared && player && Math.abs(player.x - b.x) < 420 && Audio.chirp) Audio.chirp();
+      }
+    } else {
+      b.t += dt;
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      b.vy = Math.max(b.vy - 14 * dt, -130); // keeps climbing as it escapes
+      b.y += Math.sin(b.ph * 0.6) * 8 * dt;  // flap bounce
+      if (b.t > 7 || b.x < camL - 600 || b.x > camR + 600 || b.y < -120) birds.splice(i, 1);
+    }
+  }
+}
+
+export function drawWildBirds() {
+  if (!FX || !FX.wildBirds.length) return;
+  const view = visibleWorldBounds(60), camL = view.left, camR = view.right;
+  ctx.save();
+  ctx.lineCap = "round";
+  for (const b of FX.wildBirds) {
+    if (b.x < camL || b.x > camR) continue;
+    const c = b.col;
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    if (b.dir < 0) ctx.scale(-1, 1);
+    if (b.mode === "perch") {
+      const bob = Math.sin(b.ph) * 0.5;
+      // flicking tail
+      ctx.strokeStyle = rgb(c.wing); ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(-3, bob); ctx.lineTo(-7.5, bob + 1.2 + Math.sin(b.ph * 1.7) * 0.9); ctx.stroke();
+      // body with pale breast
+      ctx.fillStyle = rgb(c.body);
+      ctx.beginPath(); ctx.ellipse(0, bob, 4, 3, -0.15, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = rgb(c.breast);
+      ctx.beginPath(); ctx.ellipse(1, bob + 1, 2.6, 1.9, 0.1, 0, Math.PI * 2); ctx.fill();
+      // head, eye, beak
+      ctx.fillStyle = rgb(c.body);
+      ctx.beginPath(); ctx.arc(3.4, bob - 2.6, 2.1, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#1c1c20"; ctx.fillRect(4, bob - 3.2, 0.9, 0.9);
+      ctx.fillStyle = "#c9a23c";
+      ctx.beginPath(); ctx.moveTo(5.3, bob - 2.8); ctx.lineTo(7.4, bob - 2.2); ctx.lineTo(5.3, bob - 1.6); ctx.closePath(); ctx.fill();
+      // folded wing
+      ctx.fillStyle = rgb(c.wing);
+      ctx.beginPath(); ctx.ellipse(-0.6, bob - 0.4, 2.6, 1.5, -0.35, 0, Math.PI * 2); ctx.fill();
+    } else {
+      const flap = Math.sin(b.ph);
+      ctx.fillStyle = rgb(c.body);
+      ctx.beginPath(); ctx.ellipse(0, 0, 4, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(3.6, -1, 1.8, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = rgb(c.wing); ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.moveTo(-0.5, 0); ctx.quadraticCurveTo(-2, -flap * 5, -5, -flap * 7); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-3, 0.8); ctx.lineTo(-6.5, 0.8 + Math.sin(b.ph * 0.7)); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  ctx.restore();
 }
 
 // ---------- Trees ----------
@@ -306,9 +445,10 @@ export function getTrees() {
   const r=mulberry32(Game.treeSeed||1);
   const far=[],mid=[],near=[],fore=[],hills=[],mountains=[];
   const campX = CFG.baseX;
-  for (let x=-140;x<CFG.worldWidth+140;x+=96)  { const tx=x+r()*70; if(Math.abs(tx-campX)>260) far.push(makeTree(tx, 165, r)); }
-  for (let x=-120;x<CFG.worldWidth+120;x+=82)  { const tx=x+r()*58; if(Math.abs(tx-campX)>300) mid.push(makeTree(tx, 225, r)); }
-  for (let x=-100;x<CFG.worldWidth+100;x+=74)  { const tx=x+r()*48; if(Math.abs(tx-campX)>380) near.push(makeTree(tx, 285, r)); }
+  // occasional giants poke above each canopy layer so the treeline isn't a flat band
+  for (let x=-140;x<CFG.worldWidth+140;x+=96)  { const tx=x+r()*70; if(Math.abs(tx-campX)>260) far.push(makeTree(tx, r()<0.08?250:165, r)); }
+  for (let x=-120;x<CFG.worldWidth+120;x+=82)  { const tx=x+r()*58; if(Math.abs(tx-campX)>300) mid.push(makeTree(tx, r()<0.08?330:225, r)); }
+  for (let x=-100;x<CFG.worldWidth+100;x+=74)  { const tx=x+r()*48; if(Math.abs(tx-campX)>380) near.push(makeTree(tx, r()<0.1?405:285, r)); }
   for (let x=-100;x<CFG.worldWidth+100;x+=520) { const tx=x+r()*220; if(Math.abs(tx-campX)>700) fore.push(makeTree(tx, 150, r)); }
   for (let x=-300;x<CFG.worldWidth+300;x+=170) hills.push({ x:x+r()*120, h:50+r()*130, w:200+r()*230 });
   treeCache={ seed:Game.treeSeed, far, mid, near, fore, hills, mountains };
@@ -322,16 +462,16 @@ export function getDeco() {
   if (decoCache&&decoCache.seed===Game.treeSeed) return decoCache;
   const r=mulberry32((Game.treeSeed||1)*7+13);
   const items=[];
-  for (let x=60;x<CFG.worldWidth-60;x+=22+r()*40) {
+  for (let x=60;x<CFG.worldWidth-60;x+=15+r()*26) {
     if (Math.abs(x - CFG.baseX) < 650) { r(); continue; } // clear deco near camp
     const b=biomeAt(x), t=r();
     let kind;
-    if      (b.snow)              kind=t<0.68?"snowtuft":(t<0.86?"stone":"stump");
-    else if (b.deco==="autumn")   kind=t<0.42?"grass":(t<0.66?"leafpile":(t<0.82?"stone":(t<0.92?"flower":"stump")));
-    else if (b.deco==="swamp")    kind=t<0.48?"reed":(t<0.74?"grass":(t<0.9?"mushroom":"stone"));
-    else if (b.deco==="dark")     kind=t<0.52?"grass":(t<0.78?"fern":(t<0.91?"mushroom":"stone"));
-    else                          kind=t<0.48?"grass":(t<0.7?"flower":(t<0.84?"stone":(t<0.94?"grass":"stump")));
-    items.push({ x, kind, s:0.7+r()*0.8, ph:r()*6, leaf:b.leaf, flower:["#e58fb0","#f2c14e","#cfe6f2","#e87b5a"][(r()*4)|0] });
+    if      (b.snow)              kind=t<0.56?"snowtuft":(t<0.72?"stone":(t<0.86?"tallgrass":"stump"));
+    else if (b.deco==="autumn")   kind=t<0.30?"grass":(t<0.48?"leafpile":(t<0.60?"bush":(t<0.72?"tallgrass":(t<0.82?"stone":(t<0.90?"flower":(t<0.96?"sapling":"stump"))))));
+    else if (b.deco==="swamp")    kind=t<0.36?"reed":(t<0.54?"grass":(t<0.68?"tallgrass":(t<0.80?"mushroom":(t<0.92?"fern":"stone"))));
+    else if (b.deco==="dark")     kind=t<0.36?"grass":(t<0.56?"fern":(t<0.68?"mushroom":(t<0.78?"bush":(t<0.88?"tallgrass":(t<0.95?"stone":"sapling")))));
+    else                          kind=t<0.34?"grass":(t<0.50?"flower":(t<0.62?"tallgrass":(t<0.72?"bush":(t<0.80?"fern":(t<0.88?"stone":(t<0.95?"grass":"sapling"))))));
+    items.push({ x, kind, s:0.7+r()*0.8, ph:r()*6, leaf:b.leaf, flower:["#e58fb0","#f2c14e","#cfe6f2","#e87b5a"][(r()*4)|0], berry:r()<0.45 });
   }
   decoCache={seed:Game.treeSeed, items};
   return decoCache;

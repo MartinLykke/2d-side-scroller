@@ -6,6 +6,18 @@ import { clamp, rand, pick, mulberry32 } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { goldCoinChunks, goldRewardAmount } from '../economy/EconomyBalance.js';
+import { eliteChanceBonus, enemyVitalityMultiplier, locationThreatMultiplier, nightQuotaMetaMultiplier, portalSpawnIntervalMultiplier } from '../infrastructure/RoguelikeSystem.js';
+
+const MAX_PARTICLES = 700;
+const MAX_FLOAT_TEXTS = 90;
+
+function pushFloatText(f) {
+  if (state.floatTexts.length >= MAX_FLOAT_TEXTS) {
+    state.floatTexts.splice(0, state.floatTexts.length - MAX_FLOAT_TEXTS + 1);
+  }
+  state.floatTexts.push(f);
+  return f;
+}
 
 export function spawnCoin(x, value = 1, fromY = -40, vx = 0, vy = -180) {
   const c = { x, y: fromY, vy, value, settled: false, life: 60, magnet: false, vx };
@@ -34,7 +46,7 @@ export function spawnGoldCoins(x, amount, opts = {}) {
 }
 
 export function floaty(x, text, color = "#f2c14e", size = 15) {
-  state.floatTexts.push({ x, y: groundY - 90, text, color, life: 1.4, vy: -34, size });
+  pushFloatText({ x, y: groundY - 90, text, color, life: 1.4, vy: -34, size });
 }
 
 // Combo-aware purchase text: buying again while the previous text is still on
@@ -51,20 +63,23 @@ export function purchaseFloaty(key, x, baseText, color) {
     c.f.vy = -34;
   } else {
     const f = { x, y: groundY - 90, text: baseText, color, life: 1.6, maxLife: 1.6, vy: -34, size: 17, pop: true };
-    state.floatTexts.push(f);
+    pushFloatText(f);
     purchaseCombos[key] = { n: 1, f };
   }
 }
 
 export function critFloaty(x, dmg) {
-  state.floatTexts.push({
+  pushFloatText({
     x, y: groundY - 100, text: String(dmg), color: "#ffd23e",
     life: 1.1, maxLife: 1.1, vy: -150, size: 32, crit: true,
   });
 }
 
 export function spawnParticles(x, y, n, color, spread = 60, up = 80) {
-  for (let i = 0; i < n; i++)
+  const count = Math.min(n, MAX_PARTICLES);
+  const overflow = state.particles.length + count - MAX_PARTICLES;
+  if (overflow > 0) state.particles.splice(0, overflow);
+  for (let i = 0; i < count; i++)
     state.particles.push({
       x, y,
       vx: rand(-spread, spread), vy: rand(-up, -up * 0.2),
@@ -121,9 +136,10 @@ export function spawnBear() {
 export function spawnEnemy(type, portal) {
   if (!ENEMY_TYPES[type]) type = "imp";
   const t = ENEMY_TYPES[type];
+  const hp = Math.ceil(t.hp * enemyVitalityMultiplier());
   const enemy = {
     x: portal.x, vx: 0, type, tag: type === "imp" || type === "fireImp" ? "Imp" : "Enemy",
-    hp: t.hp, maxHp: t.hp,
+    hp, maxHp: hp,
     dir: portal.side > 0 ? -1 : 1,
     state: "advance", aiState: type === "imp" ? "advance" : undefined, target: null, attackCd: 0,
     carry: 0, anim: rand(0, 6), flash: 0, attackAnim: 0, fleeing: false, portal,
@@ -188,7 +204,7 @@ export function planNight() {
   if (Game.diffMult > 1.5) quotaMult *= 1.35;
   // Base horde scaling: 2x from day 1, ramping up ~10% per day (caps at 3.5x)
   const hordeMult = Math.min(3.5, 2 + Math.max(0, d - 1) * 0.1);
-  Game.nightQuota   = Math.round((3 + d * 3.5 + Math.pow(d * 0.7, 1.6) + Math.max(0, d - 8) * 2.25) * quotaMult * hordeMult);
+  Game.nightQuota   = Math.round((3 + d * 3.5 + Math.pow(d * 0.7, 1.6) + Math.max(0, d - 8) * 2.25) * quotaMult * hordeMult * nightQuotaMetaMultiplier());
   Game.nightSpawned = 0;
   Game.spawnTimer   = 0;
   Game.nightCleared = false;
@@ -197,10 +213,11 @@ export function planNight() {
 function nightEnemyType() {
   const d = Game.day, r = Math.random();
   const hardMult = Game.diffMult > 1.5 ? 1.3 : 1;
+  const eliteBonus = eliteChanceBonus();
   if (Game.nightSpawned === 0 && BOSS_SCHEDULE[d]) return BOSS_SCHEDULE[d];
-  const flyingImpChance = Math.min(0.45, Math.max(0, d - 2) * 0.055 * hardMult);
-  const emberBruteChance = d >= 2 ? Math.min(0.25, (d - 1) * 0.035 * hardMult) : 0;
-  const ashPriestChance = d >= 4 ? Math.min(0.18, (d - 3) * 0.028 * hardMult) : 0;
+  const flyingImpChance = Math.min(0.55, Math.max(0, d - 2) * 0.055 * hardMult + eliteBonus * 0.85);
+  const emberBruteChance = d >= 2 ? Math.min(0.34, (d - 1) * 0.035 * hardMult + eliteBonus) : eliteBonus * 0.35;
+  const ashPriestChance = d >= 4 ? Math.min(0.26, (d - 3) * 0.028 * hardMult + eliteBonus * 0.65) : eliteBonus * 0.25;
   if (r < emberBruteChance) return "emberBrute";
   if (r < emberBruteChance + ashPriestChance) return "ashPriest";
   if (r < emberBruteChance + ashPriestChance + flyingImpChance) return "fireImp";
@@ -218,7 +235,7 @@ export function updateSpawning(dt) {
       let diffSpeedUp = Game.diffMult > 1 ? 1 / Math.sqrt(Game.diffMult) : 1;
       if (Game.diffMult > 1.5) diffSpeedUp *= 0.7;
       // Halved interval so the doubled quota still fits inside the night window
-      Game.spawnTimer = rand(0.3, 0.8) * (1 - pressure) * diffSpeedUp;
+      Game.spawnTimer = rand(0.3, 0.8) * (1 - pressure) * diffSpeedUp * portalSpawnIntervalMultiplier();
       const type = nightEnemyType();
       const portal = pick(state.portals);
       let spawned;
@@ -259,6 +276,11 @@ export function makeLocation(x, type, r) {
   }
   let enemyCount = Math.floor(r() * (def.maxE + 1));
   if (Game.diffMult > 1.5) enemyCount = Math.ceil(enemyCount * 1.4);
+  const locThreat = locationThreatMultiplier();
+  if (locThreat > 1) {
+    enemyCount = Math.ceil(enemyCount * locThreat);
+    if (enemyCount === 0 && def.maxE > 0 && r() < Math.min(0.55, locThreat - 1)) enemyCount = 1;
+  }
   return {
     x, type,
     triggered: false,

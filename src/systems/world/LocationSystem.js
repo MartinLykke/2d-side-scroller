@@ -5,6 +5,7 @@ import { ENEMY_TYPES } from '../../config/enemies.js';
 import { W } from '../../core/canvas.js';
 import { dist, rand, pick, mulberry32 } from '../../util/math.js';
 import { floaty, spawnLocLoot, makeLocation } from './SpawnSystem.js';
+import { enemyVitalityMultiplier } from '../infrastructure/RoguelikeSystem.js';
 
 export const LOC_FADE_DIST   = 900;
 export const LOC_FADE_TIME   = 4.0;
@@ -115,6 +116,7 @@ export function preActivateLocation(loc, idx) {
   loc.remainingEnemies = loc.enemyCount;
   for (let i = 0; i < loc.enemyCount; i++) {
     const type = pick(def.etype), ex = loc.x + (i % 2 === 0 ? -1 : 1) * (28 + i * 18);
-    state.enemies.push({ x: ex, vx: 0, type, hp: ENEMY_TYPES[type].hp, maxHp: ENEMY_TYPES[type].hp, dir: state.player.x < ex ? -1 : 1, attackCd: 0, carry: 0, anim: rand(0, 6), flash: 0, fleeing: false, portal: null, locIdx: idx, home: loc.x });
+    const hp = Math.ceil(ENEMY_TYPES[type].hp * enemyVitalityMultiplier());
+    state.enemies.push({ x: ex, vx: 0, type, hp, maxHp: hp, dir: state.player.x < ex ? -1 : 1, attackCd: 0, carry: 0, anim: rand(0, 6), flash: 0, fleeing: false, portal: null, locIdx: idx, home: loc.x });
   }
 }

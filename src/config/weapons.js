@@ -36,40 +36,7 @@ export const WEAPONS = {
 export const RARITY_COL  = ["#c8c8c8","#9bd05a","#6ab4ff","#bb55ff","#f2c14e"];
 export const RARITY_NAME = ["Common","Uncommon","Rare","Epic","Legendary"];
 
-export const WEAPON_UPGRADES = {
-  generic: [
-    { id:"sharpened", name:"Sharpened",        desc:"More damage",            effect:{ dmg:2 } },
-    { id:"extended",  name:"Extended",       desc:"Longer range",     effect:{ range:25 } },
-    { id:"quickened", name:"Lightning Fast",       desc:"Faster attacks",      effect:{ speedBonus:0.15 } },
-  ],
-  melee: [
-    { id:"heavy_blow",  name:"Crushing Blow", desc:"+4 damage",              effect:{ dmg:4 } },
-    { id:"whirlwind",   name:"Whirlwind",  desc:"+20 px range",     effect:{ range:20 } },
-    { id:"swift_melee", name:"Light Hand",      desc:"+25% faster attacks", effect:{ speedBonus:0.22 } },
-  ],
-  ranged: [
-    { id:"piercing",   name:"Piercing",  desc:"+3 damage per arrow",      effect:{ dmg:3 } },
-    { id:"rapid_fire", name:"Rapid Fire", desc:"+30% faster shooting",effect:{ speedBonus:0.28 } },
-    { id:"longshot",   name:"Longshot",       desc:"+80 px range",     effect:{ range:80 } },
-  ],
-  magic: [
-    { id:"amplified",  name:"Amplified Magic",desc:"+3 spell damage",    effect:{ dmg:3 } },
-    { id:"quickcast",  name:"Quickcast",     desc:"+30% faster casting",   effect:{ speedBonus:0.25 } },
-    { id:"wide_range", name:"Wide Range",desc:"+70 px range",     effect:{ range:70 } },
-    { id:"critical",   name:"Critical Discharge",desc:"+5 spell damage",  effect:{ dmg:5 } },
-  ],
-  meteor_tome: [
-    { id:"ice_meteor", name:"Ice Meteor", desc:"The meteor becomes an icy comet that freezes enemies in the explosion", effect:{ meteorIce:true } },
-    { id:"double_up",  name:"Double Up", desc:"Casts less often, but calls down two meteors", effect:{ meteorDouble:true } },
-  ],
-};
-
-// Dedicated "Aura & Control" branch for the Short Bow — offered one at a time, in order.
-export const SHORT_BOW_BRANCH = [
-  { id:"frost_bow",      name:"Frost Bow",         desc:"Each arrow significantly slows enemy movement speed.", effect:{ frostArrow:true } },
-  { id:"binding_arrows", name:"Binding Arrows", desc:"Hit enemies are pinned to the ground for 3 seconds.", effect:{ rootArrow:true }, requires:"frost_bow" },
-  { id:"ice_explosion", name:"Ice Explosion",     desc:"Ultimate: Creates a massive ice explosion that freezes all nearby enemies for 5 seconds.", effect:{ iceUltimate:true }, requires:"binding_arrows", ultimate:true },
-];
+// Upgrade pools (tiers, unique upgrades, short-bow branch) live in weaponUpgrades.js.
 
 export function effectiveWeapon(weaponId, upgrades) {
   const base = WEAPONS[weaponId];

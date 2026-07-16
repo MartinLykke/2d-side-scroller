@@ -16,7 +16,7 @@ export function upgradeBase() {
   const { base } = state;
   if (base.level >= CFG.maxBaseLevel) return;
   base.level++;
-  base.maxHp = CFG.baseMaxHp[base.level];
+  base.maxHp = CFG.baseMaxHp[base.level] + (Game.permanentBaseHpBonus || 0);
   base.hp    = base.maxHp;
   base.flash = 1;
   Audio.upgrade();

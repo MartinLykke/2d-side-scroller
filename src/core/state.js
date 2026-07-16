@@ -88,6 +88,7 @@ export const state = {
   lastPaidStation: null,
   legendaryBoss: null,
   legendaryEffects: [],
+  aegisStrikes: [],
   firePools: [],
   beacon: null,
   mineBuilt: false,

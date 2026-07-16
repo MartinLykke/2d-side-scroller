@@ -303,15 +303,29 @@ function renderDevWeaponButtons() {
   if (!row) return;
   const dropButton = row.querySelector(".dev-danger");
   row.innerHTML = "";
-  for (const [weaponId, weapon] of Object.entries(WEAPONS)) {
-    const btn = document.createElement("button");
-    btn.className = "dev-btn";
-    btn.textContent = weapon.name;
-    btn.title = RARITY_NAME[weapon.rarity] + " " + weapon.type;
-    btn.style.color = RARITY_COL[weapon.rarity];
-    btn.style.borderColor = RARITY_COL[weapon.rarity] + "80";
-    btn.onclick = () => DEV.giveWeapon(weaponId);
-    row.appendChild(btn);
+  const typeLabels = { melee: "Melee", ranged: "Ranged", magic: "Magic" };
+  for (const type of ["melee", "ranged", "magic"]) {
+    const weapons = Object.entries(WEAPONS).filter(([, weapon]) => weapon.type === type);
+    if (!weapons.length) continue;
+    const group = document.createElement("div");
+    group.className = "dev-subsection";
+    const label = document.createElement("div");
+    label.className = "dev-mini-label";
+    label.textContent = typeLabels[type] || type;
+    const buttons = document.createElement("div");
+    buttons.className = "dev-row";
+    for (const [weaponId, weapon] of weapons) {
+      const btn = document.createElement("button");
+      btn.className = "dev-btn";
+      btn.textContent = weapon.name;
+      btn.title = RARITY_NAME[weapon.rarity] + " " + weapon.type;
+      btn.style.color = RARITY_COL[weapon.rarity];
+      btn.style.borderColor = RARITY_COL[weapon.rarity] + "80";
+      btn.onclick = () => DEV.giveWeapon(weaponId);
+      buttons.appendChild(btn);
+    }
+    group.append(label, buttons);
+    row.appendChild(group);
   }
   if (dropButton) row.appendChild(dropButton);
 }
@@ -321,17 +335,42 @@ function renderDevArmorButtons() {
   if (!row) return;
   const removeButton = row.querySelector(".dev-danger");
   row.innerHTML = "";
-  for (const [armorId, armor] of Object.entries(ARMORS)) {
-    const btn = document.createElement("button");
-    btn.className = "dev-btn";
-    btn.textContent = armor.name;
-    btn.title = ARMOR_RARITY_NAME[armor.rarity] + " · +" + armor.defense + " defense";
-    btn.style.color = ARMOR_RARITY_COL[armor.rarity];
-    btn.style.borderColor = ARMOR_RARITY_COL[armor.rarity] + "80";
-    btn.onclick = () => DEV.giveArmor(armorId);
-    row.appendChild(btn);
+  for (const rarity of [0, 1, 2, 3, 4]) {
+    const armors = Object.entries(ARMORS).filter(([, armor]) => armor.rarity === rarity);
+    if (!armors.length) continue;
+    const group = document.createElement("div");
+    group.className = "dev-subsection";
+    const label = document.createElement("div");
+    label.className = "dev-mini-label";
+    label.textContent = ARMOR_RARITY_NAME[rarity];
+    label.style.color = ARMOR_RARITY_COL[rarity];
+    const buttons = document.createElement("div");
+    buttons.className = "dev-row";
+    for (const [armorId, armor] of armors) {
+      const btn = document.createElement("button");
+      btn.className = "dev-btn";
+      btn.textContent = armor.name;
+      btn.title = ARMOR_RARITY_NAME[armor.rarity] + " · +" + armor.defense + " defense";
+      btn.style.color = ARMOR_RARITY_COL[armor.rarity];
+      btn.style.borderColor = ARMOR_RARITY_COL[armor.rarity] + "80";
+      btn.onclick = () => DEV.giveArmor(armorId);
+      buttons.appendChild(btn);
+    }
+    group.append(label, buttons);
+    row.appendChild(group);
   }
   if (removeButton) row.appendChild(removeButton);
+}
+
+function appendDevStat(fragment, label, value) {
+  const item = document.createElement("div");
+  item.className = "dev-stat";
+  const term = document.createElement("dt");
+  term.textContent = label;
+  const desc = document.createElement("dd");
+  desc.textContent = String(value);
+  item.append(term, desc);
+  fragment.appendChild(item);
 }
 
 // ---- Dev tools ----
@@ -339,8 +378,64 @@ export const DEV = {
   godMode:   false,
   speedMult: 1,
   _fps:      60,
+  _fpsUiElapsed: 0,
 
-  toggle() { document.getElementById("dev-panel").classList.toggle("hidden"); },
+  toggle() {
+    const panel = document.getElementById("dev-panel");
+    if (!panel) return;
+    panel.classList.toggle("hidden");
+    if (!panel.classList.contains("hidden")) this._renderPanel();
+  },
+
+  updateFps(frameDt) {
+    if (!Number.isFinite(frameDt) || frameDt <= 0) return;
+    const instantFps = Math.min(240, 1 / frameDt);
+    this._fps += (instantFps - this._fps) * Math.min(1, frameDt * 8);
+
+    const panel = document.getElementById("dev-panel");
+    if (!panel || panel.classList.contains("hidden")) return;
+    this._fpsUiElapsed += frameDt;
+    if (this._fpsUiElapsed >= 0.2) {
+      this._fpsUiElapsed = 0;
+      this._renderPanel();
+    }
+  },
+
+  _renderPanel() {
+    this._renderFps();
+    this._renderStats();
+  },
+
+  _renderFps() {
+    const el = document.getElementById("dev-fps");
+    if (el) el.textContent = `${Math.round(this._fps)} FPS`;
+  },
+
+  _renderStats() {
+    const el = document.getElementById("dev-stats");
+    if (!el) return;
+    const player = state.player || {};
+    const base = state.base || {};
+    const units = state.units || [];
+    const enemies = state.enemies || [];
+    const activeEnemies = enemies.filter(e => !e.fleeing && !e.dying && e.hp > 0).length;
+    const fxCount = (state.particles?.length || 0) + (state.floatTexts?.length || 0);
+    const popCap = CFG.popCapByLevel?.[base.level] ?? "-";
+    const fragment = document.createDocumentFragment();
+    appendDevStat(fragment, "Day", Game.day || 1);
+    appendDevStat(fragment, "Phase", `${phaseName()} ${Math.round((Game.time || 0) * 100)}%`);
+    appendDevStat(fragment, "Gold", player.coins ?? 0);
+    appendDevStat(fragment, "Embers", Game.meta?.embers ?? 0);
+    appendDevStat(fragment, "Base", base.level ? `L${base.level} ${Math.ceil(base.hp)}/${base.maxHp}` : "-");
+    appendDevStat(fragment, "Player", player.maxHp ? `${Math.ceil(player.hp)}/${player.maxHp}` : "-");
+    appendDevStat(fragment, "Units", `${units.length}/${popCap}`);
+    appendDevStat(fragment, "Enemies", `${activeEnemies}/${enemies.length}`);
+    appendDevStat(fragment, "Drops", `${state.coins?.length || 0}/${state.lootItems?.length || 0}`);
+    appendDevStat(fragment, "FX", fxCount);
+    appendDevStat(fragment, "Pos", Game.inMine ? "mine" : Math.round(player.x || 0));
+    appendDevStat(fragment, "Speed", `${this.speedMult}x`);
+    el.replaceChildren(fragment);
+  },
 
   addCoins(n) {
     if (Game.state!=="play") return;
@@ -368,6 +463,16 @@ export const DEV = {
     saveMeta();
     const x = state.player ? state.player.x : 0;
     floaty(x,"Upgrades reset","#ff8a6a");
+  },
+
+  clearLeaderboard() {
+    Game.meta = Game.meta || { embers: 0, upgrades: {}, totalRuns: 0, bestDay: 1, totalKills: 0, lastReward: 0, lastDay: 1, lastKills: 0 };
+    Game.meta.leaderboard = [];
+    Game.meta.lastLeaderboardEntryId = null;
+    Game.meta.lastLeaderboardRank = 0;
+    saveMeta();
+    const x = state.player ? state.player.x : 0;
+    floaty(x,"Leaderboard cleared","#ff8a6a");
   },
 
   skipToNight() {
@@ -585,6 +690,15 @@ export const DEV = {
     addSkillPoints("archer", n);
     addSkillPoints("guard", n);
     floaty(state.base.x, "+" + n + " skill points", "#9bd05a");
+  },
+
+  triggerWeaponUpgrade() {
+    if (Game.state!=="play"||!state.player||!state.player.weapon) {
+      if (state.player) floaty(state.player.x, "No weapon equipped", "#ff8a6a");
+      return;
+    }
+    state.player.pendingUpgrade = true;
+    floaty(state.player.x, "⬆ Upgrade available!", "#f2c14e");
   },
 
 };
