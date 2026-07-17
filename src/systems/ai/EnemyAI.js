@@ -21,6 +21,17 @@ const WALL_DUEL_GAP = 22;
 const IMP_POUNCE_WALL_LOCKOUT = 92;
 let impStackSequence = 1;
 
+function scaledEnemyType(e, t) {
+  const damageMult = e.damageMult || 1;
+  const speedMult = e.speedMult || 1;
+  if (damageMult === 1 && speedMult === 1) return t;
+  const scaled = { ...t, speed: t.speed * speedMult };
+  if (t.dmg !== undefined) scaled.dmg = t.dmg * damageMult;
+  if (t.baseDmg !== undefined) scaled.baseDmg = t.baseDmg * damageMult;
+  if (t.meleeDmg !== undefined) scaled.meleeDmg = t.meleeDmg * damageMult;
+  if (t.ashFireballDmg !== undefined) scaled.ashFireballDmg = t.ashFireballDmg * damageMult;
+  return scaled;
+}
 function playerCombatLift() {
   const p = state.player;
   return p ? (p.jumpH || 0) + entityWallLift(p) : 0;
@@ -1163,9 +1174,10 @@ export function updateEnemies(dt) {
   const { enemies, units, base, player } = state;
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
-    const t = ENEMY_TYPES[e.type];
+    const baseType = ENEMY_TYPES[e.type];
 
-    if (!t) { enemies.splice(i, 1); continue; }
+    if (!baseType) { enemies.splice(i, 1); continue; }
+    const t = scaledEnemyType(e, baseType);
     if (e.dying) continue;
     initEnemyAI(e);
     if (e.emberWard > 0) e.emberWard = Math.max(0, e.emberWard - dt);

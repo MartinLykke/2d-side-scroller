@@ -11,6 +11,31 @@ import { eliteChanceBonus, enemyVitalityMultiplier, locationThreatMultiplier, ni
 const MAX_PARTICLES = 700;
 const MAX_FLOAT_TEXTS = 90;
 
+function dayThreatProgress() {
+  return Math.max(0, (Game.day || 1) - 2);
+}
+
+function enemyStrengthForDay(t) {
+  const progress = dayThreatProgress();
+  const lateProgress = Math.max(0, progress - 4);
+  const endgameProgress = Math.max(0, progress - 8);
+  const hardMode = Game.diffMult > 1.5 ? 1.12 : 1;
+  const phase = (Game.worldPhase || 1) >= 2 ? 1.15 : 1;
+
+  if (t.boss) {
+    return {
+      hp: clamp((1 + progress * 0.11 + lateProgress * 0.04) * hardMode * phase, 1, 2.5),
+      damage: clamp(1 + progress * 0.025, 1, 1.35),
+      speed: clamp(1 + progress * 0.004, 1, 1.1),
+    };
+  }
+
+  return {
+    hp: clamp((1 + progress * 0.18 + lateProgress * 0.055 + endgameProgress * 0.04) * hardMode * phase, 1, 4),
+    damage: clamp(1 + progress * 0.035 + lateProgress * 0.01, 1, 1.65),
+    speed: clamp(1 + progress * 0.008, 1, 1.18),
+  };
+}
 function pushFloatText(f) {
   if (state.floatTexts.length >= MAX_FLOAT_TEXTS) {
     state.floatTexts.splice(0, state.floatTexts.length - MAX_FLOAT_TEXTS + 1);
@@ -136,10 +161,14 @@ export function spawnBear() {
 export function spawnEnemy(type, portal) {
   if (!ENEMY_TYPES[type]) type = "imp";
   const t = ENEMY_TYPES[type];
-  const hp = Math.ceil(t.hp * enemyVitalityMultiplier());
+  const strength = enemyStrengthForDay(t);
+  const hp = Math.ceil(t.hp * enemyVitalityMultiplier() * strength.hp);
   const enemy = {
     x: portal.x, vx: 0, type, tag: type === "imp" || type === "fireImp" ? "Imp" : "Enemy",
     hp, maxHp: hp,
+    strengthHpMult: strength.hp,
+    damageMult: strength.damage,
+    speedMult: strength.speed,
     dir: portal.side > 0 ? -1 : 1,
     state: "advance", aiState: type === "imp" ? "advance" : undefined, target: null, attackCd: 0,
     carry: 0, anim: rand(0, 6), flash: 0, attackAnim: 0, fleeing: false, portal,
