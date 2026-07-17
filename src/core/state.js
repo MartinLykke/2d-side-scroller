@@ -20,7 +20,7 @@ export const Game = {
   shopTab: 0,
   difficulty: "normal",
   diffMult: 1.0,
-  targetFps: 144,
+  targetFps: 120,
   upgradeMenuOpen: false,
   upgradeOptions: null,
   upgradeIdx: 0,

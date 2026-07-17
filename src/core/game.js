@@ -35,6 +35,7 @@ import { upgradeBase, pickupWeapon, setBuildStations } from '../util/GameStateHe
 import { addXP, checkUpgrade } from '../systems/economy/UpgradeSystem.js';
 import { newGame, buildStations } from '../systems/infrastructure/GameInit.js';
 import { initMeta, enterDeathHub, updateHub, updateHubTransition, renderHub } from '../systems/infrastructure/RoguelikeSystem.js';
+import { applyDifficulty } from '../systems/infrastructure/DifficultySystem.js';
 import { updateLootItems, updateWeaponPickup, updateChests, updateLootPhysics, setPickupWeapon as setLootPickupWeapon } from '../systems/economy/LootSystem.js';
 import { updateAssault, performPhaseShift } from '../systems/world/AssaultSystem.js';
 import { updateFortifications } from '../systems/world/FortificationSystem.js';
@@ -533,11 +534,7 @@ Game.start = function(continueGame) {
   Audio.init(); Audio.resume();
   const activeDiff = document.querySelector('.diff-btn.diff-active');
   const diff = activeDiff ? activeDiff.dataset.diff : 'normal';
-  Game.difficulty = diff;
-  Game.targetFps = diff === 'hard' ? 144 : 120;
-  if (diff === 'easy')      Game.diffMult = 0.65;
-  else if (diff === 'hard') Game.diffMult = 1.65;
-  else                      Game.diffMult = 1.0;
+  applyDifficulty(Game, diff);
   if (continueGame && hasSave()) { newGame(); loadGame(); }
   else newGame();
   import('../rendering/Effects.js').then(({clearTreeCache})=>clearTreeCache());

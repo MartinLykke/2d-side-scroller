@@ -5,31 +5,22 @@ import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { goldCoinChunks, goldRewardAmount } from '../economy/EconomyBalance.js';
 import { eliteChanceBonus, enemyVitalityMultiplier, nightQuotaMetaMultiplier, portalSpawnIntervalMultiplier } from '../infrastructure/RoguelikeSystem.js';
-
-const MAX_PARTICLES = 700;
-const HARD_MAX_PARTICLES = 420;
-const MAX_FLOAT_TEXTS = 90;
-const HARD_MAX_FLOAT_TEXTS = 60;
-const HARD_ENEMY_COUNT_MULT = 2;
+import { currentDifficulty } from '../infrastructure/DifficultySystem.js';
 
 function dayThreatProgress() {
   return Math.max(0, (Game.day || 1) - 2);
 }
 
-function isHardMode() {
-  return Game.difficulty === "hard" || Game.diffMult > 1.5;
-}
-
-function enemyCountDifficultyMultiplier() {
-  return isHardMode() ? HARD_ENEMY_COUNT_MULT : (Game.diffMult || 1);
+function difficulty() {
+  return currentDifficulty(Game);
 }
 
 function currentParticleCap() {
-  return isHardMode() ? HARD_MAX_PARTICLES : MAX_PARTICLES;
+  return difficulty().performance.particleCap;
 }
 
 function currentFloatTextCap() {
-  return isHardMode() ? HARD_MAX_FLOAT_TEXTS : MAX_FLOAT_TEXTS;
+  return difficulty().performance.floatTextCap;
 }
 
 function nightSecondsRemaining() {
@@ -40,30 +31,28 @@ function nextNightSpawnInterval() {
   const remainingQuota = Math.max(1, (Game.nightQuota || 0) - (Game.nightSpawned || 0));
   const targetInterval = nightSecondsRemaining() / remainingQuota;
   const pressure = Math.min(0.45, Math.max(0, Game.day - 4) * 0.018);
-  const hard = isHardMode();
-  const minInterval = hard ? 0.08 : 0.14;
-  const maxInterval = hard ? 1.2 : 1.4;
+  const interval = difficulty().performance.spawnInterval;
   const paced = targetInterval * rand(0.75, 1.2) * (1 - pressure);
-  return clamp(paced, minInterval, maxInterval) * portalSpawnIntervalMultiplier();
+  return clamp(paced, interval.min, interval.max) * portalSpawnIntervalMultiplier();
 }
 
 function enemyStrengthForDay(t) {
   const progress = dayThreatProgress();
   const lateProgress = Math.max(0, progress - 4);
   const endgameProgress = Math.max(0, progress - 8);
-  const hardMode = isHardMode() ? 1.12 : 1;
+  const difficultyStrength = difficulty().enemyStrengthMult;
   const phase = (Game.worldPhase || 1) >= 2 ? 1.15 : 1;
 
   if (t.boss) {
     return {
-      hp: clamp((1 + progress * 0.11 + lateProgress * 0.04) * hardMode * phase, 1, 2.5),
+      hp: clamp((1 + progress * 0.11 + lateProgress * 0.04) * difficultyStrength * phase, 1, 2.5),
       damage: clamp(1 + progress * 0.025, 1, 1.35),
       speed: clamp(1 + progress * 0.004, 1, 1.1),
     };
   }
 
   return {
-    hp: clamp((1 + progress * 0.18 + lateProgress * 0.055 + endgameProgress * 0.04) * hardMode * phase, 1, 4),
+    hp: clamp((1 + progress * 0.18 + lateProgress * 0.055 + endgameProgress * 0.04) * difficultyStrength * phase, 1, 4),
     damage: clamp(1 + progress * 0.035 + lateProgress * 0.01, 1, 1.65),
     speed: clamp(1 + progress * 0.008, 1, 1.18),
   };
@@ -281,7 +270,7 @@ export function planNight() {
   const d = Game.day;
   Game.threatLevel  = Math.max(1, d);
   // Hard mode doubles the count relative to normal; strength/type pressure stays separate.
-  let quotaMult = enemyCountDifficultyMultiplier();
+  let quotaMult = difficulty().enemyCountMult;
   if ((Game.worldPhase || 1) >= 2) quotaMult *= 1.15; // the Hollow presses harder
   // Base horde scaling: 2x from day 1, ramping up ~10% per day (caps at 3.5x)
   const hordeMult = Math.min(3.5, 2 + Math.max(0, d - 1) * 0.1);
@@ -295,14 +284,14 @@ export function planNight() {
 
 function nightEnemyType() {
   const d = Game.day, r = Math.random();
-  const hardMult = isHardMode() ? 1.3 : 1;
+  const difficultyPressure = difficulty().elitePressureMult;
   const eliteBonus = eliteChanceBonus();
   // Phase 2: the void rifts send the Hollow instead of the ember horde
   if ((Game.worldPhase || 1) >= 2) {
     if (Game.nightSpawned === 0) return d % 2 === 0 ? "voidSeraph" : "voidTitan";
     if (Game.nightSpawned === 1) return d % 2 === 0 ? "voidTitan" : "voidSeraph";
-    const voidBruteChance = Math.min(0.32, 0.07 + d * 0.02 * hardMult + eliteBonus);
-    const wraithChance = Math.min(0.5, 0.12 + d * 0.03 * hardMult + eliteBonus * 0.85);
+    const voidBruteChance = Math.min(0.32, 0.07 + d * 0.02 * difficultyPressure + eliteBonus);
+    const wraithChance = Math.min(0.5, 0.12 + d * 0.03 * difficultyPressure + eliteBonus * 0.85);
     if (r < voidBruteChance) return "voidBrute";
     if (r < voidBruteChance + wraithChance) return "voidWraith";
     return "shade";
@@ -319,9 +308,9 @@ function nightEnemyType() {
     const unlocked = Object.keys(BOSS_SCHEDULE).map(Number).filter(n => d >= n).sort((a, b) => b - a);
     if (unlocked.length >= 2) return BOSS_SCHEDULE[unlocked[1]];
   }
-  const flyingImpChance = Math.min(0.55, Math.max(0, d - 2) * 0.055 * hardMult + eliteBonus * 0.85);
-  const emberBruteChance = d >= 2 ? Math.min(0.34, (d - 1) * 0.035 * hardMult + eliteBonus) : eliteBonus * 0.35;
-  const ashPriestChance = d >= 4 ? Math.min(0.26, (d - 3) * 0.028 * hardMult + eliteBonus * 0.65) : eliteBonus * 0.25;
+  const flyingImpChance = Math.min(0.55, Math.max(0, d - 2) * 0.055 * difficultyPressure + eliteBonus * 0.85);
+  const emberBruteChance = d >= 2 ? Math.min(0.34, (d - 1) * 0.035 * difficultyPressure + eliteBonus) : eliteBonus * 0.35;
+  const ashPriestChance = d >= 4 ? Math.min(0.26, (d - 3) * 0.028 * difficultyPressure + eliteBonus * 0.65) : eliteBonus * 0.25;
   if (r < emberBruteChance) return "emberBrute";
   if (r < emberBruteChance + ashPriestChance) return "ashPriest";
   if (r < emberBruteChance + ashPriestChance + flyingImpChance) return "fireImp";
