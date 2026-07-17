@@ -455,15 +455,93 @@ export function drawTree(t, cx, baseY, light, dark, depthDark, swayAmp) {
   if (t.moss) { ctx.fillStyle="rgba(74,116,84,0.55)"; ctx.beginPath(); ctx.ellipse(cx,baseY-Ht*0.04,Wd*0.12,Ht*0.05,0,0,Math.PI*2); ctx.fill(); }
 }
 
+function drawLowDetailTree(t, cx, baseY, light, dark, depthDark, swayAmp) {
+  const Ht = t.h, Wd = t.w;
+  const sway = windSway(t.phase, swayAmp * 0.55);
+  const trunkW = Math.max(2, Wd * 0.055);
+  const trunkCol = shade(dark, 0.68);
+  const leafCol = lerpColor(light, dark, 0.46);
+
+  if (depthDark < 0.5) {
+    ctx.fillStyle = "rgba(10,8,16,0.10)";
+    ctx.beginPath();
+    ctx.ellipse(cx, baseY - 1, Wd * 0.42, Wd * 0.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (t.type === "dead") {
+    ctx.strokeStyle = withA(trunkCol, 0.95);
+    ctx.lineWidth = Math.max(2, Wd * 0.07);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(cx, baseY);
+    ctx.lineTo(cx + sway, baseY - Ht * 0.82);
+    ctx.stroke();
+    ctx.lineWidth = Math.max(1.2, Wd * 0.045);
+    for (let i = 0; i < 2; i++) {
+      const side = i ? 1 : -1;
+      const y = baseY - Ht * (0.42 + i * 0.18);
+      const x = cx + sway * (0.42 + i * 0.18);
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + side * Wd * 0.28, y - Ht * 0.12);
+      ctx.stroke();
+    }
+    ctx.lineCap = "butt";
+    return;
+  }
+
+  ctx.fillStyle = withA(trunkCol, 0.9);
+  ctx.fillRect(cx - trunkW * 0.5, baseY - Ht * 0.48, trunkW, Ht * 0.5);
+
+  if (t.type === "pine" || t.type === "fir" || t.type === "widepine") {
+    ctx.fillStyle = withA(leafCol, 0.96);
+    for (let i = 0; i < 3; i++) {
+      const y = baseY - Ht * (0.18 + i * 0.22);
+      const top = baseY - Ht * (0.48 + i * 0.18);
+      const w = Wd * (0.58 - i * 0.1);
+      const sx = cx + sway * (0.35 + i * 0.2);
+      ctx.beginPath();
+      ctx.moveTo(sx, top);
+      ctx.lineTo(cx - w, y);
+      ctx.lineTo(cx + w, y);
+      ctx.closePath();
+      ctx.fill();
+    }
+    if (t.snow) {
+      ctx.fillStyle = "rgba(238,244,251,0.62)";
+      ctx.beginPath();
+      ctx.moveTo(cx + sway * 0.7, baseY - Ht * 0.95);
+      ctx.lineTo(cx - Wd * 0.19, baseY - Ht * 0.64);
+      ctx.lineTo(cx + Wd * 0.18, baseY - Ht * 0.64);
+      ctx.closePath();
+      ctx.fill();
+    }
+    return;
+  }
+
+  ctx.fillStyle = withA(leafCol, 0.96);
+  const cy = baseY - Ht * (t.type === "bush" ? 0.28 : 0.7);
+  const sy = t.type === "bush" ? Ht * 0.12 : Ht * 0.2;
+  ctx.beginPath();
+  ctx.ellipse(cx + sway * 0.35, cy, Wd * 0.45, sy, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx - Wd * 0.18 + sway * 0.2, cy + sy * 0.16, Wd * 0.28, sy * 0.78, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx + Wd * 0.2 + sway * 0.45, cy + sy * 0.12, Wd * 0.26, sy * 0.72, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 export function drawTreeLayer(trees, factor, depthDark, swayAmp, alpha=1) {
   const dark=darkness(), haze=hazeColor(dark), off=Game.cam*factor;
-  const step = renderBudget().groundDetail === 0 && factor < 0.7 ? 2 : 1;
+  const lowDetailLayer = factor < 0.7;
   if (alpha<1) { ctx.save(); ctx.globalAlpha=alpha; }
-  for (let i = 0; i < trees.length; i += step) {
+  for (let i = 0; i < trees.length; i++) {
     const t = trees[i];
     const px=t.x-off; if (px<-140||px>W+140) continue;
     const b=biomeAt(t.x);
-    drawTree(t, px, groundY+4, atmo(b.treeL,haze,depthDark), atmo(b.treeD,haze,depthDark), depthDark, swayAmp);
+    const light = atmo(b.treeL,haze,depthDark);
+    const darkCol = atmo(b.treeD,haze,depthDark);
+    if (lowDetailLayer) drawLowDetailTree(t, px, groundY+4, light, darkCol, depthDark, swayAmp);
+    else drawTree(t, px, groundY+4, light, darkCol, depthDark, swayAmp);
   }
   if (alpha<1) ctx.restore();
 }
