@@ -71,9 +71,16 @@ function aliveArcherCount() {
   ), 0);
 }
 
-function stuckArrowLife() {
+let currentStuckArrowLife = STUCK_ARROW_LIFE;
+
+function refreshStuckArrowLife() {
   const archerPressure = clamp(aliveArcherCount() / ARCHERS_FOR_MIN_ARROW_LIFE, 0, 1);
-  return STUCK_ARROW_LIFE - (STUCK_ARROW_LIFE - MIN_STUCK_ARROW_LIFE) * archerPressure;
+  currentStuckArrowLife = STUCK_ARROW_LIFE - (STUCK_ARROW_LIFE - MIN_STUCK_ARROW_LIFE) * archerPressure;
+  return currentStuckArrowLife;
+}
+
+function stuckArrowLife() {
+  return currentStuckArrowLife;
 }
 
 function grantArrowBarrier(seconds, col = "#ffffff") {
@@ -122,8 +129,7 @@ function stickArrowInAnimal(a, ar) {
 }
 
 // Ages out stuck arrows lodged in enemies/animals, and frozen arrows lying on the ground.
-export function updateStuckArrows(dt) {
-  const maxLife = stuckArrowLife();
+export function updateStuckArrows(dt, maxLife = stuckArrowLife()) {
   for (const e of state.enemies) {
     if (e.hunterMark > 0) e.hunterMark -= dt;
     if (!e.stuckArrows || !e.stuckArrows.length) continue;
@@ -160,6 +166,28 @@ function inAshBlast(ar, x, y, blastY, radius) {
   const dx = dist(ar.x, x);
   const dy = Math.abs(blastY - y);
   return Math.hypot(dx, dy * 0.65) < radius;
+}
+
+const ARROW_ENEMY_SCAN_X = 180;
+
+function buildEnemyXIndex(enemies) {
+  const indexed = [];
+  for (const e of enemies) {
+    if (e.fleeing || !Number.isFinite(e.x)) continue;
+    indexed.push(e);
+  }
+  indexed.sort((a, b) => a.x - b.x);
+  return indexed;
+}
+
+function enemyIndexStart(index, minX) {
+  let lo = 0, hi = index.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (index[mid].x < minX) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
 }
 
 function detonateAshFireball(ar) {
@@ -267,8 +295,9 @@ export function shootArrow(x, y, target, sourceUnit = null, weaponId = null, opt
 
 export function updateArrows(dt) {
   const { arrows, enemies, animals, player, units } = state;
-  updateStuckArrows(dt);
-  const maxStuckArrowLife = stuckArrowLife();
+  const maxStuckArrowLife = refreshStuckArrowLife();
+  updateStuckArrows(dt, maxStuckArrowLife);
+  const enemyXIndex = arrows.length ? buildEnemyXIndex(enemies) : [];
   for (let i = arrows.length - 1; i >= 0; i--) {
     const ar = arrows[i];
     if (ar.stuck) {
@@ -300,7 +329,11 @@ export function updateArrows(dt) {
     const expiresInAir = ar.enemyFireball || ar.hitKind === "base";
 
     if (ar.hitKind === "enemy") {
-      for (const e of enemies) {
+      const minX = ar.x - ARROW_ENEMY_SCAN_X;
+      const maxX = ar.x + ARROW_ENEMY_SCAN_X;
+      for (let ei = enemyIndexStart(enemyXIndex, minX); ei < enemyXIndex.length; ei++) {
+        const e = enemyXIndex[ei];
+        if (e.x > maxX) break;
         if (e.fleeing) continue;
         if (ar._hitEnemies && ar._hitEnemies.has(e)) continue;
         const et = ENEMY_TYPES[e.type];
@@ -380,7 +413,10 @@ export function updateArrows(dt) {
             spawnParticles(ar.x, enemyDrawY, 10, cols[1], ar.explosiveR * 0.6, 130);
             Game.screenShake = Math.max(Game.screenShake, 0.35);
             Audio.explosion();
-            for (const ne of enemies) {
+            const blastStart = enemyIndexStart(enemyXIndex, ar.x - ar.explosiveR);
+            for (let ni = blastStart; ni < enemyXIndex.length; ni++) {
+              const ne = enemyXIndex[ni];
+              if (ne.x > ar.x + ar.explosiveR) break;
               if (ne === e || ne.fleeing || ne.dying || ne.hp <= 0) continue;
               if (dist(ne.x, ar.x) > ar.explosiveR) continue;
               ne.hp -= burstDmg;
@@ -394,10 +430,14 @@ export function updateArrows(dt) {
           if (ar.gravityChance && Math.random() < ar.gravityChance) {
             spawnParticles(ar.x, enemyDrawY, 14, "#9933ff", 60, 80);
             spawnParticles(ar.x, enemyDrawY, 8, "#ddaaff", 30, 100);
-            for (const ne of enemies) {
+            const gravityRadius = 150;
+            const gravityStart = enemyIndexStart(enemyXIndex, ar.x - gravityRadius);
+            for (let ni = gravityStart; ni < enemyXIndex.length; ni++) {
+              const ne = enemyXIndex[ni];
+              if (ne.x > ar.x + gravityRadius) break;
               if (ne === e || ne.fleeing || ne.dying || ne.hp <= 0) continue;
               const d = dist(ne.x, ar.x);
-              if (d > 150 || d < 8) continue;
+              if (d > gravityRadius || d < 8) continue;
               if (!ENEMY_TYPES[ne.type]?.noKnockback) ne.knock = (ne.knock || 0) - Math.sign(ne.x - ar.x) * 260;
               spawnParticles(ne.x, groundY + (ne.fy || 0) - 24, 3, "#9933ff", 20, 30);
             }
@@ -420,7 +460,10 @@ export function updateArrows(dt) {
           if (ar.bouncing && ar.sourceUnit) {
             ar.bouncing = false; // one ricochet per arrow
             let nextTgt = null, nd = 400;
-            for (const ne of enemies) {
+            const bounceStart = enemyIndexStart(enemyXIndex, ar.x - nd);
+            for (let ni = bounceStart; ni < enemyXIndex.length; ni++) {
+              const ne = enemyXIndex[ni];
+              if (ne.x > ar.x + nd) break;
               if (ne === e || ne.fleeing || ne.dying || ne.hp <= 0) continue;
               const d = dist(ar.x, ne.x); if (d < nd) { nd = d; nextTgt = ne; }
             }

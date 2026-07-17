@@ -21,6 +21,24 @@ const IMP_PYRAMID_BASE = 4; // bottom-row width of the waiting pyramid
 const WALL_DUEL_GAP = 22;
 const IMP_POUNCE_WALL_LOCKOUT = 92;
 let impStackSequence = 1;
+const impWallCache = new Map();
+
+function clearImpWallCache() {
+  impWallCache.clear();
+}
+
+function impWallCacheEntry(w) {
+  let entry = impWallCache.get(w);
+  if (!entry) {
+    entry = { stack: null, queue: null };
+    impWallCache.set(w, entry);
+  }
+  return entry;
+}
+
+function invalidateImpWallCache(w) {
+  if (w) impWallCache.delete(w);
+}
 
 function scaledEnemyType(e, t) {
   const damageMult = e.damageMult || 1;
@@ -107,6 +125,8 @@ function changeState(e, newState, duration = 0) {
 }
 
 function breakImpStack(e) {
+  invalidateImpWallCache(e.stackWallRef);
+  invalidateImpWallCache(e.queueWallRef);
   e.stackWallRef = null;
   e.queueWallRef = null;
   e.queueIndex = undefined;
@@ -202,13 +222,15 @@ function impDefenderBlockedByWall(e, defender) {
 }
 
 function impStackForWall(w) {
-  const stack = state.enemies.filter(e =>
-    e.type === "imp" &&
-    !e.fleeing &&
-    !e.dying &&
-    e.stackWallRef === w &&
-    (e.aiState === "stacking" || e.aiState === "climbOver")
-  );
+  const entry = impWallCacheEntry(w);
+  if (entry.stack) return entry.stack;
+
+  const stack = [];
+  for (const e of state.enemies) {
+    if (e.type !== "imp" || e.fleeing || e.dying || e.stackWallRef !== w) continue;
+    if (e.aiState !== "stacking" && e.aiState !== "climbOver") continue;
+    stack.push(e);
+  }
   stack.sort((a, b) => (a.stackJoinOrder || 0) - (b.stackJoinOrder || 0));
   stack.forEach((imp, idx) => {
     imp.impIndex = idx;
@@ -217,6 +239,7 @@ function impStackForWall(w) {
     imp.impStackY = -idx * IMP_STACK_STEP;
     imp.impStackX = ((idx % 2 === 0) ? -1 : 1) * Math.min(7, 2 + idx * 0.45);
   });
+  entry.stack = stack;
   return stack;
 }
 
@@ -226,19 +249,24 @@ function impStackCapacity(w) {
 }
 
 function impQueueForWall(w) {
-  const queued = state.enemies.filter(e =>
-    e.type === "imp" &&
-    !e.fleeing &&
-    !e.dying &&
-    e.queueWallRef === w &&
-    e.aiState === "stackQueue"
-  );
+  const entry = impWallCacheEntry(w);
+  if (entry.queue) return entry.queue;
+
+  const queued = [];
+  for (const e of state.enemies) {
+    if (e.type !== "imp" || e.fleeing || e.dying || e.queueWallRef !== w) continue;
+    if (e.aiState !== "stackQueue") continue;
+    queued.push(e);
+  }
   queued.sort((a, b) => (a.queueJoinOrder || 0) - (b.queueJoinOrder || 0));
   queued.forEach((imp, idx) => { imp.queueIndex = idx; });
+  entry.queue = queued;
   return queued;
 }
 
 function sendImpToStackQueue(e, w) {
+  const oldStackWall = e.stackWallRef;
+  const oldQueueWall = e.queueWallRef;
   if (e.queueWallRef !== w) {
     e.queueWallRef = w;
     e.queueJoinOrder = impStackSequence++;
@@ -248,6 +276,9 @@ function sendImpToStackQueue(e, w) {
   e.stackPos = undefined;
   e.impStackY = 0;
   setImpState(e, "stackQueue");
+  invalidateImpWallCache(oldStackWall);
+  invalidateImpWallCache(oldQueueWall);
+  invalidateImpWallCache(w);
 }
 
 // Waiting imps form a pyramid just behind the stack: bottom row fills first
@@ -289,11 +320,16 @@ function moveImpToQueueSlot(e, t, dt, wall, idx) {
 }
 
 function assignImpToStack(e, w) {
+  const oldStackWall = e.stackWallRef;
+  const oldQueueWall = e.queueWallRef;
   if (e.stackWallRef !== w) {
     e.stackWallRef = w;
     e.stackJoinOrder = impStackSequence++;
   }
   setImpState(e, "stacking");
+  invalidateImpWallCache(oldStackWall);
+  invalidateImpWallCache(oldQueueWall);
+  invalidateImpWallCache(w);
 }
 
 function nearestGroundDefenderForImp(e, range = 220) {
@@ -313,19 +349,25 @@ function nearestGroundDefenderForImp(e, range = 220) {
   return best || bestOther;
 }
 
-function topDefendersForWall(w) {
-  return state.units.filter(u =>
-    (u.role === "guard" || u.role === "archer") &&
+function isTopDefenderForWall(u, w) {
+  return (u.role === "guard" || u.role === "archer") &&
     u.hp > 0 &&
     !u.dying &&
     u.onWall &&
-    u.wall === w
-  );
+    u.wall === w;
+}
+
+function hasTopDefenderForWall(w) {
+  for (const u of state.units) {
+    if (isTopDefenderForWall(u, w)) return true;
+  }
+  return false;
 }
 
 function nearestTopDefenderForWall(w, x = w.x, seeker = null) {
   let best = null, bd = 1e9;
-  for (const u of topDefendersForWall(w)) {
+  for (const u of state.units) {
+    if (!isTopDefenderForWall(u, w)) continue;
     if (seeker && u.combatTarget && u.combatTarget !== seeker) continue;
     const d = dist(u.x, x);
     if (d < bd) { bd = d; best = u; }
@@ -608,7 +650,7 @@ function updateImpCombat(e, t, dt) {
     e.combatTarget = defender;
   }
   if (e.wallTopWall && !defender) {
-    if (topDefendersForWall(e.wallTopWall).length === 0) startImpVault(e, e.wallTopWall);
+    if (!hasTopDefenderForWall(e.wallTopWall)) startImpVault(e, e.wallTopWall);
     else {
       e.fy = -wallHeight(e.wallTopWall);
       const waitX = e.wallTopWall.x + e.wallTopWall.side * 20;
@@ -1010,7 +1052,7 @@ function updateImp(e, t, dt) {
 
   if (e.aiState === "vaulting") {
     const w = e.vaultWall;
-    if (w && topDefendersForWall(w).length > 0) {
+    if (w && hasTopDefenderForWall(w)) {
       e.wallTopWall = w;
       e.vaultWall = null;
       e.combatTarget = nearestTopDefenderForWall(w, e.x, e);
@@ -1075,7 +1117,6 @@ function updateImp(e, t, dt) {
   const attachX = wallOutsideX(wall);
   const activeStack = impStackForWall(wall);
   const cap = impStackCapacity(wall);
-  const hasStack = activeStack.length > 0;
   const activeQueue = impQueueForWall(wall);
   if (e.aiState === "stackQueue") {
     const stackHasRoom = activeStack.length < cap;
@@ -1085,18 +1126,13 @@ function updateImp(e, t, dt) {
       moveImpToQueueSlot(e, t, dt, wall, queueIdx);
       return true;
     }
+    const oldQueueWall = e.queueWallRef;
     e.queueWallRef = null;
     e.queueIndex = undefined;
     e.fy = 0;
+    invalidateImpWallCache(oldQueueWall);
   }
-  const incomingStack = state.enemies.some(other =>
-    other !== e &&
-    other.type === "imp" &&
-    other.stackWallRef === wall &&
-    !other.fleeing &&
-    !other.dying &&
-    (other.aiState === "stacking" || other.aiState === "climbOver")
-  );
+  const incomingStack = activeStack.some(other => other !== e);
   const reachedWall = Math.abs(e.x - attachX) <= IMP_ATTACH_RANGE || Math.abs(e.x - wall.x) <= 24;
 
   if (!reachedWall && !incomingStack) {
@@ -1155,7 +1191,7 @@ function updateImp(e, t, dt) {
         setImpState(e, "combat");
         return updateImpCombat(e, t, dt);
       }
-      if (topDefendersForWall(wall).length > 0) {
+      if (hasTopDefenderForWall(wall)) {
         setImpState(e, "combat");
         return updateImpCombat(e, t, dt);
       }
@@ -1176,6 +1212,7 @@ function updateImp(e, t, dt) {
 
 export function updateEnemies(dt) {
   const { enemies, units, base, player } = state;
+  clearImpWallCache();
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
     const baseType = ENEMY_TYPES[e.type];
