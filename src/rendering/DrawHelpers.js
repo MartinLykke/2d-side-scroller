@@ -45,143 +45,243 @@ export function drawArm(x1,y1,x2,y2,col) {
   ctx.lineCap="butt";
 }
 
-// ---------- Icons and UI elements ----------
-export function drawTomeIcon(col, s) {
-  s = s || 1;
-  roundedRect(-8*s, -11*s, 16*s, 17*s, 2*s);
-  ctx.fillStyle = "rgba(20,14,28,0.85)"; ctx.fill();
-  ctx.strokeStyle = col; ctx.lineWidth = 1.5*s; ctx.stroke();
-  ctx.strokeStyle = col; ctx.lineWidth = s;
-  ctx.beginPath(); ctx.moveTo(0, -11*s); ctx.lineTo(0, 6*s); ctx.stroke();
-  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.75;
-  const tg = ctx.createRadialGradient(0, -18*s, 1, 0, -18*s, 6*s);
-  tg.addColorStop(0, col); tg.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = tg; ctx.beginPath(); ctx.arc(0, -18*s, 6*s, 0, Math.PI*2); ctx.fill();
-  ctx.restore();
-  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, -18*s, 2.5*s, 0, Math.PI*2); ctx.fill();
-}
-
-const TOME_LOOKS = {
-  fire_tome:      { cover:"#4a1810", spine:"#7b2416", page:"#f3d8a8", trim:"#ff9a3a", rune:"flame" },
-  hydro_tome:     { cover:"#12384d", spine:"#1d6b85", page:"#d7f4ff", trim:"#74d8ff", rune:"wave" },
-  lightning_tome: { cover:"#4c430c", spine:"#806c16", page:"#fff3b8", trim:"#fff06a", rune:"bolt" },
-  meteor_tome:    { cover:"#2d1a10", spine:"#6a2b16", page:"#e6c49a", trim:"#ff8840", rune:"crack" },
-  arcane_tome:    { cover:"#2c1b5c", spine:"#533090", page:"#eadfff", trim:"#d19aff", rune:"star" },
-  shadow_tome:    { cover:"#17111f", spine:"#35154a", page:"#c4bad6", trim:"#9b4bd6", rune:"eye" },
-  void_tome:      { cover:"#07050d", spine:"#241033", page:"#ddd7eb", trim:"#e0a0ff", rune:"void" },
+// ---------- Wand & staff models ----------
+// Each caster weapon keeps its old id but is drawn as a unique wand or staff.
+const WAND_LOOKS = {
+  fire_tome:      { len:30, wood:"#2c1410", woodLt:"#5a2a1c", trim:"#ff9a3a", gem:"#ff6a2a", core:"#ffe8b0", kind:"cinder" },
+  hydro_tome:     { len:30, wood:"#7a6a52", woodLt:"#b3a488", trim:"#74d8ff", gem:"#3ec2f0", core:"#e8fbff", kind:"tide" },
+  lightning_tome: { len:44, wood:"#3d3524", woodLt:"#6a5c38", trim:"#fff06a", gem:"#f0e060", core:"#ffffff", kind:"storm" },
+  meteor_tome:    { len:44, wood:"#332014", woodLt:"#5c3a22", trim:"#ff8840", gem:"#4a2c1c", core:"#ffb060", kind:"meteor" },
+  arcane_tome:    { len:44, wood:"#4a3a72", woodLt:"#7a62b3", trim:"#d19aff", gem:"#b080ff", core:"#f0e4ff", kind:"arcane" },
+  shadow_tome:    { len:42, wood:"#1a1322", woodLt:"#382348", trim:"#9b4bd6", gem:"#8822cc", core:"#e8d0ff", kind:"shadow" },
+  void_tome:      { len:46, wood:"#0b0812", woodLt:"#2a1638", trim:"#e0a0ff", gem:"#07050d", core:"#e0a0ff", kind:"void" },
 };
+const DEFAULT_WAND = { len:38, wood:"#3a2448", woodLt:"#5c3d70", trim:"#d0a0ff", gem:"#b080ff", core:"#f0e4ff", kind:"arcane" };
 
-function drawTomeRune(kind, trim) {
-  ctx.strokeStyle = trim;
-  ctx.fillStyle = trim;
-  ctx.lineWidth = 1.2;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  switch (kind) {
-    case "flame":
-      ctx.beginPath();
-      ctx.moveTo(0, -5.2); ctx.bezierCurveTo(3, -2.6, 0.8, -0.7, 2.8, 2.8);
-      ctx.bezierCurveTo(0.6, 1.4, -0.8, 3.9, -0.1, 5.1);
-      ctx.bezierCurveTo(-3.8, 2.9, -2.4, -1.4, 0, -5.2);
-      ctx.stroke();
-      break;
-    case "wave":
-      ctx.beginPath();
-      ctx.moveTo(-5, 1.5); ctx.quadraticCurveTo(-2.5, -2.5, 0, 1.5);
-      ctx.quadraticCurveTo(2.5, 5, 5, 1.5);
-      ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(-4, 4.5); ctx.quadraticCurveTo(-1, 2, 2, 4.4); ctx.stroke();
-      break;
-    case "bolt":
-      ctx.beginPath();
-      ctx.moveTo(1, -6); ctx.lineTo(-3, 0); ctx.lineTo(0.5, 0); ctx.lineTo(-1.2, 6); ctx.lineTo(4, -1.6); ctx.lineTo(0.5, -1.6);
-      ctx.stroke();
-      break;
-    case "crack":
-      ctx.beginPath();
-      ctx.moveTo(-2.5, -6); ctx.lineTo(1.5, -2); ctx.lineTo(-1, 1); ctx.lineTo(3, 5.5);
-      ctx.stroke();
-      ctx.beginPath(); ctx.arc(-4, 3, 1.3, 0, Math.PI * 2); ctx.fill();
-      break;
-    case "star":
-      ctx.beginPath();
-      for (let i = 0; i < 5; i++) {
-        const a = -Math.PI / 2 + i * Math.PI * 0.8;
-        const x = Math.cos(a) * 5;
-        const y = Math.sin(a) * 5;
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      }
-      ctx.closePath(); ctx.stroke();
-      ctx.beginPath(); ctx.arc(0, 0, 1.3, 0, Math.PI * 2); ctx.fill();
-      break;
-    case "eye":
-      ctx.beginPath(); ctx.ellipse(0, 0, 5, 2.6, 0, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.arc(0, 0, 1.6, 0, Math.PI * 2); ctx.fill();
-      break;
-    case "void":
-      ctx.beginPath(); ctx.arc(0, 0, 4.2, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.arc(0, 0, 1.6, 0, Math.PI * 2); ctx.fillStyle = "#06040a"; ctx.fill();
-      break;
-  }
-  ctx.lineCap = "butt";
-  ctx.lineJoin = "miter";
+// Distance from the model origin to the staff tip (model space, before scaling).
+export function wandTipLength(weaponId) {
+  return (WAND_LOOKS[weaponId] || DEFAULT_WAND).len * 0.58;
 }
 
-export function drawTomeModel(weaponId, col, s = 1, opts = {}) {
-  const look = TOME_LOOKS[weaponId] || { cover:"#23172e", spine:"#3a2448", page:"#eadfff", trim:col || "#d0a0ff", rune:"star" };
-  const open = opts.open ?? 0.25;
-  const glow = opts.glow ?? 0;
-  const trim = look.trim || col || "#d0a0ff";
+function drawWandShaft(look, top, bot) {
+  if (look.kind === "shadow") {
+    // twisted dark wood: two intertwined strands
+    ctx.lineCap = "round";
+    ctx.strokeStyle = look.wood; ctx.lineWidth = 3.4;
+    ctx.beginPath(); ctx.moveTo(-0.6, bot); ctx.bezierCurveTo(2.4, bot * 0.4, -2.6, top * 0.35, 0.4, top + 2); ctx.stroke();
+    ctx.strokeStyle = look.woodLt; ctx.lineWidth = 1.7;
+    ctx.beginPath(); ctx.moveTo(0.8, bot); ctx.bezierCurveTo(-2.2, bot * 0.4, 2.6, top * 0.35, -0.5, top + 2); ctx.stroke();
+    ctx.lineCap = "butt";
+    return;
+  }
+  if (look.kind === "cinder") {
+    // kinked charred branch with glowing ember cracks
+    ctx.lineCap = "round";
+    ctx.strokeStyle = look.wood; ctx.lineWidth = 3.2;
+    ctx.beginPath(); ctx.moveTo(0.5, bot); ctx.lineTo(-1.2, bot * 0.3); ctx.lineTo(1, top * 0.45); ctx.lineTo(-0.4, top + 1.5); ctx.stroke();
+    ctx.strokeStyle = look.trim; ctx.lineWidth = 0.8; ctx.globalAlpha = 0.85;
+    ctx.beginPath(); ctx.moveTo(-0.4, bot * 0.5); ctx.lineTo(0.6, bot * 0.15); ctx.moveTo(0.2, top * 0.55); ctx.lineTo(-0.6, top * 0.75); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.lineCap = "butt";
+    return;
+  }
+  // straight shaft: dark body with a lighter core stripe
+  ctx.lineCap = "round";
+  ctx.strokeStyle = look.wood; ctx.lineWidth = 3.4;
+  ctx.beginPath(); ctx.moveTo(0, bot); ctx.lineTo(0, top + 1.5); ctx.stroke();
+  ctx.strokeStyle = look.woodLt; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.moveTo(-0.4, bot - 1); ctx.lineTo(-0.4, top + 2.5); ctx.stroke();
+  ctx.lineCap = "butt";
+  if (look.kind === "tide") {
+    // spiral shell inlay winding up the driftwood
+    ctx.strokeStyle = look.trim; ctx.lineWidth = 0.9; ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    for (let i = 0; i <= 14; i++) {
+      const p = i / 14, y = bot - 2 + (top + 4 - (bot - 2)) * p;
+      const x = Math.sin(p * Math.PI * 3.2) * 1.9;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawWandHead(look, top, t, cast) {
+  const flick = 0.8 + 0.2 * Math.sin(t * 7 + 1.3);
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  switch (look.kind) {
+    case "cinder": {
+      // teardrop flame gem licking off the charred tip
+      const fs = 1 + cast * 0.35;
+      ctx.save(); ctx.translate(0, top - 3); ctx.scale(fs, fs * flick);
+      ctx.fillStyle = look.gem;
+      ctx.beginPath();
+      ctx.moveTo(0, -6);
+      ctx.bezierCurveTo(3.6, -2.2, 3.2, 2.2, 0, 4);
+      ctx.bezierCurveTo(-3.2, 2.2, -3.6, -2.2, 0, -6);
+      ctx.fill();
+      ctx.fillStyle = look.core;
+      ctx.beginPath(); ctx.ellipse(0, 0.8, 1.5, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      // stray embers
+      ctx.fillStyle = look.trim;
+      ctx.beginPath(); ctx.arc(3.2, top - 8 - Math.sin(t * 5) * 1.5, 0.8, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(-2.8, top - 6 + Math.cos(t * 4) * 1.2, 0.6, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case "tide": {
+      // curled wave prong cradling a sea pearl
+      ctx.strokeStyle = look.woodLt; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, top + 1); ctx.bezierCurveTo(-4.5, top - 2, -4.5, top - 8, 0.5, top - 8.5); ctx.stroke();
+      ctx.strokeStyle = look.trim; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, top); ctx.bezierCurveTo(-3.4, top - 2.4, -3.4, top - 7, 0.4, top - 7.5); ctx.stroke();
+      ctx.fillStyle = look.gem;
+      ctx.beginPath(); ctx.arc(0.8, top - 4.6, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = look.core;
+      ctx.beginPath(); ctx.arc(-0.1, top - 5.6, 1, 0, Math.PI * 2); ctx.fill();
+      // falling droplet
+      ctx.fillStyle = look.trim; ctx.globalAlpha = 0.8;
+      ctx.beginPath(); ctx.arc(3.6, top - 0.5 + ((t * 6) % 3), 0.8, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case "storm": {
+      // iron fork with a live spark arcing between the prongs
+      ctx.strokeStyle = "#8a8a96"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, top + 1); ctx.quadraticCurveTo(-4, top - 2, -3.6, top - 8); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, top + 1); ctx.quadraticCurveTo(4, top - 2, 3.6, top - 8); ctx.stroke();
+      ctx.fillStyle = "#b8b8c4";
+      ctx.beginPath(); ctx.arc(-3.6, top - 8, 1.2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(3.6, top - 8, 1.2, 0, Math.PI * 2); ctx.fill();
+      // zig-zag spark
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.55 + 0.45 * Math.sin(t * 11) + cast * 0.4;
+      ctx.strokeStyle = look.core; ctx.lineWidth = 1.1;
+      const j1 = Math.sin(t * 17) * 1.6, j2 = Math.cos(t * 13) * 1.6;
+      ctx.beginPath();
+      ctx.moveTo(-3.6, top - 8);
+      ctx.lineTo(-1.2 + j1, top - 6.4); ctx.lineTo(1 + j2, top - 9.2); ctx.lineTo(3.6, top - 8);
+      ctx.stroke();
+      ctx.restore();
+      // amber charge bead at the fork base
+      ctx.fillStyle = look.gem;
+      ctx.beginPath(); ctx.arc(0, top - 1, 1.8, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case "meteor": {
+      // cracked molten rock orb clasped by the staff
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.4 * flick + cast * 0.3;
+      const mg = ctx.createRadialGradient(0, top - 5, 1, 0, top - 5, 9);
+      mg.addColorStop(0, look.core); mg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = mg; ctx.beginPath(); ctx.arc(0, top - 5, 9, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = look.gem;
+      ctx.beginPath(); ctx.arc(0, top - 5, 5.4, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = look.core; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(-3.6, top - 7.4); ctx.lineTo(-0.6, top - 4.6); ctx.lineTo(-2.2, top - 2.2);
+      ctx.moveTo(2, top - 8.6); ctx.lineTo(1, top - 5.2); ctx.lineTo(3.8, top - 3.6);
+      ctx.stroke();
+      // stone claws holding the orb
+      ctx.strokeStyle = look.woodLt; ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.moveTo(-2.6, top + 1.5); ctx.quadraticCurveTo(-4.4, top - 1, -3.4, top - 3.4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(2.6, top + 1.5); ctx.quadraticCurveTo(4.4, top - 1, 3.4, top - 3.4); ctx.stroke();
+      // drifting pebble
+      ctx.fillStyle = look.trim;
+      ctx.beginPath(); ctx.arc(5.4, top - 9 + Math.sin(t * 2.6) * 1.4, 0.9, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case "arcane": {
+      // crescent cradle with a floating, bobbing crystal
+      const bob = Math.sin(t * 2.4) * 1.2;
+      ctx.strokeStyle = look.woodLt; ctx.lineWidth = 2.2;
+      ctx.beginPath(); ctx.arc(0, top - 5, 5.5, Math.PI * 0.72, Math.PI * 2.28); ctx.stroke();
+      ctx.strokeStyle = look.trim; ctx.lineWidth = 0.9;
+      ctx.beginPath(); ctx.arc(0, top - 5, 5.5, Math.PI * 0.78, Math.PI * 2.22); ctx.stroke();
+      ctx.save(); ctx.translate(0, top - 5 + bob); ctx.rotate(t * 0.9);
+      ctx.fillStyle = look.gem;
+      ctx.beginPath(); ctx.moveTo(0, -3.4); ctx.lineTo(2.3, 0); ctx.lineTo(0, 3.4); ctx.lineTo(-2.3, 0); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = look.core;
+      ctx.beginPath(); ctx.moveTo(0, -1.5); ctx.lineTo(1, 0); ctx.lineTo(0, 1.5); ctx.lineTo(-1, 0); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      // twinkle
+      ctx.strokeStyle = look.core; ctx.lineWidth = 0.8; ctx.globalAlpha = 0.5 + 0.5 * Math.sin(t * 5);
+      ctx.beginPath(); ctx.moveTo(5.5, top - 11); ctx.lineTo(5.5, top - 8); ctx.moveTo(4, top - 9.5); ctx.lineTo(7, top - 9.5); ctx.stroke();
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case "shadow": {
+      // claw talons gripping an unblinking eye orb
+      ctx.strokeStyle = look.wood; ctx.lineWidth = 1.9;
+      ctx.beginPath(); ctx.moveTo(-2.2, top + 2); ctx.quadraticCurveTo(-5, top - 2.5, -2.8, top - 7.5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(2.2, top + 2); ctx.quadraticCurveTo(5, top - 2.5, 2.8, top - 7.5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, top + 1); ctx.lineTo(0, top - 2); ctx.stroke();
+      ctx.fillStyle = look.gem;
+      ctx.beginPath(); ctx.arc(0, top - 5, 4.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = look.core;
+      ctx.beginPath(); ctx.ellipse(0, top - 5, 2.9, 1.7, 0, 0, Math.PI * 2); ctx.fill();
+      // slit pupil that narrows while casting
+      ctx.fillStyle = "#0c0614";
+      ctx.beginPath(); ctx.ellipse(0, top - 5, Math.max(0.4, 1 - cast * 0.7), 1.6, 0, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case "void": {
+      // obsidian annulus holding a black orb with an orbiting mote
+      ctx.strokeStyle = look.woodLt; ctx.lineWidth = 2.4;
+      ctx.beginPath(); ctx.arc(0, top - 6, 6, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = look.trim; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.arc(0, top - 6, 6, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = look.gem;
+      ctx.beginPath(); ctx.arc(0, top - 6, 3.4, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = look.core; ctx.lineWidth = 0.7; ctx.globalAlpha = 0.85;
+      ctx.beginPath(); ctx.arc(0, top - 6, 3.4, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+      const oa = t * 2.2;
+      ctx.fillStyle = look.core;
+      ctx.beginPath(); ctx.arc(Math.cos(oa) * 6, top - 6 + Math.sin(oa) * 6 * 0.4, 1.1, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+  }
+  ctx.lineCap = "butt"; ctx.lineJoin = "miter";
+}
+
+export function drawWandModel(weaponId, col, s = 1, opts = {}) {
+  const look = WAND_LOOKS[weaponId] || { ...DEFAULT_WAND, trim: col || DEFAULT_WAND.trim };
+  const cast = clamp(opts.cast ?? 0, 0, 1);
+  const glow = (opts.glow ?? 0) + cast * 0.5;
+  const t = performance.now() / 1000;
+  const top = -look.len * 0.58, bot = look.len * 0.42;
   ctx.save();
   ctx.scale(s, s);
+  // halo around the head
   if (glow > 0) {
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
-    ctx.globalAlpha = 0.18 + glow * 0.26;
-    const g = ctx.createRadialGradient(0, 0, 2, 0, 0, 24 + glow * 14);
-    g.addColorStop(0, trim);
+    ctx.globalAlpha = 0.16 + glow * 0.24;
+    const g = ctx.createRadialGradient(0, top - 4, 2, 0, top - 4, 16 + glow * 10);
+    g.addColorStop(0, look.trim);
     g.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(0, 0, 26 + glow * 12, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, top - 4, 18 + glow * 9, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
-
-  const spread = 2 + open * 4.5;
-  const pageAlpha = Math.min(1, 0.25 + open * 1.2);
-  ctx.save();
-  ctx.rotate(-0.1 * open);
-  roundedRect(-13 - spread, -10, 13, 18, 2.2);
-  ctx.fillStyle = look.cover; ctx.fill();
-  ctx.strokeStyle = trim; ctx.lineWidth = 1.1; ctx.stroke();
-  ctx.globalAlpha = pageAlpha;
-  roundedRect(-11 - spread, -8, 10, 14, 1.5);
-  ctx.fillStyle = look.page; ctx.fill();
-  ctx.globalAlpha = 1;
-  ctx.strokeStyle = "rgba(0,0,0,0.24)"; ctx.lineWidth = 0.7;
-  ctx.beginPath(); ctx.moveTo(-8 - spread, -5); ctx.lineTo(-3 - spread, -5); ctx.moveTo(-9 - spread, -1); ctx.lineTo(-3 - spread, -1); ctx.stroke();
-  ctx.restore();
-
-  ctx.save();
-  ctx.rotate(0.1 * open);
-  roundedRect(spread, -10, 13, 18, 2.2);
-  ctx.fillStyle = look.cover; ctx.fill();
-  ctx.strokeStyle = trim; ctx.lineWidth = 1.1; ctx.stroke();
-  ctx.globalAlpha = pageAlpha;
-  roundedRect(spread + 1, -8, 10, 14, 1.5);
-  ctx.fillStyle = look.page; ctx.fill();
-  ctx.globalAlpha = 1;
-  ctx.translate(spread + 7, -0.5);
-  drawTomeRune(look.rune, trim);
-  ctx.restore();
-
-  ctx.fillStyle = look.spine;
-  roundedRect(-2.2, -11, 4.4, 20, 1.4);
+  drawWandShaft(look, top, bot);
+  // metal ferrule under the head and a butt cap
+  ctx.fillStyle = look.trim;
+  roundedRect(-2, top + 1.5, 4, 2.4, 1);
   ctx.fill();
-  ctx.strokeStyle = trim; ctx.lineWidth = 0.9;
-  ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(0, 7); ctx.stroke();
-  ctx.fillStyle = trim;
-  ctx.beginPath(); ctx.arc(0, -7.2, 1.3, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(0, 5.6, 1.1, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = look.woodLt;
+  roundedRect(-1.8, bot - 1.5, 3.6, 2.6, 1.2);
+  ctx.fill();
+  // leather grip wrap just below middle
+  ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = 3.8;
+  ctx.beginPath(); ctx.moveTo(0, bot * 0.28); ctx.lineTo(0, bot * 0.72); ctx.stroke();
+  ctx.strokeStyle = look.woodLt; ctx.lineWidth = 0.8;
+  for (let k = 0; k < 3; k++) {
+    const y = bot * 0.34 + k * bot * 0.14;
+    ctx.beginPath(); ctx.moveTo(-1.9, y); ctx.lineTo(1.9, y + 1.2); ctx.stroke();
+  }
+  drawWandHead(look, top, t, cast);
   ctx.restore();
 }
 

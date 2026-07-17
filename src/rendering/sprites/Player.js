@@ -2,7 +2,7 @@ import { ctx, groundY } from '../../core/canvas.js';
 import { drawBoot } from '../DrawHelpers.js';
 import { drawClimbPose, isClimbingEntity } from './FriendlyClimb.js';
 import { drawTorsoArmor } from '../ItemRender.js';
-import { armorOutfit, drawHelmet, drawArmorAura } from '../ArmorOutfits.js';
+import { armorOutfit, drawHelmet, drawArmorAura, drawArmorShoulders } from '../ArmorOutfits.js';
 
 const C = {
   skin: "#d3ac82",
@@ -192,7 +192,9 @@ function drawHead(headX, headY, hurt, armorId = null) {
   }
 }
 
-export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop || 0) {
+// `riding` is the mount def (from MOUNTS) when the player sits a steed, else
+// null — it swaps the walking legs for a seated pose reaching the stirrup.
+export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop || 0, riding = null) {
   // Equipped armor reskins the entire model: cape, cuirass, tabard, legs,
   // boots, trims and (via `gloves`) the bare arms.
   const outfit = armorOutfit(p.armor);
@@ -263,6 +265,26 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
 
   drawCape(shX, shY, hipY, moveB, runB, airB, gallop, O, !!outfit?.longCloak);
 
+  if (riding) {
+    // Seated pose: hips rest on the saddle (local groundY - 17), the thigh
+    // runs forward along it and the shin drops down the near flank to the
+    // stirrup, which hangs 9.5*scale above the hooves at groundY + lift.
+    const stirrupY = groundY + riding.lift - 9.5 * riding.scale;
+    // far leg, shaded darker so it reads as the other side of the horse
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    limb(-3, hipY + 1, 5, groundY - 6, O.pants, 3.6);
+    limb(5, groundY - 6.5, 6.5, stirrupY - 1, O.boots, 3.2);
+    ctx.restore();
+    // near leg
+    limb(-2, hipY + 1, 7.5, groundY - 6, O.pants, 3.9);
+    limb(7.5, groundY - 6.5, 9, stirrupY - 1, O.boots, 3.5);
+    drawBoot(9.5, stirrupY + 1, O.boots, 1.06);
+    // boot cuff
+    ctx.strokeStyle = O.leather;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(6.8, stirrupY - 5); ctx.lineTo(11.4, stirrupY - 5); ctx.stroke();
+  } else {
   // Legs with animated run, jump tuck, knee plates and boot cuffs.
   // Feet lift in an arc during the swing phase so strides step instead of sliding.
   const strideAmt = (5.4 + 2.6 * runB) * moveB * (1 - airB);
@@ -298,6 +320,7 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
   ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(backFoot - 2.2, groundY - 5.6 - backLift); ctx.lineTo(backFoot + 2.6, groundY - 5.6 - backLift); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(frontFoot - 2.2, groundY - 5.6 - frontLift); ctx.lineTo(frontFoot + 2.6, groundY - 5.6 - frontLift); ctx.stroke();
+  }
 
   // Scabbard and cloak clasp behind the torso.
   ctx.save();
@@ -399,6 +422,7 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
   ctx.lineWidth = 0.9;
   ctx.beginPath(); ctx.arc(shX - 6.8, shY + 1.4, 2.3, Math.PI * 1.08, Math.PI * 1.88); ctx.stroke();
   ctx.beginPath(); ctx.arc(shX + 6.8, shY + 1.4, 2.3, Math.PI * 1.14, Math.PI * 1.94); ctx.stroke();
+  if (p.armor) drawArmorShoulders(p.armor, shX, shY, O);
 
   // Arms counter-swing (opposite arm to leg); the forward hand rises slightly.
   const counter = armSwing * moveB * (1 - airB);

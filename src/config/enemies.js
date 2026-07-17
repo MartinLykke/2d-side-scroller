@@ -11,9 +11,10 @@ export const ENEMY_TYPES = {
     stomper: true, stompMin: 4.5, stompMax: 7, stompRadius: 95,
   },
   ashPriest: {
-    name: "Ash Priest", hp: 14, speed: 52, w: 34, color: "#412225", eye: "#ffc060",
+    name: "Ash Priest", hp: 14, speed: 110, w: 34, color: "#412225", eye: "#ffc060",
     reward: 4, dmg: 8, baseDmg: 3, meleeDmg: 2,
     caster: true, shootRange: 520, shootInterval: 3.4,
+    ashFireballScale: 2.45, ashFireballRadius: 54, ashFireballSplash: 104, ashFireballDmg: 2,
     scorchRange: 265, scorchInterval: 4.8,
     wardRange: 285, wardInterval: 7.2,
     burstRadius: 112, burstInterval: 5.8,
@@ -25,11 +26,43 @@ export const ENEMY_TYPES = {
     boss: true, golem: true, legendary: true, noKnockback: true, fireImmune: true,
     shootInterval: 7, attackName: "Volcanic Impact",
   },
+
+  // ── Phase 2: the Hollow ──────────────────────────────────────────────
+  // After the hell portal falls, void rifts open and these spawn at night.
+  shade: {
+    name: "Shade", hp: 36, speed: 118, w: 24, color: "#241a38", eye: "#8fe8ff",
+    reward: 2, dmg: 8, baseDmg: 3, meleeDmg: 1,
+  },
+  voidWraith: {
+    name: "Void Wraith", hp: 48, speed: 70, w: 26, color: "#352a54", eye: "#b9a0ff",
+    reward: 4, dmg: 10, meleeDmg: 2,
+    flying: true, fireball: true, voidBolt: true, shootRange: 450, shootInterval: 2.6,
+  },
+  voidBrute: {
+    name: "Hollow Brute", hp: 120, speed: 50, w: 52, color: "#1c1430", eye: "#66e0ff",
+    reward: 7, dmg: 13, meleeDmg: 2,
+    charger: true, chargeMin: 4.5, chargeMax: 7.5, chargeRangeMin: 140, chargeRangeMax: 420,
+    stomper: true, stompMin: 4, stompMax: 6.5, stompRadius: 100,
+  },
+  voidTitan: {
+    name: "Void Titan", hp: 3280, speed: 43, w: 132, color: "#181226", eye: "#9be8ff",
+    reward: 160, dmg: 26, meleeDmg: 3,
+    boss: true, voidTitan: true, legendary: true, noKnockback: true,
+    shootInterval: 7, attackName: "Reality Collapse",
+  },
+  voidSeraph: {
+    name: "Null Seraph", hp: 2480, speed: 78, w: 150, color: "#0b0718", eye: "#d7f6ff",
+    reward: 180, dmg: 18, meleeDmg: 3,
+    boss: true, flying: true, voidSeraph: true, legendary: true, noKnockback: true,
+    shootInterval: 2.6, summonInterval: 8.5, attackName: "Black Star Choir",
+  },
 };
 
 // Which boss spawns as the first enemy of a given night.
 // SpawnSystem consults this table, so adding a boss night is a one-line change.
+// Bosses unlock on these nights and then spawn every night thereafter.
+// nightEnemyType() handles the recurring logic; this table marks the unlock day.
 export const BOSS_SCHEDULE = {
-  5: "fireDragon",
-  10: "magmaGolem",
+  3: "fireDragon",
+  6: "magmaGolem",
 };

@@ -10,6 +10,7 @@ import { drawVillager } from '../sprites/Villager.js';
 import { drawGuard } from '../sprites/Guard.js';
 import { drawFarmer } from '../sprites/Farmer.js';
 import { drawImp, drawFireImp } from '../sprites/Imps.js';
+import { drawShade, drawVoidWraith, drawVoidBrute, drawVoidTitan, drawVoidSeraph } from '../sprites/VoidSpawn.js';
 
 const STUCK_ARROW_FADE_TIME = 0.55;
 
@@ -262,10 +263,10 @@ function drawStuckImpArrows(e) {
     ctx.globalAlpha = alpha;
     ctx.translate(ar.x, ar.y);
     ctx.rotate(ar.a || 0);
-    const magic = ar.weaponId === "void_bow" || ar.weaponId === "dark_bow" || ar.weaponId === "dragons_bow";
+    const magic = ar.weaponId === "void_bow" || ar.weaponId === "dark_bow" || ar.weaponId === "dragons_bow" || ar.upgradeCol;
     if (magic) {
       ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.28 * alpha;
-      ctx.strokeStyle = ar.weaponId === "dragons_bow" ? "#ff8840" : "#b060ff";
+      ctx.strokeStyle = ar.upgradeCol || (ar.weaponId === "dragons_bow" ? "#ff8840" : "#b060ff");
       ctx.lineWidth = 4;
       ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(3, 0); ctx.stroke();
       ctx.restore();
@@ -275,7 +276,7 @@ function drawStuckImpArrows(e) {
     ctx.beginPath(); ctx.moveTo(-15, 0); ctx.lineTo(5, 0); ctx.stroke();
     ctx.fillStyle = "#b8bcc4";
     ctx.beginPath(); ctx.moveTo(5, -1.6); ctx.lineTo(8, 0); ctx.lineTo(5, 1.6); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = magic ? "#c69fff" : "#8fae4a";
+    ctx.fillStyle = ar.upgradeCol || (magic ? "#c69fff" : "#8fae4a");
     ctx.beginPath(); ctx.moveTo(-13, 0); ctx.lineTo(-17, -2.3); ctx.lineTo(-14, -0.3); ctx.closePath(); ctx.fill();
     ctx.beginPath(); ctx.moveTo(-13, 0); ctx.lineTo(-17, 2.3); ctx.lineTo(-14, 0.3); ctx.closePath(); ctx.fill();
     ctx.restore();
@@ -1546,7 +1547,8 @@ export function drawEnemies(dark) {
     const w=t.w, bob=Math.abs(Math.sin(e.anim*2))*2;
     const isBoss = !!t.boss;
     const atkF = Math.max(0, e.attackAnim || 0) / 0.25;
-    const custom = e.type === "imp" ? drawImp : e.type === "fireImp" ? drawFireImp : e.type === "emberBrute" ? drawEmberBrute : e.type === "ashPriest" ? drawAshPriest : e.type === "fireDragon" ? drawFireDragon : e.type === "magmaGolem" ? drawMagmaGolem : null;
+    const custom = e.type === "imp" ? drawImp : e.type === "fireImp" ? drawFireImp : e.type === "emberBrute" ? drawEmberBrute : e.type === "ashPriest" ? drawAshPriest : e.type === "fireDragon" ? drawFireDragon : e.type === "magmaGolem" ? drawMagmaGolem
+      : e.type === "shade" ? drawShade : e.type === "voidWraith" ? drawVoidWraith : e.type === "voidBrute" ? drawVoidBrute : e.type === "voidTitan" ? drawVoidTitan : e.type === "voidSeraph" ? drawVoidSeraph : null;
     ctx.save(); ctx.translate(e.x, drawYOff);
     if (atkF > 0 && !custom) ctx.scale(1 + atkF * 0.18, 1 - atkF * 0.12);
     if (e.dir<0) ctx.scale(-1,1);
@@ -1627,10 +1629,12 @@ export function drawEnemies(dark) {
       ctx.fillStyle=t.eye; ctx.beginPath(); ctx.arc(ex,ey,w*0.09,0,Math.PI*2); ctx.arc(ex2,ey,w*0.09,0,Math.PI*2); ctx.fill();
       if (e.carry>0) { ctx.fillStyle="#f2c14e"; ctx.beginPath(); ctx.arc(0,groundY-w-12-bob,4,0,Math.PI*2); ctx.fill(); }
       if (t.flying) {
-        ctx.fillStyle=`rgba(${t.color},0.7)`;
+        ctx.save(); ctx.globalAlpha *= 0.75;
+        ctx.fillStyle = e.flash > 0 ? "#fff" : t.color;
         const wingFlap=Math.sin(e.anim*4)*8;
         ctx.beginPath(); ctx.moveTo(-w*0.5,groundY-w*0.5-bob); ctx.lineTo(-w*1.8,groundY-w*0.5-bob-wingFlap); ctx.lineTo(-w*0.5,groundY-w*0.1-bob); ctx.fill();
         ctx.beginPath(); ctx.moveTo(w*0.5,groundY-w*0.5-bob); ctx.lineTo(w*1.8,groundY-w*0.5-bob+wingFlap); ctx.lineTo(w*0.5,groundY-w*0.1-bob); ctx.fill();
+        ctx.restore();
       }
     }
     drawStuckImpArrows(e);
@@ -1657,7 +1661,7 @@ export function drawEnemies(dark) {
 
     // Bosses get a big always-on health bar with a name plate
     if ((isBoss || t.legendary) && !e.dying) {
-      const bossVisualH = e.type === "magmaGolem" ? t.w * 1.58 : t.w;
+      const bossVisualH = e.type === "magmaGolem" || e.type === "voidTitan" ? t.w * 1.58 : e.type === "voidSeraph" ? t.w * 1.24 : t.w;
       drawHpBar(e.x, groundY+drawYOff-bossVisualH-28, t.w*0.85, e.hp/e.maxHp, "#ff2040");
       ctx.save(); ctx.textAlign="center";
       ctx.font="bold 15px Trebuchet MS";
@@ -1665,7 +1669,7 @@ export function drawEnemies(dark) {
       ctx.fillStyle=t.eye; ctx.fillText(t.name, e.x, groundY+drawYOff-bossVisualH-43);
       ctx.font="11px Trebuchet MS";
       ctx.globalAlpha=0.65+0.25*Math.sin(bossT*3);
-      if (e.type === "magmaGolem") ctx.translate(0, -bossVisualH + t.w);
+      if (e.type === "magmaGolem" || e.type === "voidTitan") ctx.translate(0, -bossVisualH + t.w);
       ctx.fillStyle="#f2c14e"; ctx.fillText(t.legendary ? "⚔ LEGENDARISK BOSS ⚔" : "⚔ BOSS ⚔", e.x, groundY+drawYOff-t.w-58);
       ctx.restore();
       continue;

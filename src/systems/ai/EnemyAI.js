@@ -138,10 +138,10 @@ function impStackDropBypassesWall(e, wall) {
   return true;
 }
 
-// Heavier enemies (ember brute) get a slower, more telegraphed swing so their
-// bulk reads clearly instead of flashing through the generic attack pose.
+// Heavier enemies (ember brute, hollow brute) get a slower, more telegraphed
+// swing so their bulk reads clearly instead of flashing through the generic pose.
 function swingMult(e) {
-  return e.type === "emberBrute" ? 2.6 : 1;
+  return e.type === "emberBrute" || e.type === "voidBrute" ? 2.6 : 1;
 }
 
 function setImpState(e, next) {
@@ -395,13 +395,14 @@ function shootEnemyFireball(e, t, target) {
     life: flightT + 0.35,
     hitKind: target === state.player ? "player" : "unit",
     enemyFireball: true,
+    voidBolt: !!t.voidBolt,
     dmg: t.meleeDmg || 2,
     radius: 28,
   });
   e.shootCd = t.shootInterval || 2.8;
   e.attackAnim = 0.38;
-  spawnParticles(e.x, launchY, 10, "#ff6a20", 42, 40);
-  spawnParticles(e.x, launchY, 5, "#ffd060", 26, 54);
+  spawnParticles(e.x, launchY, 10, t.voidBolt ? "#8a5aff" : "#ff6a20", 42, 40);
+  spawnParticles(e.x, launchY, 5, t.voidBolt ? "#b9e8ff" : "#ffd060", 26, 54);
   Audio.bow();
 }
 
@@ -761,8 +762,12 @@ function shootAshLance(e, t, target) {
     hitKind: target === state.player ? "player" : "unit",
     enemyFireball: true,
     ashLance: true,
-    dmg: t.meleeDmg || 2,
-    radius: 26,
+    ashFireball: true,
+    big: true,
+    scale: t.ashFireballScale || 2.35,
+    dmg: t.ashFireballDmg || t.meleeDmg || 2,
+    radius: t.ashFireballRadius || 54,
+    splashRadius: t.ashFireballSplash || 96,
   });
   e.shootCd = (t.shootInterval || 3.4) + rand(-0.35, 0.55);
   e.ashCastFlash = 0.34;

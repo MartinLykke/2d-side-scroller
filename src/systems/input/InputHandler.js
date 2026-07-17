@@ -3,10 +3,12 @@ import { canvas, W, H } from '../../core/canvas.js';
 import { inject, provide } from '../../core/services.js';
 import { UI, DEV, closeSkillTree, openSkillTree } from '../../rendering/HUD.js';
 import { tryOpenShop, handleShopKeys, currentShopList, tryBuyShopItem } from '../economy/ShopSystem.js';
+import { toggleMount } from '../economy/MountSystem.js';
 import { equipFromInventory, unequipWeapon, unequipArmor, ensureInventory } from '../economy/InventorySystem.js';
 import { applyUpgrade, checkUpgrade } from '../economy/UpgradeSystem.js';
 import { triggerBarrage, triggerRoyalRally } from '../ai/AI.js';
 import { tryToggleMine } from '../world/MineSystem.js';
+import { startAssault } from '../world/AssaultSystem.js';
 import { setupDevPanel } from './DevPanel.js';
 
 export function setupInputHandlers() {
@@ -61,6 +63,16 @@ function handleKeydown(e) {
     if (Game.state === "play" || Game.state === "pause") Game.togglePause();
   }
 
+  // Hub state - start new run with Enter or Space
+  if (Game.state === "hub" && (k === "enter" || k === " " || k === "space")) {
+    e.preventDefault();
+    // Walk to the portal to trigger transition
+    if (state.player) {
+      state.player.x = Math.min(state.player.x + 999, 3940 - 30);
+    }
+    return;
+  }
+
   if (Game.state !== "play") return;
 
   if (Game.upgradeMenuOpen) {
@@ -86,6 +98,10 @@ function handleKeydown(e) {
     if (!e.repeat) triggerRoyalRally();
     e.preventDefault(); return;
   }
+  if (k === "g") {
+    if (!e.repeat) startAssault();
+    e.preventDefault(); return;
+  }
   if (k === "u") {
     if (!e.repeat) DEV.triggerWeaponUpgrade();
     e.preventDefault(); return;
@@ -97,6 +113,7 @@ function handleKeydown(e) {
     if (tryToggleMine()) { e.preventDefault(); return; }
   }
   if (k === "n" && !Game.inventoryOpen && !Game.shopOpen) { UI.skipToDusk(); e.preventDefault(); return; }
+  if (k === "h" && !e.repeat && !Game.inventoryOpen && !Game.shopOpen) toggleMount();
   if (k === "i") { Game.inventoryOpen = !Game.inventoryOpen; Game.shopOpen = false; }
   if (k === "b" && !Game.inventoryOpen) tryOpenShop();
   if (Game.shopOpen) handleShopKeys(k, e);

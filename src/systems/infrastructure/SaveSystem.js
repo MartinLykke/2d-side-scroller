@@ -15,10 +15,19 @@ export function saveGame() {
     const { player, base, walls, units, vagrants, forestTrees } = state;
     const snap = {
       day: Game.day, time: Game.time, treeSeed: Game.treeSeed,
+      worldPhase: Game.worldPhase || 1,
+      // A destroyed-but-not-yet-shifted portal is saved at 1 hp so a reload
+      // during the victory celebration can't strand the run in phase 1.
+      portals: (state.portals || []).map(p => ({
+        hp: p.destroyed ? 1 : p.hp,
+        maxHp: p.maxHp,
+      })),
       coins: player.coins, px: player.x, hasCrown: player.hasCrown,
       hp: player.hp, weapon: player.weapon, armor: player.armor,
       weaponUpgrades: player.weaponUpgrades || [],
       inventory: player.inventory || [],
+      mounts: player.mounts || [],
+      mountId: player.mountId || null,
       level: player.level || 1, xp: player.xp || 0,
       base: { level: base.level, hp: base.hp, maxHp: base.maxHp },
       walls: walls.map(w => ({ commissioned: w.commissioned, level: w.level, hp: w.hp, maxHp: w.maxHp, buildProgress: w.buildProgress })),
@@ -56,6 +65,15 @@ export function loadGame() {
     if (!snap) return false;
 
     Game.day = snap.day; Game.time = snap.time; Game.treeSeed = snap.treeSeed;
+    Game.worldPhase = snap.worldPhase || 1;
+    if (Game.worldPhase >= 2) {
+      for (const p of state.portals) p.voidRift = true;
+    } else if (snap.portals) {
+      snap.portals.forEach((s, i) => {
+        const p = state.portals[i];
+        if (p && s && s.hp !== undefined && s.hp !== null) { p.hp = s.hp; p.maxHp = s.maxHp; }
+      });
+    }
     buildForest();
     const { player, base, walls, forestTrees } = state;
     if (snap.forestTrees) snap.forestTrees.forEach((s, i) => {
@@ -71,6 +89,9 @@ export function loadGame() {
     player.armor  = snap.armor  || null;
     player.weaponUpgrades = snap.weaponUpgrades || [];
     player.inventory = snap.inventory || [];
+    player.mounts = snap.mounts || [];
+    player.mountId = snap.mountId || null;
+    player.lastMountId = player.mountId;
     player.level = snap.level || 1;
     player.xp = snap.xp || 0;
     base.level = snap.base.level; base.hp = snap.base.hp; base.maxHp = snap.base.maxHp;

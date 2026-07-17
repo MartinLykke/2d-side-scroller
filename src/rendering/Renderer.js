@@ -4,6 +4,8 @@ import { Game, state } from '../core/state.js';
 import { entityWallLift } from '../entities/Wall.js';
 import { drawPlayer as drawPlayerBody } from './sprites/Player.js';
 import { drawHeldWeapon } from './ItemRender.js';
+import { drawMount } from './sprites/Mount.js';
+import { activeMount, playerMountLift } from '../systems/economy/MountSystem.js';
 import { darkness, skyColors, drawStars, drawClouds, drawCelestials, drawBirds, drawWildBirds, getTrees, drawHills, drawTreeLayer, drawLowFog, drawAmbientFront, drawLevelUpBeams, biomeAt, FX, windSway } from './Effects.js';
 
 // Import all render modules
@@ -21,7 +23,7 @@ function drawWeaponSwingArc(x, player) {
   if (!player.swing || player.swing <= 0 || !player.weapon) return;
   const w = player.weapon, prog = clamp(player.swing / 0.32, 0, 1);
   const dir = player.dir || 1;
-  const lift = entityWallLift(player);
+  const lift = entityWallLift(player) + playerMountLift(player);
   const baseY = groundY - 40 - (player.bob||0) - (player.jumpH||0) - lift;
   const WEAPON_ARC = {
     rusty_sword:  { col:"#9a9aa2", glow:null,      r:44, sw:4, a:0.5 },
@@ -148,12 +150,16 @@ function drawPlayer(dark) {
   const { player } = state;
   const x=player.x, bob=player.bob, gallop=player.gallop;
   const wallLift = entityWallLift(player);
+  const mount = Game.state==="player-death" ? null : activeMount(player);
+  const mountLift = mount ? mount.lift : 0;
   const dying = Game.state==="player-death";
   if (!dying) drawWeaponSwingArc(x, player);
   ctx.save();
   if (!dying && player.invuln>0&&Math.floor(player.invuln*12)%2===0) ctx.globalAlpha=0.45;
-  ctx.translate(x, -bob - player.jumpH - wallLift);
+  ctx.translate(x, -bob - player.jumpH - wallLift - mountLift);
   if (player.dir<0) ctx.scale(-1,1);
+  // The steed sits under the same transform, so body + held weapon ride it.
+  if (mount) drawMount(player, mount);
   if (dying) {
     // Collapse backwards: knees buckle briefly, then topple around the feet
     const t = Game.deathTimer || 0;
@@ -166,13 +172,14 @@ function drawPlayer(dark) {
     ctx.translate(0, -groundY);
   }
 
-  // Draw player body using new detailed rendering
-  drawPlayerBody(player, player.dir, Math.abs(player.vx) > 1, gallop);
+  // Draw player body using new detailed rendering. Mounted, the walk cycle is
+  // suppressed (the horse animates instead) and the legs take the seated pose.
+  drawPlayerBody(player, player.dir, mount ? false : Math.abs(player.vx) > 1, mount ? 0 : gallop, mount);
 
   if (player.weapon && !dying) drawHeldWeapon(player);
   ctx.restore();
   if (!dying && (player.hp <= 2 || player.hpShowTimer > 0)) {
-    const n=player.maxHp, gap=9, hy=groundY-86-bob-player.jumpH-wallLift;
+    const n=player.maxHp, gap=9, hy=groundY-86-bob-player.jumpH-wallLift-mountLift;
     for (let i=0;i<n;i++) drawHeart(player.x-(n-1)*gap/2+i*gap, hy, 4, i<player.hp?"#e0556a":"rgba(255,255,255,0.18)");
   }
 }

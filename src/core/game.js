@@ -2,6 +2,7 @@
 
 // ---------- Bootstrap ----------
 import { CFG, WALL_SLOTS, PORTALS, STATIONS_X, MINE, FOREST } from '../config/config.js';
+import { ARMORS } from '../config/armor.js';
 import { clamp, dist, lerp, rand, randInt, pick } from '../util/math.js';
 import { canvas, ctx, W, H, groundY, resize } from './canvas.js';
 import { Game, state } from './state.js';
@@ -29,11 +30,13 @@ import { makeWall, wallReady, wallBackDir, wallClimbAnchorX, nearWallClimbAnchor
 import { makeUnit } from '../entities/Unit.js';
 
 import { WEAPON_SHOP, ARMOR_SHOP, updateShop, setPickupWeapon as setShopPickupWeapon } from '../systems/economy/ShopSystem.js';
+import { mountSpeedMult, activeMount } from '../systems/economy/MountSystem.js';
 import { upgradeBase, pickupWeapon, setBuildStations } from '../util/GameStateHelpers.js';
 import { addXP, checkUpgrade } from '../systems/economy/UpgradeSystem.js';
 import { newGame, buildStations } from '../systems/infrastructure/GameInit.js';
 import { initMeta, enterDeathHub, updateHub, updateHubTransition, renderHub } from '../systems/infrastructure/RoguelikeSystem.js';
 import { updateLootItems, updateWeaponPickup, updateChests, updateLootPhysics, setPickupWeapon as setLootPickupWeapon } from '../systems/economy/LootSystem.js';
+import { updateAssault, performPhaseShift } from '../systems/world/AssaultSystem.js';
 import { setupInputHandlers } from '../systems/input/InputHandler.js';
 import { provide } from './services.js';
 
@@ -57,7 +60,7 @@ function updateTime(dt) {
   const timeScale = Game.isNight && Game.nightCleared ? (CFG.nightClearTimeScale || 1) : 1;
   Game.time += (dt / CFG.dayLength) * timeScale;
   if (Game.isNight && Game.nightCleared && Game.time > CFG.phases.night) {
-    Game.time = CFG.phases.night + 0.0001;
+    Game.time = 1;
   }
   if (Game.time >= 1) { Game.time -= 1; Game.day++; planNight(); }
   const t = Game.time;
@@ -80,6 +83,18 @@ function updateNightClear() {
 }
 
 const PLAYER_WALL_CLIMB_SPEED = 0.95;
+
+function playerArmorAbility(player) {
+  return player?.armor ? ARMORS[player.armor]?.ability : null;
+}
+
+function armorMoveMult(player) {
+  return playerArmorAbility(player)?.moveMult || 1;
+}
+
+function armorRegenMult(player) {
+  return playerArmorAbility(player)?.regenMult || 1;
+}
 
 function grantNightClearReward() {
   const { player, base, walls, units } = state;
@@ -133,7 +148,7 @@ function startPlayerDodge(player, move) {
 
   player.dodgeDir = move || player.dir || 1;
   player.dodgeT = CFG.playerDodgeTime;
-  player.dodgeCd = CFG.playerDodgeCooldown;
+  player.dodgeCd = CFG.playerDodgeCooldown * (playerArmorAbility(player)?.dodgeCdMult || 1);
   player.dodgeNearMiss = false;
   player.invuln = Math.max(player.invuln || 0, CFG.playerDodgeInvuln);
   player.knock = 0;
@@ -271,7 +286,7 @@ function updatePlayer(dt) {
   const left=keys["a"]||keys["arrowleft"], right=keys["d"]||keys["arrowright"], sprint=keys["shift"];
   const up=keys["w"]||keys["arrowup"], down=keys["s"]||keys["arrowdown"];
   const dodgeHeld=keys["x"]||keys["control"];
-  const speed=sprint?CFG.playerSprint:CFG.playerSpeed;
+  const speed=(sprint?CFG.playerSprint:CFG.playerSpeed)*mountSpeedMult(player)*armorMoveMult(player);
   let move=0; if (left) move-=1; if (right) move+=1;
   player.dodgeCd = Math.max(0, (player.dodgeCd || 0) - dt);
   if (dodgeHeld && !player.dodgeLatch) startPlayerDodge(player, move);
@@ -298,6 +313,10 @@ function updatePlayer(dt) {
   const strideTarget = dodging ? 20 : move!==0 ? (sprint?16:10) : 0;
   player.strideRate = (player.strideRate||0) + (strideTarget-(player.strideRate||0))*Math.min(1,dt*8);
   player.gallop += dt*player.strideRate;
+  // Hoof dust kicked up behind a galloping mount
+  if (activeMount(player) && move!==0 && (player.jumpH||0)<=0 && Math.random() < (sprint?14:5)*dt) {
+    spawnParticles(player.x - player.dir*20, groundY - 4, 1, "#c9b48a", 28, 18);
+  }
   // Walk bob is animated inside the sprite (torso/head only, feet planted);
   // translating the whole body here doubled the motion and caused sub-pixel shimmer.
   player.bob*=Math.exp(-9*dt);
@@ -323,7 +342,7 @@ function updatePlayer(dt) {
   if (player.hpShowTimer>0) player.hpShowTimer-=dt;
   if (player.hp<player.maxHp) {
     if (!nearestEnemy(player.x,220)) {
-      const regenTime = CFG.playerRegenTime * (1 - (player.permanentRegenBonus || 0));
+      const regenTime = CFG.playerRegenTime * (1 - (player.permanentRegenBonus || 0)) * armorRegenMult(player);
       player.regen+=dt;
       if (player.regen>=Math.max(2.5, regenTime)) { player.regen=0; player.hp++; floaty(player.x,"+❤","#e0556a"); }
     }
@@ -407,13 +426,15 @@ function updateCamera() {
 function updatePortals() {
   if (Game.isNight) return;
   const { portals, player } = state;
+  const guardianType = (Game.worldPhase || 1) >= 2 ? "shade" : "imp";
   for (const p of portals) {
+    if (p.destroyed) continue;
     if ((p.lastDayActivated||0) >= Game.day) continue;
     if (dist(player.x, p.x) < 300) {
       p.lastDayActivated = Game.day;
       const count = 2 + (Game.day > 5 ? 1 : 0);
       for (let i=0; i<count; i++) {
-        const guardian = spawnEnemy("imp", p);
+        const guardian = spawnEnemy(guardianType, p);
         guardian.portalGuardian = true;
       }
     }
@@ -478,6 +499,7 @@ function update(dt) {
   updateForestCamps(dt);
   updatePortals();
   updateNightPortalWarning(dt);
+  updateAssault(dt);
   updateCaltrops(dt);
   updateEnemies(dt);
   updateDyingEnemies(dt);
@@ -567,6 +589,50 @@ function drawRunStartOverlay(dt) {
   Game.runStartAnim = Math.max(0, Game.runStartAnim - dt);
 }
 
+// Phase 2 transition: flash rises over the old world, the shift happens at
+// full white, then the fade-out reveals the remade land plus the title card.
+const PHASE_FLASH_IN = 0.8, PHASE_FLASH_OUT = 1.8, PHASE_TOTAL = 4.6;
+
+function updatePhaseTransition(dt) {
+  const pt = Game.phaseTransition;
+  if (!pt) return;
+  pt.t += dt;
+  if (!pt.swapped && pt.t >= PHASE_FLASH_IN) {
+    pt.swapped = true;
+    performPhaseShift();
+  }
+  if (pt.t >= PHASE_TOTAL) Game.phaseTransition = null;
+}
+
+function drawPhaseOverlay() {
+  const pt = Game.phaseTransition;
+  if (!pt) return;
+  const a = pt.t < PHASE_FLASH_IN
+    ? pt.t / PHASE_FLASH_IN
+    : Math.max(0, 1 - (pt.t - PHASE_FLASH_IN) / PHASE_FLASH_OUT);
+  if (a > 0) {
+    ctx.fillStyle = `rgba(214,196,255,${a})`;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = `rgba(255,255,255,${a * 0.6})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+  if (pt.swapped && pt.t > PHASE_FLASH_IN + 0.3) {
+    const ta = clamp((pt.t - PHASE_FLASH_IN - 0.3) / 0.5, 0, 1) * clamp((PHASE_TOTAL - pt.t) / 0.8, 0, 1);
+    ctx.save();
+    ctx.globalAlpha = ta;
+    ctx.textAlign = "center";
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    ctx.font = "600 42px Georgia, serif";
+    ctx.fillText("PHASE II", W / 2 + 2, H * 0.3 + 2);
+    ctx.fillStyle = "#d8c9ff";
+    ctx.fillText("PHASE II", W / 2, H * 0.3);
+    ctx.font = "20px Georgia, serif";
+    ctx.fillStyle = "#b9a8d8";
+    ctx.fillText("The Hollow has awakened — new horrors stir in the night", W / 2, H * 0.3 + 36);
+    ctx.restore();
+  }
+}
+
 function drawDeathOverlay() {
   if (Game.state !== "player-death") return;
   const t = Game.deathTimer || 0;
@@ -618,6 +684,7 @@ function loop(now) {
 
   if (Game.state === "play") {
     if (!Game.upgradeMenuOpen) update(gdt);
+    updatePhaseTransition(gdt);
     uiRefreshElapsed += frameDt;
     if (uiRefreshElapsed >= 0.08) {
       uiRefreshElapsed = 0;
@@ -662,6 +729,7 @@ function loop(now) {
   else if (Game.state !== "menu") render();
   else renderMenuBackground();
   drawRunStartOverlay(dt);
+  drawPhaseOverlay();
   drawDeathOverlay();
 
   requestAnimationFrame(loop);

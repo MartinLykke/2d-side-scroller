@@ -97,35 +97,57 @@ export function drawFirePools() {
   for (const p of state.firePools) {
     if (p.x < view.left || p.x > view.right) continue;
     const fade = Math.min(1, p.life / 1.2) * Math.min(1, (p.maxLife - p.life) / 0.3 + 0.2);
+    const isVoid = p.kind === "void";
     ctx.save();
-    // molten puddle
+    // molten puddle / collapsing void scar
     ctx.globalAlpha = 0.85 * fade;
     const pg = ctx.createRadialGradient(p.x, groundY - 2, 2, p.x, groundY - 2, p.r);
-    pg.addColorStop(0, "rgba(255,214,96,0.95)");
-    pg.addColorStop(0.4, "rgba(255,106,32,0.8)");
-    pg.addColorStop(0.8, "rgba(150,30,8,0.55)");
-    pg.addColorStop(1, "rgba(60,10,4,0)");
+    if (isVoid) {
+      pg.addColorStop(0, "rgba(215,246,255,0.9)");
+      pg.addColorStop(0.26, "rgba(138,90,255,0.78)");
+      pg.addColorStop(0.68, "rgba(30,12,70,0.62)");
+      pg.addColorStop(1, "rgba(3,1,12,0)");
+    } else {
+      pg.addColorStop(0, "rgba(255,214,96,0.95)");
+      pg.addColorStop(0.4, "rgba(255,106,32,0.8)");
+      pg.addColorStop(0.8, "rgba(150,30,8,0.55)");
+      pg.addColorStop(1, "rgba(60,10,4,0)");
+    }
     ctx.fillStyle = pg;
     ctx.beginPath(); ctx.ellipse(p.x, groundY - 2, p.r, p.r * 0.16, 0, 0, Math.PI * 2); ctx.fill();
-    // flickering flame tongues
+    // flickering flame tongues or inward-falling starlight teeth
     ctx.globalCompositeOperation = "lighter";
     for (let k = 0; k < 5; k++) {
       const fx = p.x + Math.sin(p.ph + k * 2.4) * p.r * 0.6;
       const fh = (7 + Math.sin(T * (9 + k) + p.ph + k) * 3.5) * fade;
       ctx.globalAlpha = 0.5 * fade;
-      ctx.fillStyle = "#ff6a20";
-      ctx.beginPath(); ctx.ellipse(fx, groundY - 4 - fh * 0.5, 3.2, fh, Math.sin(T * 4 + k) * 0.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = isVoid ? "#8a5aff" : "#ff6a20";
+      if (isVoid) {
+        const tx = p.x + (fx - p.x) * (0.7 + 0.15 * Math.sin(T * 2 + k));
+        ctx.beginPath();
+        ctx.moveTo(fx, groundY - 4);
+        ctx.lineTo(tx - 3, groundY - 10 - fh);
+        ctx.lineTo(tx + 3, groundY - 10 - fh);
+        ctx.closePath(); ctx.fill();
+      } else {
+        ctx.beginPath(); ctx.ellipse(fx, groundY - 4 - fh * 0.5, 3.2, fh, Math.sin(T * 4 + k) * 0.2, 0, Math.PI * 2); ctx.fill();
+      }
       ctx.globalAlpha = 0.45 * fade;
-      ctx.fillStyle = "#ffd060";
-      ctx.beginPath(); ctx.ellipse(fx, groundY - 3 - fh * 0.35, 1.4, fh * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = isVoid ? "#d7f6ff" : "#ffd060";
+      ctx.beginPath(); ctx.ellipse(fx, groundY - 3 - fh * 0.35, isVoid ? 1.8 : 1.4, fh * 0.5, 0, 0, Math.PI * 2); ctx.fill();
     }
     // ground glow
     ctx.globalAlpha = 0.3 * fade;
     const glow = ctx.createRadialGradient(p.x, groundY - 6, 4, p.x, groundY - 6, p.r * 1.5);
-    glow.addColorStop(0, "rgba(255,140,40,0.7)");
-    glow.addColorStop(1, "rgba(120,20,0,0)");
+    glow.addColorStop(0, isVoid ? "rgba(138,90,255,0.72)" : "rgba(255,140,40,0.7)");
+    glow.addColorStop(1, isVoid ? "rgba(20,5,60,0)" : "rgba(120,20,0,0)");
     ctx.fillStyle = glow;
     ctx.beginPath(); ctx.ellipse(p.x, groundY - 8, p.r * 1.5, p.r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+    if (isVoid) {
+      ctx.globalAlpha = 0.48 * fade;
+      ctx.strokeStyle = "#d7f6ff"; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.ellipse(p.x, groundY - 3, p.r * (0.7 + Math.sin(T * 3 + p.ph) * 0.04), p.r * 0.11, 0, 0, Math.PI * 2); ctx.stroke();
+    }
     ctx.restore();
   }
 }
@@ -159,8 +181,11 @@ export function drawPoisonShots() {
 
 export function drawLegendaryEffects() {
   const view = visibleWorldBounds(260);
-  for (const ef of state.legendaryEffects) {
+  for (let i = state.legendaryEffects.length - 1; i >= 0; i--) {
+    const ef = state.legendaryEffects[i];
     if (ef.type !== "ring") continue;
+    ef.life -= 1 / 60;
+    if (ef.life <= 0) { state.legendaryEffects.splice(i, 1); continue; }
     if (ef.x + (ef.radius || 0) < view.left || ef.x - (ef.radius || 0) > view.right) continue;
     const alpha = Math.max(0, ef.life / ef.totalLife);
     ctx.save();
@@ -327,6 +352,17 @@ export function drawSpells() {
     ctx.save();
     ctx.translate(sp.x, sp.y);
     const age = sp.age || 0;
+    if (sp.upgradeCol) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.22 + Math.min(0.18, (sp.upgradeRank || 1) * 0.04);
+      const ug = ctx.createRadialGradient(0, 0, 2, 0, 0, 26 + (sp.upgradeRank || 1) * 7);
+      ug.addColorStop(0, sp.upgradeCol);
+      ug.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = ug;
+      ctx.beginPath(); ctx.arc(0, 0, 34 + (sp.upgradeRank || 1) * 5, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
 
     switch (sp.spellType) {
       case "fireball": {

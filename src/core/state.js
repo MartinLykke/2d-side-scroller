@@ -41,6 +41,8 @@ export const Game = {
   momentumTimer: 0,
   lastStandDay: 0,
   nightPortalWarnT: 0,
+  worldPhase: 1,          // 1 = Crown of Embers, 2 = the Hollow (after a portal falls)
+  phaseTransition: null,  // { t, swapped } while the phase-2 flash plays
 };
 
 // All mutable entity arrays and per-play variables live here so every
@@ -95,4 +97,5 @@ export const state = {
   mineVeins: [],
   mineActiveLeft: 0,
   mineActiveRight: 0,
+  assault: null, // active portal assault ({ phase, portal, ... }) or null
 };

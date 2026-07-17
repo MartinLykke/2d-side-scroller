@@ -20,9 +20,11 @@ Press `P` to open the dev panel. It exposes:
 - Gold/ember injection (+10/50/1000 coins, +10/50/500 embers, reset meta)
 - Time skips (skip to night, next day, jump to day 10/15/20)
 - Base upgrade, max walls, full heal (player + units + base + walls)
-- Enemy spawning (imp, flying imp, dragon, 8-imp wave, kill all)
+- Enemy spawning (imp, flying imp, dragon, 8-imp wave, kill all; phase-2: shade, void wraith, hollow brute, void titan, null seraph)
+- Assault & phase tools (start assault, crack portals to 10 hp, begin phase 2)
 - Unit spawning (archer, builder, farmer, guard)
-- Weapon grants (short bow, lightning tome, meteor tome), drop weapon, god mode
+- Weapon grants (short bow, storm staff, meteor staff), drop weapon, god mode
+- Mount grants (one button per mount) and stable-current-mount
 - Speed multiplier (×1, ×2, ×4)
 - Live stats: FPS, day/time, enemy/unit/coin/particle counts, player position
 
@@ -52,6 +54,7 @@ The `DEV` object is defined in `src/rendering/HUD.js` and exposed on `window`.
 - Phases: Day (0–0.55), Dusk (0.55–0.68), Night (0.68–0.85), Dawn (0.85–1.0)
 - Enemies spawn during night from portals via pre-planned quotas (`planNight()`)
 - Enemies flee at dawn
+- A HUD **Skip to dusk** button (`DEV.skipToDusk` in `HUD.js`, but player-facing) fast-forwards the day — after a cleared night it advances to the next day first — and pays out a discounted share (45%) of the skipped day's expected passive income
 
 ## Architecture
 
@@ -111,9 +114,32 @@ Every module imports these directly; nothing is passed as arguments through upda
 |------|----|-------|
 | Imp | 6 | Basic melee, spawns in night quotas |
 | Flying Imp | 8 | Flying, shoots fireballs at 430 px range |
-| Fire Dragon | 320 | Boss (night 5+), flying, drops rider imps, legendary attacks |
+| Ember Brute | 20 | Charger + stomper |
+| Ash Priest | 14 | Fast caster: big splashing fireballs, scorch, wards, bursts |
+| Fire Dragon | 320 | Boss (unlocks night 3), flying, drops rider imps, legendary attacks |
+| Magma Colossus | 650 | Legendary golem boss (unlocks night 6), fire-immune |
+
+`BOSS_SCHEDULE` (`src/config/enemies.js`) marks each boss's **unlock night**; after that it spawns every night, and once two bosses are unlocked both spawn each night (the top two tiers fill the first two spawn slots — see `nightEnemyType()` in `SpawnSystem.js`). Night quotas double from day 3 onward.
+
+Phase 2 ("the Hollow", after a portal is destroyed) replaces the night roster:
+
+| Type | HP | Notes |
+|------|----|-------|
+| Shade | 36 | Fast basic melee (replaces imp; does not wall-stack) |
+| Void Wraith | 48 | Flying, fires void bolts (fireball mechanic, violet palette) |
+| Hollow Brute | 120 | Charger + stomper (ember brute mechanics) |
+| Void Titan | 3280 | Legendary boss (golem mechanics), "Reality Collapse" |
+| Null Seraph | 2480 | Flying legendary boss, summons adds ("Black Star Choir") |
+
+Every phase-2 night opens with **both** the Void Titan and the Null Seraph (order alternates by day parity), followed by the shade/wraith/brute quota.
 
 Enemies spawn from portals, advance toward base, stack on walls. Flee at dawn.
+
+## Portal assault & phase 2
+
+Press `G` during the day (phase 1, needs ≥1 archer/guard) to sound the war horn: every archer and guard marches on the portal nearest the player (`src/systems/world/AssaultSystem.js`). Approaching within `CFG.assaultWakeRange` wakes a defense wave from the portal; a second half-wave spawns at 50% portal HP. Portal HP is `CFG.portalHp + (day-1) * CFG.portalHpPerDay`; damage persists across failed attempts. Guards melee the gate, archers volley from a stand-off line; when an enemy is in reach, the normal role AI takes the fight (assaultUnitAI returns false).
+
+If the portal falls: celebration, march home, then a flash transition (`Game.phaseTransition` in game.js) calls `performPhaseShift()` — `Game.worldPhase = 2`, player + army teleport to base, enemies/animals cleared, both portals become void rifts, the forest is regrown with a new `treeSeed`, and the whole palette shifts violet (`applyWorldPhase` in `Effects.js`). Nights then spawn the Hollow roster with a 1.15× quota. `worldPhase` is saved; a run always starts back in phase 1.
 
 ## Economy & progression
 
@@ -147,10 +173,21 @@ Health scales 45→320 HP. Cost: 6→14→22→35→55🪙. Archers stand on wal
 Buildings in forest require surrounding trees to be felled first.
 
 ### Weapons & armor
-- 34 weapons across melee (7), ranged (8), magic tomes (9), with 4 rarity tiers
-- 8 armor pieces providing defense (reduces incoming damage)
+- 34 weapons across melee (7), ranged (8), magic wands & staffs (9), with 4 rarity tiers
+- 9 armor pieces providing defense (reduces incoming damage; defense also gives a chance to fully block a hit — `armorBlockChance` in `PlayerCombat.js`)
+- Every armor has a unique **ability** (`ability` in `src/config/armor.js`): passive buffs (move speed, dodge cooldown, regen speed) and on-block effects — knockback/damage pulses with burn, frost, root, or pull; heal-on-block; riposte (block resets attack cooldown); extra block i-frames. Epic+ armors shed ambient particles (`updateArmorPassiveFX` in `PlayerCombat.js`)
 - Shop unlocked at base level 4; shop tier scales with base level
 - Weapons also found in location chests
+
+### Weapon upgrades
+On level-up the player picks from 3 random upgrades (`src/config/weaponUpgrades.js`): generic tiers plus **unique upgrades per weapon** (2 epic + 2 legendary each). Effects span melee (combo damage, barrier-on-kill, beams, novas, execute…), ranged (pierce, bounce/chain/power arrows, gravity arrows…), and magic (bigger AoE, extra chains, seeker orbs, spell echo, singularity…). Upgrades carry a `vfxCol` woven into the held weapon's glow.
+
+### Mounts
+- 3 mounts (`src/config/mounts.js`) sold in the shop's Stable tab: Dun Pony (+35% speed), Chestnut Courser (+65%), Ember Warhorse (+100%)
+- A mount multiplies walk and sprint speed and raises the rider by its `lift` (px). The steed draws inside the player's render transform (`Renderer.js`), so the body and held weapon ride it automatically; arrow/spell spawn origins add `playerMountLift()` (`src/systems/economy/MountSystem.js`)
+- Owned mounts toggle ride/stable in the shop or with H in the field; no riding in the mine or while climbing walls
+- Hitboxes are unchanged while mounted (the mount is speed + visuals only)
+- Ownership and the ridden mount persist in the save
 
 ### Skill trees (K to open)
 **Archer** — 3 branches (Pilen, Buen, Taktik) + 2 ultimates (Master Shadows, Heavy Ballista)
@@ -162,7 +199,7 @@ Skill points earned from upgrades and building construction.
 
 - **Melee**: hold mouse to swing; arc visual; cooldown from weapon speed
 - **Ranged**: aim-and-release sequence
-- **Magic (tomes)**: cast spell toward cursor
+- **Magic (wands & staffs)**: cast spell toward cursor
 - **Crit**: 15% chance for 1.5× damage
 - Archers: fire arrows (every 4th shot ignites), piercing, bouncing volley, double shot, powershot (3s charge → 3× damage)
 - Guards: piercing thrust, whirlwind, shield bash, rally cry (+20% damage to allies)
@@ -178,7 +215,7 @@ On death, the player enters a hub and earns **embers** based on run performance 
 - Starter bonuses: +vagrants, +free bow, +skill points, +starting gold burst
 - Run reward scaling: +ember multiplier
 
-Meta data persisted in localStorage (`kingdom_embers_meta_v1`). Applied at game start via `applyPermanentUpgrades()`.
+Meta data persisted in localStorage (`kingdom_embers_meta_v1`). Applied at game start via `applyPermanentUpgrades()`. In the hub, Enter/Space warps the player to the run portal to start the next run.
 
 ## Save system
 
@@ -191,13 +228,16 @@ Auto-saves every 5 seconds to localStorage (`kingdom_embers_save_v1`). Saves ful
 | A/D or ←/→ | Move |
 | Shift | Sprint |
 | Space | Jump |
+| X/Ctrl | Dodge roll (i-frames; dodging through an enemy primes a riposte) |
 | ↓/S (hold) | Pay/recruit at station |
 | F | Pick up weapon / open chest |
 | B | Open shop (near base, lvl 4) |
-| T | Switch shop tabs |
+| T | Switch shop tabs (weapons / armor / stable) |
+| H | Mount / dismount your steed |
 | E/Enter | Buy selected item |
 | K | Skill tree |
 | Q | Unit ability (barrage / rally cry) |
+| G | Sound the war horn (portal assault) |
 | I | Inventory |
 | +/−/0 | Zoom in/out/reset |
 | M | Mute |

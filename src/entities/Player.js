@@ -10,6 +10,7 @@ export function makePlayer() {
     dodgeNearMiss: false, riposteT: 0,
     weapon: null, attackCd: 0, swing: 0, armor: null,
     inventory: [],
+    mountId: null, lastMountId: null, mounts: [],
     jumpH: 0, jumpVy: 0,
     xp: 0, level: 1, weaponUpgrades: [], pendingUpgrade: false,
   };

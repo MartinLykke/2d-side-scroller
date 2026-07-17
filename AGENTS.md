@@ -22,7 +22,7 @@ Press `P` to open the dev panel. It exposes:
 - Base upgrade, max walls, full heal (player + units + base + walls)
 - Enemy spawning (imp, flying imp, dragon, 8-imp wave, kill all)
 - Unit spawning (archer, builder, farmer, guard)
-- Weapon grants (short bow, lightning tome, meteor tome), drop weapon, god mode
+- Weapon grants (short bow, storm staff, meteor staff), drop weapon, god mode
 - Speed multiplier (×1, ×2, ×4)
 - Live stats: FPS, day/time, enemy/unit/coin/particle counts, player position
 
@@ -147,7 +147,7 @@ Health scales 45→320 HP. Cost: 6→14→22→35→55🪙. Archers stand on wal
 Buildings in forest require surrounding trees to be felled first.
 
 ### Weapons & armor
-- 34 weapons across melee (7), ranged (8), magic tomes (9), with 4 rarity tiers
+- 34 weapons across melee (7), ranged (8), magic wands & staffs (9), with 4 rarity tiers
 - 8 armor pieces providing defense (reduces incoming damage)
 - Shop unlocked at base level 4; shop tier scales with base level
 - Weapons also found in location chests
@@ -162,7 +162,7 @@ Skill points earned from upgrades and building construction.
 
 - **Melee**: hold mouse to swing; arc visual; cooldown from weapon speed
 - **Ranged**: aim-and-release sequence
-- **Magic (tomes)**: cast spell toward cursor
+- **Magic (wands & staffs)**: cast spell toward cursor
 - **Crit**: 15% chance for 1.5× damage
 - Archers: fire arrows (every 4th shot ignites), piercing, bouncing volley, double shot, powershot (3s charge → 3× damage)
 - Guards: piercing thrust, whirlwind, shield bash, rally cry (+20% damage to allies)

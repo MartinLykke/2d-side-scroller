@@ -641,6 +641,8 @@ export function drawPortals(dark) {
   for (const p of state.portals) {
     const x = p.x;
     if (x < view.left || x > view.right) continue;
+    if (p.voidRift) { drawVoidRift(p, x, T, dark); continue; }
+    if (p.destroyed) { drawRuinedPortal(x, T); continue; }
     const glow = Game.isNight ? 1 : 0.4;
     const gateW = 52, gateH = 140, archH = 34;
     const pillarW = 14;
@@ -824,8 +826,161 @@ export function drawPortals(dark) {
     }
     ctx.restore();
 
+    // --- siege damage: hit flash + HP bar during an assault ---
+    if ((p.flash || 0) > 0) {
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = `rgba(255,240,220,${Math.min(1, p.flash * 4) * 0.35})`;
+      ctx.fillRect(x - gateW - pillarW, baseY - gateH - archH - 12, (gateW + pillarW) * 2, gateH + archH + 12);
+      ctx.restore();
+    }
+    if (p.hp !== undefined && p.maxHp && p.hp < p.maxHp) {
+      const bw = 110, bh = 8, by = baseY - gateH - archH - 34;
+      const frac = Math.max(0, p.hp / p.maxHp);
+      ctx.fillStyle = "rgba(10,6,4,0.75)";
+      ctx.fillRect(x - bw / 2 - 1, by - 1, bw + 2, bh + 2);
+      ctx.fillStyle = "#3a1208";
+      ctx.fillRect(x - bw / 2, by, bw, bh);
+      ctx.fillStyle = frac > 0.5 ? "#ff7a24" : frac > 0.25 ? "#ffb040" : "#ffe08a";
+      ctx.fillRect(x - bw / 2, by, bw * frac, bh);
+      ctx.strokeStyle = "rgba(0,0,0,0.5)"; ctx.lineWidth = 1;
+      ctx.strokeRect(x - bw / 2 - 0.5, by - 0.5, bw + 1, bh + 1);
+    }
+
     ctx.restore();
   }
+}
+
+// Collapsed hell gate: broken pillar stumps, cooling rubble, drifting smoke.
+function drawRuinedPortal(x, T) {
+  const baseY = groundY, gateW = 52, pillarW = 14;
+  ctx.save();
+
+  // scorched ground, cooling from the old burn
+  const sg = ctx.createRadialGradient(x, baseY, 8, x, baseY, 95);
+  sg.addColorStop(0, "rgba(30,16,12,0.8)");
+  sg.addColorStop(0.6, "rgba(24,12,8,0.35)");
+  sg.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = sg;
+  ctx.beginPath(); ctx.ellipse(x, baseY + 4, 95, 15, 0, 0, Math.PI * 2); ctx.fill();
+
+  // shattered pillar stumps
+  const stoneBase = "#2a1a12", stoneMid = "#3d2518";
+  for (const side of [-1, 1]) {
+    const px = x + side * gateW;
+    const stumpH = side < 0 ? 44 : 26;
+    ctx.fillStyle = stoneMid;
+    ctx.beginPath();
+    ctx.moveTo(px - pillarW / 2, baseY);
+    ctx.lineTo(px - pillarW / 2, baseY - stumpH);
+    ctx.lineTo(px - pillarW / 6, baseY - stumpH - 9);
+    ctx.lineTo(px + pillarW / 3, baseY - stumpH + 4);
+    ctx.lineTo(px + pillarW / 2, baseY);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = stoneBase;
+    ctx.fillRect(px + side * pillarW / 2 - 3, baseY - stumpH + 6, 3, stumpH - 6);
+  }
+
+  // rubble field between the stumps
+  ctx.fillStyle = stoneBase;
+  for (let k = 0; k < 9; k++) {
+    const rx = x + Math.sin(k * 37.3) * gateW * 0.9;
+    const rs = 4 + ((k * 13) % 3) * 3;
+    ctx.beginPath();
+    ctx.moveTo(rx - rs, baseY);
+    ctx.lineTo(rx - rs * 0.2, baseY - rs - (k % 2) * 3);
+    ctx.lineTo(rx + rs, baseY);
+    ctx.closePath(); ctx.fill();
+  }
+
+  // last embers dying in the rubble + thin smoke
+  ctx.globalCompositeOperation = "lighter";
+  for (let k = 0; k < 3; k++) {
+    const ea = 0.25 + 0.2 * Math.sin(T * 2.4 + k * 2.2);
+    ctx.fillStyle = `rgba(255,110,40,${ea * 0.5})`;
+    ctx.beginPath(); ctx.arc(x + (k - 1) * 26, baseY - 4, 2.2, 0, Math.PI * 2); ctx.fill();
+  }
+  for (let k = 0; k < 4; k++) {
+    const st = (T * 0.35 + k * 0.6) % 2.4;
+    const sy = baseY - 8 - st * 46;
+    ctx.fillStyle = `rgba(120,110,105,${(1 - st / 2.4) * 0.14})`;
+    ctx.beginPath();
+    ctx.ellipse(x + Math.sin(T + k * 2) * 10 + (k - 1.5) * 12, sy, 7 + st * 6, 4 + st * 2.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// Phase 2 portal: a floating tear in reality, humming with void light.
+function drawVoidRift(p, x, T, dark) {
+  const baseY = groundY;
+  const glow = Game.isNight ? 1 : 0.5;
+  const riftH = 150, riftW = 30;
+  const cy = baseY - riftH * 0.55;
+  ctx.save();
+
+  // drained, ashen ground under the tear
+  const sg = ctx.createRadialGradient(x, baseY, 8, x, baseY, 90);
+  sg.addColorStop(0, `rgba(40,26,66,${0.65 * glow})`);
+  sg.addColorStop(0.6, `rgba(22,14,40,${0.3 * glow})`);
+  sg.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = sg;
+  ctx.beginPath(); ctx.ellipse(x, baseY + 4, 90, 14, 0, 0, Math.PI * 2); ctx.fill();
+
+  // outer void glow
+  ctx.globalCompositeOperation = "lighter";
+  const og = ctx.createRadialGradient(x, cy, 6, x, cy, riftW + 70);
+  og.addColorStop(0, `rgba(150,110,255,${0.3 * glow})`);
+  og.addColorStop(0.6, `rgba(70,40,160,${0.14 * glow})`);
+  og.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = og;
+  ctx.beginPath(); ctx.ellipse(x, cy, riftW + 70, riftH * 0.85, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.globalCompositeOperation = "source-over";
+
+  // the tear itself: a jagged black lens with a breathing violet rim
+  const pulse = 1 + Math.sin(T * 1.7 + x * 0.01) * 0.06;
+  const rim = `rgba(185,160,255,${(0.55 + 0.25 * Math.sin(T * 2.3)) * glow})`;
+  for (const [w, col] of [[riftW * pulse + 5, rim], [riftW * pulse, "#08040f"]]) {
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(x, cy - riftH / 2);
+    ctx.bezierCurveTo(x + w, cy - riftH * 0.22, x + w * 0.8, cy + riftH * 0.2, x, cy + riftH / 2);
+    ctx.bezierCurveTo(x - w * 0.8, cy + riftH * 0.2, x - w, cy - riftH * 0.22, x, cy - riftH / 2);
+    ctx.closePath(); ctx.fill();
+  }
+
+  // starlight inside the void
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  for (let k = 0; k < 6; k++) {
+    const ph = T * 0.7 + k * 1.05;
+    const fy = cy + Math.sin(ph) * riftH * 0.32;
+    const fx = x + Math.sin(ph * 1.7 + k) * riftW * 0.4;
+    const fa = (0.3 + 0.25 * Math.sin(ph * 3)) * glow;
+    ctx.fillStyle = k % 2 ? `rgba(143,232,255,${fa})` : `rgba(185,160,255,${fa})`;
+    ctx.beginPath(); ctx.arc(fx, fy, 1.4 + (k % 3) * 0.8, 0, Math.PI * 2); ctx.fill();
+  }
+  // motes drifting up out of the tear
+  for (let k = 0; k < 5; k++) {
+    const mt = (T * 0.5 + k * 0.47) % 2.2;
+    const my = cy - riftH * 0.35 - mt * 55;
+    const ma = (1 - mt / 2.2) * 0.5 * glow;
+    ctx.fillStyle = `rgba(160,130,255,${ma})`;
+    ctx.beginPath();
+    ctx.arc(x + Math.sin(T * 1.4 + k * 3) * 18, my, 1.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // ground cracks leaking void light
+  ctx.strokeStyle = `rgba(150,120,255,${(0.35 + 0.2 * Math.sin(T * 2)) * glow})`;
+  ctx.lineWidth = 1.4;
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(x + side * 12, baseY);
+    ctx.lineTo(x + side * 34, baseY + 3);
+    ctx.lineTo(x + side * 58, baseY + 1);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawLog(x, dir, len) {

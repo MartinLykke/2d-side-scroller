@@ -62,7 +62,7 @@
         <div class="controls">
           <div><kbd>A</kbd>/<kbd>D</kbd> or <kbd>←</kbd><kbd>→</kbd> — ride &nbsp;·&nbsp; <kbd>Shift</kbd> — gallop &nbsp;·&nbsp; <kbd>Space</kbd> — jump &nbsp;·&nbsp; <kbd>X</kbd>/<kbd>Ctrl</kbd> — dodge</div>
           <div><b>Hold</b> <kbd>↓</kbd>/<kbd>S</kbd> — pay at marker / recruit vagrant</div>
-          <div><kbd>F</kbd> — pick up weapon &nbsp;·&nbsp; <kbd>I</kbd> — inventory &nbsp;·&nbsp; <kbd>B</kbd> — shop (level 4) &nbsp;·&nbsp; <kbd>R</kbd> — rally subjects</div>
+          <div><kbd>F</kbd> — pick up weapon &nbsp;·&nbsp; <kbd>I</kbd> — inventory &nbsp;·&nbsp; <kbd>B</kbd> — shop (level 4) &nbsp;·&nbsp; <kbd>R</kbd> — rally subjects &nbsp;·&nbsp; <kbd>G</kbd> — assault a portal</div>
           <div><kbd>M</kbd> — sound &nbsp;·&nbsp; <kbd>Esc</kbd> — pause/close menu &nbsp;·&nbsp; <kbd>P</kbd> — dev mode</div>
         </div>
         <div class="goal-line">🎯 Goal: Survive as many days as possible. The threat rises without end.</div>
@@ -208,6 +208,24 @@
             </div>
           </div>
           <div class="dev-group">
+            <div class="dev-label">The Hollow (phase 2)</div>
+            <div class="dev-row">
+              <button class="dev-btn" data-dev="shade">Shade</button>
+              <button class="dev-btn" data-dev="voidWraith">Void Wraith</button>
+              <button class="dev-btn" data-dev="voidBrute">Hollow Brute</button>
+              <button class="dev-btn" data-dev="voidTitan">Void Titan</button>
+              <button class="dev-btn" data-dev="voidSeraph">Null Seraph</button>
+            </div>
+          </div>
+          <div class="dev-group">
+            <div class="dev-label">Assault & phases</div>
+            <div class="dev-row">
+              <button class="dev-btn" data-dev="startAssault">⚔ Start assault</button>
+              <button class="dev-btn" data-dev="crackPortals">Crack portals</button>
+              <button class="dev-btn dev-danger" data-dev="phase2">🌀 Begin phase 2</button>
+            </div>
+          </div>
+          <div class="dev-group">
             <div class="dev-label">Units</div>
             <div class="dev-row dev-equal">
               <button class="dev-btn" data-dev="unitArcher">🏹 Archer</button>
@@ -262,6 +280,12 @@
             <div class="dev-label">Armor</div>
             <div class="dev-stack" id="dev-armor-buttons">
               <button class="dev-btn dev-danger" data-dev="removeArmor">Remove armor</button>
+            </div>
+          </div>
+          <div class="dev-group">
+            <div class="dev-label">Mounts</div>
+            <div class="dev-stack" id="dev-mount-buttons">
+              <button class="dev-btn dev-danger" data-dev="stableMount">Dismount</button>
             </div>
           </div>
         </div>

@@ -13,6 +13,8 @@ import { GUARD_SKILLS } from '../config/guardSkills.js';
 import { makeUnit } from '../entities/Unit.js';
 import { saveMeta } from '../systems/infrastructure/RoguelikeSystem.js';
 import { equipArmor, unequipArmor } from '../systems/economy/InventorySystem.js';
+import { MOUNTS } from '../config/mounts.js';
+import { acquireMount, toggleMount } from '../systems/economy/MountSystem.js';
 import { expectedGoldForDay, goldRewardAmount } from '../systems/economy/EconomyBalance.js';
 import { addSkillPoints, autoSpendSkillPoints } from '../systems/economy/SkillSystem.js';
 
@@ -161,6 +163,22 @@ function phaseName() {
   return "Dawn";
 }
 
+function canSkipToDusk() {
+  if (Game.state !== "play") return false;
+  return Game.time < CFG.phases.day || Game.nightCleared || Game.time > CFG.phases.night;
+}
+
+function advanceToNextDayForSkip() {
+  Game.day++;
+  Game.time = 0.02;
+  Game.isNight = false;
+  Game.nightCleared = false;
+  Game.nightPortalWarnT = 0;
+  if (state.enemies) state.enemies.forEach(e => { e.fleeing = true; });
+  Audio.setNight(false);
+  planNight();
+}
+
 function baseName(lvl) { return ["—","Camp","Small Village","Large Village","Castle","Fortress","Citadel","Royal Capital"][lvl]; }
 export { baseName };
 
@@ -175,10 +193,13 @@ export const UI = {
   toggleMute() { Audio.init(); this.muted = !Audio.toggle(); },
 
   skipToDusk() {
-    if (Game.state !== "play" || Game.time >= CFG.phases.day) return;
+    if (!canSkipToDusk()) return;
+    const fromPostNight = Game.nightCleared || Game.time > CFG.phases.night;
+    if (fromPostNight) advanceToNextDayForSkip();
+
     // Pay out a discounted share of the day's expected income for the skipped time,
     // so skipping is never better than playing the day out.
-    const skippedFrac = (CFG.phases.day - Game.time) / CFG.phases.day;
+    const skippedFrac = clamp((CFG.phases.day - Game.time) / CFG.phases.day, 0, 1);
     const gold = goldRewardAmount(expectedGoldForDay() * skippedFrac * 0.45, "passive");
     if (gold > 0) {
       state.player.coins = clamp(state.player.coins + gold, 0, CFG.maxCoinsCarry);
@@ -191,21 +212,23 @@ export const UI = {
   refresh() {
     const { player, base, units, vagrants, stations } = state;
     const ph = phaseName();
-    const dayText = ph === "Night" ? "Night " + Game.day : "Day " + Game.day;
+    let dayText = ph === "Night" ? "Night " + Game.day : "Day " + Game.day;
+    if ((Game.worldPhase || 1) >= 2) dayText = "Phase II · " + dayText;
     document.getElementById("hud-day-text").textContent = dayText;
     document.getElementById("hud-phase-text").textContent = "";
     document.getElementById("hud-phase-icon").textContent = ph==="Night"?"🌙":ph==="Dusk"?"🌆":ph==="Dawn"?"🌅":"☀";
     document.getElementById("hud-base-text").textContent = "";
     const skipEl = document.getElementById("hud-skipnight");
-    if (skipEl) skipEl.style.display = (ph === "Day" && Game.state === "play") ? "" : "none";
+    if (skipEl) skipEl.style.display = canSkipToDusk() ? "" : "none";
     document.getElementById("hud-coins-text").textContent = player.coins;
     document.getElementById("hud-hp-text").textContent    = "";
 
-    let arch = 0, build = 0;
+    let arch = 0, build = 0, guards = 0;
     for (let i = 0; i < units.length; i++) {
       const r = units[i].role;
       if (r === "archer") arch++;
       else if (r === "builder") build++;
+      else if (r === "guard") guards++;
     }
     const popCap = CFG.popCapByLevel[base.level];
     document.getElementById("hud-pop-text").textContent   = (units.length + vagrants.length) + "/" + popCap;
@@ -215,10 +238,23 @@ export const UI = {
     let obj = "🎯 Survive as long as you can. Threat level " + (Game.threatLevel || Game.day);
     if (base.level<CFG.maxBaseLevel) obj += " · upgrade the base ("+base.level+"/"+CFG.maxBaseLevel+")";
     else obj += " · the royal capital stands";
+    if (!Game.isNight && !state.assault && (Game.worldPhase || 1) === 1 && arch + guards > 0) {
+      obj += " · G: assault a portal";
+    }
     if (Game.isNight) {
       let activeEnemies = 0;
       for (let i = 0; i < state.enemies.length; i++) if (!state.enemies[i].fleeing) activeEnemies++;
       obj="🌙 NIGHT — "+(Game.nightQuota-activeEnemies>0?"the horde attacks!":"hold the line!");
+    }
+    if (state.assault) {
+      const a = state.assault, p = a.portal;
+      if (a.phase === "celebrate" || a.phase === "return") {
+        obj = "🎉 The portal has fallen! The army returns home";
+      } else if (p.hp !== undefined && p.hp < p.maxHp) {
+        obj = "⚔ ASSAULT — destroy the portal! " + Math.max(0, Math.ceil(p.hp)) + "/" + p.maxHp;
+      } else {
+        obj = "⚔ ASSAULT — the army marches on the portal!";
+      }
     }
     document.getElementById("hud-objective").textContent = obj;
 
@@ -243,7 +279,8 @@ export const UI = {
 
 
     document.getElementById("hud-base").classList.add("hidden");
-    document.getElementById("hud-objective").classList.add("hidden");
+    // The objective banner stays tucked away except while an assault runs
+    document.getElementById("hud-objective").classList.toggle("hidden", !state.assault);
     document.getElementById("hud-hp").classList.add("hidden");
     document.getElementById("hud-weapon").classList.add("hidden");
     document.getElementById("hud-armor").classList.add("hidden");
@@ -292,6 +329,10 @@ export const UI = {
     } else if (nearShop && !Game.shopOpen) {
       this.prompt.classList.remove("hidden");
       this.prompt.innerHTML=`B - Open shop 🏪`;
+    } else if (!Game.inMine && !state.assault && (Game.worldPhase || 1) === 1 && !Game.isNight
+        && state.portals.some(p => !p.destroyed && dist(player.x, p.x) < 520)) {
+      this.prompt.classList.remove("hidden");
+      this.prompt.innerHTML=`⚔ Sound the war horn — send the army against this portal &nbsp;<span class="hold">press G</span>`;
     } else {
       this.prompt.classList.add("hidden");
     }
@@ -360,6 +401,27 @@ function renderDevArmorButtons() {
     row.appendChild(group);
   }
   if (removeButton) row.appendChild(removeButton);
+}
+
+function renderDevMountButtons() {
+  const row = document.getElementById("dev-mount-buttons");
+  if (!row) return;
+  const stableButton = row.querySelector(".dev-danger");
+  row.innerHTML = "";
+  const buttons = document.createElement("div");
+  buttons.className = "dev-row";
+  for (const [mountId, mount] of Object.entries(MOUNTS)) {
+    const btn = document.createElement("button");
+    btn.className = "dev-btn";
+    btn.textContent = mount.name;
+    btn.title = "+" + Math.round((mount.speedMult - 1) * 100) + "% move speed";
+    btn.style.color = mount.col;
+    btn.style.borderColor = mount.col + "80";
+    btn.onclick = () => DEV.giveMount(mountId);
+    buttons.appendChild(btn);
+  }
+  row.appendChild(buttons);
+  if (stableButton) row.appendChild(stableButton);
 }
 
 function appendDevStat(fragment, label, value) {
@@ -578,6 +640,41 @@ export const DEV = {
     spawnBoss("magmaGolem", { x: state.base.x + side * 720, side });
   },
 
+  spawnVoidTitanBoss() {
+    if (Game.state!=="play") return;
+    const side = pick([-1, 1]);
+    spawnBoss("voidTitan", { x: state.base.x + side * 720, side });
+  },
+
+  spawnVoidSeraphBoss() {
+    if (Game.state!=="play") return;
+    const side = pick([-1, 1]);
+    spawnBoss("voidSeraph", { x: state.base.x + side * 820, side });
+  },
+
+  // Dynamic import keeps HUD out of the AssaultSystem module graph
+  startAssaultDev() {
+    if (Game.state!=="play") return;
+    import('../systems/world/AssaultSystem.js').then(m => m.startAssault());
+  },
+
+  crackPortals() {
+    if (Game.state!=="play") return;
+    let cracked = 0;
+    for (const p of state.portals) {
+      if (p.destroyed || p.voidRift) continue;
+      if (p.maxHp === undefined) p.maxHp = CFG.portalHp + (Game.day - 1) * CFG.portalHpPerDay;
+      p.hp = 10;
+      cracked++;
+    }
+    floaty(state.base.x, cracked ? "Portals cracked to 10 hp" : "No portals to crack", cracked ? "#cfe6f2" : "#ff8a6a");
+  },
+
+  beginPhase2() {
+    if (Game.state!=="play" || (Game.worldPhase||1) >= 2 || Game.phaseTransition) return;
+    Game.phaseTransition = { t: 0, swapped: false };
+  },
+
   spawnAnimalNearBase(type) {
     if (Game.state!=="play") return;
     const x = state.base.x + pick([-1, 1]) * rand(200, 400);
@@ -630,6 +727,16 @@ export const DEV = {
   removeArmor() {
     if (Game.state!=="play"||!state.player) return;
     if (unequipArmor()) floaty(state.player.x, "Armor stored in inventory", "#c8c8c8");
+  },
+
+  giveMount(mountId) {
+    if (Game.state!=="play"||!state.player||!MOUNTS[mountId]) return;
+    acquireMount(mountId);
+  },
+
+  stableMount() {
+    if (Game.state!=="play"||!state.player||!state.player.mountId) return;
+    toggleMount(state.player.mountId); // dismounts the current steed
   },
 
   dropWeapon() {
@@ -705,6 +812,7 @@ export const DEV = {
 
 renderDevWeaponButtons();
 renderDevArmorButtons();
+renderDevMountButtons();
 
 // Keep the documented dev-console entry point while UI events are wired by DevPanel.js.
 window.DEV = DEV;

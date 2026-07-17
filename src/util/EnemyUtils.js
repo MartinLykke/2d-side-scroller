@@ -54,6 +54,34 @@ const ENEMY_DEATH_PROFILES = {
     lava: true,
     mass: 7,
   },
+  // Phase 2: the Hollow bleeds cold violet light instead of blood
+  shade: {
+    blood: ["#1a1030", "#31215a", "#5a3f96"],
+    chunks: ["#120a24", "#241a38", "#4a3578"],
+    mass: 0.7,
+  },
+  voidWraith: {
+    blood: ["#1e1438", "#3a2a64", "#6a4fb0"],
+    chunks: ["#160e2c", "#352a54", "#5a48a0"],
+    mass: 0.65,
+  },
+  voidBrute: {
+    blood: ["#160e2c", "#2a1c50", "#4a3590"],
+    chunks: ["#100a20", "#1c1430", "#3a2a68"],
+    mass: 2.2,
+  },
+  voidTitan: {
+    gore: false,
+    blood: ["#8a5aff", "#8fe8ff", "#241a38"],
+    chunks: ["#0e0a1c", "#241a38", "#4a3578", "#8a5aff"],
+    mass: 7,
+  },
+  voidSeraph: {
+    gore: false,
+    blood: ["#8a5aff", "#d7f6ff", "#0b0718"],
+    chunks: ["#080414", "#241a38", "#5a4788", "#d7f6ff"],
+    mass: 5.8,
+  },
 };
 
 const HUMAN_BLOOD = ["#5a0710", "#8a1f1f", "#c1453b"];
@@ -84,7 +112,7 @@ function pushDeathParticle(p) {
 function deathImpactY(e, t, y = null) {
   if (y !== null && y !== undefined) return y;
   const fy = e?.fy || 0;
-  const h = t?.dragon ? t.w * 0.35 : t?.golem ? t.w * 0.56 : Math.min(54, (t?.w || 24) * 0.78);
+  const h = (t?.dragon || t?.voidSeraph) ? t.w * 0.35 : (t?.golem || t?.voidTitan) ? t.w * 0.56 : Math.min(54, (t?.w || 24) * 0.78);
   return groundY + fy - h;
 }
 
@@ -176,6 +204,8 @@ function violenceTier(violence) {
 }
 
 function chooseDeathKind(e, t, violence, tier) {
+  if (t.voidTitan) return tier >= 2 ? "golemShatter" : "golemCollapse";
+  if (t.voidSeraph) return tier >= 2 ? "dragonCrash" : "wingShear";
   if (t.golem) return tier >= 2 ? "golemShatter" : "golemCollapse";
   if (t.dragon) return tier >= 2 ? "dragonCrash" : "dragonFall";
   if (e.type === "fireImp") return tier >= 2 ? "wingShear" : "wingFold";
@@ -336,7 +366,7 @@ export function killEnemyWithAnimation(e, knockDirection = 0) {
   }
   if (t.boss) {
     e.deathDuration += 0.55;
-    e.deathAngVel *= t.golem ? 0.32 : 0.55;
+    e.deathAngVel *= (t.golem || t.voidTitan) ? 0.32 : 0.55;
   }
   e.deathFriction = Math.max(1.45, 5.3 - violence * 0.68);
   e.overkillViolence = violence;
@@ -369,6 +399,12 @@ export function killEnemyWithAnimation(e, knockDirection = 0) {
   }
   if (e.type === "magmaGolem") {
     state.lootItems.push({ x: e.x, weaponId: "sunblade", dropVy: -350, dropY: groundY - 150 });
+  }
+  if (e.type === "voidTitan") {
+    state.lootItems.push({ x: e.x, weaponId: "void_bow", dropVy: -350, dropY: groundY - 150 });
+  }
+  if (e.type === "voidSeraph") {
+    state.lootItems.push({ x: e.x, weaponId: "void_tome", dropVy: -350, dropY: groundY - 150 });
   }
 
   // Coins are dropped during the death animation

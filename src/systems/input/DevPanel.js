@@ -44,6 +44,14 @@ export function setupDevPanel() {
   bind('[data-dev="dragon"]',       () => DEV.spawnFireDragonBoss());
   bind('[data-dev="magmaGolem"]',   () => DEV.spawnMagmaGolemBoss());
   bind('[data-dev="killAll"]',      () => DEV.killAll());
+  bind('[data-dev="shade"]',        () => DEV.spawnEnemyNearBase('shade'));
+  bind('[data-dev="voidWraith"]',   () => DEV.spawnEnemyNearBase('voidWraith'));
+  bind('[data-dev="voidBrute"]',    () => DEV.spawnEnemyNearBase('voidBrute'));
+  bind('[data-dev="voidTitan"]',    () => DEV.spawnVoidTitanBoss());
+  bind('[data-dev="voidSeraph"]',   () => DEV.spawnVoidSeraphBoss());
+  bind('[data-dev="startAssault"]', () => DEV.startAssaultDev());
+  bind('[data-dev="crackPortals"]', () => DEV.crackPortals());
+  bind('[data-dev="phase2"]',       () => DEV.beginPhase2());
 
   // Spawn unit
   bind('[data-dev="unitArcher"]',  () => DEV.spawnUnit('archer'));
@@ -71,6 +79,7 @@ export function setupDevPanel() {
   bind('[data-dev="deathHub"]',   () => inject('enterDeathHub')?.('Dev test: the crown fell between worlds.'));
   bind('[data-dev="dropWeapon"]', () => DEV.dropWeapon());
   bind('[data-dev="removeArmor"]', () => DEV.removeArmor());
+  bind('[data-dev="stableMount"]', () => DEV.stableMount());
 
   // Game speed
   bind('[data-dev="speed1"]', () => DEV.setSpeed(1));

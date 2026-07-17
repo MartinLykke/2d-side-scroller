@@ -15,6 +15,7 @@ import { castSpell, chainLightning } from './SpellSystem.js';
 import { startArcherShoot } from '../../rendering/sprites/Archer.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { entityWallLift } from '../../entities/Wall.js';
+import { playerMountLift } from '../economy/MountSystem.js';
 
 // Per-weapon hit effects. `enemyTgt` is the struck enemy when it can carry a
 // status effect (null for animals), so themed weapons apply burns/chills/etc.
@@ -149,7 +150,7 @@ function updateWeaponAmbientFX(dt) {
   const fx = cachedUpgradeEffects(player.weaponUpgrades);
   const upgCols = fx._vfxCols || [];
   if (!amb && !upgCols.length) return;
-  const lift = entityWallLift(player) + (player.jumpH || 0);
+  const lift = entityWallLift(player) + (player.jumpH || 0) + playerMountLift(player);
   const handOff = WEAPONS[player.weapon].type === "melee" ? 14 : 10;
   const handX = () => player.x + (player.dir || 1) * handOff + rand(-4, 4);
   const handY = () => groundY - 30 - lift + rand(-8, 4);
@@ -159,6 +160,87 @@ function updateWeaponAmbientFX(dt) {
   // Applied upgrades weave their own colors into the weapon's aura.
   if (upgCols.length && Math.random() < (1.5 + fx._tierRank * 1.2) * dt) {
     spawnParticles(handX(), handY(), 1, upgCols[Math.floor(Math.random() * upgCols.length)], 14, 26);
+  }
+}
+
+function updateArmorPassiveFX(dt) {
+  const { player } = state;
+  if (!player || player.hp <= 0) return;
+  if ((player.armorHealCd || 0) > 0) player.armorHealCd = Math.max(0, player.armorHealCd - dt);
+
+  const armor = player.armor ? ARMORS[player.armor] : null;
+  const amb = armor?.ability?.ambient;
+  if (!amb || Game.inMine) return;
+
+  const lift = entityWallLift(player) + (player.jumpH || 0) + playerMountLift(player);
+  if (Math.random() < amb.rate * dt) {
+    const col = amb.cols[Math.floor(Math.random() * amb.cols.length)] || armor.col;
+    const side = Math.random() < 0.5 ? -1 : 1;
+    spawnParticles(player.x + side * rand(3, 13), groundY - 42 - lift + rand(-8, 10), 1, col, 12, 30);
+  }
+}
+
+function armorBlockBurst(player, armor, lift) {
+  const ability = armor?.ability;
+  if (!ability) return;
+
+  const col = ability.blockPulse?.col || armor.col;
+  if (ability.readyAttackOnBlock) {
+    player.attackCd = 0;
+    player.riposteT = Math.max(player.riposteT || 0, 1.1);
+    floaty(player.x, ability.name + "!", ARMOR_RARITY_COL[armor.rarity], 14);
+  }
+  if (ability.blockInvuln) player.invuln = Math.max(player.invuln || 0, ability.blockInvuln);
+  if (ability.blockSpark) {
+    spawnParticles(player.x, groundY - 44 - lift, 12, "#f2d28a", 92, 120);
+    spawnParticles(player.x, groundY - 44 - lift, 5, "#ffffff", 50, 130);
+  }
+  if (ability.healOnBlock && player.hp < player.maxHp && (player.armorHealCd || 0) <= 0) {
+    player.hp = Math.min(player.maxHp, player.hp + (ability.healOnBlock.amount || 1));
+    player.hpShowTimer = Math.max(player.hpShowTimer || 0, 2.5);
+    player.armorHealCd = ability.healOnBlock.cooldown || 10;
+    floaty(player.x, "+" + (ability.healOnBlock.amount || 1) + "❤", "#fff2c0");
+    spawnParticles(player.x, groundY - 42 - lift, 12, "#fff2c0", 70, 110);
+  }
+
+  const pulse = ability.blockPulse;
+  if (!pulse) return;
+  const radius = pulse.radius || 140;
+  spawnParticles(player.x, groundY - 42 - lift, 12 + Math.round(radius / 18), col, radius * 0.55, 120);
+  if (!ability.readyAttackOnBlock) floaty(player.x, ability.name + "!", col, armor.rarity >= 3 ? 16 : 14);
+  let hit = 0;
+  for (const e of state.enemies) {
+    if (e.fleeing || e.dying || e.hp <= 0) continue;
+    const d = dist(e.x, player.x);
+    if (d > radius) continue;
+    const et = ENEMY_TYPES[e.type] || {};
+    const away = Math.sign(e.x - player.x) || 1;
+    if (pulse.knock && !et.noKnockback) {
+      const falloff = 1 - d / (radius * 1.45);
+      const dir = pulse.knock < 0 ? -away : away;
+      e.knock = (e.knock || 0) + dir * Math.abs(pulse.knock) * clamp(falloff, 0.35, 1);
+    }
+    if (pulse.damage) {
+      e.hp -= pulse.damage;
+      e.flash = Math.max(e.flash || 0, 0.14);
+      floaty(e.x, "-" + pulse.damage, col);
+    }
+    if (pulse.burn) {
+      e.burn = Math.max(e.burn || 0, pulse.burn);
+      e.burnTick = Math.min(e.burnTick || 1, 0.45);
+      e.burnDmg = Math.max(e.burnDmg || 0, pulse.burnDmg || 1);
+      e.ignited = true;
+    }
+    if (pulse.frost) e.frost = Math.max(e.frost || 0, pulse.frost);
+    if (pulse.root) e.rooted = Math.max(e.rooted || 0, pulse.root);
+    if (pulse.slow) e.slow = Math.max(e.slow || 0, pulse.slow);
+    spawnParticles(e.x, groundY + (e.fy || 0) - 24, 4, col, 42, 64);
+    hit++;
+    if (e.hp <= 0) killEnemyWithAnimation(e, away);
+  }
+  if (hit > 0) {
+    Game.screenShake = Math.max(Game.screenShake || 0, Math.min(0.5, 0.12 + radius / 800));
+    Audio.hit();
   }
 }
 
@@ -176,11 +258,12 @@ export function damagePlayer(rawDmg, opts = {}) {
   player.invuln = CFG.playerInvuln;
   player.hpShowTimer = 3;
   if (opts.knock) player.knock = opts.knock;
-  const lift = entityWallLift(player) + (player.jumpH || 0);
+  const lift = entityWallLift(player) + (player.jumpH || 0) + playerMountLift(player);
   if (blocked) {
     floaty(player.x, "🛡 Blocked!", ARMOR_RARITY_COL[armor.rarity]);
     spawnParticles(player.x, groundY - 45 - lift, 8, "#cfd3d9", 90, 90);
     spawnParticles(player.x, groundY - 45 - lift, 4, armor.col, 60, 70);
+    armorBlockBurst(player, armor, lift);
     Audio.hit();
     return 0;
   }
@@ -238,6 +321,14 @@ function playerMomentumCooldownMultiplier() {
 
 function playerRiposteDamageMultiplier(player) {
   return (player.riposteT || 0) > 0 ? (CFG.dodgeRiposteDamageMult || 1.6) : 1;
+}
+
+function grantKillBarrier(player, seconds, col = "#ffffff") {
+  if (!seconds || seconds <= 0) return;
+  player.invuln = Math.max(player.invuln || 0, seconds);
+  spawnParticles(player.x, groundY - 42, 10, col, 46, 90);
+  spawnParticles(player.x, groundY - 42, 5, "#ffffff", 28, 95);
+  floaty(player.x, "Guarded", col);
 }
 
 function finishRiposte(player, x) {
@@ -359,6 +450,21 @@ function meleeStrike(player, tgt, tgtIsAnimal, wBase, fx, rawDmg, playerLift) {
   if (fx.berserk && player.maxHp > 0) dmg *= 1 + fx.berserk * clamp(1 - player.hp / player.maxHp, 0, 1);
   const chilled = !tgtIsAnimal && ((tgt.frost || 0) > 0 || (tgt.rooted || 0) > 0);
   if (fx.shatter && chilled) dmg += fx.shatter;
+  if (fx.comboDmg) {
+    const now = performance.now() / 1000;
+    const prev = player.weaponCombo;
+    const sameChain = prev && prev.weapon === player.weapon && now - prev.t < 2.4;
+    const combo = Math.min(5, sameChain ? (prev.n || 1) + 1 : 1);
+    player.weaponCombo = { weapon: player.weapon, n: combo, t: now };
+    if (combo > 1) {
+      dmg += fx.comboDmg * (combo - 1);
+      if (combo >= 3) {
+        const col = fx._vfxCols?.length ? fx._vfxCols[fx._vfxCols.length - 1] : wBase.col;
+        spawnParticles(tgt.x, groundY - 28 - playerLift, 4 + combo, col, 45, 70);
+        floaty(tgt.x + 10, "Combo x" + combo, col);
+      }
+    }
+  }
   const crit = applyCrit(dmg, CFG.critChance + (fx.critBonus || 0), CFG.critMultiplier);
   tgt.hp -= crit.damage;
   tgt.flash = 0.14;
@@ -399,6 +505,9 @@ function meleeStrike(player, tgt, tgtIsAnimal, wBase, fx, rawDmg, playerLift) {
   spawnImpBlood(tgt, 1 + crit.damage * 0.12, groundY - 28);
   const et = ENEMY_TYPES[tgt.type];
   if (!et.noKnockback) tgt.knock = (tgt.knock || 0) + Math.sign(tgt.x - player.x) * (220 + (fx.knockBonus || 0));
+  if (fx.chainBonus && player.weapon === "thunder_blade") {
+    chainLightning(tgt.x, Math.max(1, crit.damage * 0.55), fx.chainBonus);
+  }
   if (fx.skyBolt && Math.random() < fx.skyBolt) skyBoltStrike(tgt, crit.damage);
   if (fx.execute && tgt.hp > 0 && !et.boss && tgt.hp <= (et.hp || 6) * fx.execute) {
     tgt.hp = 0;
@@ -418,6 +527,10 @@ function meleeStrike(player, tgt, tgtIsAnimal, wBase, fx, rawDmg, playerLift) {
       const g = spawnGoldReward(tgt.x, 2, "hunt", { spreadX: 12, fromY: groundY - 24, vyMin: 120, vyMax: 200 });
       if (g > 0) floaty(tgt.x + 14, "+" + g + "🪙", "#f2c14e");
     }
+    if (fx.barrierOnKill) {
+      const col = fx._vfxCols?.length ? fx._vfxCols[fx._vfxCols.length - 1] : wBase.col;
+      grantKillBarrier(player, fx.barrierOnKill, col);
+    }
     cleaveNearbyEnemies(player, tgt, crit.damage);
     killEnemyWithAnimation(tgt, knockDir);
   } else if (fx.alwaysCleave) {
@@ -436,12 +549,28 @@ function applyArrowUpgrades(ar, fx) {
   if (fx.rootHit && Math.random() < fx.rootHit) ar.rootArrow = true;
   if (fx.healOnKill) ar.healOnKill = fx.healOnKill;
   if (fx.goldOnKill) ar.goldOnKill = fx.goldOnKill;
+  if (fx.barrierOnKill) ar.barrierOnKill = fx.barrierOnKill;
+  if (fx.bounceArrow) ar.bouncing = true;
+  if (fx.chainArrow) ar.chainBounces = Math.max(ar.chainBounces || 0, fx.chainArrow);
+  if (fx.powerArrow && Math.random() < fx.powerArrow) {
+    ar.powered = true;
+    ar.vx *= 1.22;
+    ar.vy *= 1.22;
+    ar.pierce = (ar.pierce || 0) + 1;
+    ar.dmgMult = Math.max(1, (ar.dmgMult || ar.dmg || 1) * 1.45);
+    ar.dmg = Math.round(ar.dmgMult);
+  }
+  if (fx._vfxCols?.length) {
+    ar.upgradeCol = fx._vfxCols[fx._vfxCols.length - 1];
+    ar.upgradeRank = fx._tierRank || 1;
+  }
 }
 
 export function updatePlayerAttack(dt) {
   const { player, enemies } = state;
   if (player.castAnim > 0) player.castAnim -= dt;
   updateWeaponAmbientFX(dt);
+  updateArmorPassiveFX(dt);
   if (!player.weapon) return;
   if (Game.inMine) { if (player.swing > 0) player.swing -= dt; player.attackCd -= dt; return; }
   if (player.weapon === "short_bow" && (player.weaponUpgrades || []).some(u => u.id === "ice_explosion")) {
@@ -471,7 +600,7 @@ export function updatePlayerAttack(dt) {
   if (!tgt) return;
   player.dir = Math.sign(tgt.x - player.x) || player.dir;
   player.swing = 0.32;
-  const playerLift = entityWallLift(player) + (player.jumpH || 0);
+  const playerLift = entityWallLift(player) + (player.jumpH || 0) + playerMountLift(player);
   const riposteMult = playerRiposteDamageMultiplier(player);
   if (wBase.type === "melee") {
     Audio.swordSwing();

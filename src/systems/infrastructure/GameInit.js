@@ -277,6 +277,7 @@ export function newGame() {
   state.legendaryBoss   = null;
   state.legendaryEffects= [];
   state.aegisStrikes    = [];
+  state.firePools       = [];
   state.spells          = [];
   state.weaponPickup    = null;
   state.payCooldown     = 0;
@@ -286,7 +287,10 @@ export function newGame() {
   state.animalTimer     = 2;
   state.mineBuilt       = false;
   state.mineVeins       = [];
+  state.assault         = null;
   Game.inMine           = false;
+  Game.worldPhase       = 1;
+  Game.phaseTransition  = null;
 
   applyPermanentWorldUpgrades();
 

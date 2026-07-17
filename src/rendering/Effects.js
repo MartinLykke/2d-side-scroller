@@ -14,18 +14,40 @@ export const BIOME_DEFS = [
   { c:7300, name:"swamp",  treeL:[92,100,58],   treeD:[40,46,30],    gT:[66,72,44],    gB:[36,42,28],    fog:[118,128,96],  sky:[122,132,108], leaf:"#8a9a4a", deco:"swamp",  snow:0, moss:1 },
 ];
 
+// Phase 2 ("the Hollow"): the whole land shifts toward a dead violet-grey.
+// Applied as a post-tint so the biome bands still read as distinct regions.
+const HOLLOW_TINT = {
+  treeL: [138, 116, 168], treeD: [50, 38, 74],
+  gT: [104, 92, 122], gB: [54, 46, 72],
+  fog: [128, 108, 152], sky: [104, 82, 138],
+};
+const HOLLOW_LEAF = "#8a6fb0";
+
+function applyWorldPhase(b) {
+  if ((Game.worldPhase || 1) < 2) return b;
+  return {
+    treeL: lerpColor(b.treeL, HOLLOW_TINT.treeL, 0.6),
+    treeD: lerpColor(b.treeD, HOLLOW_TINT.treeD, 0.6),
+    gT: lerpColor(b.gT, HOLLOW_TINT.gT, 0.55),
+    gB: lerpColor(b.gB, HOLLOW_TINT.gB, 0.55),
+    fog: lerpColor(b.fog, HOLLOW_TINT.fog, 0.6),
+    sky: lerpColor(b.sky, HOLLOW_TINT.sky, 0.55),
+    leaf: HOLLOW_LEAF, deco: b.deco, snow: 0, moss: b.moss,
+  };
+}
+
 export function biomeAt(x) {
   const d = BIOME_DEFS;
-  if (x <= d[0].c) return d[0];
-  if (x >= d[d.length-1].c) return d[d.length-1];
+  if (x <= d[0].c) return applyWorldPhase(d[0]);
+  if (x >= d[d.length-1].c) return applyWorldPhase(d[d.length-1]);
   let i = 0; while (i < d.length-1 && !(x >= d[i].c && x <= d[i+1].c)) i++;
   const a = d[i], b = d[i+1], t = (x - a.c) / (b.c - a.c), near = t < 0.5 ? a : b;
-  return {
+  return applyWorldPhase({
     treeL: lerpColor(a.treeL,b.treeL,t), treeD: lerpColor(a.treeD,b.treeD,t),
     gT: lerpColor(a.gT,b.gT,t), gB: lerpColor(a.gB,b.gB,t),
     fog: lerpColor(a.fog,b.fog,t), sky: lerpColor(a.sky,b.sky,t),
     leaf: near.leaf, deco: near.deco, snow: near.snow, moss: near.moss,
-  };
+  });
 }
 
 // ---------- Sky / time-of-day ----------
@@ -49,6 +71,10 @@ export function skyColors() {
   const bi = biomeAt(Game.cam + W/2), w = 0.32 * (1 - darkness());
   top = lerpColor(top, bi.sky, w);
   bot = lerpColor(bot, shade(bi.sky, 1.12), w*0.7);
+  if ((Game.worldPhase || 1) >= 2) {
+    top = lerpColor(top, [88, 62, 122], 0.45);
+    bot = lerpColor(bot, [140, 104, 156], 0.35);
+  }
   return [top, bot];
 }
 

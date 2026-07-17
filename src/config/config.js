@@ -76,6 +76,12 @@ export const CFG = {
   aegisDamage: 6,
   aegisSplashDamage: 2,   // reduced damage to enemies caught near the primary target
   aegisRadius: 80,
+  // Portal assault (G): archers + guards march on a portal to destroy it
+  portalHp: 300,
+  portalHpPerDay: 12,        // portals harden as the days pass
+  assaultWakeRange: 650,     // approach distance that triggers the defense wave
+  assaultCelebrateTime: 4.2, // seconds of cheering after the portal falls
+  assaultReturnTime: 2.2,    // seconds of marching home before the phase shift
 };
 
 export const STATIONS_X = {

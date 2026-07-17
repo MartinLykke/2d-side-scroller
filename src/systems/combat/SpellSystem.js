@@ -10,6 +10,7 @@ import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js';
 import { ENEMY_TYPES } from '../../config/enemies.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { entityWallLift } from '../../entities/Wall.js';
+import { playerMountLift } from '../economy/MountSystem.js';
 
 function spellGravity(spellType) {
   return spellType === "meteor" ? 650 : spellType === "waterjet" ? 80 : 280;
@@ -17,7 +18,7 @@ function spellGravity(spellType) {
 
 function playerTomeCastOrigin(player, pulse = 0) {
   const dir = player.dir || 1;
-  const lift = entityWallLift(player) + (player.jumpH || 0) + (player.bob || 0);
+  const lift = entityWallLift(player) + (player.jumpH || 0) + (player.bob || 0) + playerMountLift(player);
   return {
     x: player.x + dir * (18 + pulse * 8),
     y: groundY - 31 - pulse * 5 - lift,
@@ -201,6 +202,8 @@ function spawnSplitOrbs(sp, x, y) {
       aoeRadius: Math.max(30, (sp.aoeRadius || 60) * 0.5),
       age: 0,
       isSplitOrb: true,
+      upgradeCol: sp.upgradeCol,
+      upgradeRank: sp.upgradeRank,
     });
   }
   spawnParticles(x, y, 12, sp.col, 60, 100);
@@ -266,6 +269,8 @@ export function castSpell(player, wBase, tgt) {
   const dmgMult = permanentDamageMultiplier() * playerMomentumDamageMultiplier() * playerRiposteDamageMultiplier(player);
   const aoeR = (wBase.aoeRadius || 0) + (ew.range - wBase.range) * 0.2 + (fx.aoeBonus || 0);
   const castOrigin = playerTomeCastOrigin(player);
+  const upgradeCol = fx._vfxCols?.length ? fx._vfxCols[fx._vfxCols.length - 1] : null;
+  const upgradeRank = fx._tierRank || 0;
 
   const tgtIsBear = tgt.type === "bear" && state.animals.includes(tgt);
 
@@ -337,6 +342,13 @@ export function castSpell(player, wBase, tgt) {
       }
     }
 
+    if (fx.spellEcho && Math.random() < fx.spellEcho) {
+      const echoCol = fx._vfxCols?.length ? fx._vfxCols[fx._vfxCols.length - 1] : wBase.col;
+      spawnParticles(tgt.x, enemyY, 12, echoCol, 58, 90);
+      spawnParticles(tgt.x, enemyY, 5, "#ffffff", 30, 100);
+      chainLightning(tgt.x, Math.max(1, ew.dmg * dmgMult * 0.7), 2 + (fx.chainBonus || 0));
+    }
+
     if (!tgtIsBear && tgt.hp <= 0) killEnemy(tgt);
 
     castBurstFX(wBase, castOrigin.x, castOrigin.y, player.dir || 1, 0);
@@ -391,8 +403,27 @@ export function castSpell(player, wBase, tgt) {
     split: fx.splitOrbs || 0,
     pull: !!fx.singularity,
     iceMeteor: !!fx.meteorIce && wBase.spellType === "meteor",
+    upgradeCol,
+    upgradeRank,
   };
   state.spells.push(spell);
+
+  if (fx.spellEcho && Math.random() < fx.spellEcho) {
+    const dir = Math.sign(tgt.x - player.x) || player.dir || 1;
+    const echo = {
+      ...spell,
+      x: startX - dir * 18,
+      y: startY - 8,
+      vx: vx * 0.9 + rand(-38, 38),
+      vy: vy * 0.88 - 70,
+      dmg: Math.max(1, spell.dmg * 0.55),
+      life: life + 0.25,
+      aoeRadius: Math.max(24, aoeR * 0.65),
+      isEcho: true,
+    };
+    state.spells.push(echo);
+    spawnParticles(castOrigin.x, castOrigin.y, 8, upgradeCol || wBase.col, 42, 75);
+  }
 
   // Double Up: a twin meteor trails the first, landing a beat behind it
   if (wBase.spellType === "meteor" && fx.meteorDouble) {
@@ -482,6 +513,9 @@ export function updateSpells(dt) {
 }
 
 function spellTrail(sp) {
+  if (sp.upgradeCol && Math.random() < (sp.upgradeRank >= 3 ? 0.85 : 0.55)) {
+    spawnParticles(sp.x, sp.y, 1, sp.upgradeCol, 14 + (sp.upgradeRank || 1) * 4, 14);
+  }
   switch (sp.spellType) {
     case "fireball":
       if (Math.random() < 0.7) spawnParticles(sp.x, sp.y, 1, "#ff6a20", 12, 10);

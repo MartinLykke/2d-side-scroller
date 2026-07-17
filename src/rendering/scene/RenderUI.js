@@ -8,6 +8,8 @@ import { Game, state } from '../../core/state.js';
 import { inject, provide } from '../../core/services.js';
 import { roundedRect, drawHeart } from '../DrawHelpers.js';
 import { drawWeaponModel, drawArmorModel, drawHeldWeapon, WEAPON_TYPE_LABEL } from '../ItemRender.js';
+import { MOUNTS } from '../../config/mounts.js';
+import { drawMountModel } from '../sprites/Mount.js';
 import { drawPlayer as drawPlayerBody } from '../sprites/Player.js';
 import { weaponLevel, ensureInventory } from '../../systems/economy/InventorySystem.js';
 import { currentShopList, isShopItemOwned, SHOP_COLS } from '../../systems/economy/ShopSystem.js';
@@ -78,6 +80,10 @@ function upgradeSummary(u) {
   return UPGRADE_TIERS[u.tier]?.name.toLowerCase() || "special";
 }
 
+function armorAbilityText(a) {
+  return a?.ability ? a.ability.name + ": " + a.ability.desc : "";
+}
+
 // ---------- Tooltip ----------
 // item: { kind:"weapon", weaponId, upgrades } | { kind:"armor", armorId } (+ price)
 function drawItemTooltip(item, mx, my) {
@@ -105,6 +111,10 @@ function drawItemTooltip(item, mx, my) {
     lines.push({ t: "Defense: +" + a.defense, c: "#9bd05a" });
     lines.push({ t: "Block chance: " + Math.round(armorBlockChance(a.defense) * 100) + "%", c: "#6ab4ff" });
     if (a.defense >= 3) lines.push({ t: "Heavy hits reduced by " + Math.round(a.defense / 3), c: "#e8d8a8" });
+    if (a.ability) {
+      lines.push({ t: a.ability.name, c: ARMOR_RARITY_COL[a.rarity], gap: 4 });
+      for (const dl of wrapText(a.ability.desc, 190, "11px Trebuchet MS")) lines.push({ t: dl, c: "rgba(230,220,190,0.78)" });
+    }
     for (const dl of wrapText(a.desc, 190, "italic 11px Trebuchet MS")) lines.push({ t: dl, c: "rgba(200,190,170,0.6)", italic: true });
   }
   if (item.price !== undefined) lines.push({ t: "Price: " + item.price + " 🪙", c: GOLD, gap: 4 });
@@ -258,6 +268,10 @@ function drawEquipSlot(r, item, label, hovered) {
     ctx.fillText(a.name, nx, r.y + 32);
     ctx.font = "11px Trebuchet MS"; ctx.fillStyle = MUTED;
     ctx.fillText(ARMOR_RARITY_NAME[a.rarity], nx, r.y + 50);
+    if (a.ability) {
+      ctx.font = "bold 10px Trebuchet MS"; ctx.fillStyle = ARMOR_RARITY_COL[a.rarity];
+      ctx.fillText(a.ability.name, nx, r.y + 79);
+    }
     ctx.fillStyle = "#c9c2b2";
     ctx.fillText("🛡 +" + a.defense + "   ⛨ " + Math.round(armorBlockChance(a.defense) * 100) + "% block", nx, r.y + 68);
   }
@@ -452,9 +466,9 @@ export function drawShopOverlay() {
 
   // tabs
   const tabs = [];
-  const tabLabels = ["⚔  Weapons", "🛡  Armor"];
-  const tabW = (panelW - padX * 2) / 2;
-  for (let ti = 0; ti < 2; ti++) {
+  const tabLabels = ["⚔  Weapons", "🛡  Armor", "🐴  Stable"];
+  const tabW = (panelW - padX * 2) / 3;
+  for (let ti = 0; ti < 3; ti++) {
     const tr = { x: px0 + padX + ti * tabW + (ti ? 4 : 0), y: py0 + headH + 6, w: tabW - 4, h: tabH - 12, tab: ti };
     tabs.push(tr);
     const active = ti === tab, hov = inRect(m, tr);
@@ -481,10 +495,11 @@ export function drawShopOverlay() {
     const selected = i === Game.shopIdx;
     const hov = inRect(m, r);
     const owned = isShopItemOwned(it);
-    const equipped = it.armorId ? player.armor === it.armorId : player.weapon === it.weaponId;
+    const equipped = it.mountId ? player.mountId === it.mountId
+      : it.armorId ? player.armor === it.armorId : player.weapon === it.weaponId;
     const canAfford = player.coins >= it.price;
-    const rar = it.armorId ? ARMORS[it.armorId].rarity : WEAPONS[it.weaponId].rarity;
-    const rc = it.armorId ? ARMOR_RARITY_COL[rar] : RARITY_COL[rar];
+    const rc = it.mountId ? MOUNTS[it.mountId].col
+      : it.armorId ? ARMOR_RARITY_COL[ARMORS[it.armorId].rarity] : RARITY_COL[WEAPONS[it.weaponId].rarity];
 
     roundedRect(r.x, r.y, r.w, r.h, 9);
     ctx.fillStyle = selected ? "rgba(255,220,100,0.14)" : hov ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.035)";
@@ -502,25 +517,27 @@ export function drawShopOverlay() {
     ctx.translate(r.x + r.w / 2, r.y + (cellH - 26) / 2 + 2);
     if (!canAfford && !owned) ctx.globalAlpha = 0.45;
     const ms = clamp((cellH - 34) / 46, 0.55, 1.05);
-    if (it.armorId) drawArmorModel(it.armorId, ms);
+    if (it.mountId) drawMountModel(it.mountId, ms * 0.85);
+    else if (it.armorId) drawArmorModel(it.armorId, ms);
     else drawWeaponModel(it.weaponId, ms);
     ctx.restore();
 
     // name + price
-    const name = it.armorId ? ARMORS[it.armorId].name : WEAPONS[it.weaponId].name;
+    const name = it.mountId ? MOUNTS[it.mountId].name : it.armorId ? ARMORS[it.armorId].name : WEAPONS[it.weaponId].name;
     ctx.textAlign = "center";
     ctx.font = "bold 10.5px Trebuchet MS";
     ctx.fillStyle = owned ? "rgba(160,150,130,0.8)" : rc;
     ctx.fillText(name, r.x + r.w / 2, r.y + cellH - 16);
     if (owned) {
       ctx.font = "bold 9px Trebuchet MS"; ctx.fillStyle = equipped ? GOLD : "#9bd05a";
-      ctx.fillText(equipped ? "★ EQUIPPED" : "✓ OWNED", r.x + r.w / 2, r.y + cellH - 4);
+      const label = it.mountId ? (equipped ? "★ RIDING" : "✓ STABLED") : (equipped ? "★ EQUIPPED" : "✓ OWNED");
+      ctx.fillText(label, r.x + r.w / 2, r.y + cellH - 4);
     } else {
       ctx.font = "11px Trebuchet MS";
       ctx.fillStyle = canAfford ? GOLD : "rgba(255,110,90,0.85)";
       ctx.fillText(it.price + " 🪙", r.x + r.w / 2, r.y + cellH - 4);
     }
-    if (hov) hoveredShopItem = { ...shopItemToTooltip(it), hint: owned ? (equipped ? "Already equipped" : "Already in your inventory") : selected ? "Click again to buy" : "Click to inspect" };
+    if (hov && !it.mountId) hoveredShopItem = { ...shopItemToTooltip(it), hint: owned ? (equipped ? "Already equipped" : "Already in your inventory") : selected ? "Click again to buy" : "Click to inspect" };
   }
 
   // ----- detail footer -----
@@ -539,13 +556,30 @@ export function drawShopOverlay() {
     ctx.strokeStyle = "rgba(210,185,130,0.25)"; ctx.stroke();
     ctx.save();
     ctx.translate(px0 + 18 + 48, dy + 8 + (detailH - 20) / 2);
-    if (sel.armorId) drawArmorModel(sel.armorId, 1.75, { glow: 0.12 });
+    if (sel.mountId) drawMountModel(sel.mountId, 1.35);
+    else if (sel.armorId) drawArmorModel(sel.armorId, 1.75, { glow: 0.12 });
     else drawWeaponModel(sel.weaponId, 1.75, { glow: 0.12 });
     ctx.restore();
 
     const tx = px0 + 132;
     ctx.textAlign = "left";
-    if (sel.armorId) {
+    if (sel.mountId) {
+      const mo = MOUNTS[sel.mountId];
+      const riding = player.mountId === sel.mountId;
+      ctx.font = "bold 17px Trebuchet MS"; ctx.fillStyle = mo.col;
+      ctx.fillText(mo.name, tx, dy + 28);
+      ctx.font = "11px Trebuchet MS"; ctx.fillStyle = MUTED;
+      ctx.fillText("Mount  ·  " + mo.desc, tx, dy + 46);
+      ctx.font = "12px Trebuchet MS"; ctx.fillStyle = "#c9c2b2";
+      ctx.fillText("Move speed: +" + Math.round((mo.speedMult - 1) * 100) + "%", tx, dy + 68);
+      const curMo = player.mountId ? MOUNTS[player.mountId] : null;
+      if (curMo && !riding) {
+        const d = statDelta(Math.round((curMo.speedMult - 1) * 100), Math.round((mo.speedMult - 1) * 100));
+        if (d.t) { ctx.fillStyle = d.c; ctx.fillText(d.t + "% vs " + curMo.name, tx + 118, dy + 68); }
+      }
+      ctx.font = "10px Trebuchet MS"; ctx.fillStyle = "rgba(200,190,170,0.45)";
+      ctx.fillText(riding ? "Currently riding · press H in the field to dismount" : "Press H in the field to mount your last steed", tx, dy + 88);
+    } else if (sel.armorId) {
       const a = ARMORS[sel.armorId];
       ctx.font = "bold 17px Trebuchet MS"; ctx.fillStyle = ARMOR_RARITY_COL[a.rarity];
       ctx.fillText(a.name, tx, dy + 28);
@@ -561,6 +595,11 @@ export function drawShopOverlay() {
       const curBlock = curA ? Math.round(armorBlockChance(curA.defense) * 100) : 0;
       const dBlk = statDelta(curBlock, Math.round(armorBlockChance(a.defense) * 100));
       if (dBlk.t) { ctx.fillStyle = dBlk.c; ctx.fillText(dBlk.t + "%", tx + 118, dy + 86); }
+      if (a.ability) {
+        ctx.font = "bold 11px Trebuchet MS"; ctx.fillStyle = ARMOR_RARITY_COL[a.rarity];
+        const abilityLines = wrapText(armorAbilityText(a), panelW - 330, "bold 11px Trebuchet MS").slice(0, 2);
+        for (let i = 0; i < abilityLines.length; i++) ctx.fillText(abilityLines[i], tx, dy + 104 + i * 13);
+      }
     } else {
       const w = WEAPONS[sel.weaponId];
       ctx.font = "bold 17px Trebuchet MS"; ctx.fillStyle = RARITY_COL[w.rarity];
@@ -585,20 +624,25 @@ export function drawShopOverlay() {
       ctx.fillText(cur ? "Compared with your equipped " + WEAPONS[player.weapon].name : "You have no weapon equipped", tx, dy + 88);
     }
 
-    // buy button
+    // buy button (owned mounts keep it live as a ride/dismount toggle)
     buyRect = { x: px0 + panelW - 158, y: dy + 26, w: 138, h: 44 };
     const bHov = inRect(m, buyRect);
+    const mountToggle = owned && !!sel.mountId;
+    const riding = mountToggle && player.mountId === sel.mountId;
+    const active = mountToggle || (canAfford && !owned);
     roundedRect(buyRect.x, buyRect.y, buyRect.w, buyRect.h, 10);
-    if (owned) { ctx.fillStyle = "rgba(130,130,130,0.12)"; }
-    else if (canAfford) { ctx.fillStyle = bHov ? "rgba(242,193,78,0.4)" : "rgba(242,193,78,0.24)"; }
+    if (active) { ctx.fillStyle = bHov ? "rgba(242,193,78,0.4)" : "rgba(242,193,78,0.24)"; }
+    else if (owned) { ctx.fillStyle = "rgba(130,130,130,0.12)"; }
     else { ctx.fillStyle = "rgba(255,90,70,0.10)"; }
     ctx.fill();
-    ctx.strokeStyle = owned ? "rgba(150,150,150,0.4)" : canAfford ? GOLD : "rgba(255,110,90,0.5)";
-    ctx.lineWidth = canAfford && !owned ? 2 : 1;
+    ctx.strokeStyle = active ? GOLD : owned ? "rgba(150,150,150,0.4)" : "rgba(255,110,90,0.5)";
+    ctx.lineWidth = active ? 2 : 1;
     roundedRect(buyRect.x, buyRect.y, buyRect.w, buyRect.h, 10); ctx.stroke();
     ctx.textAlign = "center"; ctx.font = "bold 14px Trebuchet MS";
-    ctx.fillStyle = owned ? "rgba(180,180,180,0.6)" : canAfford ? "#ffe9b0" : "rgba(255,140,120,0.8)";
-    ctx.fillText(owned ? "OWNED" : "BUY  ·  " + sel.price + " 🪙", buyRect.x + buyRect.w / 2, buyRect.y + 27);
+    ctx.fillStyle = active ? "#ffe9b0" : owned ? "rgba(180,180,180,0.6)" : "rgba(255,140,120,0.8)";
+    const label = mountToggle ? (riding ? "DISMOUNT" : "RIDE  🐴")
+      : owned ? "OWNED" : "BUY  ·  " + sel.price + " 🪙";
+    ctx.fillText(label, buyRect.x + buyRect.w / 2, buyRect.y + 27);
   } else {
     ctx.textAlign = "center"; ctx.font = "13px Trebuchet MS"; ctx.fillStyle = MUTED;
     ctx.fillText("Nothing for sale in this tab yet.", px0 + panelW / 2, dy + detailH / 2);
@@ -835,6 +879,8 @@ export function drawLegendaryIntro() {
     legend3: "Emits a massive void pulse that hits everything within 310px.",
     magmaGolem: "Armored obsidian shell – hit the glowing core when it opens! Crushes walls and leaves burning pools of magma.",
   };
+  descs.voidTitan = "Sealed void plates halve damage until the star-core opens. Tears gravity scars into the battlefield.";
+  descs.voidSeraph = "A flying ritual horror that fires black-star lances, screams shockwaves and summons the Hollow.";
   ctx.fillText(descs[intro.bossType] || "", tx, py + 120);
   ctx.fillStyle = "rgba(255,255,255,0.1)"; roundedRect(tx, py + 140, panW - 230, 12, 6); ctx.fill();
   ctx.fillStyle = ET.eye;

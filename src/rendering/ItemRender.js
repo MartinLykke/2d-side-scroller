@@ -8,7 +8,7 @@ import { WEAPONS, RARITY_COL } from '../config/weapons.js';
 import { cachedUpgradeEffects } from '../config/weaponUpgrades.js';
 import { ARMORS, ARMOR_RARITY_COL } from '../config/armor.js';
 import { shootPose, ease, drawBow, limb } from './sprites/Archer.js';
-import { drawTomeModel, roundedRect } from './DrawHelpers.js';
+import { drawWandModel, wandTipLength, roundedRect } from './DrawHelpers.js';
 import { armorOutfit } from './ArmorOutfits.js';
 
 export const WEAPON_TYPE_LABEL = { melee: "Melee", ranged: "Bow", magic: "Magic" };
@@ -353,9 +353,10 @@ export function drawWeaponModel(weaponId, s = 1, opts = {}) {
   ctx.scale(s, s);
   rarityHalo(w.rarity, RARITY_COL[w.rarity], 26, opts.glow || 0);
   // Enchanted items glow with the color of their strongest applied upgrade.
+  let modelFx = null;
   if (opts.upgrades?.length) {
-    const ufx = cachedUpgradeEffects(opts.upgrades);
-    if (ufx._vfxCols?.length) rarityHalo(2, ufx._vfxCols[ufx._vfxCols.length - 1], 30, ufx._tierRank * 0.06);
+    modelFx = cachedUpgradeEffects(opts.upgrades);
+    if (modelFx._vfxCols?.length) rarityHalo(2, modelFx._vfxCols[modelFx._vfxCols.length - 1], 30, modelFx._tierRank * 0.06);
   }
   if (w.type === "melee") {
     const len = clamp(w.range * 0.42, 16, 40);
@@ -363,12 +364,14 @@ export function drawWeaponModel(weaponId, s = 1, opts = {}) {
     ctx.translate(-(len - 4) / 2, 0);
     drawMeleeWeaponModel(weaponId, w, len);
   } else if (weaponId === "crossbow") {
-    drawHeldCrossbow(-2, 0, 1, 0, 0, true, w.col);
+    const crossCol = modelFx?._vfxCols?.length ? modelFx._vfxCols[modelFx._vfxCols.length - 1] : w.col;
+    drawHeldCrossbow(-2, 0, 1, 0, 0, true, crossCol);
   } else if (w.type === "ranged") {
     ctx.translate(-4, 0);
     drawBowModel(weaponId, w);
   } else {
-    drawTomeModel(weaponId, w.col, 0.92, { open: opts.open ?? 0.4, glow: (opts.glow || 0) + (w.rarity >= 3 ? 0.25 : 0.1) });
+    ctx.rotate(0.42);
+    drawWandModel(weaponId, w.col, 0.92, { glow: (opts.glow || 0) + (w.rarity >= 3 ? 0.25 : 0.1) });
   }
   ctx.restore();
 }
@@ -1022,6 +1025,7 @@ function drawPlayerWeaponArm(x1, y1, x2, y2, width = 3) {
 export function drawHeldWeapon(player, px = 0) {
   if (!player.weapon) return;
   const w = WEAPONS[player.weapon], sw = player.swing || 0;
+  const weaponFx = cachedUpgradeEffects(player.weaponUpgrades);
   const outfit = armorOutfit(player.armor);
   ARM_LOOK = {
     arm: outfit?.gloves || PLAYER_SKIN,
@@ -1077,7 +1081,7 @@ export function drawHeldWeapon(player, px = 0) {
     ctx.rotate(angle);
     ctx.translate(slide, 0);
     drawMeleeWeaponModel(player.weapon, w, len);
-    drawUpgradeSheen(len, cachedUpgradeEffects(player.weaponUpgrades));
+    drawUpgradeSheen(len, weaponFx);
     ctx.restore();
   } else if (w.type === "ranged") {
     const shoot = shootPose(player);
@@ -1102,7 +1106,8 @@ export function drawHeldWeapon(player, px = 0) {
       else drawHand = { x: backSh.x - 1, y: backSh.y + 10 };
       drawPlayerWeaponArm(backSh.x, backSh.y, drawHand.x, drawHand.y, 2.6);
       drawPlayerWeaponArm(frontSh.x, frontSh.y, grip.x + 4 - recoil * 3, grip.y, 2.8);
-      drawHeldCrossbow(grip.x + 6, grip.y, aim, pull, recoil, true, w.col);
+      const crossCol = weaponFx._vfxCols?.length ? weaponFx._vfxCols[weaponFx._vfxCols.length - 1] : w.col;
+      drawHeldCrossbow(grip.x + 6, grip.y, aim, pull, recoil, true, crossCol);
     } else {
       if (shoot) {
         if (shoot.phase === "reach") { const p = ease(shoot.p); drawHand = { x: backSh.x + 2 - p * 6, y: backSh.y + 8 - p * 14 }; }
@@ -1120,30 +1125,35 @@ export function drawHeldWeapon(player, px = 0) {
       } else {
         limb(backSh.x, backSh.y, backSh.x - 2, backSh.y + 11, ARM_LOOK.arm, 2.5);
       }
-      drawBow(grip.x, grip.y, aim, pull, shoot && shoot.phase === "draw" ? drawHand : null, heldBowLook(player.weapon, w, cachedUpgradeEffects(player.weaponUpgrades)));
+      drawBow(grip.x, grip.y, aim, pull, shoot && shoot.phase === "draw" ? drawHand : null, heldBowLook(player.weapon, w, weaponFx));
       limb(frontSh.x, frontSh.y, grip.x, grip.y, ARM_LOOK.arm, 2.6);
     }
   } else {
     const upgCount = (player.weaponUpgrades || []).length;
-    const fxUpg = cachedUpgradeEffects(player.weaponUpgrades);
+    const fxUpg = weaponFx;
     const ringCol = fxUpg._vfxCols?.length ? fxUpg._vfxCols[fxUpg._vfxCols.length - 1] : w.col;
     const castT = clamp((player.castAnim || 0) / 0.55, 0, 1);
     const castP = 1 - castT;
     const pulse = castT > 0 ? Math.sin(castP * Math.PI) : 0;
-    const book = { x: px + 9 + pulse * 6, y: groundY - 22 - pulse * 10 };
-    const channel = { x: px + 18 + pulse * 8, y: groundY - 31 - pulse * 5 };
-    drawPlayerWeaponArm(px - 5, groundY - 28, book.x - 5, book.y + 5, 2.7);
-    drawPlayerWeaponArm(px + 5, groundY - 28, channel.x, channel.y, 2.8);
+    // staff grip in the leading hand; swings up-forward on cast
+    const grip = { x: px + 10 + pulse * 5, y: groundY - 25 - pulse * 5 };
+    const rot = 0.6 - pulse * 0.75;
+    const mScale = 0.8;
+    const dirX = Math.sin(rot), dirY = -Math.cos(rot); // unit vector along the shaft toward the tip
+    const tipL = wandTipLength(player.weapon) * mScale;
+    const tip = { x: grip.x + dirX * tipL, y: grip.y + dirY * tipL };
+    drawPlayerWeaponArm(px - 5, groundY - 28, grip.x - dirX * 6, grip.y - dirY * 6, 2.7);
+    drawPlayerWeaponArm(px + 5, groundY - 28, grip.x + dirX * 3, grip.y + dirY * 3, 2.8);
     if (pulse > 0 || upgCount > 0) {
       ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.18 + pulse * 0.34 + upgCount * 0.035;
       ctx.strokeStyle = ringCol; ctx.lineWidth = 2.2;
       for (let r = 0; r < 2; r++) {
-        ctx.beginPath(); ctx.arc(channel.x, channel.y, 9 + r * 8 + pulse * 8, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(tip.x, tip.y, 7 + r * 7 + pulse * 8, 0, Math.PI * 2); ctx.stroke();
       }
       ctx.restore();
     }
-    ctx.save(); ctx.translate(book.x, book.y); ctx.rotate(-0.18 + pulse * 0.22);
-    drawTomeModel(player.weapon, w.col, 0.68, { open: 0.45 + pulse * 0.55, glow: pulse + upgCount * 0.08 });
+    ctx.save(); ctx.translate(grip.x, grip.y); ctx.rotate(rot);
+    drawWandModel(player.weapon, w.col, mScale, { cast: pulse, glow: pulse + upgCount * 0.08 });
     ctx.restore();
   }
   ctx.restore();

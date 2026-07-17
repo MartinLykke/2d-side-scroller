@@ -5,6 +5,8 @@ import { ARMORS } from '../../config/armor.js';
 import { dist } from '../../util/math.js';
 import { Audio } from '../infrastructure/Audio.js';
 import { equipArmor, playerOwnsWeapon, playerOwnsArmor } from './InventorySystem.js';
+import { MOUNTS } from '../../config/mounts.js';
+import { playerOwnsMount, acquireMount, toggleMount } from './MountSystem.js';
 
 // Grid width shared with the shop overlay renderer.
 export const SHOP_COLS = 5;
@@ -48,6 +50,12 @@ export const ARMOR_SHOP = [
   { armorId: 'sun_plate',        price: 78, tier: 6 },
 ];
 
+export const MOUNT_SHOP = [
+  { mountId: 'dun_pony',         price: 20, tier: 1 },
+  { mountId: 'chestnut_courser', price: 45, tier: 3 },
+  { mountId: 'ember_warhorse',   price: 85, tier: 6 },
+];
+
 let pickupWeaponFn = null;
 
 export function setPickupWeapon(fn) {
@@ -82,12 +90,13 @@ export function updateShop() {
 
 export function currentShopList() {
   const tier = shopTierUnlocked();
-  const list = Game.shopTab === 1 ? ARMOR_SHOP : WEAPON_SHOP;
+  const list = Game.shopTab === 2 ? MOUNT_SHOP : Game.shopTab === 1 ? ARMOR_SHOP : WEAPON_SHOP;
   return list.filter(item => (item.tier || 1) <= tier);
 }
 
 export function isShopItemOwned(item) {
   if (!item) return false;
+  if (item.mountId) return playerOwnsMount(item.mountId);
   return item.armorId ? playerOwnsArmor(item.armorId) : playerOwnsWeapon(item.weaponId);
 }
 
@@ -95,6 +104,8 @@ export function tryBuyShopItem(item) {
   if (!item) return;
   const floaty = inject('floaty');
   if (isShopItemOwned(item)) {
+    // Owned mounts toggle between riding and stabling instead of re-buying.
+    if (item.mountId) { toggleMount(item.mountId); return; }
     if (floaty) floaty(state.player.x, "Already owned", "#c8c8c8");
     return;
   }
@@ -103,6 +114,10 @@ export function tryBuyShopItem(item) {
     return;
   }
   state.player.coins -= item.price;
+  if (item.mountId) {
+    acquireMount(item.mountId); // plays its own mount-up feedback
+    return;
+  }
   if (item.armorId) {
     equipArmor(item.armorId);
     if (floaty) floaty(state.player.x, ARMORS[item.armorId].name + " equipped 🛡", "#9bd05a");
@@ -119,6 +134,6 @@ export function handleShopKeys(k, e) {
   if (k === "arrowright") { Game.shopIdx = Math.min(last, Game.shopIdx + 1); e.preventDefault(); }
   if (k === "arrowup")    { Game.shopIdx = Math.max(0, Game.shopIdx - SHOP_COLS); e.preventDefault(); }
   if (k === "arrowdown")  { Game.shopIdx = Math.min(last, Game.shopIdx + SHOP_COLS); e.preventDefault(); }
-  if (k === "t") { Game.shopTab = Game.shopTab === 0 ? 1 : 0; Game.shopIdx = 0; }
+  if (k === "t") { Game.shopTab = ((Game.shopTab || 0) + 1) % 3; Game.shopIdx = 0; }
   if (k === "e" || k === "enter") tryBuyShopItem(list[Game.shopIdx]);
 }

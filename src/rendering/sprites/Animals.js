@@ -867,11 +867,17 @@ function drawStuckArrows(a) {
     // rel arrows (ducks hit mid-flight) ride the body as it falls
     ctx.translate(a.x + ar.x, ar.rel ? groundY + (a.fy || 0) + ar.y : ar.y);
     ctx.rotate(ar.a || 0);
-    ctx.strokeStyle = "#c9b48a"; ctx.lineWidth = 1.5;
+    if (ar.upgradeCol) {
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.26 * alpha;
+      ctx.strokeStyle = ar.upgradeCol; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(5, 0); ctx.stroke();
+      ctx.restore();
+    }
+    ctx.strokeStyle = ar.upgradeCol ? "#e8d8ff" : "#c9b48a"; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(-15, 0); ctx.lineTo(5, 0); ctx.stroke();
     ctx.fillStyle = "#b8bcc4";
     ctx.beginPath(); ctx.moveTo(5, -1.6); ctx.lineTo(8, 0); ctx.lineTo(5, 1.6); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = "#8fae4a";
+    ctx.fillStyle = ar.upgradeCol || "#8fae4a";
     ctx.beginPath(); ctx.moveTo(-13, 0); ctx.lineTo(-17, -2.3); ctx.lineTo(-14, -0.3); ctx.closePath(); ctx.fill();
     ctx.beginPath(); ctx.moveTo(-13, 0); ctx.lineTo(-17, 2.3); ctx.lineTo(-14, 0.3); ctx.closePath(); ctx.fill();
     ctx.restore();

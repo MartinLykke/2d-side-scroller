@@ -184,6 +184,22 @@ const BOSS_RIGGERS = {
     spawnParticles(portal.x, groundY - 20, 30, "#ff6a20", 160, 180);
     spawnParticles(portal.x, groundY - 10, 18, "#6b5a45", 200, 120);
   },
+  voidTitan(titan, portal) {
+    titan.dir = portal.side > 0 ? -1 : 1;
+    Game.screenShake = Math.max(Game.screenShake || 0, 0.4);
+    spawnParticles(portal.x, groundY - 20, 30, "#b9a0ff", 160, 180);
+    spawnParticles(portal.x, groundY - 10, 18, "#8fe8ff", 200, 120);
+  },
+  voidSeraph(seraph, portal) {
+    seraph.patrolDir = portal.side > 0 ? -1 : 1;
+    seraph.dir = seraph.patrolDir;
+    seraph.fy = -230;
+    seraph.shootCd = rand(1.0, 1.8);
+    seraph.seraphSummonCd = rand(4, 6);
+    Game.screenShake = Math.max(Game.screenShake || 0, 0.32);
+    spawnParticles(portal.x, groundY - 160, 34, "#8a5aff", 180, 220);
+    spawnParticles(portal.x, groundY - 110, 18, "#d7f6ff", 120, 180);
+  },
 };
 
 export function spawnBoss(type, portal) {
@@ -202,8 +218,11 @@ export function planNight() {
   Game.threatLevel  = Math.max(1, d);
   let quotaMult = Game.diffMult || 1;
   if (Game.diffMult > 1.5) quotaMult *= 1.35;
+  if ((Game.worldPhase || 1) >= 2) quotaMult *= 1.15; // the Hollow presses harder
   // Base horde scaling: 2x from day 1, ramping up ~10% per day (caps at 3.5x)
   const hordeMult = Math.min(3.5, 2 + Math.max(0, d - 1) * 0.1);
+  // From round 3 onward, double the enemy count
+  if (d >= 3) quotaMult *= 2;
   Game.nightQuota   = Math.round((3 + d * 3.5 + Math.pow(d * 0.7, 1.6) + Math.max(0, d - 8) * 2.25) * quotaMult * hordeMult * nightQuotaMetaMultiplier());
   Game.nightSpawned = 0;
   Game.spawnTimer   = 0;
@@ -214,7 +233,28 @@ function nightEnemyType() {
   const d = Game.day, r = Math.random();
   const hardMult = Game.diffMult > 1.5 ? 1.3 : 1;
   const eliteBonus = eliteChanceBonus();
-  if (Game.nightSpawned === 0 && BOSS_SCHEDULE[d]) return BOSS_SCHEDULE[d];
+  // Phase 2: the void rifts send the Hollow instead of the ember horde
+  if ((Game.worldPhase || 1) >= 2) {
+    if (Game.nightSpawned === 0) return d % 2 === 0 ? "voidSeraph" : "voidTitan";
+    if (Game.nightSpawned === 1) return d % 2 === 0 ? "voidTitan" : "voidSeraph";
+    const voidBruteChance = Math.min(0.32, 0.07 + d * 0.02 * hardMult + eliteBonus);
+    const wraithChance = Math.min(0.5, 0.12 + d * 0.03 * hardMult + eliteBonus * 0.85);
+    if (r < voidBruteChance) return "voidBrute";
+    if (r < voidBruteChance + wraithChance) return "voidWraith";
+    return "shade";
+  }
+  if (Game.nightSpawned === 0) {
+    // Spawn every unlocked boss each night (strongest first via the schedule check)
+    if (BOSS_SCHEDULE[d]) return BOSS_SCHEDULE[d];
+    // After unlock night, keep spawning the highest-tier boss available
+    const unlocked = Object.keys(BOSS_SCHEDULE).map(Number).filter(n => d > n).sort((a, b) => b - a);
+    if (unlocked.length) return BOSS_SCHEDULE[unlocked[0]];
+  }
+  // Second boss slot: spawn the other unlocked boss as enemy #2
+  if (Game.nightSpawned === 1) {
+    const unlocked = Object.keys(BOSS_SCHEDULE).map(Number).filter(n => d >= n).sort((a, b) => b - a);
+    if (unlocked.length >= 2) return BOSS_SCHEDULE[unlocked[1]];
+  }
   const flyingImpChance = Math.min(0.55, Math.max(0, d - 2) * 0.055 * hardMult + eliteBonus * 0.85);
   const emberBruteChance = d >= 2 ? Math.min(0.34, (d - 1) * 0.035 * hardMult + eliteBonus) : eliteBonus * 0.35;
   const ashPriestChance = d >= 4 ? Math.min(0.26, (d - 3) * 0.028 * hardMult + eliteBonus * 0.65) : eliteBonus * 0.25;
@@ -237,7 +277,8 @@ export function updateSpawning(dt) {
       // Halved interval so the doubled quota still fits inside the night window
       Game.spawnTimer = rand(0.3, 0.8) * (1 - pressure) * diffSpeedUp * portalSpawnIntervalMultiplier();
       const type = nightEnemyType();
-      const portal = pick(state.portals);
+      const livePortals = state.portals.filter(p => !p.destroyed);
+      const portal = pick(livePortals.length ? livePortals : state.portals);
       let spawned;
       if (ENEMY_TYPES[type] && ENEMY_TYPES[type].boss) {
         spawned = spawnBoss(type, portal);
@@ -256,8 +297,9 @@ export function updateSpawning(dt) {
         Game.legendaryIntro = { timer: 5.5, maxTimer: 5.5, bossType: type };
         // Rally all fighters
         for (const u of state.units) u.rallied = true;
+        const bossCol = ENEMY_TYPES[type].eye || "#ff2020";
         for (let k = 0; k < 30; k++)
-          state.particles.push({ x: CFG.baseX + rand(-120,120), y: groundY - rand(40,160), vx: rand(-60,60), vy: rand(-80,-20), life: rand(0.6,1.2), color:"#ff2020", size: rand(2,5) });
+          state.particles.push({ x: CFG.baseX + rand(-120,120), y: groundY - rand(40,160), vx: rand(-60,60), vy: rand(-80,-20), life: rand(0.6,1.2), color: bossCol, size: rand(2,5) });
       }
     }
   }

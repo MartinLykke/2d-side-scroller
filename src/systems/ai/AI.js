@@ -18,6 +18,7 @@ import { archerAI as archerRoleAI } from './ArcherAI.js';
 import { builderAI as builderRoleAI } from './BuilderAI.js';
 import { farmerAI as farmerRoleAI } from './FarmerAI.js';
 import { guardAI as guardRoleAI } from './GuardAI.js';
+import { assaultUnitAI } from '../world/AssaultSystem.js';
 
 function hasSkill(id) { return state.archerSkills.includes(id); }
 
@@ -1297,6 +1298,15 @@ export function updateUnits(dt) {
       u.moving = Math.abs(u.x - px0) > 0.04;
       u.moveSpeed = dt > 0 ? Math.abs(u.x - px0) / dt : 0;
       if (u.moving) u.anim += dt * 12;
+      continue;
+    }
+    // Portal assault: marching/sieging fighters follow the assault plan; when
+    // it returns false a foe is in reach and the normal role AI takes the fight.
+    if (state.assault && u.assault && (u.role === "archer" || u.role === "guard")
+        && assaultUnitAI(u, dt)) {
+      u.moving = Math.abs(u.x - px0) > 0.04;
+      u.moveSpeed = dt > 0 ? Math.abs(u.x - px0) / dt : 0;
+      if (u.moving) u.anim += dt * (u.moveSpeed > 72 ? 11 : 8);
       continue;
     }
     const handler = AI_HANDLERS[u.role];

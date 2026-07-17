@@ -10,15 +10,21 @@ import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../../util/Ene
 import { startArcherShoot, SHOOT_RELEASE_TIME } from '../../rendering/sprites/Archer.js';
 import { entityWallLift } from '../../entities/Wall.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
-import { spawnFirePool } from '../ai/BossAI.js';
+import { spawnFirePool, spawnVoidPool } from '../ai/BossAI.js';
 import { damagePlayer } from './PlayerCombat.js';
+import { chainLightning } from './SpellSystem.js';
 import { addSkillPoints } from '../economy/SkillSystem.js';
+import { playerMountLift } from '../economy/MountSystem.js';
 
 function arrowTrail(ar) {
   if (ar.enemyFireball) {
-    spawnParticles(ar.x, ar.y, 3, "#ff6a20", 22, 20);
-    if (Math.random() < 0.75) spawnParticles(ar.x, ar.y, 1, "#ffd060", 10, 24);
-    if (Math.random() < 0.35) spawnParticles(ar.x, ar.y, 1, "#5a0710", 18, 8);
+    const hot = ar.voidBolt ? "#8a5aff" : "#ff6a20";
+    const core = ar.voidBolt ? "#d7f6ff" : "#ffd060";
+    const smoke = ar.voidBolt ? "#160a38" : "#5a0710";
+    const scale = ar.scale || (ar.big ? 1.5 : 1);
+    spawnParticles(ar.x, ar.y, ar.ashFireball ? 5 : 3, hot, 22 * scale, ar.voidBolt ? 30 : 20);
+    if (Math.random() < 0.75) spawnParticles(ar.x, ar.y, 1, core, 10 * scale, ar.voidBolt ? 34 : 24);
+    if (Math.random() < 0.35) spawnParticles(ar.x, ar.y, 1, smoke, 18 * scale, 8);
     return;
   }
   if (ar.fireArrow) {
@@ -36,6 +42,10 @@ function arrowTrail(ar) {
   if (ar.frostArrow) {
     spawnParticles(ar.x, ar.y, 2, "#bfefff", 14, 14);
     if (Math.random() < 0.5) spawnParticles(ar.x, ar.y, 1, "#ffffff", 8, 16);
+  }
+  if (ar.upgradeCol) {
+    const rate = ar.upgradeRank >= 3 ? 0.85 : 0.55;
+    if (Math.random() < rate) spawnParticles(ar.x, ar.y, 1, ar.upgradeCol, 12 + (ar.upgradeRank || 1) * 3, 12);
   }
   if (ar.weaponId === "dark_bow") {
     if (Math.random() < 0.5) spawnParticles(ar.x, ar.y, 1, "#880099", 8, 5);
@@ -66,6 +76,15 @@ function stuckArrowLife() {
   return STUCK_ARROW_LIFE - (STUCK_ARROW_LIFE - MIN_STUCK_ARROW_LIFE) * archerPressure;
 }
 
+function grantArrowBarrier(seconds, col = "#ffffff") {
+  const player = state.player;
+  if (!player || !seconds || seconds <= 0) return;
+  player.invuln = Math.max(player.invuln || 0, seconds);
+  spawnParticles(player.x, groundY - 42, 10, col, 46, 90);
+  spawnParticles(player.x, groundY - 42, 5, "#ffffff", 28, 95);
+  floaty(player.x, "Guarded", col);
+}
+
 function stickArrowInEnemy(e, ar, enemyDrawY) {
   if (ar.ballista) return;
   if (!e.stuckArrows) e.stuckArrows = [];
@@ -79,6 +98,8 @@ function stickArrowInEnemy(e, ar, enemyDrawY) {
     y: localY,
     a: Math.atan2(ar.vy, ar.vx) * facing,
     weaponId: ar.weaponId || null,
+    upgradeCol: ar.upgradeCol || null,
+    upgradeRank: ar.upgradeRank || 0,
     t: stuckArrowLife(),
   });
 }
@@ -94,6 +115,8 @@ function stickArrowInAnimal(a, ar) {
     y: airborne ? -10 : groundY - (a.type === "bear" ? 36 : 14),
     a: Math.atan2(ar.vy, ar.vx),
     weaponId: ar.weaponId || null,
+    upgradeCol: ar.upgradeCol || null,
+    upgradeRank: ar.upgradeRank || 0,
     t: stuckArrowLife(),
   });
 }
@@ -122,6 +145,66 @@ export function updateStuckArrows(dt) {
 
 function enemyDrawYOffset(e) {
   return e.type === "imp" && e.aiState === "stacking" && e.impStackY !== undefined ? e.impStackY : (e.fy || 0);
+}
+
+function playerBlastY(player) {
+  const lift = entityWallLift(player) + (player.jumpH || 0) + playerMountLift(player);
+  return groundY - 50 - lift;
+}
+
+function unitBlastY(u) {
+  return groundY - 30 - entityWallLift(u) - (u.jumpH || 0);
+}
+
+function inAshBlast(ar, x, y, blastY, radius) {
+  const dx = dist(ar.x, x);
+  const dy = Math.abs(blastY - y);
+  return Math.hypot(dx, dy * 0.65) < radius;
+}
+
+function detonateAshFireball(ar) {
+  if (!ar.ashFireball || ar.ashBlastDone) return false;
+  ar.ashBlastDone = true;
+
+  const { player, units } = state;
+  const radius = ar.splashRadius || ar.radius || 96;
+  const dmg = Math.max(1, ar.dmg || 1);
+  const blastY = Math.min(ar.y, groundY - 12);
+  let hit = false;
+
+  for (const u of units) {
+    if (u.hp <= 0 || u.dying || u.mine) continue;
+    const uy = unitBlastY(u);
+    if (!inAshBlast(ar, u.x, uy, blastY, radius)) continue;
+    u.hp -= dmg;
+    u.flash = Math.max(u.flash || 0, 0.16);
+    u.panic = Math.max(u.panic || 0, 1.1);
+    u.knock = (u.knock || 0) + Math.sign(u.x - ar.x || 1) * 170;
+    spawnParticles(u.x, uy, 14, "#ff6a20", 88, 100);
+    spawnParticles(u.x, uy, 6, "#ffd060", 50, 105);
+    floaty(u.x, "-" + dmg, "#ff6a4a");
+    hit = true;
+  }
+
+  if (player && player.hp > 0 && !Game.inMine) {
+    const py = playerBlastY(player);
+    if (inAshBlast(ar, player.x, py, blastY, radius)) {
+      const dealt = damagePlayer(dmg, { knock: Math.sign(player.x - ar.x || 1) * 210 });
+      if (dealt !== null) {
+        spawnParticles(player.x, py, 16, "#ff6a20", 92, 105);
+        spawnParticles(player.x, py, 8, "#ffd060", 54, 115);
+        hit = true;
+      }
+    }
+  }
+
+  spawnParticles(ar.x, blastY, 30, "#ff6a20", radius * 0.95, 135);
+  spawnParticles(ar.x, blastY, 14, "#ffd060", radius * 0.55, 150);
+  spawnParticles(ar.x, Math.min(blastY + 6, groundY - 6), 12, "#5a0710", radius * 0.7, 70);
+  state.legendaryEffects.push({ type: "ring", x: ar.x, radius, life: 0.45, totalLife: 0.45, col: "#ff7a24", width: 6 });
+  Game.screenShake = Math.max(Game.screenShake || 0, hit ? 0.46 : 0.34);
+  Audio.hit();
+  return hit;
 }
 
 export function shootArrow(x, y, target, sourceUnit = null, weaponId = null, opts = {}) {
@@ -201,7 +284,7 @@ export function updateArrows(dt) {
       if (ar.sourceUnit) {
         ar.x = ar.sourceUnit.x;
         if (ar.sourceUnit === player) {
-          const lift = entityWallLift(player) + (player.jumpH || 0);
+          const lift = entityWallLift(player) + (player.jumpH || 0) + playerMountLift(player);
           ar.y = groundY - 30 - lift;
         } else if (ar.sourceUnit.role === "archer") {
           const lift = entityWallLift(ar.sourceUnit) + (ar.sourceUnit.jumpH || 0);
@@ -320,6 +403,12 @@ export function updateArrows(dt) {
             }
             Game.screenShake = Math.max(Game.screenShake, 0.2);
           }
+          if (ar.chainBounces) {
+            const col = ar.upgradeCol || "#ccccff";
+            spawnParticles(ar.x, enemyDrawY, 10, col, 52, 80);
+            spawnParticles(ar.x, enemyDrawY, 5, "#ffffff", 30, 95);
+            chainLightning(e.x, Math.max(1, crit.damage * 0.65), ar.chainBounces);
+          }
           if (ar.pierce > 0) {
             if (!ar._hitEnemies) ar._hitEnemies = new Set();
             ar._hitEnemies.add(e);
@@ -343,8 +432,14 @@ export function updateArrows(dt) {
               state.arrows.push({
                 x: ar.x, y: ar.y, vx: Math.cos(ang)*480, vy: Math.sin(ang)*480 - 40,
                 target: nextTgt, life: 1.0, hitKind: "enemy", sourceUnit: ar.sourceUnit,
-                fireArrow: ar.fireArrow, bouncing: false, pierce: 0,
-                weaponId: ar.weaponId,
+                fireArrow: ar.fireArrow, frostArrow: ar.frostArrow, rootArrow: ar.rootArrow,
+                bouncing: false, pierce: 0, weaponId: ar.weaponId,
+                dmg: ar.dmg, dmgMult: ar.dmgMult, critBonus: ar.critBonus,
+                playerShot: ar.playerShot, powered: ar.powered,
+                explosiveR: ar.explosiveR, explosiveFrac: ar.explosiveFrac,
+                gravityChance: ar.gravityChance, chainBounces: ar.chainBounces,
+                healOnKill: ar.healOnKill, goldOnKill: ar.goldOnKill, barrierOnKill: ar.barrierOnKill,
+                upgradeCol: ar.upgradeCol, upgradeRank: ar.upgradeRank,
                 _hitEnemies: new Set([e]), // never re-hit the enemy it bounced off
               });
             }
@@ -358,6 +453,7 @@ export function updateArrows(dt) {
                 ar.sourceUnit.level = (ar.sourceUnit.level || 1) + 1;
                 addSkillPoints("archer", 1);
                 spawnLevelUpBeam(ar.sourceUnit.x);
+                if (ar.barrierOnKill) grantArrowBarrier(ar.barrierOnKill, ar.upgradeCol || "#ffffff");
               }
               const knockDir = Math.sign(e.x - ar.x) || 1;
               killEnemyWithAnimation(e, knockDir);
@@ -406,12 +502,15 @@ export function updateArrows(dt) {
     }
 
     if (!hit && ar.hitKind === "player" && !Game.inMine) {
-      const playerLift = entityWallLift(player) + (player.jumpH || 0);
-      const playerY = groundY - 50 - playerLift;
-      if (dist(ar.x, player.x) < 18 && Math.abs(ar.y - playerY) < 50) {
-        if (damagePlayer(ar.dmg || 1, { knock: (player.x < ar.x ? -1 : 1) * -120 }) !== null && ar.enemyFireball) {
-          spawnParticles(player.x, playerY, 16, "#ff6a20", 85, 95);
-          spawnParticles(player.x, playerY, 8, "#ffd060", 50, 90);
+      const playerY = playerBlastY(player);
+      const hitRadius = ar.ashFireball ? (ar.radius || 54) : 18;
+      const hitHeight = ar.ashFireball ? 62 : 50;
+      if (dist(ar.x, player.x) < hitRadius && Math.abs(ar.y - playerY) < hitHeight) {
+        if (ar.ashFireball) {
+          detonateAshFireball(ar);
+        } else if (damagePlayer(ar.dmg || 1, { knock: (player.x < ar.x ? -1 : 1) * -120 }) !== null && ar.enemyFireball) {
+          spawnParticles(player.x, playerY, 16, ar.voidBolt ? "#8a5aff" : "#ff6a20", 85, 95);
+          spawnParticles(player.x, playerY, 8, ar.voidBolt ? "#d7f6ff" : "#ffd060", 50, 90);
           Game.screenShake = Math.max(Game.screenShake, 0.22);
         }
         hit = true;
@@ -421,15 +520,20 @@ export function updateArrows(dt) {
     if (!hit && ar.hitKind === "unit") {
       for (const u of units) {
         if (u.hp <= 0 || u.dying || u.mine) continue;
-        const uy = groundY - 30 - entityWallLift(u);
-        if (dist(ar.x, u.x) < (ar.radius || 22) && Math.abs(ar.y - uy) < 46) {
-          u.hp -= ar.dmg || 1;
-          u.panic = 0.9;
-          u.knock = (u.knock || 0) + Math.sign(u.x - ar.x || 1) * 90;
-          spawnParticles(u.x, uy, 14, "#ff6a20", 75, 90);
-          spawnParticles(u.x, uy, 6, "#ffd060", 42, 80);
-          Game.screenShake = Math.max(Game.screenShake, 0.18);
-          Audio.hit();
+        const uy = unitBlastY(u);
+        const hitHeight = ar.ashFireball ? 62 : 46;
+        if (dist(ar.x, u.x) < (ar.radius || 22) && Math.abs(ar.y - uy) < hitHeight) {
+          if (ar.ashFireball) {
+            detonateAshFireball(ar);
+          } else {
+            u.hp -= ar.dmg || 1;
+            u.panic = 0.9;
+            u.knock = (u.knock || 0) + Math.sign(u.x - ar.x || 1) * 90;
+            spawnParticles(u.x, uy, 14, ar.voidBolt ? "#8a5aff" : "#ff6a20", 75, 90);
+            spawnParticles(u.x, uy, 6, ar.voidBolt ? "#d7f6ff" : "#ffd060", 42, 80);
+            Game.screenShake = Math.max(Game.screenShake, 0.18);
+            Audio.hit();
+          }
           hit = true;
           break;
         }
@@ -454,19 +558,23 @@ export function updateArrows(dt) {
       if (dist(ar.x, player.x) < r * 0.6 && (player.jumpH || 0) + entityWallLift(player) <= 20) {
         damagePlayer(1, { knock: (player.x < ar.x ? -1 : 1) * 160 });
       }
-      spawnParticles(ar.x, groundY - 14, 26, "#ff6a20", 140, 120);
-      spawnParticles(ar.x, groundY - 14, 12, "#ffd060", 85, 130);
-      spawnParticles(ar.x, groundY - 10, 8, "#5a0710", 90, 60);
+      spawnParticles(ar.x, groundY - 14, 26, ar.voidBolt ? "#8a5aff" : "#ff6a20", 140, 120);
+      spawnParticles(ar.x, groundY - 14, 12, ar.voidBolt ? "#d7f6ff" : "#ffd060", 85, 130);
+      spawnParticles(ar.x, groundY - 10, 8, ar.voidBolt ? "#160a38" : "#5a0710", 90, 60);
+      if (ar.voidBolt) spawnVoidPool(ar.x, Math.max(58, r * 0.62), 4.2, { pull: true });
       Game.screenShake = Math.max(Game.screenShake, 0.4);
       Audio.hit();
       hit = true;
     }
 
     if (ar.enemyFireball && (hit || ar.life <= 0 || ar.y > groundY - 6)) {
-      spawnParticles(ar.x, Math.min(ar.y, groundY - 8), 16, "#ff6a20", 80, 90);
-      spawnParticles(ar.x, Math.min(ar.y, groundY - 8), 7, "#ffd060", 45, 80);
+      if (ar.ashFireball) detonateAshFireball(ar);
+      const impactRadius = ar.ashFireball ? (ar.splashRadius || 96) : 80;
+      spawnParticles(ar.x, Math.min(ar.y, groundY - 8), ar.ashFireball ? 22 : 16, ar.voidBolt ? "#8a5aff" : "#ff6a20", impactRadius, 90);
+      spawnParticles(ar.x, Math.min(ar.y, groundY - 8), ar.ashFireball ? 10 : 7, ar.voidBolt ? "#d7f6ff" : "#ffd060", impactRadius * 0.55, 80);
       // Magma boulders splash into a burning pool that lingers on the ground
       if (ar.magma) spawnFirePool(ar.x);
+      if (ar.voidBolt && ar.hitKind !== "base") spawnVoidPool(ar.x, ar.big ? 72 : 48, ar.big ? 4.2 : 2.6, { pull: !!ar.big });
     }
     if (hit || (expiresInAir && ar.life <= 0) || ar.y > groundY - 6) {
       // Real arrows (not fireballs/magma/base impacts) freeze in place so it's clear where they landed.

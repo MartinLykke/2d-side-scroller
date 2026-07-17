@@ -26,7 +26,13 @@ function drawStuckArrowShaft(ar, alpha) {
     ctx.beginPath(); ctx.moveTo(-16,0); ctx.lineTo(-21,4); ctx.lineTo(-13.5,1); ctx.closePath(); ctx.fill();
     return;
   }
-  const magic = wid === "void_bow" || wid === "dark_bow" || wid === "dragons_bow";
+  const magic = wid === "void_bow" || wid === "dark_bow" || wid === "dragons_bow" || ar.upgradeCol;
+  if (ar.upgradeCol) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.26 * alpha;
+    ctx.strokeStyle = ar.upgradeCol; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(5, 0); ctx.stroke();
+    ctx.restore();
+  }
   ctx.strokeStyle = ar.powered ? "#e8c060" : magic ? "#e8d8ff" : "#c9b48a";
   ctx.lineWidth = magic ? 1.7 : 1.4;
   ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(5,0); ctx.stroke();
@@ -80,6 +86,13 @@ export function drawArrows() {
       ctx.restore();
       continue;
     }
+    if (ar.upgradeCol) {
+      ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.28 + Math.min(0.18, (ar.upgradeRank || 1) * 0.04);
+      const ug=ctx.createRadialGradient(0,0,1,0,0,15 + (ar.upgradeRank || 1) * 4);
+      ug.addColorStop(0, ar.upgradeCol); ug.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle=ug; ctx.beginPath(); ctx.arc(0,0,20 + (ar.upgradeRank || 1) * 3,0,Math.PI*2); ctx.fill();
+      ctx.restore();
+    }
     if (ar.magma) {
       // The colossus throws dense, cracked chunks of the mountain — not a
       // generic fireball. The short ash wake keeps the projectile readable at
@@ -119,19 +132,23 @@ export function drawArrows() {
       continue;
     }
     if (ar.enemyFireball) {
-      const sc = ar.big ? 2.1 : 1;
+      const sc = ar.scale || (ar.big ? 2.1 : 1);
+      // Void wraith bolts burn cold violet; everything else is hellfire orange
+      const pal = ar.voidBolt
+        ? { core: "rgba(220,240,255,1)", mid: "rgba(150,110,255,0.85)", edge: "rgba(50,20,120,0)", dot: "#b9e8ff", tail: "#8a5aff" }
+        : { core: "rgba(255,245,150,1)", mid: "rgba(255,105,20,0.85)", edge: "rgba(160,20,0,0)", dot: "#ffd060", tail: "#ff5a16" };
       ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.scale(sc, sc);
       const pulse = 0.85 + 0.15 * Math.sin(t * 24 + ar.x);
       const fg=ctx.createRadialGradient(0,0,2,0,0,20 * pulse);
-      fg.addColorStop(0,"rgba(255,245,150,1)");
-      fg.addColorStop(0.35,"rgba(255,105,20,0.85)");
-      fg.addColorStop(1,"rgba(160,20,0,0)");
+      fg.addColorStop(0,pal.core);
+      fg.addColorStop(0.35,pal.mid);
+      fg.addColorStop(1,pal.edge);
       ctx.fillStyle=fg; ctx.beginPath(); ctx.arc(0,0,20 * pulse,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle="#ffd060"; ctx.beginPath(); ctx.arc(4,0,5,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle="#ff5a16"; ctx.beginPath(); ctx.moveTo(-18,0); ctx.quadraticCurveTo(-7,-10,3,-3); ctx.quadraticCurveTo(-7,8,-18,0); ctx.fill();
+      ctx.fillStyle=pal.dot; ctx.beginPath(); ctx.arc(4,0,5,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle=pal.tail; ctx.beginPath(); ctx.moveTo(-18,0); ctx.quadraticCurveTo(-7,-10,3,-3); ctx.quadraticCurveTo(-7,8,-18,0); ctx.fill();
       if (ar.big) {
         ctx.globalAlpha = 0.55;
-        ctx.strokeStyle = "#ff8a30"; ctx.lineWidth = 2;
+        ctx.strokeStyle = ar.voidBolt ? "#d7f6ff" : "#ff8a30"; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(-30,0); ctx.quadraticCurveTo(-16,-7+Math.sin(t*30)*3,-4,-2); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(-30,0); ctx.quadraticCurveTo(-16,7+Math.sin(t*26)*3,-4,2); ctx.stroke();
       }
@@ -282,7 +299,7 @@ export function drawLootItems() {
     if (!stillFalling) groundShadow(it.x,9,0.22);
     const spinAng = stillFalling ? (t*8 % (Math.PI*2)) : (-0.1+Math.sin(t*1.2+it.x*0.005)*0.07);
     ctx.save(); ctx.translate(it.x,yy); ctx.rotate(spinAng);
-    drawWeaponModel(it.weaponId, 0.66, { glow: stillFalling ? 0.05 : 0.1 });
+    drawWeaponModel(it.weaponId, 0.66, { glow: stillFalling ? 0.05 : 0.1, upgrades: it.upgrades });
     ctx.restore();
     if (!stillFalling && it.upgrades && it.upgrades.length > 0) {
       ctx.font="bold 9px Trebuchet MS"; ctx.textAlign="center";
