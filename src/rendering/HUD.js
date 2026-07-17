@@ -498,7 +498,7 @@ export const DEV = {
     appendDevStat(fragment, "Enemies", `${activeEnemies}/${enemies.length}`);
     appendDevStat(fragment, "Drops", `${state.coins?.length || 0}/${state.lootItems?.length || 0}`);
     appendDevStat(fragment, "FX", fxCount);
-    appendDevStat(fragment, "Render", `${budget.level} ${Math.round(load.score || 0)}`);
+    appendDevStat(fragment, "Render", `${budget.level} ${Math.round(load.fps || 0)}/${Math.round(load.targetFps || Game.targetFps || 144)}fps ${Math.round(load.score || 0)}`);
     appendDevStat(fragment, "Pos", Game.inMine ? "mine" : Math.round(player.x || 0));
     appendDevStat(fragment, "Speed", `${this.speedMult}x`);
     el.replaceChildren(fragment);

@@ -7,17 +7,51 @@ import { goldCoinChunks, goldRewardAmount } from '../economy/EconomyBalance.js';
 import { eliteChanceBonus, enemyVitalityMultiplier, nightQuotaMetaMultiplier, portalSpawnIntervalMultiplier } from '../infrastructure/RoguelikeSystem.js';
 
 const MAX_PARTICLES = 700;
+const HARD_MAX_PARTICLES = 420;
 const MAX_FLOAT_TEXTS = 90;
+const HARD_MAX_FLOAT_TEXTS = 60;
+const HARD_ENEMY_COUNT_MULT = 2;
 
 function dayThreatProgress() {
   return Math.max(0, (Game.day || 1) - 2);
+}
+
+function isHardMode() {
+  return Game.difficulty === "hard" || Game.diffMult > 1.5;
+}
+
+function enemyCountDifficultyMultiplier() {
+  return isHardMode() ? HARD_ENEMY_COUNT_MULT : (Game.diffMult || 1);
+}
+
+function currentParticleCap() {
+  return isHardMode() ? HARD_MAX_PARTICLES : MAX_PARTICLES;
+}
+
+function currentFloatTextCap() {
+  return isHardMode() ? HARD_MAX_FLOAT_TEXTS : MAX_FLOAT_TEXTS;
+}
+
+function nightSecondsRemaining() {
+  return Math.max(0.1, (CFG.phases.night - (Game.time || 0)) * CFG.dayLength);
+}
+
+function nextNightSpawnInterval() {
+  const remainingQuota = Math.max(1, (Game.nightQuota || 0) - (Game.nightSpawned || 0));
+  const targetInterval = nightSecondsRemaining() / remainingQuota;
+  const pressure = Math.min(0.45, Math.max(0, Game.day - 4) * 0.018);
+  const hard = isHardMode();
+  const minInterval = hard ? 0.08 : 0.14;
+  const maxInterval = hard ? 1.2 : 1.4;
+  const paced = targetInterval * rand(0.75, 1.2) * (1 - pressure);
+  return clamp(paced, minInterval, maxInterval) * portalSpawnIntervalMultiplier();
 }
 
 function enemyStrengthForDay(t) {
   const progress = dayThreatProgress();
   const lateProgress = Math.max(0, progress - 4);
   const endgameProgress = Math.max(0, progress - 8);
-  const hardMode = Game.diffMult > 1.5 ? 1.12 : 1;
+  const hardMode = isHardMode() ? 1.12 : 1;
   const phase = (Game.worldPhase || 1) >= 2 ? 1.15 : 1;
 
   if (t.boss) {
@@ -36,8 +70,9 @@ function enemyStrengthForDay(t) {
 }
 
 function pushFloatText(f) {
-  if (state.floatTexts.length >= MAX_FLOAT_TEXTS) {
-    state.floatTexts.splice(0, state.floatTexts.length - MAX_FLOAT_TEXTS + 1);
+  const cap = currentFloatTextCap();
+  if (state.floatTexts.length >= cap) {
+    state.floatTexts.splice(0, state.floatTexts.length - cap + 1);
   }
   state.floatTexts.push(f);
   return f;
@@ -100,8 +135,9 @@ export function critFloaty(x, dmg) {
 }
 
 export function spawnParticles(x, y, n, color, spread = 60, up = 80) {
-  const count = Math.min(n, MAX_PARTICLES);
-  const overflow = state.particles.length + count - MAX_PARTICLES;
+  const cap = currentParticleCap();
+  const count = Math.min(n, cap);
+  const overflow = state.particles.length + count - cap;
   if (overflow > 0) state.particles.splice(0, overflow);
   for (let i = 0; i < count; i++)
     state.particles.push({
@@ -244,8 +280,8 @@ export function spawnFireDragon(portal) {
 export function planNight() {
   const d = Game.day;
   Game.threatLevel  = Math.max(1, d);
-  let quotaMult = Game.diffMult || 1;
-  if (Game.diffMult > 1.5) quotaMult *= 1.35;
+  // Hard mode doubles the count relative to normal; strength/type pressure stays separate.
+  let quotaMult = enemyCountDifficultyMultiplier();
   if ((Game.worldPhase || 1) >= 2) quotaMult *= 1.15; // the Hollow presses harder
   // Base horde scaling: 2x from day 1, ramping up ~10% per day (caps at 3.5x)
   const hordeMult = Math.min(3.5, 2 + Math.max(0, d - 1) * 0.1);
@@ -259,7 +295,7 @@ export function planNight() {
 
 function nightEnemyType() {
   const d = Game.day, r = Math.random();
-  const hardMult = Game.diffMult > 1.5 ? 1.3 : 1;
+  const hardMult = isHardMode() ? 1.3 : 1;
   const eliteBonus = eliteChanceBonus();
   // Phase 2: the void rifts send the Hollow instead of the ember horde
   if ((Game.worldPhase || 1) >= 2) {
@@ -299,11 +335,7 @@ export function updateSpawning(dt) {
   if (Game.isNight && Game.nightSpawned < Game.nightQuota) {
     Game.spawnTimer -= dt;
     if (Game.spawnTimer <= 0) {
-      const pressure = Math.min(0.55, Math.max(0, Game.day - 4) * 0.018);
-      let diffSpeedUp = Game.diffMult > 1 ? 1 / Math.sqrt(Game.diffMult) : 1;
-      if (Game.diffMult > 1.5) diffSpeedUp *= 0.7;
-      // Halved interval so the doubled quota still fits inside the night window
-      Game.spawnTimer = rand(0.3, 0.8) * (1 - pressure) * diffSpeedUp * portalSpawnIntervalMultiplier();
+      Game.spawnTimer = nextNightSpawnInterval();
       const type = nightEnemyType();
       const livePortals = state.portals.filter(p => !p.destroyed);
       const portal = pick(livePortals.length ? livePortals : state.portals);

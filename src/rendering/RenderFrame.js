@@ -10,36 +10,50 @@ const BUDGETS = {
     particlesEvery: 1,
     shadowStride: 1,
     groundDetail: 2,
+    ambientEvery: 1,
   }),
   medium: Object.freeze({
     level: "medium",
     enemySpriteDetail: 1,
-    minorHealthBars: true,
-    particlesEvery: 1,
-    shadowStride: 1,
+    minorHealthBars: false,
+    particlesEvery: 2,
+    shadowStride: 2,
     groundDetail: 1,
+    ambientEvery: 2,
   }),
   low: Object.freeze({
     level: "low",
     enemySpriteDetail: 0,
     minorHealthBars: false,
-    particlesEvery: 2,
-    shadowStride: 2,
+    particlesEvery: 3,
+    shadowStride: 3,
     groundDetail: 0,
+    ambientEvery: 3,
   }),
 };
 
 const DETAIL_RANK = { low: 0, medium: 1, high: 2 };
+const DEFAULT_TARGET_FPS = 144;
 let heldBudget = BUDGETS.high;
 let recoveryFrames = 0;
+let lastFrameMs = 0;
+let fpsEstimate = DEFAULT_TARGET_FPS;
 
 let frame = {
   id: 0,
   now: 0,
   views: new Map(),
   budget: heldBudget,
-  load: { score: 0, enemies: 0, entities: 0 },
+  load: { score: 0, enemies: 0, entities: 0, fps: DEFAULT_TARGET_FPS, targetFps: DEFAULT_TARGET_FPS },
 };
+
+function isHardMode() {
+  return Game.difficulty === "hard" || Game.diffMult > 1.5;
+}
+
+function currentTargetFps() {
+  return Game.targetFps || DEFAULT_TARGET_FPS;
+}
 
 function computeView(pad) {
   const zoom = Game.zoom || 1;
@@ -105,6 +119,18 @@ function estimateRenderLoad(baseView) {
 }
 
 function targetBudgetFor(load) {
+  const hard = isHardMode();
+  const targetFps = load.targetFps || currentTargetFps();
+  const fpsGap = targetFps - (load.fps || targetFps);
+
+  if (hard) {
+    if (fpsGap >= 20 || load.enemies >= 34 || load.entities >= 72 || load.score >= 118 || load.particles >= 260) return BUDGETS.low;
+    if (fpsGap >= 6 || load.enemies >= 14 || load.entities >= 34 || load.score >= 54 || load.particles >= 130) return BUDGETS.medium;
+    return BUDGETS.high;
+  }
+
+  if (fpsGap >= 28) return BUDGETS.low;
+  if (fpsGap >= 12) return BUDGETS.medium;
   if (load.enemies >= 42 || load.entities >= 90 || load.score >= 170) return BUDGETS.low;
   if (load.enemies >= 26 || load.entities >= 58 || load.score >= 105) return BUDGETS.medium;
   return BUDGETS.high;
@@ -123,7 +149,7 @@ function settleBudget(load) {
   }
 
   recoveryFrames++;
-  if (recoveryFrames > 24) {
+  if (recoveryFrames > (isHardMode() ? 60 : 30)) {
     heldBudget = target;
     recoveryFrames = 0;
   }
@@ -131,9 +157,17 @@ function settleBudget(load) {
 }
 
 export function beginRenderFrame() {
+  const nowMs = performance.now();
+  if (lastFrameMs > 0) {
+    const dtMs = Math.max(1, nowMs - lastFrameMs);
+    const instantFps = Math.min(240, 1000 / dtMs);
+    fpsEstimate += (instantFps - fpsEstimate) * 0.12;
+  }
+  lastFrameMs = nowMs;
+
   frame = {
     id: frame.id + 1,
-    now: performance.now() / 1000,
+    now: nowMs / 1000,
     views: new Map(),
     budget: heldBudget,
     load: frame.load,
@@ -141,6 +175,8 @@ export function beginRenderFrame() {
   const baseView = computeView(0);
   frame.views.set(0, baseView);
   frame.load = estimateRenderLoad(baseView);
+  frame.load.fps = fpsEstimate;
+  frame.load.targetFps = currentTargetFps();
   frame.budget = settleBudget(frame.load);
   return frame;
 }

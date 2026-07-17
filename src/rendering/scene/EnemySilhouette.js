@@ -4,7 +4,7 @@ import { roundedRect } from '../DrawHelpers.js';
 const TAU = Math.PI * 2;
 
 export function shouldDrawEnemySilhouette(e, t, budget) {
-  if (!budget || budget.enemySpriteDetail > 0) return false;
+  if (!budget || budget.enemySpriteDetail >= 2) return false;
   if (!e || !t || t.boss || t.legendary || e.dying || e.hunterMark > 0) return false;
   return e.type === "imp" || e.type === "fireImp";
 }

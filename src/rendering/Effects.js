@@ -691,12 +691,66 @@ export function drawLowFog(dark, bi) {
 }
 
 export function drawAmbientFront(dark, bi) {
+  const budget = renderBudget();
+  const every = Math.max(1, budget.ambientEvery || 1);
+  const lowDetail = budget.groundDetail === 0;
+
   ctx.save();
-  for (const d of FX.dust) { ctx.globalAlpha=(0.10+0.16*d.z)*(0.5+0.5*(1-dark)); ctx.fillStyle=dark>0.5?"rgba(180,190,220,1)":"rgba(255,250,230,1)"; const s=1+d.z*1.5; ctx.fillRect(d.x,d.y,s,s); }
+  for (let i = 0; i < FX.dust.length; i += every) {
+    const d = FX.dust[i];
+    ctx.globalAlpha=(0.10+0.16*d.z)*(0.5+0.5*(1-dark));
+    ctx.fillStyle=dark>0.5?"rgba(180,190,220,1)":"rgba(255,250,230,1)";
+    const s=1+d.z*1.5;
+    ctx.fillRect(d.x,d.y,s,s);
+  }
   ctx.restore();
-  if (dark<0.5) { for (const bf of FX.butter) { const w=Math.abs(Math.sin(bf.ph*6)); ctx.globalAlpha=1-dark*2; if (ctx.globalAlpha<=0) continue; ctx.fillStyle=bf.c; ctx.beginPath(); ctx.ellipse(bf.x-2,bf.y,3,1.4+w*1.6,0,0,Math.PI*2); ctx.ellipse(bf.x+2,bf.y,3,1.4+w*1.6,0,0,Math.PI*2); ctx.fill(); } ctx.globalAlpha=1; }
-  if (dark>0.4) { ctx.save(); ctx.globalCompositeOperation="lighter"; for (const f of FX.flies) { const tw=0.4+0.6*Math.abs(Math.sin(f.ph*3)); ctx.globalAlpha=tw*dark; ctx.fillStyle="rgba(190,255,120,0.9)"; ctx.beginPath(); ctx.arc(f.x,f.y,1.7,0,Math.PI*2); ctx.fill(); } ctx.restore(); }
-  for (const p of FX.fall) { if (!p.active) continue; ctx.globalAlpha=0.85; if (p.snow) { ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(p.x,p.y,1.8,0,Math.PI*2); ctx.fill(); } else { ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot); ctx.fillStyle=p.color; ctx.beginPath(); ctx.ellipse(0,0,3.2,1.5,0,0,Math.PI*2); ctx.fill(); ctx.restore(); } }
+  if (!lowDetail && dark<0.5) {
+    for (const bf of FX.butter) {
+      const w=Math.abs(Math.sin(bf.ph*6));
+      ctx.globalAlpha=1-dark*2;
+      if (ctx.globalAlpha<=0) continue;
+      ctx.fillStyle=bf.c;
+      ctx.beginPath();
+      ctx.ellipse(bf.x-2,bf.y,3,1.4+w*1.6,0,0,Math.PI*2);
+      ctx.ellipse(bf.x+2,bf.y,3,1.4+w*1.6,0,0,Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+  if (!lowDetail && dark>0.4) {
+    ctx.save();
+    ctx.globalCompositeOperation="lighter";
+    for (let i = 0; i < FX.flies.length; i += every) {
+      const f = FX.flies[i];
+      const tw=0.4+0.6*Math.abs(Math.sin(f.ph*3));
+      ctx.globalAlpha=tw*dark;
+      ctx.fillStyle="rgba(190,255,120,0.9)";
+      ctx.beginPath();
+      ctx.arc(f.x,f.y,1.7,0,Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+  for (let i = 0; i < FX.fall.length; i += every) {
+    const p = FX.fall[i];
+    if (!p.active) continue;
+    ctx.globalAlpha=0.85;
+    if (p.snow) {
+      ctx.fillStyle=p.color;
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,1.8,0,Math.PI*2);
+      ctx.fill();
+    } else {
+      ctx.save();
+      ctx.translate(p.x,p.y);
+      ctx.rotate(p.rot);
+      ctx.fillStyle=p.color;
+      ctx.beginPath();
+      ctx.ellipse(0,0,3.2,1.5,0,0,Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
   ctx.globalAlpha=1;
 }
 
