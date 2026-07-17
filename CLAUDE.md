@@ -32,7 +32,7 @@ The `DEV` object is defined in `src/rendering/HUD.js` and exposed on `window`.
 
 ## Game overview
 
-**Kingdom: Crown of Embers** — a roguelike tower defense where the player defends a base from nightly enemy waves, recruits units, explores locations, and earns permanent meta-progression (embers) across runs.
+**Kingdom: Crown of Embers** — a roguelike tower defense where the player defends a base from nightly enemy waves, recruits units, and earns permanent meta-progression (embers) across runs.
 
 ### Core loop
 
@@ -46,7 +46,7 @@ The `DEV` object is defined in `src/rendering/HUD.js` and exposed on `window`.
 - Two enemy portals at edges (x=500, x=8500)
 - Four wall slots (2 per side) around base
 - Dense forest across the map except near base; trees can be felled to clear building slots
-- Locations (camps, ruins, caves, etc.) spawn procedurally outside the forest
+- Camps spawn in the forest with vagrants that can be rescued
 
 ### Day/night cycle
 
@@ -73,17 +73,17 @@ Every module imports these directly; nothing is passed as arguments through upda
 | Path | Purpose |
 |------|---------|
 | `src/core/` | Entry point (`game.js`), shared state (`state.js`), canvas setup (`canvas.js`) |
-| `src/config/` | Pure data: `config.js`, `weapons.js`, `armor.js`, `enemies.js`, `locations.js`, `archerSkills.js`, `guardSkills.js` |
+| `src/config/` | Pure data: `config.js`, `weapons.js`, `armor.js`, `enemies.js`, `archerSkills.js`, `guardSkills.js` |
 | `src/entities/` | Factory functions: `Player.js`, `Unit.js`, `Wall.js` |
 | `src/systems/ai/` | Unit AI (`AI.js`), enemy behavior (`EnemyAI.js`) |
 | `src/systems/combat/` | Combat orchestrator (`Combat.js`), player attacks (`PlayerCombat.js`), arrows (`ProjectileSystem.js`), spells (`SpellSystem.js`) |
-| `src/systems/world/` | Spawning (`SpawnSystem.js`), forests (`ForestSystem.js`), locations (`LocationSystem.js`), outposts/buildings (`OutpostSystem.js`) |
+| `src/systems/world/` | Spawning (`SpawnSystem.js`), forests (`ForestSystem.js`), outposts/buildings (`OutpostSystem.js`) |
 | `src/systems/economy/` | Payments (`Economy.js`), shops (`ShopSystem.js`), loot (`LootSystem.js`), upgrades/leveling (`UpgradeSystem.js`) |
 | `src/systems/input/` | Keyboard state (`Input.js`), event listeners (`InputHandler.js`) |
 | `src/systems/infrastructure/` | Save/load (`SaveSystem.js`), audio (`Audio.js`), game init (`GameInit.js`), roguelike meta (`RoguelikeSystem.js`) |
 | `src/rendering/` | Main draw orchestrator (`Renderer.js`), DOM HUD (`HUD.js`), particles/biomes (`Effects.js`), draw helpers (`DrawHelpers.js`) |
 | `src/rendering/sprites/` | Entity sprite renderers: `Player.js`, `Archer.js`, `Guard.js`, `Builder.js`, `Villager.js`, `Animals.js` |
-| `src/rendering/scene/` | Scene renderers: `RenderWorld.js`, `RenderEntities.js`, `RenderItems.js`, `RenderEffects.js`, `RenderLocations.js`, `RenderUI.js` |
+| `src/rendering/scene/` | Scene renderers: `RenderWorld.js`, `RenderEntities.js`, `RenderItems.js`, `RenderEffects.js`, `RenderUI.js` |
 | `src/util/` | Pure utilities: `math.js` (clamp, dist, lerp, rand, etc.), `GameStateHelpers.js`, `EnemyUtils.js` |
 
 ### Key patterns
@@ -177,7 +177,7 @@ Buildings in forest require surrounding trees to be felled first.
 - 9 armor pieces providing defense (reduces incoming damage; defense also gives a chance to fully block a hit — `armorBlockChance` in `PlayerCombat.js`)
 - Every armor has a unique **ability** (`ability` in `src/config/armor.js`): passive buffs (move speed, dodge cooldown, regen speed) and on-block effects — knockback/damage pulses with burn, frost, root, or pull; heal-on-block; riposte (block resets attack cooldown); extra block i-frames. Epic+ armors shed ambient particles (`updateArmorPassiveFX` in `PlayerCombat.js`)
 - Shop unlocked at base level 4; shop tier scales with base level
-- Weapons also found in location chests
+- Weapons also found in chests
 
 ### Weapon upgrades
 On level-up the player picks from 3 random upgrades (`src/config/weaponUpgrades.js`): generic tiers plus **unique upgrades per weapon** (2 epic + 2 legendary each). Effects span melee (combo damage, barrier-on-kill, beams, novas, execute…), ranged (pierce, bounce/chain/power arrows, gravity arrows…), and magic (bigger AoE, extra chains, seeker orbs, spell echo, singularity…). Upgrades carry a `vfxCol` woven into the held weapon's glow.
@@ -204,10 +204,6 @@ Skill points earned from upgrades and building construction.
 - Archers: fire arrows (every 4th shot ignites), piercing, bouncing volley, double shot, powershot (3s charge → 3× damage)
 - Guards: piercing thrust, whirlwind, shield bash, rally cry (+20% damage to allies)
 
-## Locations & exploration
-
-17 location types across 4 tiers (easy/medium/hard/epic). Spawn procedurally outside the forest. Trigger on approach (90–180 px detection radius). Grant XP, spawn enemies, drop chests with gold and weapons. Fade out at 900 px distance and respawn after 90–180s. Survivors (vagrants) can be rescued from locations.
-
 ## Roguelike meta-progression
 
 On death, the player enters a hub and earns **embers** based on run performance (kills × multiplier). 11 permanent upgrades purchasable with embers:
@@ -219,7 +215,7 @@ Meta data persisted in localStorage (`kingdom_embers_meta_v1`). Applied at game 
 
 ## Save system
 
-Auto-saves every 5 seconds to localStorage (`kingdom_embers_save_v1`). Saves full game state: clock, player, base, walls, buildings, units, vagrants, locations, forest trees, farm, skill points. Continue button on start screen if save exists.
+Auto-saves every 5 seconds to localStorage (`kingdom_embers_save_v1`). Saves full game state: clock, player, base, walls, buildings, units, vagrants, forest trees, farm, skill points. Continue button on start screen if save exists.
 
 ## Controls
 
