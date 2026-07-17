@@ -41,6 +41,7 @@ import { updateAssault, performPhaseShift } from '../systems/world/AssaultSystem
 import { updateFortifications } from '../systems/world/FortificationSystem.js';
 import { setupInputHandlers } from '../systems/input/InputHandler.js';
 import { provide } from './services.js';
+// Profiler uses window._perf (set by HUD toggle) to avoid ES module cache issues
 
 // Setup callbacks between modules to avoid circular dependencies
 setBuildStations(buildStations);
@@ -486,38 +487,74 @@ function updateArcherAnimations(dt) {
 }
 
 function update(dt) {
+  const p = window._perf;
+  if(p) p.begin("update.time");
   updateTime(dt);
+  if(p) p.end("update.time");
+
+  if(p) p.begin("update.player");
   updatePlayer(dt);
   updatePlayerAttack(dt);
+  if(p) p.end("update.player");
+
+  if(p) p.begin("update.economy");
   updatePayment(dt);
+  if(p) p.end("update.economy");
+
+  if(p) p.begin("update.forest");
   updateForestTrees(dt);
+  updateForestCamps(dt);
+  if(p) p.end("update.forest");
+
+  if(p) p.begin("update.mine");
   updateMine(dt);
+  if(p) p.end("update.mine");
+
+  if(p) p.begin("update.buildings");
   updateBuildings(dt);
+  updateFortifications(dt);
+  if(p) p.end("update.buildings");
+
+  if(p) p.begin("update.units");
   updateVagrants(dt);
   updateAssignments();
   updateUnits(dt);
   updateArcherAnimations(dt);
   updateAnimals(dt);
-  updateForestCamps(dt);
+  if(p) p.end("update.units");
+
+  if(p) p.begin("update.portals");
   updatePortals();
   updateNightPortalWarning(dt);
   updateAssault(dt);
-  updateFortifications(dt);
+  if(p) p.end("update.portals");
+
+  if(p) p.begin("update.enemies");
   updateCaltrops(dt);
   updateEnemies(dt);
   updateDyingEnemies(dt);
   updateFirePools(dt);
+  if(p) p.end("update.enemies");
+
+  if(p) p.begin("update.combat");
   updateArrows(dt);
   updateSpells(dt);
+  if(p) p.end("update.combat");
 
+  if(p) p.begin("update.loot");
   updateCoins(dt);
   updateLootItems(dt);
   updateChests(dt);
   updateLootPhysics(dt);
   updateWeaponPickup(dt);
+  if(p) p.end("update.loot");
+
+  if(p) p.begin("update.fx");
   updateParticles(dt);
   if (Game.screenShake > 0) Game.screenShake = Math.max(0, Game.screenShake - dt * 9);
   updateFloats(dt);
+  if(p) p.end("update.fx");
+
   updateMomentum(dt);
   updateSpawning(dt);
   updateNightClear();
@@ -680,12 +717,17 @@ function loop(now) {
   let dt = clamp(frameDt, 0, 0.05);
   DEV.updateFps(frameDt);
 
+  const _p = window._perf;
+  if(_p) _p.beginFrame();
+
   const gdt = dt * DEV.speedMult;
   updateFXEffects(gdt);
 
   if (Game.state === "play") {
+    if(_p) _p.begin("update");
     if (!Game.upgradeMenuOpen) update(gdt);
     updatePhaseTransition(gdt);
+    if(_p) _p.end("update");
     uiRefreshElapsed += frameDt;
     if (uiRefreshElapsed >= 0.08) {
       uiRefreshElapsed = 0;
@@ -708,7 +750,6 @@ function loop(now) {
   }
   if (Game.state === "player-death") {
     Game.deathTimer += dt;
-    // slow-motion aftermath: only ambient bits keep moving
     const sdt = gdt * 0.35;
     updateParticles(sdt);
     updateFloats(sdt);
@@ -726,13 +767,16 @@ function loop(now) {
     Game.cam += (target - Game.cam) * Math.min(1, dt * 2.5);
     if (Game.defeatPanTimer > 2.2) endGame(Game.defeatText);
   }
+  if(_p) _p.begin("render");
   if (Game.state === "hub" || Game.state === "hub-transition") renderHub();
   else if (Game.state !== "menu") render();
   else renderMenuBackground();
   drawRunStartOverlay(dt);
   drawPhaseOverlay();
   drawDeathOverlay();
+  if(_p) _p.end("render");
 
+  if(_p) _p.endFrame();
   requestAnimationFrame(loop);
 }
 

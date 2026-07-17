@@ -75,6 +75,9 @@ export function setupDevPanel() {
   bind('[data-dev="duck"]',   () => DEV.spawnAnimalNearBase('duck'));
   bind('[data-dev="bear"]',   () => DEV.spawnAnimalNearBase('bear'));
 
+  // Profiler
+  bind('[data-dev="profiler"]',   () => DEV.toggleProfiler());
+
   // Player & Weapons
   bind('[data-dev="godMode"]',    () => DEV.toggleGodMode());
   bind('[data-dev="deathHub"]',   () => inject('enterDeathHub')?.('Dev test: the crown fell between worlds.'));

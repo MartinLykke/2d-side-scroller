@@ -18,6 +18,7 @@ import { acquireMount, toggleMount } from '../systems/economy/MountSystem.js';
 import { expectedGoldForDay, goldRewardAmount } from '../systems/economy/EconomyBalance.js';
 import { addSkillPoints, autoSpendSkillPoints } from '../systems/economy/SkillSystem.js';
 import { renderBudget, renderLoad } from './RenderFrame.js';
+import { profilerEnabled, setProfilerEnabled, profilerResults, profilerFrameMs, profilerReset } from '../util/Profiler.js';
 
 // ── Skill Tree ────────────────────────────────────────────────
 const BRANCH_NAMES = {
@@ -468,6 +469,7 @@ export const DEV = {
   _renderPanel() {
     this._renderFps();
     this._renderStats();
+    this._renderProfiler();
   },
 
   _renderFps() {
@@ -487,6 +489,16 @@ export const DEV = {
     const budget = renderBudget();
     const load = renderLoad();
     const popCap = CFG.popCapByLevel?.[base.level] ?? "-";
+
+    const costs = [];
+    costs.push({ label: `Enemies (${load.enemies})`, weight: load.enemies * 1.4 });
+    costs.push({ label: `Units (${units.length})`, weight: units.length * 1.1 });
+    costs.push({ label: `FX (${fxCount})`, weight: fxCount * 0.12 });
+    costs.push({ label: `Arrows (${state.arrows?.length || 0})`, weight: (state.arrows?.length || 0) * 0.45 });
+    costs.push({ label: `Coins (${state.coins?.length || 0})`, weight: (state.coins?.length || 0) * 0.18 });
+    costs.sort((a, b) => b.weight - a.weight);
+    const top3 = costs.slice(0, 3).map(c => `${c.label}`).join(", ");
+
     const fragment = document.createDocumentFragment();
     appendDevStat(fragment, "Day", Game.day || 1);
     appendDevStat(fragment, "Phase", `${phaseName()} ${Math.round((Game.time || 0) * 100)}%`);
@@ -499,6 +511,7 @@ export const DEV = {
     appendDevStat(fragment, "Drops", `${state.coins?.length || 0}/${state.lootItems?.length || 0}`);
     appendDevStat(fragment, "FX", fxCount);
     appendDevStat(fragment, "Render", `${budget.level} ${Math.round(load.fps || 0)}/${Math.round(load.targetFps || Game.targetFps || 144)}fps ${Math.round(load.score || 0)}`);
+    appendDevStat(fragment, "Top Costs", top3);
     appendDevStat(fragment, "Pos", Game.inMine ? "mine" : Math.round(player.x || 0));
     appendDevStat(fragment, "Speed", `${this.speedMult}x`);
     el.replaceChildren(fragment);
@@ -818,6 +831,112 @@ export const DEV = {
     }
     state.player.pendingUpgrade = true;
     floaty(state.player.x, "⬆ Upgrade available!", "#f2c14e");
+  },
+
+  toggleProfiler() {
+    const on = !profilerEnabled();
+    setProfilerEnabled(on);
+    if (!on) {
+      profilerReset();
+      const el = document.getElementById("dev-profiler");
+      if (el) el.remove();
+    }
+    const btn = document.getElementById("dev-profiler-btn");
+    if (btn) {
+      btn.textContent = "Profiler: " + (on ? "🟢 ON" : "⚫ OFF");
+      btn.classList.toggle("dev-active", on);
+    }
+  },
+
+  _profilerRows: new Map(),
+  _profilerOrder: [],
+
+  _renderProfiler() {
+    if (!profilerEnabled()) return;
+
+    let el = document.getElementById("dev-profiler");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "dev-profiler";
+      el.style.cssText = [
+        "position:fixed", "bottom:12px", "left:12px", "z-index:9999",
+        "width:360px", "max-height:50vh", "overflow-y:auto",
+        "padding:10px 12px", "border-radius:8px",
+        "background:rgba(8,6,18,0.88)", "border:1px solid rgba(155,208,90,0.25)",
+        "backdrop-filter:blur(8px)",
+        "font-size:11px", "font-family:monospace", "line-height:1.55",
+        "color:#c8b890", "pointer-events:none", "user-select:none",
+      ].join(";");
+
+      const header = document.createElement("div");
+      header.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;";
+      header.innerHTML = `<span style="color:#f2c14e;font-weight:bold;">Profiler</span><span id="dev-prof-frame" style="font-weight:bold;"></span>`;
+      el.appendChild(header);
+
+      const budgetBar = document.createElement("div");
+      budgetBar.style.cssText = "height:4px;background:rgba(255,255,255,0.08);border-radius:2px;margin-bottom:6px;overflow:hidden;";
+      budgetBar.innerHTML = `<div id="dev-prof-budget" style="height:100%;border-radius:2px;transition:width .3s,background .3s;"></div>`;
+      el.appendChild(budgetBar);
+
+      const body = document.createElement("div");
+      body.id = "dev-prof-body";
+      el.appendChild(body);
+
+      document.body.appendChild(el);
+      this._profilerRows.clear();
+      this._profilerOrder.length = 0;
+    }
+
+    const results = profilerResults();
+    if (!results.length) return;
+
+    const frameMs = profilerFrameMs();
+    const budgetMs = 1000 / 60;
+    const budgetPct = Math.min(100, (frameMs / budgetMs) * 100);
+    const budgetCol = budgetPct > 80 ? "#ff6a6a" : budgetPct > 50 ? "#ffc24e" : "#9bd05a";
+
+    const frameEl = document.getElementById("dev-prof-frame");
+    if (frameEl) { frameEl.textContent = `${frameMs.toFixed(1)}ms / ${budgetMs.toFixed(1)}ms`; frameEl.style.color = budgetCol; }
+    const budgetEl = document.getElementById("dev-prof-budget");
+    if (budgetEl) { budgetEl.style.width = budgetPct.toFixed(0) + "%"; budgetEl.style.background = budgetCol; }
+
+    const body = document.getElementById("dev-prof-body");
+    if (!body) return;
+
+    const maxMs = Math.max(0.1, ...results.map(r => r.avg));
+
+    for (const r of results) {
+      if (r.avg < 0.005) continue;
+      let row = this._profilerRows.get(r.name);
+      if (!row) {
+        row = document.createElement("div");
+        row.style.cssText = "display:flex;align-items:center;gap:5px;height:14px;margin:1px 0;";
+        const label = document.createElement("span");
+        label.style.cssText = "width:110px;color:#c8b890;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;";
+        label.textContent = r.name;
+        label.title = r.name;
+        const track = document.createElement("div");
+        track.style.cssText = "flex:1;height:8px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;";
+        const fill = document.createElement("div");
+        fill.style.cssText = "height:100%;border-radius:3px;transition:width .3s,background .3s;";
+        fill.className = "prof-fill";
+        track.appendChild(fill);
+        const val = document.createElement("span");
+        val.style.cssText = "width:80px;text-align:right;color:#e0d8c0;flex-shrink:0;";
+        val.className = "prof-val";
+        row.append(label, track, val);
+        this._profilerRows.set(r.name, row);
+        this._profilerOrder.push(r.name);
+        body.appendChild(row);
+      }
+      const pct = maxMs > 0 ? (r.avg / maxMs) * 100 : 0;
+      const framePct = frameMs > 0 ? (r.avg / frameMs) * 100 : 0;
+      const barCol = r.avg > 4 ? "#ff6a6a" : r.avg > 2 ? "#ffc24e" : r.avg > 0.5 ? "#9bd05a" : "#6a8a5a";
+      const fill = row.querySelector(".prof-fill");
+      if (fill) { fill.style.width = pct.toFixed(0) + "%"; fill.style.background = barCol; }
+      const val = row.querySelector(".prof-val");
+      if (val) val.innerHTML = `${r.avg.toFixed(2)}ms <span style="color:#888;">${framePct.toFixed(0)}%</span>`;
+    }
   },
 
 };

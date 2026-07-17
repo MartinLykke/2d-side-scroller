@@ -18,6 +18,7 @@ import { drawWeaponPickupOverlay, drawInventoryOverlay, drawShopOverlay, drawUpg
 import { drawMineCutaway } from './scene/RenderMine.js';
 import { drawHeart } from './DrawHelpers.js';
 import { beginRenderFrame } from './RenderFrame.js';
+// Profiler uses window._perf (set by HUD toggle)
 
 // Helper functions
 function drawWeaponSwingArc(x, player) {
@@ -206,32 +207,34 @@ export { drawEntityShadows };
 // Main render function
 export function render() {
   beginRenderFrame();
+  const p = window._perf;
   const dark=darkness();
   const [top,bot]=skyColors();
   const g=ctx.createLinearGradient(0,0,0,groundY+80);
   g.addColorStop(0,rgb(top)); g.addColorStop(0.62,rgb(lerpColor(top,bot,0.6))); g.addColorStop(1,rgb(bot));
   ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
 
+  if(p) p.begin("draw.sky");
   drawStars(dark); drawCelestials(dark); drawClouds(dark,top); drawBirds(dark);
+  if(p) p.end("draw.sky");
 
+  if(p) p.begin("draw.trees");
   const trees=getTrees();
   drawHills(trees.hills,dark);
   drawTreeLayer(trees.far,0.22,0.88,4,0.9);
   drawTreeLayer(trees.mid,0.38,0.64,7,0.95);
   drawTreeLayer(trees.near,0.70,0.30,14);
+  if(p) p.end("draw.trees");
 
   const bi=biomeAt(Game.cam+W/2);
-  // grass band -> warm earth -> dark loam
   const gg=ctx.createLinearGradient(0,groundY,0,H);
   gg.addColorStop(0,rgb(lerpColor(bi.gT,[14,16,26],dark)));
   gg.addColorStop(0.16,rgb(lerpColor(shade(bi.gT,0.88),[12,14,22],dark)));
   gg.addColorStop(0.34,rgb(lerpColor(lerpColor(bi.gB,[96,72,48],0.3),[9,11,18],dark)));
   gg.addColorStop(1,rgb(lerpColor(lerpColor(bi.gB,[44,32,24],0.5),[6,8,16],dark)));
   ctx.fillStyle=gg; ctx.fillRect(0,groundY,W,H-groundY);
-  // dark seam just above the lip separates the play surface from the backdrop
   ctx.fillStyle=withA(lerpColor(shade(bi.gT,0.45),[6,8,14],dark),0.55);
   ctx.fillRect(0,groundY-1,W,1.5);
-  // sunlit grass lip
   ctx.fillStyle=withA(lerpColor(shade(bi.gT,1.3),[44,48,64],dark),0.85);
   ctx.fillRect(0,groundY,W,2);
   ctx.fillStyle=withA(lerpColor(shade(bi.gT,1.12),[30,34,48],dark),0.4);
@@ -242,19 +245,34 @@ export function render() {
   const _skx=_sk>0?(Math.random()-0.5)*_sk*12:0, _sky=_sk>0?(Math.random()-0.5)*_sk*7:0;
   ctx.save();
   ctx.translate(W/2+_skx, groundY+_sky); ctx.scale(zoom,zoom); ctx.translate(-W/2-Game.cam,-groundY);
+
+  if(p) p.begin("draw.terrain");
   drawGroundTexture(dark); drawGroundDeco(dark); drawPonds(dark); drawMineCutaway(drawPlayer, dark); drawForestCamps(dark); drawForestTrees(dark); drawWildBirds();
+  if(p) p.end("draw.terrain");
+
+  if(p) p.begin("draw.structures");
   drawEntityShadows(); drawPortals(dark); drawWalls(dark); drawBuildings(dark); drawBase(dark);
   drawStations(); drawCoins(); drawGroundBows(); drawGroundHammers(); drawLootItems(); drawChests();
+  if(p) p.end("draw.structures");
+
+  if(p) p.begin("draw.entities");
   drawAnimals(); drawVagrants(); drawCaltrops(); drawFirePools(); drawUnits(); drawEnemies(dark); drawLegendaryEffects();
   if (!Game.inMine) drawPlayer(dark);
+  if(p) p.end("draw.entities");
+
+  if(p) p.begin("draw.fx");
   drawArrows(); drawPoisonShots(); drawSpells(); drawAegisStrikes(); drawLevelUpBeams(); drawParticles(); drawCampLight(dark); drawFloats();
+  if(p) p.end("draw.fx");
+
   ctx.restore();
 
+  if(p) p.begin("draw.post");
   drawLowFog(dark,bi); drawAmbientFront(dark,bi);
-
   ctx.fillStyle=`rgba(4,3,12,${0.04+0.18*dark})`;
   ctx.fillRect(0,0,W,H);
+  if(p) p.end("draw.post");
 
+  if(p) p.begin("draw.ui");
   drawOffscreenIndicators();
   drawWeaponPickupOverlay();
   drawInventoryOverlay();
@@ -262,4 +280,5 @@ export function render() {
   drawUpgradeMenu();
   if (Game.state === "play") drawXpBar();
   drawLegendaryIntro();
+  if(p) p.end("draw.ui");
 }

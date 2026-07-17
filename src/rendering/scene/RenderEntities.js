@@ -1537,13 +1537,51 @@ function drawMagmaGolem(e, t, dark, atkF) {
   ctx.restore();
 }
 
+function cullStackedImps(enemies) {
+  const wallStacks = new Map();
+  for (const e of enemies) {
+    if (e.type !== "imp" || e.dying) continue;
+    if (e.aiState !== "stacking" && e.aiState !== "stackQueue") continue;
+    const key = e.stackWallRef || e.queueWallRef;
+    if (!key) continue;
+    let entry = wallStacks.get(key);
+    if (!entry) { entry = { top: null, topY: Infinity, count: 0 }; wallStacks.set(key, entry); }
+    entry.count++;
+    const sy = e.impStackY || 0;
+    if (sy < entry.topY) { entry.topY = sy; entry.top = e; }
+  }
+  const hidden = new Set();
+  for (const entry of wallStacks.values()) {
+    if (entry.count < 3) continue;
+    for (const e of enemies) {
+      if (e.type !== "imp" || e.dying || e === entry.top) continue;
+      if ((e.aiState === "stacking" || e.aiState === "stackQueue") &&
+          (e.stackWallRef || e.queueWallRef) === (entry.top.stackWallRef || entry.top.queueWallRef)) {
+        hidden.add(e);
+      }
+    }
+    entry.top._stackCount = entry.count;
+  }
+  return hidden;
+}
+
+function isHighDetailContext(e) {
+  if (e.aiState === "stacking" || e.aiState === "stackQueue" || e.aiState === "climbOver") return false;
+  if (e.attackAnim > 0 || e.target) return true;
+  const bx = state.base?.x || 4500;
+  if (Math.abs(e.x - bx) < 400) return true;
+  return false;
+}
+
 export function drawEnemies(dark) {
   const view = visibleWorldBounds(650);
   const budget = renderBudget();
+  const hiddenImps = cullStackedImps(state.enemies);
   for (const e of state.enemies) {
     const t=ENEMY_TYPES[e.type];
     if (!t) continue;
     if (e.x < view.left || e.x > view.right) continue;
+    if (hiddenImps.has(e)) continue;
     let drawYOff = e.type === "imp" && e.aiState === "stacking" && e.impStackY !== undefined ? e.impStackY : (e.fy || 0);
     const bossT = performance.now()/1000;
 
@@ -1552,7 +1590,8 @@ export function drawEnemies(dark) {
     const atkF = Math.max(0, e.attackAnim || 0) / 0.25;
     const custom = e.type === "imp" ? drawImp : e.type === "fireImp" ? drawFireImp : e.type === "emberBrute" ? drawEmberBrute : e.type === "ashPriest" ? drawAshPriest : e.type === "fireDragon" ? drawFireDragon : e.type === "magmaGolem" ? drawMagmaGolem
       : e.type === "shade" ? drawShade : e.type === "voidWraith" ? drawVoidWraith : e.type === "voidBrute" ? drawVoidBrute : e.type === "voidTitan" ? drawVoidTitan : e.type === "voidSeraph" ? drawVoidSeraph : null;
-    const useSilhouette = shouldDrawEnemySilhouette(e, t, budget);
+    const useSilhouette = shouldDrawEnemySilhouette(e, t, budget) ||
+      (e.type === "imp" && !e.dying && !isHighDetailContext(e) && !t.boss && !t.legendary);
     ctx.save(); ctx.translate(e.x, drawYOff);
     if (atkF > 0 && !custom && !useSilhouette) ctx.scale(1 + atkF * 0.18, 1 - atkF * 0.12);
     if (e.dir<0) ctx.scale(-1,1);
@@ -1645,6 +1684,18 @@ export function drawEnemies(dark) {
     }
     if (!useSilhouette) drawStuckImpArrows(e);
     ctx.restore();
+
+    if (e._stackCount > 1) {
+      ctx.save();
+      ctx.font = "bold 10px Trebuchet MS";
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillText("×" + e._stackCount, e.x + 1, groundY + drawYOff - t.w - 6);
+      ctx.fillStyle = "#ffd060";
+      ctx.fillText("×" + e._stackCount, e.x, groundY + drawYOff - t.w - 7);
+      ctx.restore();
+      e._stackCount = 0;
+    }
 
     // Hunter's Mark: a pulsing crimson chevron hovers over the marked target
     if (e.hunterMark > 0 && !e.dying) {
