@@ -24,6 +24,20 @@ function paymentBatchSize(station) {
   return Math.min(3, remaining);
 }
 
+function completeInstantPurchase(station, player) {
+  const cost = station.cost();
+  const remaining = Math.max(0, cost - (station.paid || 0));
+  if (remaining <= 0 || player.coins < remaining) return false;
+
+  player.coins -= remaining;
+  station.paid = 0;
+  state.payCooldown = CFG.payInterval;
+  flyingCoin(player.x + rand(-6, 6), station.x());
+  Audio.pay();
+  station.onPaid();
+  return true;
+}
+
 export function updatePayment(dt) {
   const { player, stations } = state;
   const keys = inject('keys') || {};
@@ -56,8 +70,14 @@ export function updatePayment(dt) {
   state.lastPaidStation = near;
 
   const payHeld = keys["arrowdown"] || keys["s"];
+  const payStarted = payHeld && state.payHoldTime <= 0;
   if (!payHeld) state.payHoldTime = 0;
   else state.payHoldTime += dt;
+
+  if (near.instantPurchase) {
+    if (payStarted && state.payCooldown <= 0) completeInstantPurchase(near, player);
+    return;
+  }
 
   if (player.coins > 0 && payHeld && state.payCooldown <= 0) {
     const batch = Math.min(player.coins, paymentBatchSize(near));

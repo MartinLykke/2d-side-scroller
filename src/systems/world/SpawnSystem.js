@@ -1,12 +1,10 @@
-import { CFG, PORTALS, WALL_SLOTS, FOREST } from '../../config/config.js';
+import { CFG } from '../../config/config.js';
 import { ENEMY_TYPES, BOSS_SCHEDULE } from '../../config/enemies.js';
-import { LOC_DEFS } from '../../config/locations.js';
-import { WEAPONS } from '../../config/weapons.js';
-import { clamp, rand, pick, mulberry32 } from '../../util/math.js';
+import { clamp, rand, pick } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { goldCoinChunks, goldRewardAmount } from '../economy/EconomyBalance.js';
-import { eliteChanceBonus, enemyVitalityMultiplier, locationThreatMultiplier, nightQuotaMetaMultiplier, portalSpawnIntervalMultiplier } from '../infrastructure/RoguelikeSystem.js';
+import { eliteChanceBonus, enemyVitalityMultiplier, nightQuotaMetaMultiplier, portalSpawnIntervalMultiplier } from '../infrastructure/RoguelikeSystem.js';
 
 const MAX_PARTICLES = 700;
 const MAX_FLOAT_TEXTS = 90;
@@ -36,6 +34,7 @@ function enemyStrengthForDay(t) {
     speed: clamp(1 + progress * 0.008, 1, 1.18),
   };
 }
+
 function pushFloatText(f) {
   if (state.floatTexts.length >= MAX_FLOAT_TEXTS) {
     state.floatTexts.splice(0, state.floatTexts.length - MAX_FLOAT_TEXTS + 1);
@@ -332,48 +331,4 @@ export function updateSpawning(dt) {
       }
     }
   }
-}
-
-export function makeLocation(x, type, r) {
-  const def = LOC_DEFS[type];
-  const goldAmt = Math.round(def.goldR[0] + r() * (def.goldR[1] - def.goldR[0]));
-  let weaponId = null;
-  if (r() < 0.70) {
-    const rarMin = def.wRar[0], rarMax = def.wRar[1];
-    const bonus = Game.rarityBonus || 0;
-    const targetRar = clamp(rarMin + Math.floor(r() * (rarMax - rarMin + 1)) + bonus, 0, 4);
-    const wList = Object.keys(WEAPONS).filter(k => WEAPONS[k].rarity === targetRar);
-    if (wList.length) weaponId = wList[Math.floor(r() * wList.length)];
-  }
-  let enemyCount = Math.floor(r() * (def.maxE + 1));
-  if (Game.diffMult > 1.5) enemyCount = Math.ceil(enemyCount * 1.4);
-  const locThreat = locationThreatMultiplier();
-  if (locThreat > 1) {
-    enemyCount = Math.ceil(enemyCount * locThreat);
-    if (enemyCount === 0 && def.maxE > 0 && r() < Math.min(0.55, locThreat - 1)) enemyCount = 1;
-  }
-  return {
-    x, type,
-    triggered: false,
-    preActivated: false,
-    cleared: enemyCount === 0,
-    lootGold: goldAmt,
-    weaponId,
-    enemyCount,
-    remainingEnemies: 0,
-    remainingVagrants: def.vagrants || 0,
-    blockedUntilExit: false,
-    lootSpawned: false,
-    ph: r() * 6,
-  };
-}
-
-export function buildLocations() {
-  state.locations = [];
-}
-
-export function spawnLocLoot(loc) {
-  loc.lootSpawned = true;
-  spawnGoldReward(loc.x, loc.lootGold, "location", { spreadX: 50, fromY: groundY - 20, vx: 70 });
-  if (loc.weaponId) state.lootItems.push({ x: loc.x + rand(-24, 24), weaponId: loc.weaponId, dropVy: -340, dropY: groundY - 160 });
 }

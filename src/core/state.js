@@ -19,7 +19,6 @@ export const Game = {
   shopIdx: 0,
   shopTab: 0,
   diffMult: 1.0,
-  rarityBonus: 0,
   upgradeMenuOpen: false,
   upgradeOptions: null,
   upgradeIdx: 0,

@@ -17,6 +17,7 @@ import { MOUNTS } from '../config/mounts.js';
 import { acquireMount, toggleMount } from '../systems/economy/MountSystem.js';
 import { expectedGoldForDay, goldRewardAmount } from '../systems/economy/EconomyBalance.js';
 import { addSkillPoints, autoSpendSkillPoints } from '../systems/economy/SkillSystem.js';
+import { renderBudget, renderLoad } from './RenderFrame.js';
 
 // ── Skill Tree ────────────────────────────────────────────────
 const BRANCH_NAMES = {
@@ -312,7 +313,8 @@ export const UI = {
     if (near) {
       this.prompt.classList.remove("hidden");
       const prog=near.paid>0?` (${near.paid}/${near.cost()})` : "";
-      this.prompt.innerHTML=`${near.label()} &nbsp;<span class="cost">${near.cost()}🪙</span>${prog} &nbsp;<span class="hold">hold ↓/S</span>`;
+      const action=near.instantPurchase ? "press \u2193/S" : "hold \u2193/S";
+      this.prompt.innerHTML=`${near.label()} &nbsp;<span class="cost">${near.cost()}\u{1FA99}</span>${prog} &nbsp;<span class="hold">${action}</span>`;
     } else if (mineLadderNear) {
       this.prompt.classList.remove("hidden");
       this.prompt.innerHTML=Game.inMine
@@ -482,6 +484,8 @@ export const DEV = {
     const enemies = state.enemies || [];
     const activeEnemies = enemies.filter(e => !e.fleeing && !e.dying && e.hp > 0).length;
     const fxCount = (state.particles?.length || 0) + (state.floatTexts?.length || 0);
+    const budget = renderBudget();
+    const load = renderLoad();
     const popCap = CFG.popCapByLevel?.[base.level] ?? "-";
     const fragment = document.createDocumentFragment();
     appendDevStat(fragment, "Day", Game.day || 1);
@@ -494,6 +498,7 @@ export const DEV = {
     appendDevStat(fragment, "Enemies", `${activeEnemies}/${enemies.length}`);
     appendDevStat(fragment, "Drops", `${state.coins?.length || 0}/${state.lootItems?.length || 0}`);
     appendDevStat(fragment, "FX", fxCount);
+    appendDevStat(fragment, "Render", `${budget.level} ${Math.round(load.score || 0)}`);
     appendDevStat(fragment, "Pos", Game.inMine ? "mine" : Math.round(player.x || 0));
     appendDevStat(fragment, "Speed", `${this.speedMult}x`);
     el.replaceChildren(fragment);
@@ -593,6 +598,13 @@ export const DEV = {
       w.buildProgress = 1;
     }
     floaty(state.base.x, "⬆ All walls → max level!", "#9bd05a");
+  },
+
+  fortTierUp() {
+    if (Game.state!=="play") return;
+    import('../systems/world/FortificationSystem.js').then(m => {
+      if (!m.purchaseFortUpgrade()) floaty(state.base.x, "Runeforge fully attuned", "#c9a2ff");
+    });
   },
 
   healAll() {

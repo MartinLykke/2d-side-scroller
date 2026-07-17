@@ -5,6 +5,7 @@ import { Audio } from '../systems/infrastructure/Audio.js';
 import { floaty, spawnParticles } from '../systems/world/SpawnSystem.js';
 import { storeWeapon } from '../systems/economy/InventorySystem.js';
 import { baseName } from '../rendering/HUD.js';
+import { fortDefenseHpMult } from '../systems/world/FortificationSystem.js';
 
 let buildStationsFn = null;
 
@@ -16,7 +17,7 @@ export function upgradeBase() {
   const { base } = state;
   if (base.level >= CFG.maxBaseLevel) return;
   base.level++;
-  base.maxHp = CFG.baseMaxHp[base.level] + (Game.permanentBaseHpBonus || 0);
+  base.maxHp = Math.round((CFG.baseMaxHp[base.level] + (Game.permanentBaseHpBonus || 0)) * fortDefenseHpMult());
   base.hp    = base.maxHp;
   base.flash = 1;
   Audio.upgrade();

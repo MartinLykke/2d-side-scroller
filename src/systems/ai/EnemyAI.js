@@ -8,6 +8,7 @@ import { Audio } from '../infrastructure/Audio.js';
 import { spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js';
 import { meleeHitPlayer, damagePlayer } from '../combat/PlayerCombat.js';
 import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js';
+import { fortOnWallStruck } from '../world/FortificationSystem.js';
 import { wallHeight, wallReady, wallRenderWidth, entityWallLift } from '../../entities/Wall.js';
 import { updateBoss, dropRiderFromDragon, spawnFirePool } from './BossAI.js';
 
@@ -32,6 +33,7 @@ function scaledEnemyType(e, t) {
   if (t.ashFireballDmg !== undefined) scaled.ashFireballDmg = t.ashFireballDmg * damageMult;
   return scaled;
 }
+
 function playerCombatLift() {
   const p = state.player;
   return p ? (p.jumpH || 0) + entityWallLift(p) : 0;
@@ -381,13 +383,15 @@ function killWall(w) {
 }
 
 // Shared wall-chipping attack: crit roll, hit feedback and collapse check.
-function damageWall(wall, baseDmg, particleCount = 3) {
+// Runeforge wards retaliate against the attacker when one is provided.
+function damageWall(wall, baseDmg, particleCount = 3, attacker = null) {
   const crit = applyCrit(baseDmg, CFG.critChance, CFG.critMultiplier);
   wall.hp -= crit.damage;
   wall.flash = 0.15;
   spawnParticles(wall.x, groundY - 30, particleCount, "#caa46a", 30, 30);
   if (crit.isCrit) critFloaty(wall.x, crit.damage);
   Audio.hit();
+  if (attacker) fortOnWallStruck(wall, attacker, crit.damage);
   if (wall.hp <= 0) killWall(wall);
 }
 
@@ -807,7 +811,7 @@ function finishAshScorch(e, t) {
   if (target.kind === "wall") {
     const wall = target.obj;
     if (!wall || !wall.commissioned || wall.hp <= 0) return;
-    damageWall(wall, Math.max(2, t.dmg * 0.72), 9);
+    damageWall(wall, Math.max(2, t.dmg * 0.72), 9, e);
     spawnFirePool(wall.x - wall.side * 18, 46, 3.8);
     floaty(wall.x, "Scorched", "#ff7a24", 14);
   } else if (target.kind === "base") {
@@ -1165,7 +1169,7 @@ function updateImp(e, t, dt) {
   if (e.attackCd <= 0) {
     e.attackCd = 1.15;
     e.attackAnim = 0.18;
-    damageWall(wall, Math.max(1, t.dmg * 0.12), 2);
+    damageWall(wall, Math.max(1, t.dmg * 0.12), 2, e);
   }
   return true;
 }
@@ -1198,8 +1202,6 @@ export function updateEnemies(dt) {
         continue;
       }
     }
-
-    if (e.home !== undefined) { updateLocEnemy(e, t, dt); continue; }
 
     // Night bosses run their own state machines in BossAI.js
     if (t.boss) {
@@ -1383,7 +1385,7 @@ export function updateEnemies(dt) {
         }
         for (const w of state.walls) {
           if (!w.commissioned || w.hp <= 0) continue;
-          if (dist(e.x, w.x) < radius) { damageWall(w, t.dmg * 0.35, 4); hitSomething = true; }
+          if (dist(e.x, w.x) < radius) { damageWall(w, t.dmg * 0.35, 4, e); hitSomething = true; }
         }
         if (hitSomething || dist(e.x, base.x) < radius) {
           e.stompFlash = 0.35;
@@ -1415,7 +1417,7 @@ export function updateEnemies(dt) {
       if (e.attackCd <= 0 && e.aiState !== "recovery") {
         changeState(e, "attacking", 0.5);
         e.attackCd = 0.7; e.attackAnim = 0.22 * swingMult(e);
-        damageWall(wall, t.dmg);
+        damageWall(wall, t.dmg, 3, e);
       }
       continue;
     }
@@ -1545,56 +1547,4 @@ export function updateEnemies(dt) {
       e.x += e.dir * t.speed * slowMult * sprintMult * approachSpeedMult(Math.abs(base.x - e.x)) * dt;
     }
   }
-}
-
-function updateLocEnemy(e, t, dt) {
-  const { player } = state;
-  if (e.flash > 0) e.flash -= dt;
-  e.attackCd -= dt;
-  if (e.stateTimer > 0) e.stateTimer -= dt;
-
-  if (e.knock) {
-    e.x += e.knock * dt;
-    e.knock *= Math.max(0, 1 - 9 * dt);
-    if (Math.abs(e.knock) < 8) {
-      e.knock = 0;
-      if (e.aiState !== "recovery") changeState(e, "recovery", 0.35);
-    }
-  }
-
-  const prevX = e.x;
-  const dp = dist(e.x, player.x);
-
-  if (dp < 300 && !Game.inMine) {
-    const dir = Math.sign(player.x - e.x);
-    e.dir = dir || e.dir;
-
-    if (e.aiState === "recovery") {
-      if (e.stateTimer <= 0) changeState(e, "chasing", 0);
-    } else if (e.aiState === "attacking") {
-      if (e.stateTimer <= 0) {
-        if (dp < 32 && playerCombatLift() <= 4 && player.invuln <= 0 && !inject('godMode')) {
-          changeState(e, "recovery", 0.4);
-          e.attackCd = 1.0;
-          meleeHitPlayer(e, t, 220);
-        } else {
-          changeState(e, "chasing", 0);
-        }
-      }
-    } else {
-      e.x += dir * t.speed * dt;
-      if (dp < 32 && e.attackCd <= 0) {
-        changeState(e, "attacking", 0.4 + Math.random() * 0.2);
-      }
-    }
-  } else if (dist(e.x, e.home) > 50) {
-    const dir = Math.sign(e.home - e.x);
-    e.dir = dir || e.dir;
-    if (e.aiState !== "recovery") {
-      e.x += dir * t.speed * 0.45 * dt;
-    } else if (e.stateTimer <= 0) {
-      changeState(e, "chasing", 0);
-    }
-  }
-  if (Math.abs(e.x - prevX) > 0.02) e.anim += dt * 5;
 }

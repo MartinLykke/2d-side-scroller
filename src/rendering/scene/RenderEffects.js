@@ -3,6 +3,7 @@ import { ctx, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { FX } from '../Effects.js';
 import { visibleWorldBounds } from '../Viewport.js';
+import { renderBudget } from '../RenderFrame.js';
 
 // Caltrop drawn as a small snap trap: two jagged jaws on a base plate.
 // open: 1 = armed/open (jaws lie flat), 0 = snapped shut.
@@ -268,7 +269,10 @@ export function drawAegisStrikes() {
 
 export function drawParticles(mineLayer = false) {
   const view = visibleWorldBounds(120);
-  for (const p of state.particles) {
+  const particles = state.particles || [];
+  const every = Math.max(1, renderBudget().particlesEvery || 1);
+  for (let i = 0; i < particles.length; i += every) {
+    const p = particles[i];
     if (!!p.mine !== mineLayer) continue;
     if (p.x < view.left || p.x > view.right) continue;
     const alpha = p.fly ? 1 : (p.maxLife ? clamp(p.life / p.maxLife, 0, 1) : clamp(p.life * 1.5, 0, 1));

@@ -14,6 +14,7 @@ import { addXP } from '../economy/UpgradeSystem.js';
 import { baseName } from '../../rendering/HUD.js';
 import { applyPermanentUpgrades, applyPermanentWorldUpgrades } from './RoguelikeSystem.js';
 import { initMineVeins } from '../world/MineSystem.js';
+import { fortNext, fortDefenseHpMult, purchaseFortUpgrade } from '../world/FortificationSystem.js';
 
 function missingDefenseHp() {
   let missing = Math.max(0, state.base.maxHp - state.base.hp);
@@ -46,7 +47,7 @@ function reinforceDefenseCost() {
 }
 
 function wallMaxHp(level) {
-  return CFG.wallHp[level] + (Game.permanentWallHpBonus || 0);
+  return Math.round((CFG.wallHp[level] + (Game.permanentWallHpBonus || 0)) * fortDefenseHpMult());
 }
 
 function baseStationCost(base) {
@@ -169,6 +170,19 @@ export function buildStations() {
       },
     });
   }
+  if (state.base.level >= 3) {
+    state.stations.push({
+      id:"runeforge", x:()=>STATIONS_X.runeforge, paid:0,
+      cost:()=>{ const f = fortNext(); return f ? f.cost : 0; },
+      label:()=>{
+        const f = fortNext();
+        return f ? `Runeforge: ${f.name} — ${f.blurb}` : "The Runeforge is fully attuned";
+      },
+      onPaid:()=>{
+        if (purchaseFortUpgrade()) { addXP(20); Audio.build(); }
+      },
+    });
+  }
   if (state.base.level >= 3 && !state.mineBuilt) {
     state.stations.push({
       id:"mine", x:()=>STATIONS_X.mine, paid:0,
@@ -230,6 +244,7 @@ export function buildStations() {
   for (const b of (state.buildings || [])) {
     state.stations.push({
       id:"building", building:b, x:()=>b.x, paid:0,
+      instantPurchase:true,
       cost:()=>buildingCost(b),
       label:()=>buildingLabel(b),
       onPaid:()=>payBuilding(b),
@@ -288,6 +303,10 @@ export function newGame() {
   state.mineBuilt       = false;
   state.mineVeins       = [];
   state.assault         = null;
+  state.fortLevel       = 0;
+  state.sigilPulseT     = 0;
+  state.sigilPulse      = 0;
+  state.sigilSpin       = 0;
   Game.inMine           = false;
   Game.worldPhase       = 1;
   Game.phaseTransition  = null;

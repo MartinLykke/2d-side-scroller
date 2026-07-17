@@ -5,7 +5,6 @@ const SOURCE_MULTIPLIERS = {
   enemy: 1,
   boss: 0.78,
   chest: 0.85,
-  location: 0.85,
   hunt: 0.75,
   passive: 0.68,
   lumber: 0.7,

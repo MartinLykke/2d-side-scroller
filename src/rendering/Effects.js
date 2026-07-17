@@ -4,6 +4,7 @@ import { ctx, W, H, groundY } from '../core/canvas.js';
 import { Game, state } from '../core/state.js';
 import { Audio } from '../systems/infrastructure/Audio.js';
 import { visibleWorldBounds } from './Viewport.js';
+import { renderBudget } from './RenderFrame.js';
 
 // ---------- Biomes ----------
 export const BIOME_DEFS = [
@@ -456,8 +457,10 @@ export function drawTree(t, cx, baseY, light, dark, depthDark, swayAmp) {
 
 export function drawTreeLayer(trees, factor, depthDark, swayAmp, alpha=1) {
   const dark=darkness(), haze=hazeColor(dark), off=Game.cam*factor;
+  const step = renderBudget().groundDetail === 0 && factor < 0.7 ? 2 : 1;
   if (alpha<1) { ctx.save(); ctx.globalAlpha=alpha; }
-  for (const t of trees) {
+  for (let i = 0; i < trees.length; i += step) {
+    const t = trees[i];
     const px=t.x-off; if (px<-140||px>W+140) continue;
     const b=biomeAt(t.x);
     drawTree(t, px, groundY+4, atmo(b.treeL,haze,depthDark), atmo(b.treeD,haze,depthDark), depthDark, swayAmp);

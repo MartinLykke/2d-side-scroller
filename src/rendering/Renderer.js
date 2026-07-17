@@ -17,6 +17,7 @@ import { drawCaltrops, drawPoisonShots, drawFirePools, drawLegendaryEffects, dra
 import { drawWeaponPickupOverlay, drawInventoryOverlay, drawShopOverlay, drawUpgradeMenu, drawXpBar, drawLegendaryIntro } from './scene/RenderUI.js';
 import { drawMineCutaway } from './scene/RenderMine.js';
 import { drawHeart } from './DrawHelpers.js';
+import { beginRenderFrame } from './RenderFrame.js';
 
 // Helper functions
 function drawWeaponSwingArc(x, player) {
@@ -186,12 +187,17 @@ function drawPlayer(dark) {
 
 function drawOffscreenIndicators() {
   if (!Game.isNight) return;
+  let left = false, right = false;
   for (const e of state.enemies) {
     if (e.fleeing) continue;
     const sx=e.x-Game.cam;
-    if (sx<0) { ctx.fillStyle="rgba(255,70,70,0.85)"; ctx.beginPath(); ctx.moveTo(14,groundY-60); ctx.lineTo(30,groundY-70); ctx.lineTo(30,groundY-50); ctx.fill(); }
-    else if (sx>W) { ctx.fillStyle="rgba(255,70,70,0.85)"; ctx.beginPath(); ctx.moveTo(W-14,groundY-60); ctx.lineTo(W-30,groundY-70); ctx.lineTo(W-30,groundY-50); ctx.fill(); }
+    if (sx<0) left = true;
+    else if (sx>W) right = true;
+    if (left && right) break;
   }
+  ctx.fillStyle="rgba(255,70,70,0.85)";
+  if (left) { ctx.beginPath(); ctx.moveTo(14,groundY-60); ctx.lineTo(30,groundY-70); ctx.lineTo(30,groundY-50); ctx.fill(); }
+  if (right) { ctx.beginPath(); ctx.moveTo(W-14,groundY-60); ctx.lineTo(W-30,groundY-70); ctx.lineTo(W-30,groundY-50); ctx.fill(); }
 }
 
 // Export for external use
@@ -199,6 +205,7 @@ export { drawEntityShadows };
 
 // Main render function
 export function render() {
+  beginRenderFrame();
   const dark=darkness();
   const [top,bot]=skyColors();
   const g=ctx.createLinearGradient(0,0,0,groundY+80);

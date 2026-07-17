@@ -7,6 +7,9 @@ import { visibleWorldBounds } from '../Viewport.js';
 import { wallHeight, wallRenderWidth, wallBackDir, wallPlatformDepth } from '../../entities/Wall.js';
 import { groundShadow, roundedRect, stoneCol, stoneLt, woodCol, litWindow, drawHpBar } from '../DrawHelpers.js';
 import { ENEMY_TYPES } from '../../config/enemies.js';
+import { fortHas, fortLevel, fortNext } from '../../systems/world/FortificationSystem.js';
+import { FORT_TRACK } from '../../config/fortifications.js';
+import { renderBudget } from '../RenderFrame.js';
 
 // ---------- Ground ----------
 // True when a ground doodad would sit inside a pond's water footprint.
@@ -17,18 +20,21 @@ function overPond(x, margin = 0) {
 
 export function drawGroundTexture(dark) {
   const tex=getGroundTex(), view=visibleWorldBounds(30), camL=view.left, camR=view.right;
+  const groundDetail = renderBudget().groundDetail;
   for (const p of tex.patches) {
     if (p.x<camL||p.x>camR) continue;
     const b=biomeAt(p.x), col=lerpColor(p.light?shade(b.gT,1.16):shade(b.gT,0.8),[12,14,22],dark);
     ctx.fillStyle=withA(col,0.5); ctx.beginPath(); ctx.ellipse(p.x,groundY+7+p.dy,p.r,p.r*0.4,0,0,Math.PI*2); ctx.fill();
   }
-  for (const p of tex.pebbles) {
+  const pebbleStep = groundDetail === 0 ? 2 : 1;
+  for (let i = 0; i < tex.pebbles.length; i += pebbleStep) {
+    const p = tex.pebbles[i];
     if (p.x<camL||p.x>camR) continue;
     ctx.fillStyle=withA(lerpColor([120,118,124],[40,40,52],dark),0.7); ctx.beginPath(); ctx.ellipse(p.x,groundY+9+p.dy,p.r,p.r*0.7,0,0,Math.PI*2); ctx.fill();
     ctx.fillStyle=withA(lerpColor([200,200,206],[70,72,86],dark),0.35); ctx.beginPath(); ctx.ellipse(p.x-p.r*0.25,groundY+8.4+p.dy,p.r*0.5,p.r*0.3,0,0,Math.PI*2); ctx.fill();
   }
   // fine dirt speckles give the soil grain
-  if (tex.specks) for (const s of tex.specks) {
+  if (groundDetail > 0 && tex.specks) for (const s of tex.specks) {
     if (s.x<camL||s.x>camR) continue;
     const b=biomeAt(s.x);
     const col=s.light?lerpColor(shade(b.gB,1.5),[60,64,80],dark):lerpColor(shade(b.gB,0.55),[8,10,16],dark);
@@ -43,7 +49,9 @@ export function drawGroundTexture(dark) {
     if (!w.commissioned || w.buildProgress < 0.95) continue;
     if (w.x < CFG.baseX) clearL=Math.min(clearL, w.x); else clearR=Math.max(clearR, w.x);
   }
-  for (const f of tex.fringe) {
+  for (let i = 0; i < tex.fringe.length; i++) {
+    if (groundDetail === 0 && (i & 1)) continue;
+    const f = tex.fringe[i];
     if (f.x<camL||f.x>camR) continue;
     if (f.x>clearL && f.x<clearR) continue;
     if (overPond(f.x, -4)) continue; // no grass growing out of the water
@@ -163,8 +171,10 @@ function drawDeco(it, b, dark) {
 
 export function drawGroundDeco(dark) {
   const items=getDeco().items, view=visibleWorldBounds(40), camL=view.left, camR=view.right;
+  const step = renderBudget().groundDetail === 0 ? 2 : 1;
   const px=state.player?state.player.x:null;
-  for (const it of items) {
+  for (let i = 0; i < items.length; i += step) {
+    const it = items[i];
     if (it.x<camL||it.x>camR) continue;
     if (overPond(it.x, -2)) continue; // ponds get their own shoreline dressing
     // fade small clutter near the player so characters stay easy to spot
@@ -628,10 +638,18 @@ export function drawEntityShadows() {
   const { player, units, vagrants, enemies, animals } = state;
   const view = visibleWorldBounds(160);
   const seen = x => x >= view.left && x <= view.right;
+  const budget = renderBudget();
   if (player && !Game.inMine && seen(player.x)) groundShadow(player.x,22,0.24);
   for (const u of units)   { if (!u.mine && seen(u.x)) groundShadow(u.x,11,0.2); }
   for (const v of vagrants) { if (seen(v.x)) groundShadow(v.x,11,0.2); }
-  for (const e of enemies)  { if (seen(e.x)) groundShadow(e.x,ENEMY_TYPES[e.type].w*0.7,0.22); }
+  let enemyShadowIndex = 0;
+  for (const e of enemies)  {
+    if (!seen(e.x)) continue;
+    const type = ENEMY_TYPES[e.type];
+    if (!type) continue;
+    if (budget.shadowStride > 1 && !type.boss && !type.legendary && (enemyShadowIndex++ % budget.shadowStride) !== 0) continue;
+    groundShadow(e.x,type.w*0.7,0.22);
+  }
   for (const a of animals)  if (a.alive && seen(a.x)) groundShadow(a.x,10,0.18);
 }
 
@@ -1285,6 +1303,108 @@ function drawWallPlatform(w, h, flash) {
   ctx.restore();
 }
 
+// A small pointed rune diamond with a vertical scratch through it.
+function drawRuneGlyph(x, y, s, col) {
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(x, y - s); ctx.lineTo(x + s * 0.7, y);
+  ctx.lineTo(x, y + s); ctx.lineTo(x - s * 0.7, y);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = col; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x, y - s - 3); ctx.lineTo(x, y + s + 3); ctx.stroke();
+}
+
+// Runeforge dressing layered onto a finished wall: fire runes (ember wards),
+// glowing gold seams (stoneskin), ice crystals + ground mist (frost wards)
+// and orbiting runestones (bulwark).
+function drawWallWards(w, h, WW) {
+  if (!fortLevel() || w.buildProgress < 1 || w.hp <= 0) return;
+  const t = performance.now() / 1000;
+  const x = w.x;
+
+  if (fortHas("stone")) {
+    ctx.save();
+    ctx.globalAlpha = 0.32 + 0.16 * Math.sin(t * 1.7 + x * 0.013);
+    ctx.strokeStyle = "#f2c14e"; ctx.lineWidth = 1;
+    for (let yy = groundY - h + 10; yy < groundY - 6; yy += 16) {
+      ctx.beginPath(); ctx.moveTo(x - WW / 2 + 3, yy); ctx.lineTo(x + WW / 2 - 3, yy); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  const emberTier = fortHas("ember2") ? 2 : fortHas("ember1") ? 1 : 0;
+  if (emberTier) {
+    const col = emberTier === 2 ? "#ff6a20" : "#ff8a3d";
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    for (let k = 0; k < 3; k++) {
+      const gy = groundY - h * (0.26 + k * 0.24);
+      const gx = x + (k - 1) * WW * 0.27;
+      const a = 0.4 + 0.35 * Math.sin(t * 2.6 + k * 2.1 + x * 0.02);
+      ctx.globalAlpha = Math.max(0.12, a);
+      const glow = ctx.createRadialGradient(gx, gy, 1, gx, gy, 13 + emberTier * 3);
+      glow.addColorStop(0, emberTier === 2 ? "rgba(255,140,60,0.55)" : "rgba(255,150,80,0.4)");
+      glow.addColorStop(1, "rgba(255,90,20,0)");
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(gx, gy, 13 + emberTier * 3, 0, Math.PI * 2); ctx.fill();
+      drawRuneGlyph(gx, gy, 3.5 + emberTier, col);
+    }
+    ctx.restore();
+  }
+
+  if (fortHas("frost")) {
+    ctx.save();
+    // cold mist pooling at the foot of the wall
+    const mg = ctx.createRadialGradient(x, groundY, 4, x, groundY, WW * 0.9);
+    mg.addColorStop(0, "rgba(150,215,255,0.16)");
+    mg.addColorStop(1, "rgba(150,215,255,0)");
+    ctx.fillStyle = mg;
+    ctx.beginPath(); ctx.ellipse(x, groundY - 2, WW * 0.95, 16, 0, 0, Math.PI * 2); ctx.fill();
+    // crystal clusters on both faces
+    for (const side of [-1, 1]) {
+      const cx = x + side * (WW / 2 + 2);
+      for (let k = 0; k < 3; k++) {
+        const px = cx + side * k * 5;
+        const ph = 13 - k * 3.5;
+        const shimmer = 0.55 + 0.25 * Math.sin(t * 2.2 + k * 1.7 + side);
+        ctx.globalAlpha = shimmer;
+        ctx.fillStyle = "#a8dcf2";
+        ctx.beginPath();
+        ctx.moveTo(px - 3, groundY);
+        ctx.lineTo(px + side * 1.5, groundY - ph);
+        ctx.lineTo(px + 3.5, groundY);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "#e8f8ff";
+        ctx.fillRect(px + side * 0.5 - 0.7, groundY - ph + 2, 1.4, ph * 0.5);
+      }
+    }
+    ctx.restore();
+  }
+
+  if (fortHas("bulwark")) {
+    const orbit = t * 1.15 + x * 0.03;
+    for (const ph of [0, Math.PI]) {
+      const ox = x + Math.cos(orbit + ph) * (WW * 0.5 + 12);
+      const oy = groundY - h - 18 + Math.sin((orbit + ph) * 2) * 4;
+      const behind = Math.sin(orbit + ph) < 0;
+      ctx.save();
+      ctx.globalAlpha = behind ? 0.55 : 0.95;
+      ctx.globalCompositeOperation = "lighter";
+      const glow = ctx.createRadialGradient(ox, oy, 1, ox, oy, 12);
+      glow.addColorStop(0, "rgba(155,232,192,0.5)");
+      glow.addColorStop(1, "rgba(155,232,192,0)");
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(ox, oy, 12, 0, Math.PI * 2); ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.translate(ox, oy); ctx.rotate(orbit * 1.6 + ph);
+      ctx.fillStyle = behind ? "#3d5a4c" : "#55806a";
+      ctx.fillRect(-3.5, -5, 7, 10);
+      ctx.fillStyle = "#9be8c0";
+      ctx.fillRect(-0.8, -3.5, 1.6, 7);
+      ctx.restore();
+    }
+  }
+}
+
 export function drawWalls(dark) {
   const night=dark>0.25;
   const view = visibleWorldBounds(170);
@@ -1444,6 +1564,7 @@ export function drawWalls(dark) {
       }
       ctx.restore();
     }
+    drawWallWards(w, h, WW);
     drawHpBar(x,groundY-h-18,WW+6,w.hp/w.maxHp,"#9bd05a");
   }
 }
@@ -1469,7 +1590,50 @@ export function drawBase(dark) {
     drawGrandCastle(x,stoneL,stoneD,dark,night);
     if (lvl>=5) drawCastleRegalia(x,lvl,dark);
   }
+  if (fortHas("sigil")) drawCrownSigil(x, lvl);
   drawHpBar(x,groundY-(lvl>=7?292:lvl>=4?250:lvl>=2?130:70),70,base.hp/base.maxHp,"#f2c14e");
+  ctx.restore();
+}
+
+// Crown Sigil: a slowly rotating ring of violet runes hovering over the base,
+// flaring into an expanding shockwave each time the sigil pulses.
+function drawCrownSigil(x, lvl) {
+  const spin = state.sigilSpin || 0;
+  const y = groundY - (lvl >= 4 ? 296 : lvl >= 2 ? 170 : 110);
+  const rx = 58, ry = 13;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+
+  // faint ring path
+  ctx.globalAlpha = 0.3 + 0.1 * Math.sin(spin * 2);
+  ctx.strokeStyle = "#c9a2ff"; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
+
+  // orbiting runes
+  for (let k = 0; k < 6; k++) {
+    const a = spin * 0.9 + k * Math.PI / 3;
+    const gx = x + Math.cos(a) * rx;
+    const gy = y + Math.sin(a) * ry;
+    const front = Math.sin(a) > 0;
+    ctx.globalAlpha = (front ? 0.9 : 0.45) * (0.7 + 0.3 * Math.sin(spin * 3 + k));
+    const glow = ctx.createRadialGradient(gx, gy, 0.5, gx, gy, 10);
+    glow.addColorStop(0, "rgba(201,162,255,0.6)");
+    glow.addColorStop(1, "rgba(160,110,255,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(gx, gy, 10, 0, Math.PI * 2); ctx.fill();
+    drawRuneGlyph(gx, gy, 3.4, "#d8bcff");
+  }
+
+  // pulse shockwave sweeping outward toward the sigil's damage radius
+  const pulse = state.sigilPulse || 0;
+  if (pulse > 0) {
+    const p = 1 - pulse / 0.9; // 0 → 1 over the pulse
+    ctx.globalAlpha = (1 - p) * 0.55;
+    ctx.strokeStyle = "#c9a2ff"; ctx.lineWidth = 3 - p * 2;
+    ctx.beginPath(); ctx.ellipse(x, groundY - 24, 30 + p * 270, 10 + p * 44, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = (1 - p) * 0.25;
+    ctx.beginPath(); ctx.ellipse(x, groundY - 24, 20 + p * 230, 8 + p * 36, 0, 0, Math.PI * 2); ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -1981,6 +2145,75 @@ export function drawStations() {
   if (state.base && state.base.level >= 3 && seen(STATIONS_X.guard)) drawGuardStation(STATIONS_X.guard);
   if (state.base && state.base.level >= 3 && !state.mineBuilt && seen(STATIONS_X.mine)) drawFlag(STATIONS_X.mine, "#d8b46a");
   if (state.mineBuilt && seen(STATIONS_X.mine)) drawMineEntrance(STATIONS_X.mine);
+  if (state.base && state.base.level >= 3 && seen(STATIONS_X.runeforge)) drawRuneforge(STATIONS_X.runeforge);
+}
+
+// The Runeforge: a dark obelisk whose runes glow in the color of the next
+// fortification tier, with one lit orb per tier already attuned and a
+// floating shard that appears once anything has been forged.
+function drawRuneforge(x) {
+  const t = performance.now() / 1000;
+  const next = fortNext();
+  const lvl = fortLevel();
+  const col = next ? next.col : "#c9a2ff";
+  ctx.save();
+  groundShadow(x, 30, 0.24);
+
+  // stepped stone plinth
+  ctx.fillStyle = "#2e2836";
+  ctx.fillRect(x - 22, groundY - 7, 44, 7);
+  ctx.fillStyle = "#3a3346";
+  ctx.fillRect(x - 15, groundY - 12, 30, 6);
+
+  // tapering monolith
+  ctx.fillStyle = "#443c54";
+  ctx.beginPath();
+  ctx.moveTo(x - 11, groundY - 12);
+  ctx.lineTo(x - 6, groundY - 62);
+  ctx.lineTo(x, groundY - 70);
+  ctx.lineTo(x + 6, groundY - 62);
+  ctx.lineTo(x + 11, groundY - 12);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.beginPath();
+  ctx.moveTo(x - 11, groundY - 12);
+  ctx.lineTo(x - 6, groundY - 62);
+  ctx.lineTo(x - 2, groundY - 66);
+  ctx.lineTo(x - 4, groundY - 12);
+  ctx.closePath(); ctx.fill();
+
+  // carved runes pulsing in the next tier's color
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (let k = 0; k < 3; k++) {
+    const gy = groundY - 24 - k * 15;
+    ctx.globalAlpha = Math.max(0.2, 0.55 + 0.4 * Math.sin(t * 2.4 + k * 1.9));
+    drawRuneGlyph(x, gy, 3.2, col);
+  }
+  // floating shard once attuned at least once
+  if (lvl > 0) {
+    const sy = groundY - 84 + Math.sin(t * 1.6) * 4;
+    const glow = ctx.createRadialGradient(x, sy, 1, x, sy, 14);
+    glow.addColorStop(0, "rgba(201,162,255,0.55)");
+    glow.addColorStop(1, "rgba(160,110,255,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(x, sy, 14, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = "#d8bcff";
+    ctx.beginPath();
+    ctx.moveTo(x, sy - 7); ctx.lineTo(x + 4, sy); ctx.lineTo(x, sy + 7); ctx.lineTo(x - 4, sy);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+
+  // one lit orb per attuned tier along the plinth
+  for (let i = 0; i < FORT_TRACK.length; i++) {
+    const ox = x - (FORT_TRACK.length - 1) * 3.5 + i * 7;
+    ctx.fillStyle = i < lvl ? FORT_TRACK[i].col : "rgba(255,255,255,0.14)";
+    ctx.beginPath(); ctx.arc(ox, groundY - 15.5, 1.9, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+  drawStationIcon(x, "🔮");
 }
 
 function drawMineEntrance(x) {

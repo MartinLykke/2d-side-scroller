@@ -91,6 +91,7 @@ export const STATIONS_X = {
   shop:   CFG.baseX + 445, // between the two right wall slots (mirrors the farm on the left)
   guard:  CFG.baseX + 220,
   mine:   CFG.baseX - 250,
+  runeforge: CFG.baseX - 550, // between the left walls and the farm
 };
 
 // Underground mine below the base. Shares the surface x-coordinate space and

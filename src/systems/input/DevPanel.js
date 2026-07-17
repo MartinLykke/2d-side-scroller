@@ -34,6 +34,7 @@ export function setupDevPanel() {
   bind('[data-dev="healAll"]',     () => DEV.healAll());
   bind('[data-dev="maxBase"]',     () => DEV.maxBaseLevel());
   bind('[data-dev="maxWalls"]',    () => DEV.maxWallLevels());
+  bind('[data-dev="fortTier"]',    () => DEV.fortTierUp());
 
   // Spawn enemy
   bind('[data-dev="imp"]',          () => DEV.spawnEnemyNearBase('imp'));

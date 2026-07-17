@@ -32,7 +32,6 @@ const HUB_UPGRADE_LABELS = {
   builder_cache: "Hammer cache",
   armory_token: "Starter armor",
   war_banner: "Starting guard",
-  relic_compass: "Loot rarity",
   dawn_masonry: "Fortified start",
   blood_moon: "Bigger hordes",
   hungry_portals: "Faster portals",
@@ -216,17 +215,6 @@ export const META_UPGRADES = [
     color: "#ffcf5a",
     icon: "GUARD",
     cost: lvl => 58 + lvl * 48,
-  },
-  {
-    id: "relic_compass",
-    tier: "relic",
-    name: "Relic Compass",
-    desc: "+1 location loot rarity per rank",
-    max: 2,
-    x: 2880,
-    color: "#d9e8ff",
-    icon: "LOOT",
-    cost: lvl => 66 + lvl * 54,
   },
   {
     id: "dawn_masonry",
@@ -456,10 +444,6 @@ export function eliteChanceBonus() {
   return metaLevel("ashen_elites") * 0.035;
 }
 
-export function locationThreatMultiplier() {
-  return 1 + metaLevel("ashen_elites") * 0.18;
-}
-
 export function enemyVitalityMultiplier() {
   return 1 + metaLevel("iron_hide") * 0.10;
 }
@@ -493,7 +477,6 @@ export function applyPermanentWorldUpgrades() {
     const armorRank = metaLevel("armory_token");
     if (armorRank > 0) state.player.armor = armorRank > 1 ? "chainmail" : "leather_cap";
   }
-  Game.rarityBonus = (Game.rarityBonus || 0) + metaLevel("relic_compass");
 
   const extraVagrants = metaLevel("wanderer_lantern");
   for (let i = 0; i < extraVagrants; i++) {
@@ -1277,17 +1260,6 @@ function drawUpgradeRelic(upg, lvl, maxed, affordable, spin, t) {
       ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.stroke();
       ctx.fillStyle = color;
       ctx.beginPath(); ctx.moveTo(1, -11); ctx.lineTo(5, -5); ctx.lineTo(1, 1); ctx.lineTo(-3, -5); ctx.closePath(); ctx.fill();
-      break;
-    case "relic_compass":
-      ctx.fillStyle = "#1b2235";
-      ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
-      ctx.strokeStyle = "rgba(255,255,255,0.4)"; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.stroke();
-      ctx.fillStyle = "#ffcf5a";
-      ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(5, 3); ctx.lineTo(0, 0); ctx.lineTo(-5, 3); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = "#8fd8ff";
-      ctx.beginPath(); ctx.moveTo(0, 12); ctx.lineTo(5, -3); ctx.lineTo(0, 0); ctx.lineTo(-5, -3); ctx.closePath(); ctx.fill();
       break;
     case "dawn_masonry":
       ctx.fillStyle = "#777486";

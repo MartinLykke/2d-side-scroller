@@ -11,6 +11,8 @@ import { drawGuard } from '../sprites/Guard.js';
 import { drawFarmer } from '../sprites/Farmer.js';
 import { drawImp, drawFireImp } from '../sprites/Imps.js';
 import { drawShade, drawVoidWraith, drawVoidBrute, drawVoidTitan, drawVoidSeraph } from '../sprites/VoidSpawn.js';
+import { renderBudget } from '../RenderFrame.js';
+import { drawEnemySilhouette, shouldDrawEnemySilhouette } from './EnemySilhouette.js';
 
 const STUCK_ARROW_FADE_TIME = 0.55;
 
@@ -1537,6 +1539,7 @@ function drawMagmaGolem(e, t, dark, atkF) {
 
 export function drawEnemies(dark) {
   const view = visibleWorldBounds(650);
+  const budget = renderBudget();
   for (const e of state.enemies) {
     const t=ENEMY_TYPES[e.type];
     if (!t) continue;
@@ -1549,8 +1552,9 @@ export function drawEnemies(dark) {
     const atkF = Math.max(0, e.attackAnim || 0) / 0.25;
     const custom = e.type === "imp" ? drawImp : e.type === "fireImp" ? drawFireImp : e.type === "emberBrute" ? drawEmberBrute : e.type === "ashPriest" ? drawAshPriest : e.type === "fireDragon" ? drawFireDragon : e.type === "magmaGolem" ? drawMagmaGolem
       : e.type === "shade" ? drawShade : e.type === "voidWraith" ? drawVoidWraith : e.type === "voidBrute" ? drawVoidBrute : e.type === "voidTitan" ? drawVoidTitan : e.type === "voidSeraph" ? drawVoidSeraph : null;
+    const useSilhouette = shouldDrawEnemySilhouette(e, t, budget);
     ctx.save(); ctx.translate(e.x, drawYOff);
-    if (atkF > 0 && !custom) ctx.scale(1 + atkF * 0.18, 1 - atkF * 0.12);
+    if (atkF > 0 && !custom && !useSilhouette) ctx.scale(1 + atkF * 0.18, 1 - atkF * 0.12);
     if (e.dir<0) ctx.scale(-1,1);
     if (e.dying) {
       const deathProgress = Math.min(e.deathT / (e.deathDuration || 0.5), 1);
@@ -1590,7 +1594,7 @@ export function drawEnemies(dark) {
       ctx.scale(sx, Math.max(0.62, sy));
       ctx.translate(0, -pivotY);
     }
-    if (e.type === "imp" && e.burn > 0) {
+    if (e.type === "imp" && e.burn > 0 && !useSilhouette) {
       const ft = performance.now() / 1000;
       ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.35 + 0.18 * Math.sin(ft * 18 + e.x);
       const flame = ctx.createRadialGradient(0, groundY - 18, 2, 0, groundY - 18, 24);
@@ -1600,7 +1604,9 @@ export function drawEnemies(dark) {
       ctx.fillStyle = flame; ctx.beginPath(); ctx.ellipse(0, groundY - 18, 16, 25, 0, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
-    if (custom) {
+    if (useSilhouette) {
+      drawEnemySilhouette(e, t, dark, atkF);
+    } else if (custom) {
       custom(e, t, dark, atkF);
     } else {
       const s=Math.sin(e.anim*3);
@@ -1637,7 +1643,7 @@ export function drawEnemies(dark) {
         ctx.restore();
       }
     }
-    drawStuckImpArrows(e);
+    if (!useSilhouette) drawStuckImpArrows(e);
     ctx.restore();
 
     // Hunter's Mark: a pulsing crimson chevron hovers over the marked target
@@ -1676,7 +1682,10 @@ export function drawEnemies(dark) {
     }
 
     const sprH = t.w;
-    if (!e.dying && e.hp<e.maxHp) drawHpBar(e.x,groundY+drawYOff-sprH-4,t.w+(isBoss?12:4),e.hp/e.maxHp,isBoss?"#ff4080":"#d05a5a");
+    const hpFrac = e.maxHp ? e.hp / e.maxHp : 1;
+    if (!e.dying && e.hp<e.maxHp && (budget.minorHealthBars || hpFrac < 0.45 || e.flash > 0)) {
+      drawHpBar(e.x,groundY+drawYOff-sprH-4,t.w+(isBoss?12:4),hpFrac,isBoss?"#ff4080":"#d05a5a");
+    }
     if (isBoss) {
       ctx.save(); ctx.font="bold 12px Trebuchet MS"; ctx.textAlign="center";
       ctx.fillStyle="rgba(0,0,0,0.7)"; ctx.fillText(t.name||e.type, e.x+1, groundY+drawYOff-sprH-18);

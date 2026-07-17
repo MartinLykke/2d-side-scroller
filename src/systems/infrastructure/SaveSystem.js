@@ -39,6 +39,7 @@ export function saveGame() {
       vagrants: vagrants.length,
       farm: state.farmBuilt,
       farmLevel: state.farmLevel,
+      fortLevel: state.fortLevel || 0,
       mineBuilt: state.mineBuilt,
       mineActiveLeft: state.mineActiveLeft,
       mineActiveRight: state.mineActiveRight,
@@ -108,6 +109,7 @@ export function loadGame() {
     for (let i = 0; i < (snap.vagrants || 0); i++) spawnVagrant();
     state.farmBuilt = snap.farm;
     state.farmLevel = snap.farmLevel || (snap.farm ? 1 : 0);
+    state.fortLevel = snap.fortLevel || 0;
     state.mineBuilt = !!snap.mineBuilt;
     Game.inMine = false; // always resurface on load
     if (state.mineBuilt) {
