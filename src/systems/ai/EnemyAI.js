@@ -1,16 +1,16 @@
 import { CFG } from '../../config/config.js';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeboss1';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive1';
 import { clamp, lerp, dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { inject } from '../../core/services.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js?v=biomeboss1';
-import { meleeHitPlayer, damagePlayer } from '../combat/PlayerCombat.js?v=biomeboss1';
-import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeboss1';
-import { fortOnWallStruck } from '../world/FortificationSystem.js?v=biomeweapons1';
+import { spawnParticles, floaty, critFloaty, spawnEnemy } from '../world/SpawnSystem.js?v=biomeactive1';
+import { meleeHitPlayer, damagePlayer } from '../combat/PlayerCombat.js?v=biomeactive1';
+import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive1';
+import { fortOnWallStruck } from '../world/FortificationSystem.js?v=biomeactive1';
 import { wallHeight, wallReady, wallRenderWidth, entityWallLift } from '../../entities/Wall.js';
-import { updateBoss, dropRiderFromDragon, spawnFirePool } from './BossAI.js?v=biomeboss1';
+import { updateBoss, dropRiderFromDragon, spawnFirePool } from './BossAI.js?v=biomeactive1';
 
 const IMP_STACK_STEP = 18;
 const IMP_ATTACH_RANGE = 34;
@@ -465,6 +465,7 @@ function killWall(w) {
 // Shared wall-chipping attack: crit roll, hit feedback and collapse check.
 // Runeforge wards retaliate against the attacker when one is provided.
 function damageWall(wall, baseDmg, particleCount = 3, attacker = null) {
+  const attackerType = attacker ? ENEMY_TYPES[attacker.type] : null;
   if ((attacker?.blindedHits || 0) > 0) {
     attacker.blindedHits--;
     attacker.blind = Math.max(attacker.blind || 0, 0.7);
@@ -473,14 +474,31 @@ function damageWall(wall, baseDmg, particleCount = 3, attacker = null) {
     spawnParticles(attacker.x, groundY - 24 + (attacker.fy || 0), 7, "#d8b46a", 42, 45);
     return;
   }
-  const crit = applyCrit(baseDmg, CFG.critChance, CFG.critMultiplier);
+  const freezeMult = (wall.frozenT || 0) > 0 && !attackerType?.wallFreezeOnHit ? 2 : 1;
+  const crit = applyCrit(baseDmg * freezeMult, CFG.critChance, CFG.critMultiplier);
   wall.hp -= crit.damage;
   wall.flash = 0.15;
   spawnParticles(wall.x, groundY - 30, particleCount, "#caa46a", 30, 30);
+  if (attackerType?.wallFreezeOnHit) {
+    wall.frozenT = Math.max(wall.frozenT || 0, attackerType.wallFreezeOnHit);
+    spawnParticles(wall.x, groundY - 34, 10, "#bfefff", 52, 56);
+    floaty(wall.x, "Frozen", "#cfe6f2", 13);
+  }
+  if (attackerType?.coinShock && state.player?.coins > 0) {
+    const lost = Math.min(state.player.coins, 1 + Math.floor((Game.day || 1) / 5));
+    state.player.coins -= lost;
+    floaty(state.player.x, "-" + lost + " coins", attackerType.eye || "#d7a8ff", 13);
+  }
   if (crit.isCrit) critFloaty(wall.x, crit.damage);
   Audio.hit();
   if (attacker) fortOnWallStruck(wall, attacker, crit.damage);
   if (wall.hp <= 0) killWall(wall);
+  if (attackerType?.explodeOnWall && attacker && !attacker.dying) {
+    spawnFirePool(attacker.x, 58, 3.8);
+    spawnParticles(attacker.x, groundY - 18, 28, attackerType.eye || "#ff7a24", 120, 135);
+    attacker.hp = 0;
+    killEnemy(attacker);
+  }
 }
 
 function shootEnemyFireball(e, t, target) {
@@ -1543,9 +1561,117 @@ function updateSiegeImp(e, t, dt) {
   return true;
 }
 
+function nearestBiomeSiegeTarget(e, range) {
+  let best = null, bd = range;
+  for (const w of state.walls) {
+    if (!w.commissioned || w.hp <= 0) continue;
+    const d = dist(e.x, w.x);
+    if (d < bd) { bd = d; best = { kind: "wall", x: w.x, obj: w }; }
+  }
+  const base = state.base;
+  if (base?.hp > 0) {
+    const d = dist(e.x, base.x);
+    if (d < bd) best = { kind: "base", x: base.x, obj: base };
+  }
+  return best;
+}
+
+function updateBiomeCommon(e, t, dt) {
+  if (t.blizzardAura) {
+    let chilled = 0;
+    for (const u of state.units) {
+      if (u.role !== "archer" || u.hp <= 0 || u.dying || dist(e.x, u.x) > t.blizzardAura) continue;
+      u.cooldown = Math.max(u.cooldown || 0, 0.18);
+      chilled++;
+    }
+    if (chilled && Math.random() < dt * 8) spawnParticles(e.x + rand(-20, 20), groundY + (e.fy || -120), 1, "#d8f8ff", 34, 48);
+  }
+
+  if (t.goldEater) {
+    e.goldEatCd = (e.goldEatCd || 0) - dt;
+    if (e.goldEatCd <= 0) {
+      e.goldEatCd = 0.55;
+      let best = -1, bd = 95;
+      for (let i = 0; i < state.coins.length; i++) {
+        const c = state.coins[i];
+        const d = dist(e.x, c.x);
+        if (d < bd) { bd = d; best = i; }
+      }
+      if (best >= 0) {
+        const c = state.coins.splice(best, 1)[0];
+        e.hp = Math.min((e.maxHp || t.hp) + 24, (e.hp || 0) + 8 + (c.value || 1));
+        e.maxHp = Math.max(e.maxHp || t.hp, e.hp);
+        e.w = Math.min((e.w || t.w) + 1.4, (t.w || 70) * 1.25);
+        e.flash = Math.max(e.flash || 0, 0.12);
+        spawnParticles(c.x, groundY - 18, 10, t.eye || "#b8ff7a", 44, 68);
+        floaty(e.x, "+fed", t.eye || "#b8ff7a", 12);
+      }
+    }
+  }
+
+  if (t.breeder) {
+    e.spawnCd = (e.spawnCd || rand(2.5, t.spawnInterval || 8)) - dt;
+    if (e.spawnCd <= 0 && state.enemies.length < 180) {
+      e.spawnCd = (t.spawnInterval || 8) + rand(-1, 1.4);
+      const count = t.spawnCount || 2;
+      for (let k = 0; k < count; k++) {
+        const child = spawnEnemy(t.spawnType || "imp", {
+          x: e.x - (e.dir || 1) * rand(24, 68),
+          side: e.portal?.side || (e.x < CFG.baseX ? -1 : 1),
+        });
+        child.portal = e.portal || child.portal;
+        child.fy = 0;
+        child.spawnedByBiomeEnemy = true;
+      }
+      e.attackAnim = 0.4;
+      spawnParticles(e.x, groundY - 28 + (e.fy || 0), 18, t.eye || "#f2c14e", 72, 80);
+      Audio.portalSpawn();
+    }
+  }
+
+  if (t.rangedSiege) {
+    e.siegeShootCd = (e.siegeShootCd ?? rand(1.2, t.shootInterval || 4)) - dt;
+    const target = nearestBiomeSiegeTarget(e, t.shootRange || 480);
+    if (target) {
+      e.dir = Math.sign(target.x - e.x) || e.dir;
+      if (e.siegeShootCd <= 0) {
+        e.siegeShootCd = (t.shootInterval || 4) + rand(-0.35, 0.6);
+        e.attackAnim = 0.26;
+        if (target.kind === "wall") {
+          damageWall(target.obj, Math.max(2, (t.dmg || 6) * 0.65), 7, e);
+          target.obj.sporeT = Math.max(target.obj.sporeT || 0, t.biome === "swamp" ? 5.5 : 0);
+        } else {
+          const crit = applyCrit(t.baseDmg ?? Math.max(2, (t.dmg || 6) * 0.4), CFG.critChance, CFG.critMultiplier);
+          target.obj.hp = Math.max(0, target.obj.hp - crit.damage);
+          target.obj.flash = 0.22;
+          if (crit.isCrit) critFloaty(target.obj.x, crit.damage);
+          else floaty(target.obj.x, "-" + crit.damage, t.eye || "#ff6a4a");
+        }
+        spawnParticles(e.x, groundY - t.w * 0.7 + (e.fy || 0), 8, t.eye || "#caff7a", 56, 46);
+        Audio.bow();
+      }
+      if (dist(e.x, target.x) < (t.shootRange || 480) * 0.72) return true;
+    }
+  }
+
+  return false;
+}
+
 export function updateEnemies(dt) {
   const { enemies, units, base, player } = state;
   clearImpWallCache();
+  for (const w of state.walls) {
+    if (w.frozenT > 0) w.frozenT = Math.max(0, w.frozenT - dt);
+    if (w.sporeT > 0) {
+      w.sporeT = Math.max(0, w.sporeT - dt);
+      w.sporeTick = (w.sporeTick || 0) - dt;
+      if (w.sporeTick <= 0 && w.commissioned && w.hp > 0) {
+        w.sporeTick = 1;
+        damageWall(w, 1, 2, null);
+        spawnParticles(w.x + rand(-18, 18), groundY - 30, 3, "#b8ff7a", 28, 34);
+      }
+    }
+  }
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
     const baseType = ENEMY_TYPES[e.type];
@@ -1556,6 +1682,7 @@ export function updateEnemies(dt) {
     initEnemyAI(e);
     if (e.emberWard > 0) e.emberWard = Math.max(0, e.emberWard - dt);
     if (e.emberFrenzy > 0) e.emberFrenzy = Math.max(0, e.emberFrenzy - dt);
+    if (updateBiomeCommon(e, t, dt)) continue;
 
     // Imps riding on the fire dragon's back stay seated until dropped
     if (e.ridingDragon) {
@@ -1818,6 +1945,15 @@ export function updateEnemies(dt) {
     const side = e.x < CFG.baseX ? -1 : 1;
     const wall = wallAt(side, e.x);
     const stackDropBypassesWall = e.type === "imp" && impStackDropBypassesWall(e, wall);
+    if (wall && t.burrower && wall.level < 3 && dist(e.x, wall.x) < 34) {
+      e.x = wallInsideX(wall);
+      e.burrowedWall = wall;
+      e.fy = -4;
+      e.aggroPlayer = false;
+      spawnParticles(wall.x + wall.side * 12, groundY - 4, 18, "#d8b46a", 70, 38);
+      floaty(wall.x, "Burrow!", "#d8b46a", 13);
+      continue;
+    }
     if (wall && e.type !== "imp" && dist(e.x, wall.x) < 30 && !stackDropBypassesWall) {
       e.dir = Math.sign(wall.x - e.x) || e.dir;
       if (e.attackCd <= 0 && e.aiState !== "recovery") {

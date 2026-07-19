@@ -10,9 +10,137 @@ export const BIOME_BOSS_TYPES = {
   corrupted: "voidMindflayer",
 };
 
+export const BIOME_ENEMY_POOLS = {
+  forest: {
+    basic: "greedlet",
+    standard: "maskedGreed",
+    special: "floater",
+    heavy: "breeder",
+  },
+  frozen: {
+    basic: "frostSprite",
+    standard: "iceGolem",
+    special: "blizzardWitch",
+    heavy: "iceGolem",
+  },
+  desert: {
+    basic: "sandScuttler",
+    standard: "dustWraith",
+    special: "behemothScorpion",
+    heavy: "behemothScorpion",
+  },
+  swamp: {
+    basic: "bogCrawler",
+    standard: "sporeSpitter",
+    special: "murkAbomination",
+    heavy: "murkAbomination",
+  },
+  volcano: {
+    basic: "ashFiend",
+    standard: "magmaGargoyle",
+    special: "obsidianJuggernaut",
+    heavy: "obsidianJuggernaut",
+  },
+  corrupted: {
+    basic: "shadowStalker",
+    standard: "riftWeaver",
+    special: "amalgam",
+    heavy: "amalgam",
+  },
+};
+
 export const ENEMY_TYPES = {
   imp: { hp: 6, speed: 95, w: 22, color: "#8f221c", eye: "#ffd060", reward: 1, dmg: 6, baseDmg: 2, meleeDmg: 1 },
+  greedlet: {
+    name: "Greedlet", hp: 5, speed: 128, w: 20, color: "#6f2118", eye: "#ffd060",
+    reward: 1, dmg: 5, baseDmg: 2, meleeDmg: 1, biome: "forest", greed: true,
+  },
+  maskedGreed: {
+    name: "Masked Greed", hp: 16, speed: 82, w: 30, color: "#4b2f20", eye: "#ffcf6a",
+    reward: 3, dmg: 8, baseDmg: 3, meleeDmg: 1, biome: "forest", arrowArmor: 3,
+  },
+  floater: {
+    name: "Floater", hp: 14, speed: 70, w: 30, color: "#596c72", eye: "#cfe6f2",
+    reward: 4, dmg: 7, meleeDmg: 1, biome: "forest", flying: true, shootInterval: 2.9,
+  },
+  breeder: {
+    name: "Breeder", hp: 92, speed: 28, w: 70, color: "#5a3d2e", eye: "#f2c14e",
+    reward: 10, dmg: 15, baseDmg: 6, meleeDmg: 2, biome: "forest",
+    breeder: true, spawnType: "greedlet", spawnInterval: 7.5, spawnCount: 3,
+    rangedSiege: true, shootInterval: 5.6, shootRange: 520,
+  },
   fireImp: { name: "Flying Imp", hp: 8, speed: 64, w: 25, color: "#9b2418", eye: "#ffd060", reward: 3, dmg: 9, meleeDmg: 2, flying: true, fireball: true, shootRange: 430, shootInterval: 2.8 },
+  frostSprite: {
+    name: "Frost-Sprite", hp: 9, speed: 118, w: 22, color: "#bfefff", eye: "#ffffff",
+    reward: 2, dmg: 5, baseDmg: 2, meleeDmg: 1, biome: "frozen", wallFreezeOnHit: 5.5,
+  },
+  iceGolem: {
+    name: "Ice-Golem", hp: 105, speed: 30, w: 64, color: "#b8d8ef", eye: "#eaf8ff",
+    reward: 9, dmg: 14, baseDmg: 6, meleeDmg: 2, biome: "frozen",
+    noKnockback: true, arrowArmor: 4,
+  },
+  blizzardWitch: {
+    name: "Blizzard Witch", hp: 24, speed: 52, w: 34, color: "#1b2842", eye: "#d8f8ff",
+    reward: 6, dmg: 8, meleeDmg: 1, biome: "frozen",
+    flying: true, shootInterval: 3.4, blizzardAura: 175,
+  },
+  sandScuttler: {
+    name: "Sand-Scuttler", hp: 11, speed: 132, w: 22, color: "#b48642", eye: "#ffe08a",
+    reward: 2, dmg: 6, baseDmg: 2, meleeDmg: 1, biome: "desert", burrower: true,
+  },
+  dustWraith: {
+    name: "Dust-Wraith", hp: 20, speed: 76, w: 30, color: "#c6a368", eye: "#fff0a0",
+    reward: 4, dmg: 7, meleeDmg: 1, biome: "desert",
+    flying: true, shootInterval: 3.1, arrowFarImmuneRange: 250,
+  },
+  behemothScorpion: {
+    name: "Behemoth Scorpion", hp: 88, speed: 42, w: 66, color: "#7a5738", eye: "#df8a3a",
+    reward: 10, dmg: 17, baseDmg: 6, meleeDmg: 2, biome: "desert",
+    noKnockback: true, builderSting: true,
+  },
+  bogCrawler: {
+    name: "Bog-Crawler", hp: 12, speed: 112, w: 24, color: "#3f5a34", eye: "#b8ff7a",
+    reward: 2, dmg: 6, baseDmg: 2, meleeDmg: 1, biome: "swamp", deathMud: true,
+  },
+  sporeSpitter: {
+    name: "Spore-Spitter", hp: 26, speed: 54, w: 34, color: "#566c36", eye: "#caff7a",
+    reward: 5, dmg: 8, baseDmg: 4, meleeDmg: 1, biome: "swamp",
+    rangedShoot: true, rangedSiege: true, shootRange: 440, shootInterval: 3.2,
+  },
+  murkAbomination: {
+    name: "Murk-Abomination", hp: 120, speed: 32, w: 78, color: "#283827", eye: "#b8ff7a",
+    reward: 11, dmg: 16, baseDmg: 7, meleeDmg: 2, biome: "swamp",
+    noKnockback: true, goldEater: true,
+  },
+  ashFiend: {
+    name: "Ash-Fiend", hp: 8, speed: 138, w: 22, color: "#3a1814", eye: "#ffb040",
+    reward: 2, dmg: 8, baseDmg: 3, meleeDmg: 1, biome: "volcano",
+    explodeOnDeath: true, explodeOnWall: true,
+  },
+  magmaGargoyle: {
+    name: "Magma Gargoyle", hp: 30, speed: 56, w: 36, color: "#302222", eye: "#ff7a24",
+    reward: 6, dmg: 10, meleeDmg: 2, biome: "volcano",
+    flying: true, fireball: true, fireImmune: true, shootRange: 420, shootInterval: 3.1,
+  },
+  obsidianJuggernaut: {
+    name: "Obsidian Juggernaut", hp: 135, speed: 26, w: 74, color: "#16141a", eye: "#ff6a28",
+    reward: 13, dmg: 22, baseDmg: 9, meleeDmg: 3, biome: "volcano",
+    noKnockback: true, fireImmune: true, arrowHeavyOnly: true,
+  },
+  shadowStalker: {
+    name: "Shadow-Stalker", hp: 18, speed: 112, w: 24, color: "#1b1228", eye: "#9f72ff",
+    reward: 3, dmg: 7, baseDmg: 3, meleeDmg: 1, biome: "corrupted", stealth: true, panicTouch: true,
+  },
+  riftWeaver: {
+    name: "Rift-Weaver", hp: 34, speed: 48, w: 34, color: "#2b1740", eye: "#d7a8ff",
+    reward: 6, dmg: 8, meleeDmg: 1, biome: "corrupted",
+    flying: true, shootInterval: 3.5, breeder: true, spawnType: "shadowStalker", spawnInterval: 8.5, spawnCount: 2,
+  },
+  amalgam: {
+    name: "The Amalgam", hp: 150, speed: 30, w: 82, color: "#21162f", eye: "#d7a8ff",
+    reward: 14, dmg: 19, baseDmg: 7, meleeDmg: 3, biome: "corrupted",
+    noKnockback: true, coinShock: true,
+  },
   emberBrute: {
     name: "Ember Brute", hp: 45, speed: 46, w: 50, color: "#5a1a10", eye: "#ff8a30",
     reward: 7, dmg: 11, meleeDmg: 2,
@@ -142,17 +270,9 @@ export const ENEMY_TYPES = {
   },
 };
 
-// Which boss spawns as the first enemy of a given night.
-// SpawnSystem consults this table, so adding a boss night is a one-line change.
-// Bosses unlock on these nights and then spawn every night thereafter.
-// nightEnemyType() handles the recurring logic; this table marks the unlock day.
+// Legacy non-biome bosses. The biome bosses above are chosen from the current
+// active biome, not from this global calendar.
 export const BOSS_SCHEDULE = {
   3: "fireDragon",
   6: "magmaGolem",
-  5: "forestStalker",
-  8: "skadiWrath",
-  10: "duneBroodmother",
-  12: "sunkenBehemoth",
-  14: "ignitedCore",
-  16: "voidMindflayer",
 };

@@ -1,4 +1,4 @@
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeboss1';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive1';
 import { ctx, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { roundedRect, legs, drawArm, drawHpBar } from '../DrawHelpers.js';

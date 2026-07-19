@@ -7,14 +7,14 @@ import { makeWall } from '../../entities/Wall.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { Audio } from './Audio.js';
 import { spawnParticles, spawnAnimal, planNight, purchaseFloaty } from '../world/SpawnSystem.js';
-import { addForestCamp, buildForest } from '../world/ForestSystem.js';
-import { makeBuildings, buildingCost, buildingLabel, payBuilding } from '../world/OutpostSystem.js?v=biomeweapons1';
+import { addForestCamp, buildForest } from '../world/ForestSystem.js?v=biomeactive1';
+import { makeBuildings, buildingCost, buildingLabel, payBuilding } from '../world/OutpostSystem.js?v=biomeactive1';
 import { upgradeBase } from '../../util/GameStateHelpers.js?v=biomeweapons1';
 import { addXP } from '../economy/UpgradeSystem.js?v=biomeweapons1';
-import { baseName } from '../../rendering/HUD.js?v=biomeweapons1';
+import { baseName } from '../../rendering/HUD.js?v=biomeactive1';
 import { applyPermanentUpgrades, applyPermanentWorldUpgrades, permanentForestCampPlans } from './RoguelikeSystem.js';
 import { initMineVeins } from '../world/MineSystem.js';
-import { fortNext, purchaseFortUpgrade } from '../world/FortificationSystem.js?v=biomeweapons1';
+import { fortNext, purchaseFortUpgrade } from '../world/FortificationSystem.js?v=biomeactive1';
 import { currentPopCap, wallMaxHpForLevel } from '../../util/DefenseStats.js';
 
 function missingDefenseHp() {
@@ -315,6 +315,8 @@ export function newGame() {
   state.sigilPulse      = 0;
   state.sigilSpin       = 0;
   Game.inMine           = false;
+  Game.activeBiome      = "forest";
+  Game.unlockedBiomes   = ["forest"];
   Game.worldPhase       = 1;
   Game.phaseTransition  = null;
 

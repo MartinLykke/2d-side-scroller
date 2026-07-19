@@ -1,12 +1,12 @@
-import { ENEMY_TYPES } from '../config/enemies.js?v=biomeboss1';
+import { ENEMY_TYPES } from '../config/enemies.js?v=biomeactive1';
 import { WEAPONS, BIOME_WEAPON_DROPS } from '../config/weapons.js?v=biomeweapons1';
 import { groundY } from '../core/canvas.js';
 import { Game, state } from '../core/state.js';
 import { inject } from '../core/services.js';
-import { spawnGoldReward, spawnParticles, floaty } from '../systems/world/SpawnSystem.js?v=biomeboss1';
+import { spawnGoldReward, spawnParticles, floaty } from '../systems/world/SpawnSystem.js?v=biomeactive1';
 import { Audio } from '../systems/infrastructure/Audio.js';
 import { registerEnemyKill } from '../systems/infrastructure/RoguelikeSystem.js';
-import { biomeAt } from '../rendering/Effects.js?v=biomes4';
+import { biomeAt } from '../rendering/Effects.js?v=biomeactive1';
 
 const PORTAL_GUARDIAN_WEAPON_DROP_CHANCE = 0.25;
 const PORTAL_GUARDIAN_WEAPON_RARITIES = [1, 2, 3];
@@ -352,6 +352,30 @@ function registerMomentumKill(e, t) {
   }
 }
 
+function spawnBiomeHazardPool(x, kind, r, life, col) {
+  if (!state.firePools) state.firePools = [];
+  state.firePools.push({
+    x, r, life, maxLife: life,
+    tick: 0.35 + Math.random() * 0.35,
+    ph: Math.random() * Math.PI * 2,
+    kind,
+    dmg: kind === "mud" ? 0 : 1,
+  });
+  spawnParticles(x, groundY - 8, kind === "mud" ? 24 : 34, col, r * 1.2, kind === "mud" ? 55 : 130);
+}
+
+function triggerBiomeDeathEffects(e, t) {
+  if (t.deathMud) {
+    spawnBiomeHazardPool(e.x, "mud", 74, 4.8, "#5f6f3a");
+    floaty(e.x, "Mud burst", "#b8ff7a", 12);
+  }
+  if (t.explodeOnDeath) {
+    spawnBiomeHazardPool(e.x, "fire", 62, 4.2, t.eye || "#ff7a24");
+    Game.screenShake = Math.max(Game.screenShake || 0, 0.32);
+    floaty(e.x, "Boom", t.eye || "#ff7a24", 12);
+  }
+}
+
 export function killEnemyWithAnimation(e, knockDirection = 0) {
   if (e.dying) return;
   const t = ENEMY_TYPES[e.type];
@@ -429,6 +453,7 @@ export function killEnemyWithAnimation(e, knockDirection = 0) {
 
   if (e.portalGuardian) rollPortalGuardianWeaponDrop(e);
   rollBiomeWeaponDrop(e, t);
+  triggerBiomeDeathEffects(e, t);
   if (e.type === "fireDragon") {
     state.lootItems.push({ x: e.x, weaponId: "meteor_tome", dropVy: -350, dropY: groundY - 150 });
   }

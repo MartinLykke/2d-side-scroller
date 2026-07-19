@@ -2,7 +2,7 @@ import { clamp } from '../../util/math.js';
 import { WEAPONS, RARITY_COL, RARITY_NAME, effectiveWeapon } from '../../config/weapons.js?v=biomeweapons1';
 import { UPGRADE_TIERS } from '../../config/weaponUpgrades.js?v=biomeweapons1';
 import { ARMORS, ARMOR_RARITY_COL, ARMOR_RARITY_NAME, armorBlockChance } from '../../config/armor.js';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeboss1';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive1';
 import { ctx, W, H, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { inject, provide } from '../../core/services.js';

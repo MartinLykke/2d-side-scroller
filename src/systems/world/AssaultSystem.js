@@ -3,11 +3,11 @@ import { clamp, clampCameraTarget, dist, rand, randInt } from '../../util/math.j
 import { groundY, W } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnEnemy, spawnParticles, spawnGoldReward, floaty, planNight } from './SpawnSystem.js?v=biomeboss1';
-import { shootArrow } from '../combat/Combat.js?v=biomeboss1';
-import { moveToward, nearestEnemy } from '../ai/AIHelpers.js?v=biomeboss1';
-import { buildForest } from './ForestSystem.js';
-import { clearTreeCache } from '../../rendering/Effects.js?v=biomes4';
+import { spawnEnemy, spawnParticles, spawnGoldReward, floaty, planNight } from './SpawnSystem.js?v=biomeactive1';
+import { shootArrow } from '../combat/Combat.js?v=biomeactive1';
+import { moveToward, nearestEnemy } from '../ai/AIHelpers.js?v=biomeactive1';
+import { buildForest } from './ForestSystem.js?v=biomeactive1';
+import { activeBiomeId, nextBiomeId, setActiveBiome, clearTreeCache } from '../../rendering/Effects.js?v=biomeactive1';
 import { addXP } from '../economy/UpgradeSystem.js?v=biomeweapons1';
 
 // ── Portal assault ───────────────────────────────────────────────────────
@@ -282,6 +282,57 @@ export function assaultUnitAI(u, dt) {
 // Runs at the peak of the transition flash (see game.js): the world is
 // remade under cover of white, so the reveal shows the changed land.
 export function performPhaseShift() {
+  const nextBiome = nextBiomeId(activeBiomeId());
+  if (nextBiome) {
+    const biome = setActiveBiome(nextBiome, { reseed: true });
+    Game.worldPhase = 1;
+    state.assault = null;
+
+    const { player } = state;
+    player.x = CFG.baseX;
+    player.knock = 0;
+    player.invuln = Math.max(player.invuln || 0, 1.4);
+    Game.inMine = false;
+    Game.cam = clampCameraTarget(CFG.baseX - W / 2, CFG.worldWidth, W, Game.zoom || 1);
+
+    for (const u of state.units) {
+      if (u.assault) {
+        u.assault = false;
+        u.assaultSlot = 0;
+        u.x = CFG.baseX + rand(-240, 240);
+      }
+      dismountUnit(u);
+      if (u.pendingLog) { u.pendingLog.claimedBy = null; u.pendingLog = null; }
+      if (u.carryLog) { u.carryLog.carriedBy = null; u.carryLog = null; }
+    }
+
+    state.enemies.length = 0;
+    state.arrows.length = 0;
+    state.legendaryBoss = null;
+    state.firePools.length = 0;
+    state.animals.length = 0;
+
+    for (const p of state.portals) {
+      p.destroyed = false;
+      p.voidRift = false;
+      p.hp = undefined;
+      p.maxHp = undefined;
+      p.flash = 0;
+      p.lastDayActivated = Game.day;
+    }
+
+    buildForest();
+    clearTreeCache();
+    planNight();
+
+    const col = biome.hot ? "#ff7a36" : biome.corrupt ? "#b66bff" : biome.snow ? "#cfe6f2" : biome.deco==="desert" ? "#d8b06a" : biome.deco==="swamp" ? "#9bd05a" : "#f2c14e";
+    spawnParticles(CFG.baseX, groundY - 60, 42, col, 260, 220);
+    spawnParticles(CFG.baseX, groundY - 80, 20, "#ffffff", 150, 190);
+    floaty(state.base.x, "ENTERING " + biome.name.toUpperCase(), col, 20);
+    Audio.horn();
+    return;
+  }
+
   Game.worldPhase = 2;
   state.assault = null;
 

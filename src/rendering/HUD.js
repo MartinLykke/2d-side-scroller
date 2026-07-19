@@ -1,12 +1,12 @@
 import { CFG, MINE } from '../config/config.js';
-import { ENEMY_TYPES } from '../config/enemies.js?v=biomeboss1';
+import { ENEMY_TYPES } from '../config/enemies.js?v=biomeactive1';
 import { WEAPONS, RARITY_COL, RARITY_NAME } from '../config/weapons.js?v=biomeweapons1';
 import { ARMORS, ARMOR_RARITY_COL, ARMOR_RARITY_NAME } from '../config/armor.js';
 import { dist, clamp, rand, clampCameraTarget } from '../util/math.js';
 import { Game, state } from '../core/state.js';
 import { inject, provide } from '../core/services.js';
 import { Audio } from '../systems/infrastructure/Audio.js';
-import { spawnEnemy, spawnFireDragon, spawnBoss, spawnBiomeBoss, planNight, floaty, spawnParticles } from '../systems/world/SpawnSystem.js?v=biomeboss1';
+import { spawnEnemy, spawnFireDragon, spawnBoss, spawnBiomeBoss, planNight, floaty, spawnParticles } from '../systems/world/SpawnSystem.js?v=biomeactive1';
 import { pick } from '../util/math.js';
 import { groundY, W } from '../core/canvas.js';
 import { ARCHER_SKILLS, ARROW_RAIN_COOLDOWN } from '../config/archerSkills.js';
@@ -22,7 +22,7 @@ import { renderBudget, renderLoad } from './RenderFrame.js';
 import { profilerEnabled, setProfilerEnabled, profilerResults, profilerFrameMs, profilerReset } from '../util/Profiler.js';
 import { canOpenCastleUpgrades } from '../systems/economy/CastleUpgradeSystem.js?v=biomeweapons1';
 import { currentCoinCap, currentPopCap, wallMaxHpForLevel } from '../util/DefenseStats.js';
-import { BIOME_DEFS, biomeAt, biomeCenterX } from './Effects.js?v=biomes4';
+import { BIOME_DEFS, biomeAt, setActiveBiome } from './Effects.js?v=biomeactive1';
 
 // ── Skill Tree ────────────────────────────────────────────────
 const BRANCH_NAMES = {
@@ -632,7 +632,7 @@ export const DEV = {
 
   fortTierUp() {
     if (Game.state!=="play") return;
-    import('../systems/world/FortificationSystem.js?v=biomeboss1').then(m => {
+    import('../systems/world/FortificationSystem.js?v=biomeactive1').then(m => {
       if (!m.purchaseFortUpgrade()) floaty(state.base.x, "Runeforge fully attuned", "#c9a2ff");
     });
   },
@@ -712,7 +712,7 @@ export const DEV = {
   // Dynamic import keeps HUD out of the AssaultSystem module graph
   startAssaultDev() {
     if (Game.state!=="play") return;
-    import('../systems/world/AssaultSystem.js?v=biomeboss1').then(m => m.startAssault());
+    import('../systems/world/AssaultSystem.js?v=biomeactive1').then(m => m.startAssault());
   },
 
   crackPortals() {
@@ -736,14 +736,18 @@ export const DEV = {
     if (Game.state!=="play" || !state.player) return;
     const biome = BIOME_DEFS.find(b => b.id === id);
     if (!biome) return;
-    const x = biomeCenterX(id);
+    setActiveBiome(id, { reseed: true });
+    const x = CFG.baseX;
     Game.inMine = false;
     state.assault = null;
+    Game.phaseTransition = null;
+    Game.worldPhase = 1;
     for (const u of state.units || []) {
-      if (!u.assault) continue;
       u.assault = false;
       u.assaultSlot = 0;
       u.combatTarget = null;
+      u.pendingLog = null;
+      u.carryLog = null;
     }
     const p = state.player;
     p.x = x;
@@ -754,8 +758,11 @@ export const DEV = {
     p.invuln = Math.max(p.invuln || 0, 0.8);
     Game.cam = clampCameraTarget(x - W / 2, CFG.worldWidth, W, Game.zoom || 1);
     const col = biome.hot ? "#ff7a36" : biome.corrupt ? "#b66bff" : biome.snow ? "#cfe6f2" : biome.deco==="desert" ? "#d8b06a" : biome.deco==="swamp" ? "#9bd05a" : "#f2c14e";
+    state.enemies.length = 0;
+    state.animals.length = 0;
+    import('../systems/world/ForestSystem.js?v=biomeactive1').then(({ buildForest }) => buildForest());
     spawnParticles(x, groundY - 45, 24, col, 120, 130);
-    floaty(x, "Biome: " + biome.name, col, 18);
+    floaty(x, "World biome: " + biome.name, col, 18);
     this._renderPanel();
   },
 

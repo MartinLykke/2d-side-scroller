@@ -1005,6 +1005,56 @@ export function updateHub(dt, startNewRun) {
   }
 }
 
+function hubTeleportBurst(x) {
+  for (let i = 0; i < 14; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const r = Math.random() * 26;
+    state.particles.push({
+      x: x + Math.cos(a) * r,
+      y: groundY - 40 + Math.sin(a) * r * 0.7,
+      vx: Math.cos(a) * (40 + Math.random() * 90),
+      vy: Math.sin(a) * (30 + Math.random() * 60) - 20,
+      life: 0.3 + Math.random() * 0.3,
+      color: Math.random() < 0.5 ? "#8fd8ff" : "#d8f6ff",
+      size: 1.6 + Math.random() * 2.4,
+    });
+  }
+}
+
+// Snap the player to the next/previous tier plaza (dir > 0 = toward the portal).
+export function snapHubToPlaza(dir) {
+  if (Game.state !== "hub" || !state.player) return;
+  const anchors = [...HUB_TIERS.map(t => t.cx), HUB.portalX];
+  const x = state.player.x;
+  let target = null;
+  if (dir > 0) {
+    for (const a of anchors) { if (a > x + 12) { target = a; break; } }
+  } else {
+    for (let i = anchors.length - 1; i >= 0; i--) { if (anchors[i] < x - 12) { target = anchors[i]; break; } }
+  }
+  if (target == null) return;
+  hubTeleportBurst(state.player.x);
+  state.player.x = clamp(target, 120, HUB.width - 120);
+  state.player.vx = 0;
+  hubTeleportBurst(state.player.x);
+  Game.cam = clampCameraTarget(state.player.x - W / 2, HUB.width, W, Game.zoom || 1.2);
+  Audio.upgrade();
+}
+
+// Instantly begin the run-start transition from anywhere in the hub.
+export function warpToHubPortal() {
+  if (Game.state !== "hub" || !state.player) return;
+  saveMeta(Game.meta);
+  Game.state = "hub-transition";
+  Game.hubTransitionT = 0;
+  Game.hubTransitionFromX = state.player.x;
+  state.player.vx = 0;
+  state.player.jumpH = 0;
+  state.player.jumpVy = 0;
+  state.payHoldTime = 0;
+  Audio.upgrade();
+}
+
 export function updateHubTransition(dt, startNewRun) {
   Game.hubT = (Game.hubT || 0) + dt;
   Game.hubTransitionT = (Game.hubTransitionT || 0) + dt;
@@ -2146,7 +2196,7 @@ function drawHubText() {
   ctx.fillStyle = "#cfc6b0";
   ctx.font = "13px sans-serif";
   const reward = Game.meta?.lastReward || 0;
-  ctx.fillText(`Last run: day ${Game.meta?.lastDay || 1}, ${Game.meta?.lastKills || 0} slain, +${reward} embers. Head right into the blue portal when you are ready.`, 24, 56);
+  ctx.fillText(`Last run: day ${Game.meta?.lastDay || 1}, ${Game.meta?.lastKills || 0} slain, +${reward} embers.  [Q/E] hop between plazas   -   [Enter] start next run`, 24, 56);
   ctx.restore();
 }
 

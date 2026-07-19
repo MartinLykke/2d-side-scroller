@@ -7,9 +7,11 @@ import { visibleWorldBounds } from './Viewport.js';
 import { renderBudget } from './RenderFrame.js';
 
 // ---------- Biomes ----------
-// The world is still one continuous map, but each band now has a strong
-// identity. Forest stays around the base as the starting biome.
+// The map is one continuous kingdom, but it only has one active biome at a
+// time. Changing biome remakes the whole landscape instead of moving through
+// world-space bands.
 const BIOME_BLEND = 180;
+export const BIOME_ORDER = ["forest", "frozen", "desert", "swamp", "volcano", "corrupted"];
 export const BIOME_DEFS = [
   {
     id:"frozen", name:"Frozen Wastes", c:680, start:0, end:1400,
@@ -31,8 +33,8 @@ export const BIOME_DEFS = [
   },
   {
     id:"swamp", name:"Swamp", c:6500, start:5850, end:7200,
-    treeL:[88,112,58], treeD:[34,48,30], gT:[58,76,42], gB:[28,42,30],
-    fog:[116,132,94], sky:[118,136,112], leaf:"#8a9a4a", deco:"swamp",
+    treeL:[62,96,64], treeD:[14,36,32], gT:[42,60,38], gB:[14,30,28],
+    fog:[92,116,74], sky:[78,104,102], leaf:"#b4bd58", deco:"swamp",
     snow:0, moss:1, dry:0, hot:0, wet:1, corrupt:0, fallKind:"spore",
   },
   {
@@ -95,20 +97,29 @@ export function biomeCenterX(id) {
   return clamp(b.c ?? (b.start + b.end) / 2, 120, CFG.worldWidth - 120);
 }
 
-export function biomeAt(x) {
-  const d = BIOME_DEFS;
-  const wx = clamp(Number.isFinite(x) ? x : CFG.baseX, 0, CFG.worldWidth);
-  for (let i = 0; i < d.length - 1; i++) {
-    const a = d[i], b = d[i + 1], edge = a.end;
-    const blend = Math.min(BIOME_BLEND, Math.max(40, (b.end - a.start) * 0.08));
-    if (wx >= edge - blend && wx <= edge + blend) {
-      const t = clamp((wx - (edge - blend)) / (blend * 2), 0, 1);
-      const smooth = t * t * (3 - 2 * t);
-      return applyWorldPhase(mixBiome(a, b, smooth));
-    }
+export function activeBiomeId() {
+  return BIOME_DEFS.some(b => b.id === Game.activeBiome) ? Game.activeBiome : "forest";
+}
+
+export function nextBiomeId(id = activeBiomeId()) {
+  const i = BIOME_ORDER.indexOf(id);
+  return i >= 0 && i < BIOME_ORDER.length - 1 ? BIOME_ORDER[i + 1] : null;
+}
+
+export function setActiveBiome(id, opts = {}) {
+  const biome = biomeById(id);
+  Game.activeBiome = biome.id;
+  if (!Array.isArray(Game.unlockedBiomes) || !Game.unlockedBiomes.includes("forest")) {
+    Game.unlockedBiomes = ["forest"];
   }
-  for (const b of d) if (wx >= b.start && wx <= b.end) return applyWorldPhase(b);
-  return applyWorldPhase(wx < d[0].start ? d[0] : d[d.length - 1]);
+  if (!Game.unlockedBiomes.includes(biome.id)) Game.unlockedBiomes.push(biome.id);
+  if (opts.reseed) Game.treeSeed = Math.floor(rand(1, 99999));
+  clearTreeCache();
+  return biome;
+}
+
+export function biomeAt(_x) {
+  return applyWorldPhase(biomeById(activeBiomeId()));
 }
 
 // ---------- Sky / time-of-day ----------
@@ -373,14 +384,14 @@ function pickType(b, r) {
   if (b.deco==="desert")   return t<0.64?"cactus":t<0.82?"dead":"petrified";
   if (b.deco==="volcano")  return t<0.68?"petrified":t<0.92?"dead":"cactus";
   if (b.deco==="corrupted") return t<0.70?"corrupt":t<0.88?"dead":"petrified";
-  if (b.deco==="swamp")    return t<0.38?"mangrove":t<0.62?"crooked":t<0.78?"dead":t<0.90?"oak":"bush";
+  if (b.deco==="swamp")    return t<0.52?"mangrove":t<0.78?"crooked":t<0.92?"dead":t<0.98?"bush":"oak";
   return t<0.4?"pine":t<0.66?"fir":t<0.82?"oak":t<0.92?"widepine":"birch";
 }
 
 export function makeTree(x, baseH, r, opts = {}) {
   const b = biomeAt(x);
   let type = pickType(b, r);
-  if (opts.harvestable && type === "dead" && !b.dry && !b.hot && !b.corrupt) type = r() < 0.5 ? "fir" : "oak";
+  if (opts.harvestable && type === "dead" && !b.dry && !b.hot && !b.corrupt && b.deco !== "swamp") type = r() < 0.5 ? "fir" : "oak";
   const heightBoost = opts.harvestable ? 1.18 : 1;
   let h = baseH * heightBoost * (0.76+r()*0.56);
   if (type === "dead") h *= 0.82;
@@ -431,7 +442,7 @@ export function makeTree(x, baseH, r, opts = {}) {
   }
   return {
     x, type, h, w, phase:r()*6, tiers, lean, trunkW:0.08+r()*0.035,
-    broken:r()<0.16, snow:b.snow&&r()<0.85, moss:b.moss&&r()<0.6,
+    broken:r()<0.16, snow:b.snow&&r()<0.85, moss:b.moss&&r()<(b.deco==="swamp"?0.94:0.6),
     hot:!!b.hot, corrupt:!!b.corrupt, clusters, branches, arms, roots, cracks, crystals,
   };
 }
@@ -661,6 +672,23 @@ export function drawTree(t, cx, baseY, light, dark, depthDark, swayAmp) {
     // canopy silhouette + clipped shading is expensive (clip per tree per frame),
     // so it's baked to an offscreen sprite and re-baked only when lighting shifts
     drawCanopySprite(t, cx, baseY, light, dark, Ht, sw);
+    if (t.moss && t.clusters?.length) {
+      ctx.strokeStyle = withA(lerpColor(dark, [138, 148, 74], 0.48), 0.72);
+      ctx.lineWidth = Math.max(1, Wd * 0.012);
+      ctx.lineCap = "round";
+      const n = Math.min(8, t.clusters.length);
+      for (let i = 0; i < n; i++) {
+        const cl = t.clusters[(i * 2) % t.clusters.length];
+        const mx = cx + sw(cl.dy) + cl.dx * (0.55 + (i % 3) * 0.08);
+        const my = baseY - cl.dy * Ht + cl.r * 0.35;
+        const len = Math.min(Ht * 0.22, cl.r * (0.85 + ((t.x + i * 19) % 7) * 0.08));
+        ctx.beginPath();
+        ctx.moveTo(mx, my);
+        ctx.quadraticCurveTo(mx + windSway(t.phase + i, swayAmp) * 0.18, my + len * 0.55, mx + ((i % 2) ? 3 : -3), my + len);
+        ctx.stroke();
+      }
+      ctx.lineCap = "butt";
+    }
   }
   if (t.broken&&t.type!=="dead") { ctx.strokeStyle=withA(trunkCol,1); ctx.lineWidth=Math.max(1.5,Wd*0.07); ctx.beginPath(); ctx.moveTo(cx,baseY-Ht*0.34); ctx.lineTo(cx+Wd*0.4,baseY-Ht*0.28); ctx.stroke(); }
   if (t.moss) { ctx.fillStyle="rgba(74,116,84,0.55)"; ctx.beginPath(); ctx.ellipse(cx,baseY-Ht*0.04,Wd*0.12,Ht*0.05,0,0,Math.PI*2); ctx.fill(); }
@@ -830,6 +858,10 @@ export function drawTreeLayer(trees, factor, depthDark, swayAmp, alpha=1) {
 }
 
 let treeCache = null;
+function biomeCacheKey() {
+  return `${Game.treeSeed || 1}:${activeBiomeId()}:${Game.worldPhase || 1}`;
+}
+
 function biomeTreeDensity(x) {
   const b = biomeAt(x);
   if (b.deco==="desert") return 0.34;
@@ -841,7 +873,8 @@ function biomeTreeDensity(x) {
 }
 
 export function getTrees() {
-  if (treeCache && treeCache.seed===Game.treeSeed) return treeCache;
+  const key = biomeCacheKey();
+  if (treeCache && treeCache.key===key) return treeCache;
   const r=mulberry32(Game.treeSeed||1);
   const far=[],mid=[],near=[],fore=[],hills=[],mountains=[];
   const campX = CFG.baseX;
@@ -851,7 +884,7 @@ export function getTrees() {
   for (let x=-100;x<CFG.worldWidth+100;x+=74)  { const tx=x+r()*48; if(Math.abs(tx-campX)>380 && r()<biomeTreeDensity(tx)) near.push(makeTree(tx, r()<0.1?405:285, r)); }
   for (let x=-100;x<CFG.worldWidth+100;x+=520) { const tx=x+r()*220; if(Math.abs(tx-campX)>700 && r()<biomeTreeDensity(tx)) fore.push(makeTree(tx, 150, r)); }
   for (let x=-300;x<CFG.worldWidth+300;x+=170) hills.push({ x:x+r()*120, h:50+r()*130, w:200+r()*230 });
-  treeCache={ seed:Game.treeSeed, far, mid, near, fore, hills, mountains };
+  treeCache={ key, seed:Game.treeSeed, far, mid, near, fore, hills, mountains };
   return treeCache;
 }
 export function clearTreeCache() { treeCache=null; decoCache=null; groundTexCache=null; }
@@ -859,7 +892,8 @@ export function clearTreeCache() { treeCache=null; decoCache=null; groundTexCach
 // ---------- Ground decoration cache ----------
 let decoCache=null;
 export function getDeco() {
-  if (decoCache&&decoCache.seed===Game.treeSeed) return decoCache;
+  const key = biomeCacheKey();
+  if (decoCache&&decoCache.key===key) return decoCache;
   const r=mulberry32((Game.treeSeed||1)*7+13);
   const items=[];
   for (let x=60;x<CFG.worldWidth-60;x+=15+r()*26) {
@@ -868,26 +902,27 @@ export function getDeco() {
     let kind;
     if      (b.deco==="frozen" || b.snow) kind=t<0.42?"snowtuft":(t<0.58?"iceShard":(t<0.74?"stone":(t<0.88?"tallgrass":"stump")));
     else if (b.deco==="desert")   kind=t<0.28?"drygrass":(t<0.44?"sandstone":(t<0.58?"smallCactus":(t<0.72?"stone":(t<0.88?"dustPatch":"deadRoot"))));
-    else if (b.deco==="swamp")    kind=t<0.30?"reed":(t<0.48?"bogBubble":(t<0.62?"grass":(t<0.76?"mushroom":(t<0.90?"fern":"stone"))));
+    else if (b.deco==="swamp")    kind=t<0.26?"reed":(t<0.48?"bogBubble":(t<0.62?"deadRoot":(t<0.74?"mushroom":(t<0.86?"fern":(t<0.94?"tallgrass":"stone")))));
     else if (b.deco==="volcano")  kind=t<0.30?"lavaCrack":(t<0.48?"obsidian":(t<0.66?"ashVent":(t<0.82?"stone":"deadRoot")));
     else if (b.deco==="corrupted") kind=t<0.34?"corruptShard":(t<0.52?"deadRoot":(t<0.68?"mushroom":(t<0.82?"obsidian":(t<0.93?"tallgrass":"stone"))));
     else                          kind=t<0.34?"grass":(t<0.50?"flower":(t<0.62?"tallgrass":(t<0.72?"bush":(t<0.80?"fern":(t<0.88?"stone":(t<0.95?"grass":"sapling"))))));
     items.push({ x, kind, s:0.7+r()*0.8, ph:r()*6, leaf:b.leaf, flower:["#e58fb0","#f2c14e","#cfe6f2","#e87b5a"][(r()*4)|0], berry:r()<0.45 });
   }
-  decoCache={seed:Game.treeSeed, items};
+  decoCache={key, seed:Game.treeSeed, items};
   return decoCache;
 }
 
 let groundTexCache=null;
 export function getGroundTex() {
-  if (groundTexCache&&groundTexCache.seed===Game.treeSeed) return groundTexCache;
+  const key = biomeCacheKey();
+  if (groundTexCache&&groundTexCache.key===key) return groundTexCache;
   const r=mulberry32((Game.treeSeed||1)*13+7);
   const fringe=[],patches=[],pebbles=[],specks=[];
   for (let x=0;x<CFG.worldWidth;x+=8+r()*10) fringe.push({x, h:6+r()*11, ph:r()*6, lt:r()<0.4});
   for (let x=0;x<CFG.worldWidth;x+=24+r()*38) patches.push({x, dy:r()*60, r:9+r()*24, light:r()<0.5});
   for (let x=0;x<CFG.worldWidth;x+=28+r()*56) pebbles.push({x, dy:8+r()*70, r:1.4+r()*3});
   for (let x=0;x<CFG.worldWidth;x+=7+r()*12)  specks.push({x, dy:14+r()*85, r:0.6+r()*1.5, light:r()<0.3});
-  groundTexCache={seed:Game.treeSeed, fringe, patches, pebbles, specks};
+  groundTexCache={key, seed:Game.treeSeed, fringe, patches, pebbles, specks};
   return groundTexCache;
 }
 

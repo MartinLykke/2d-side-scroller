@@ -3,9 +3,9 @@ import { clamp, dist, rand } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles } from '../world/SpawnSystem.js?v=biomeboss1';
-import { nearestChoppableTree, chopTree, nearestLog, deliverLog } from '../world/ForestSystem.js';
-import { nearestEnemy, moveToward, sunsetApproaching } from './AIHelpers.js?v=biomeboss1';
+import { spawnParticles } from '../world/SpawnSystem.js?v=biomeactive1';
+import { nearestChoppableTree, chopTree, nearestLog, deliverLog } from '../world/ForestSystem.js?v=biomeactive1';
+import { nearestEnemy, moveToward, sunsetApproaching } from './AIHelpers.js?v=biomeactive1';
 
 const BUILDER_TASK_SPEED = 200;
 

@@ -2,12 +2,12 @@ import { clamp, lerp, lerpColor, rgb, withA, shade, atmo, hazeColor, mulberry32,
 import { CFG, STATIONS_X } from '../../config/config.js';
 import { ctx, W, H, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
-import { FX, biomeAt, getGroundTex, getDeco, windGust, windSway, drawTree, makeTree } from '../Effects.js?v=biomes4';
+import { FX, biomeAt, getGroundTex, getDeco, windGust, windSway, drawTree, makeTree } from '../Effects.js?v=biomeactive1';
 import { visibleWorldBounds } from '../Viewport.js';
 import { wallHeight, wallRenderWidth, wallBackDir, wallPlatformDepth } from '../../entities/Wall.js';
 import { groundShadow, roundedRect, stoneCol, stoneLt, woodCol, litWindow, drawHpBar } from '../DrawHelpers.js?v=biomeweapons1';
-import { ENEMY_TYPES } from '../../config/enemies.js';
-import { fortHas, fortLevel, fortNext } from '../../systems/world/FortificationSystem.js?v=biomeweapons1';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive1';
+import { fortHas, fortLevel, fortNext } from '../../systems/world/FortificationSystem.js?v=biomeactive1';
 import { FORT_TRACK } from '../../config/fortifications.js';
 import { renderBudget } from '../RenderFrame.js';
 import { castleUpgradeLevel } from '../../util/DefenseStats.js';
@@ -24,8 +24,16 @@ export function drawGroundTexture(dark) {
   const groundDetail = renderBudget().groundDetail;
   for (const p of tex.patches) {
     if (p.x<camL||p.x>camR) continue;
-    const b=biomeAt(p.x), col=lerpColor(p.light?shade(b.gT,1.16):shade(b.gT,0.8),[12,14,22],dark);
-    ctx.fillStyle=withA(col,0.5); ctx.beginPath(); ctx.ellipse(p.x,groundY+7+p.dy,p.r,p.r*0.4,0,0,Math.PI*2); ctx.fill();
+    const b=biomeAt(p.x);
+    const swamp = b.deco==="swamp";
+    const col=swamp
+      ? lerpColor(p.light?[42,70,54]:[22,42,38],[6,12,16],dark)
+      : lerpColor(p.light?shade(b.gT,1.16):shade(b.gT,0.8),[12,14,22],dark);
+    ctx.fillStyle=withA(col,swamp?0.68:0.5); ctx.beginPath(); ctx.ellipse(p.x,groundY+7+p.dy,p.r,p.r*(swamp?0.32:0.4),0,0,Math.PI*2); ctx.fill();
+    if (swamp && p.light && p.r > 14) {
+      ctx.fillStyle=withA(lerpColor([80,104,66],[8,18,18],dark),0.32);
+      ctx.beginPath(); ctx.ellipse(p.x,groundY+6+p.dy,p.r*0.72,p.r*0.14,0,0,Math.PI*2); ctx.fill();
+    }
   }
   const pebbleStep = groundDetail === 0 ? 2 : 1;
   for (let i = 0; i < tex.pebbles.length; i += pebbleStep) {
@@ -67,6 +75,7 @@ export function drawGroundTexture(dark) {
       b.deco==="desert"?lerpColor([188,144,78],[58,42,30],dark):
       b.deco==="volcano"?lerpColor([90,76,66],[24,20,22],dark):
       b.deco==="corrupted"?lerpColor([84,58,96],[20,16,28],dark):
+      b.deco==="swamp"?lerpColor(f.lt?[92,116,58]:[42,82,64],[8,22,20],dark):
       lerpColor(shade(b.gT,f.lt?1.28:1.04),[18,26,18],dark);
     const sway=windSway(f.ph,4);
     ctx.strokeStyle=rgb(col); ctx.lineWidth=2;
@@ -295,6 +304,7 @@ export function drawPonds(dark) {
     if (p.x + p.hw < camL || p.x - p.hw > camR) continue;
     const biome = biomeAt(p.x);
     if (biome.dry || biome.hot || biome.corrupt) continue;
+    const swamp = biome.deco==="swamp";
     const r = mulberry32(p.seed);
     const hw = p.hw;
     const sy = groundY + 1.5;                 // waterline sits just under the grass lip
@@ -305,8 +315,14 @@ export function drawPonds(dark) {
     ctx.beginPath(); ctx.ellipse(p.x, sy + 1, hw + 14, depth + 5, 0, 0, Math.PI); ctx.fill();
 
     // water body: flat surface, curved bed
-    const shallow = biome.snow ? lerpColor([204, 226, 238], [74, 94, 124], dark) : lerpColor([96, 138, 148], [24, 34, 52], dark);
-    const deep = biome.snow ? lerpColor([150, 182, 210], [34, 48, 76], dark) : lerpColor([34, 66, 78], [8, 14, 26], dark);
+    const shallow = biome.snow
+      ? lerpColor([204, 226, 238], [74, 94, 124], dark)
+      : swamp ? lerpColor([76, 98, 58], [16, 28, 24], dark)
+      : lerpColor([96, 138, 148], [24, 34, 52], dark);
+    const deep = biome.snow
+      ? lerpColor([150, 182, 210], [34, 48, 76], dark)
+      : swamp ? lerpColor([18, 46, 38], [4, 12, 14], dark)
+      : lerpColor([34, 66, 78], [8, 14, 26], dark);
     const wg = ctx.createLinearGradient(0, sy, 0, sy + depth);
     wg.addColorStop(0, rgb(shallow));
     wg.addColorStop(1, rgb(deep));
@@ -314,7 +330,7 @@ export function drawPonds(dark) {
     ctx.beginPath(); ctx.ellipse(p.x, sy, hw, depth, 0, 0, Math.PI); ctx.fill();
 
     // sky sheen along the surface
-    ctx.fillStyle = withA(lerpColor([196, 224, 228], [90, 120, 160], dark), 0.4);
+    ctx.fillStyle = withA(swamp ? lerpColor([150, 170, 92], [38, 58, 44], dark) : lerpColor([196, 224, 228], [90, 120, 160], dark), swamp ? 0.24 : 0.4);
     ctx.fillRect(p.x - hw + 4, sy, hw * 2 - 8, 1.6);
     if (biome.snow) {
       ctx.fillStyle = withA(lerpColor([232, 244, 250], [112, 138, 170], dark), 0.72);
@@ -355,13 +371,13 @@ export function drawPonds(dark) {
 
     // ---- seeded shoreline dressing ----
     // lilypads floating near the middle
-    const pads = 2 + Math.floor(r() * (hw / 60));
+    const pads = (swamp ? 4 : 2) + Math.floor(r() * (hw / (swamp ? 46 : 60)));
     for (let k = 0; k < pads; k++) {
       const px = p.x + (r() * 2 - 1) * hw * 0.62;
       const ps = 0.7 + r() * 0.7;
       const flower = r() < 0.3;
       const bob = Math.sin(t * 1.1 + px * 0.13) * 0.7;
-      ctx.fillStyle = rgb(lerpColor([64, 108, 62], [18, 32, 26], dark));
+      ctx.fillStyle = rgb(lerpColor(swamp ? [74, 102, 42] : [64, 108, 62], [18, 32, 26], dark));
       ctx.beginPath(); ctx.ellipse(px, sy + 1.5 + bob, 7 * ps, 2.6 * ps, 0, 0, Math.PI * 2); ctx.fill();
       // notch cut toward the stem
       ctx.fillStyle = rgb(shallow);

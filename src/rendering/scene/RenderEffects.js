@@ -1,7 +1,7 @@
 import { clamp } from '../../util/math.js';
 import { ctx, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
-import { FX } from '../Effects.js?v=biomes4';
+import { FX } from '../Effects.js?v=biomeactive1';
 import { visibleWorldBounds } from '../Viewport.js';
 import { renderBudget } from '../RenderFrame.js';
 

@@ -1,24 +1,24 @@
 import { CFG, STATIONS_X } from '../../config/config.js';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeboss1';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive1';
 import { ARROW_RAIN_COOLDOWN } from '../../config/archerSkills.js';
 import { clamp, dist, rand, pick } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, spawnGoldCoins, spawnGoldReward, floaty as showFloaty } from '../world/SpawnSystem.js?v=biomeboss1';
-import { shootArrow, killEnemy, damagePlayer } from '../combat/Combat.js?v=biomeboss1';
-import { killEnemyWithAnimation, spawnImpBlood, spawnHumanBlood } from '../../util/EnemyUtils.js?v=biomeboss1';
+import { spawnParticles, spawnGoldCoins, spawnGoldReward, floaty as showFloaty } from '../world/SpawnSystem.js?v=biomeactive1';
+import { shootArrow, killEnemy, damagePlayer } from '../combat/Combat.js?v=biomeactive1';
+import { killEnemyWithAnimation, spawnImpBlood, spawnHumanBlood } from '../../util/EnemyUtils.js?v=biomeactive1';
 import { wallHeight, wallStandX, wallBackDir, wallRenderWidth, wallPlatformDepth, overWallPlatform, entityWallLift } from '../../entities/Wall.js';
 import { makeUnit } from '../../entities/Unit.js';
-import { nearestChoppableTree, chopTree, nearestLog, deliverLog, pondAt, nearestPond } from '../world/ForestSystem.js';
+import { nearestChoppableTree, chopTree, nearestLog, deliverLog, pondAt, nearestPond } from '../world/ForestSystem.js?v=biomeactive1';
 import { minerAI } from '../world/MineSystem.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { addSkillPoints } from '../economy/SkillSystem.js';
-import { archerAI as archerRoleAI } from './ArcherAI.js?v=biomeboss1';
-import { builderAI as builderRoleAI } from './BuilderAI.js?v=biomeboss1';
-import { farmerAI as farmerRoleAI } from './FarmerAI.js?v=biomeboss1';
-import { guardAI as guardRoleAI } from './GuardAI.js?v=biomeboss1';
-import { assaultUnitAI } from '../world/AssaultSystem.js?v=biomeboss1';
+import { archerAI as archerRoleAI } from './ArcherAI.js?v=biomeactive1';
+import { builderAI as builderRoleAI } from './BuilderAI.js?v=biomeactive1';
+import { farmerAI as farmerRoleAI } from './FarmerAI.js?v=biomeactive1';
+import { guardAI as guardRoleAI } from './GuardAI.js?v=biomeactive1';
+import { assaultUnitAI } from '../world/AssaultSystem.js?v=biomeactive1';
 
 function hasSkill(id) { return state.archerSkills.includes(id); }
 

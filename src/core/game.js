@@ -9,20 +9,20 @@ import { Game, state } from './state.js';
 
 import { Audio } from '../systems/infrastructure/Audio.js';
 import { keys } from '../systems/input/Input.js';
-import { saveGame, hasSave, loadGame, deleteSave } from '../systems/infrastructure/SaveSystem.js?v=biomeweapons1';
-import { updateSpawning, floaty, spawnParticles, spawnAnimal, planNight, spawnEnemy } from '../systems/world/SpawnSystem.js?v=biomeboss1';
+import { saveGame, hasSave, loadGame, deleteSave } from '../systems/infrastructure/SaveSystem.js?v=biomeactive1';
+import { updateSpawning, floaty, spawnParticles, spawnAnimal, planNight, spawnEnemy } from '../systems/world/SpawnSystem.js?v=biomeactive1';
 import { updatePayment, updateCoins } from '../systems/economy/Economy.js';
-import { updateForestTrees, updateForestCamps } from '../systems/world/ForestSystem.js';
+import { updateForestTrees, updateForestCamps } from '../systems/world/ForestSystem.js?v=biomeactive1';
 import { updateMine } from '../systems/world/MineSystem.js';
-import { updateBuildings } from '../systems/world/OutpostSystem.js?v=biomeboss1';
-import { updateUnits, updateAssignments, updateVagrants, updateAnimals, nearestEnemy, updateCaltrops } from '../systems/ai/AI.js?v=biomeboss1';
-import { updateEnemies, updateArrows, updatePlayerAttack, updateSpells } from '../systems/combat/Combat.js?v=biomeboss1';
-import { updateFirePools } from '../systems/ai/BossAI.js?v=biomeboss1';
-import { updateDyingEnemies } from '../util/EnemyUtils.js?v=biomeboss1';
+import { updateBuildings } from '../systems/world/OutpostSystem.js?v=biomeactive1';
+import { updateUnits, updateAssignments, updateVagrants, updateAnimals, nearestEnemy, updateCaltrops } from '../systems/ai/AI.js?v=biomeactive1';
+import { updateEnemies, updateArrows, updatePlayerAttack, updateSpells } from '../systems/combat/Combat.js?v=biomeactive1';
+import { updateFirePools } from '../systems/ai/BossAI.js?v=biomeactive1';
+import { updateDyingEnemies } from '../util/EnemyUtils.js?v=biomeactive1';
 
-import { FX, initFX, updateFX as updateFXEffects, biomeAt } from '../rendering/Effects.js?v=biomes4';
-import { render, drawEntityShadows } from '../rendering/Renderer.js?v=biomeboss1';
-import { UI, DEV, baseName } from '../rendering/HUD.js?v=biomeboss1';
+import { FX, initFX, updateFX as updateFXEffects, biomeAt } from '../rendering/Effects.js?v=biomeactive1';
+import { render, drawEntityShadows } from '../rendering/Renderer.js?v=biomeactive1';
+import { UI, DEV, baseName } from '../rendering/HUD.js?v=biomeactive1';
 import { updateArcherShoot } from '../rendering/sprites/Archer.js';
 
 import { makePlayer } from '../entities/Player.js';
@@ -35,13 +35,13 @@ import { mountSpeedMult, activeMount } from '../systems/economy/MountSystem.js';
 import { upgradeBase, pickupWeapon, setBuildStations } from '../util/GameStateHelpers.js?v=biomeweapons1';
 import { currentCoinCap } from '../util/DefenseStats.js';
 import { addXP, checkUpgrade } from '../systems/economy/UpgradeSystem.js?v=biomeweapons1';
-import { newGame, buildStations } from '../systems/infrastructure/GameInit.js?v=biomeweapons1';
+import { newGame, buildStations } from '../systems/infrastructure/GameInit.js?v=biomeactive1';
 import { initMeta, enterDeathHub, updateHub, updateHubTransition, renderHub, permanentDayLengthBonusSeconds } from '../systems/infrastructure/RoguelikeSystem.js';
 import { applyDifficulty } from '../systems/infrastructure/DifficultySystem.js';
 import { updateLootItems, updateWeaponPickup, updateChests, updateLootPhysics, setPickupWeapon as setLootPickupWeapon } from '../systems/economy/LootSystem.js';
-import { updateAssault, performPhaseShift } from '../systems/world/AssaultSystem.js?v=biomeboss1';
-import { updateFortifications } from '../systems/world/FortificationSystem.js?v=biomeboss1';
-import { setupInputHandlers } from '../systems/input/InputHandler.js?v=biomeboss1';
+import { updateAssault, performPhaseShift } from '../systems/world/AssaultSystem.js?v=biomeactive1';
+import { updateFortifications } from '../systems/world/FortificationSystem.js?v=biomeactive1';
+import { setupInputHandlers } from '../systems/input/InputHandler.js?v=biomeactive1';
 import { provide } from './services.js';
 // Profiler uses window._perf (set by HUD toggle) to avoid ES module cache issues
 
@@ -309,7 +309,9 @@ function updatePlayer(dt) {
   const left=keys["a"]||keys["arrowleft"], right=keys["d"]||keys["arrowright"], sprint=keys["shift"];
   const up=keys["w"]||keys["arrowup"], down=keys["s"]||keys["arrowdown"];
   const dodgeHeld=keys["x"]||keys["control"];
-  const speed=(sprint?CFG.playerSprint:CFG.playerSpeed)*mountSpeedMult(player)*armorMoveMult(player);
+  if (player.mudSlow > 0) player.mudSlow = Math.max(0, player.mudSlow - dt);
+  const mudMult = player.mudSlow > 0 ? 0.55 : 1;
+  const speed=(sprint?CFG.playerSprint:CFG.playerSpeed)*mountSpeedMult(player)*armorMoveMult(player)*mudMult;
   let move=0; if (left) move-=1; if (right) move+=1;
   player.dodgeCd = Math.max(0, (player.dodgeCd || 0) - dt);
   if (dodgeHeld && !player.dodgeLatch) startPlayerDodge(player, move);
@@ -595,7 +597,7 @@ Game.start = function(continueGame) {
   applyDifficulty(Game, diff);
   if (continueGame && hasSave()) { newGame(); loadGame(); }
   else newGame();
-  import('../rendering/Effects.js?v=biomes4').then(({clearTreeCache})=>clearTreeCache());
+  import('../rendering/Effects.js?v=biomeactive1').then(({clearTreeCache})=>clearTreeCache());
   Game.state="play";
   UI.startScreen.classList.add("hidden");
   UI.endScreen.classList.add("hidden");
@@ -677,17 +679,23 @@ function drawPhaseOverlay() {
   }
   if (pt.swapped && pt.t > PHASE_FLASH_IN + 0.3) {
     const ta = clamp((pt.t - PHASE_FLASH_IN - 0.3) / 0.5, 0, 1) * clamp((PHASE_TOTAL - pt.t) / 0.8, 0, 1);
+    const bi = biomeAt(CFG.baseX);
+    const hollow = (Game.worldPhase || 1) >= 2;
+    const title = hollow ? "PHASE II" : bi.name.toUpperCase();
+    const subtitle = hollow
+      ? "The Hollow has awakened - new horrors stir in the night"
+      : "The world has shifted into " + bi.name;
     ctx.save();
     ctx.globalAlpha = ta;
     ctx.textAlign = "center";
     ctx.fillStyle = "rgba(0,0,0,0.55)";
     ctx.font = "600 42px Georgia, serif";
-    ctx.fillText("PHASE II", W / 2 + 2, H * 0.3 + 2);
+    ctx.fillText(title, W / 2 + 2, H * 0.3 + 2);
     ctx.fillStyle = "#d8c9ff";
-    ctx.fillText("PHASE II", W / 2, H * 0.3);
+    ctx.fillText(title, W / 2, H * 0.3);
     ctx.font = "20px Georgia, serif";
     ctx.fillStyle = "#b9a8d8";
-    ctx.fillText("The Hollow has awakened — new horrors stir in the night", W / 2, H * 0.3 + 36);
+    ctx.fillText(subtitle, W / 2, H * 0.3 + 36);
     ctx.restore();
   }
 }

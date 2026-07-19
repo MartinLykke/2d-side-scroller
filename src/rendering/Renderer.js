@@ -7,15 +7,15 @@ import { drawHeldWeapon } from './ItemRender.js?v=biomeweapons1';
 import { cachedUpgradeEffects } from '../config/weaponUpgrades.js?v=biomeweapons1';
 import { drawMount } from './sprites/Mount.js';
 import { activeMount, playerMountLift } from '../systems/economy/MountSystem.js';
-import { darkness, skyColors, drawStars, drawClouds, drawCelestials, drawBirds, drawWildBirds, getTrees, drawHills, drawTreeLayer, drawLowFog, drawAmbientFront, drawLevelUpBeams, biomeAt, FX, windSway } from './Effects.js?v=biomes4';
+import { darkness, skyColors, drawStars, drawClouds, drawCelestials, drawBirds, drawWildBirds, getTrees, drawHills, drawTreeLayer, drawLowFog, drawAmbientFront, drawLevelUpBeams, biomeAt, FX, windSway } from './Effects.js?v=biomeactive1';
 
 // Import all render modules
-import { drawGroundTexture, drawGroundDeco, drawPonds, drawEntityShadows, drawPortals, drawWalls, drawBase, drawStations, drawForestTrees, drawForestCamps, drawBuildings } from './scene/RenderWorld.js?v=biomeweapons1';
-import { drawEnemies } from './scene/RenderEntities.js?v=biomeboss1';
+import { drawGroundTexture, drawGroundDeco, drawPonds, drawEntityShadows, drawPortals, drawWalls, drawBase, drawStations, drawForestTrees, drawForestCamps, drawBuildings } from './scene/RenderWorld.js?v=biomeactive1';
+import { drawEnemies } from './scene/RenderEntities.js?v=biomeactive1';
 import { drawVagrants, drawUnits, drawAnimals } from './scene/RenderUnits.js';
 import { drawCoins, drawGoldCollectors, drawArrows, drawLootItems, drawChests, drawGroundBows, drawGroundHammers } from './scene/RenderItems.js?v=biomeweapons1';
-import { drawCaltrops, drawPoisonShots, drawFirePools, drawSpellFields, drawLegendaryEffects, drawAegisStrikes, drawParticles, drawFloats, drawSpells, drawCampLight } from './scene/RenderEffects.js?v=biomeweapons1';
-import { drawWeaponPickupOverlay, drawInventoryOverlay, drawShopOverlay, drawCastleUpgradeOverlay, drawUpgradeMenu, drawXpBar, drawLegendaryIntro, drawOneSidedAnnounce } from './scene/RenderUI.js?v=biomeboss1';
+import { drawCaltrops, drawPoisonShots, drawFirePools, drawSpellFields, drawLegendaryEffects, drawAegisStrikes, drawParticles, drawFloats, drawSpells, drawCampLight } from './scene/RenderEffects.js?v=biomeactive1';
+import { drawWeaponPickupOverlay, drawInventoryOverlay, drawShopOverlay, drawCastleUpgradeOverlay, drawUpgradeMenu, drawXpBar, drawLegendaryIntro, drawOneSidedAnnounce } from './scene/RenderUI.js?v=biomeactive1';
 import { drawMineCutaway } from './scene/RenderMine.js';
 import { drawHeart } from './DrawHelpers.js?v=biomeweapons1';
 import { beginRenderFrame } from './RenderFrame.js';

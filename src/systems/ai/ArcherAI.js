@@ -1,12 +1,12 @@
 import { CFG } from '../../config/config.js';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeboss1';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive1';
 import { clamp, dist, rand } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, spawnGoldCoins } from '../world/SpawnSystem.js?v=biomeboss1';
-import { shootArrow, killEnemy } from '../combat/Combat.js?v=biomeboss1';
-import { spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeboss1';
+import { spawnParticles, spawnGoldCoins } from '../world/SpawnSystem.js?v=biomeactive1';
+import { shootArrow, killEnemy } from '../combat/Combat.js?v=biomeactive1';
+import { spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive1';
 import { wallHeight, wallStandX, wallBackDir, wallRenderWidth, wallPlatformDepth, overWallPlatform } from '../../entities/Wall.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { addSkillPoints } from '../economy/SkillSystem.js';

@@ -1,18 +1,18 @@
 import { CFG } from '../../config/config.js';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeboss1';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive1';
 import { clamp, dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnGoldReward, spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js?v=biomeboss1';
-import { spawnLevelUpBeam } from '../../rendering/Effects.js?v=biomes4';
-import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeboss1';
+import { spawnGoldReward, spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js?v=biomeactive1';
+import { spawnLevelUpBeam } from '../../rendering/Effects.js?v=biomeactive1';
+import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive1';
 import { startArcherShoot, SHOOT_RELEASE_TIME } from '../../rendering/sprites/Archer.js';
 import { entityWallLift } from '../../entities/Wall.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
-import { spawnFirePool, spawnVoidPool } from '../ai/BossAI.js?v=biomeboss1';
-import { damagePlayer } from './PlayerCombat.js?v=biomeboss1';
-import { chainLightning } from './SpellSystem.js?v=biomeboss1';
+import { spawnFirePool, spawnVoidPool } from '../ai/BossAI.js?v=biomeactive1';
+import { damagePlayer } from './PlayerCombat.js?v=biomeactive1';
+import { chainLightning } from './SpellSystem.js?v=biomeactive1';
 import { addSkillPoints } from '../economy/SkillSystem.js';
 import { playerMountLift } from '../economy/MountSystem.js';
 
@@ -439,6 +439,31 @@ export function updateArrows(dt) {
               (ar.x - e.x) * (e.dir || 1) > -4) {
             spawnParticles(ar.x, enemyDrawY, 5, "#c9b48a", 42, 44);
             spawnParticles(ar.x, enemyDrawY, 3, "#9aa2ae", 30, 52);
+            Audio.hit();
+            hit = true;
+            break;
+          }
+          if (et.arrowHeavyOnly && !ar.ballista && !ar.powered) {
+            spawnParticles(ar.x, enemyDrawY, 6, et.eye || "#ff6a28", 42, 40);
+            spawnParticles(ar.x, enemyDrawY, 4, "#111018", 32, 36);
+            floaty(e.x, "Deflected", et.eye || "#ff6a28", 12);
+            Audio.hit();
+            hit = true;
+            break;
+          }
+          if (et.arrowFarImmuneRange && !ar.ballista && !ar.powered && ar.sourceUnit
+              && dist(ar.sourceUnit.x || ar.x, e.x) > et.arrowFarImmuneRange) {
+            spawnParticles(ar.x, enemyDrawY, 8, "#d8b46a", 58, 42);
+            floaty(e.x, "Dust veil", "#d8b46a", 12);
+            Audio.hit();
+            hit = true;
+            break;
+          }
+          if (et.arrowArmor && !ar.ballista && !ar.powered && (e.arrowArmor ?? et.arrowArmor) > 0) {
+            e.arrowArmor = (e.arrowArmor ?? et.arrowArmor) - 1;
+            e.flash = 0.1;
+            spawnParticles(ar.x, enemyDrawY, 7, "#8a5a30", 44, 42);
+            if (e.arrowArmor <= 0) floaty(e.x, "Mask cracked", "#f2c14e", 12);
             Audio.hit();
             hit = true;
             break;

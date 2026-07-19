@@ -3,13 +3,13 @@ import { clamp, dist, rand } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles } from '../world/SpawnSystem.js?v=biomeboss1';
-import { killEnemy } from '../combat/Combat.js?v=biomeboss1';
-import { killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeboss1';
+import { spawnParticles } from '../world/SpawnSystem.js?v=biomeactive1';
+import { killEnemy } from '../combat/Combat.js?v=biomeactive1';
+import { killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive1';
 import { wallHeight, wallStandX, wallBackDir } from '../../entities/Wall.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { addSkillPoints } from '../economy/SkillSystem.js';
-import { floaty, nearestEnemy, moveToward, sunsetApproaching } from './AIHelpers.js?v=biomeboss1';
+import { floaty, nearestEnemy, moveToward, sunsetApproaching } from './AIHelpers.js?v=biomeactive1';
 
 function grantGuardXP(u) {
   u.xp = (u.xp || 0) + 1;

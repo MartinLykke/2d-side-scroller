@@ -1,5 +1,5 @@
 import { CFG } from '../../config/config.js';
-import { ENEMY_TYPES, BOSS_SCHEDULE, BIOME_BOSS_TYPES } from '../../config/enemies.js?v=biomeboss1';
+import { ENEMY_TYPES, BOSS_SCHEDULE, BIOME_BOSS_TYPES, BIOME_ENEMY_POOLS } from '../../config/enemies.js?v=biomeactive1';
 import { clamp, rand, pick } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
@@ -7,7 +7,7 @@ import { goldCoinChunks, goldRewardAmount } from '../economy/EconomyBalance.js';
 import { bountyRaiderCount, eliteChanceBonus, enemyVitalityMultiplier, nightQuotaMetaMultiplier, portalSpawnIntervalMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { currentDifficulty } from '../infrastructure/DifficultySystem.js';
 import { currentPopCap } from '../../util/DefenseStats.js';
-import { biomeCenterX } from '../../rendering/Effects.js?v=biomes4';
+import { activeBiomeId } from '../../rendering/Effects.js?v=biomeactive1';
 
 function dayThreatProgress() {
   return Math.max(0, (Game.day || 1) - 2);
@@ -234,6 +234,20 @@ function bountyRaiderType() {
   return "fireImp";
 }
 
+function biomeWaveEnemyType(d, r) {
+  const pool = BIOME_ENEMY_POOLS[activeBiomeId()];
+  if (!pool) return null;
+
+  const heavyChance = d >= 5 ? Math.min(0.2, 0.06 + (d - 4) * 0.018) : 0;
+  const specialChance = d >= 3 ? Math.min(0.3, 0.1 + (d - 3) * 0.018) : 0;
+  const standardChance = d >= 2 ? Math.min(0.42, 0.2 + (d - 2) * 0.02) : 0.12;
+
+  if (pool.heavy && r < heavyChance) return pool.heavy;
+  if (pool.special && r < heavyChance + specialChance) return pool.special;
+  if (pool.standard && r < heavyChance + specialChance + standardChance) return pool.standard;
+  return pool.basic || pool.standard || "imp";
+}
+
 function spawnBountyRaider(portal) {
   const e = spawnEnemy(bountyRaiderType(), portal);
   e.bounty = true;
@@ -250,15 +264,11 @@ function spawnBountyRaider(portal) {
 function biomeBossPortal(type, fallback = null) {
   const t = ENEMY_TYPES[type];
   if (!t?.biome) return fallback || pick(state.portals);
+  if (fallback) return fallback;
 
-  if (t.biome === "forest") {
-    const side = fallback?.side || pick([-1, 1]);
-    return { x: clamp(CFG.baseX + side * 900, 900, CFG.worldWidth - 900), side };
-  }
-
-  const x = clamp(biomeCenterX(t.biome), 420, CFG.worldWidth - 420);
-  const side = x < CFG.baseX ? -1 : 1;
-  return { x, side };
+  const side = pick([-1, 1]);
+  const spread = t.flying ? 900 : 760;
+  return { x: clamp(CFG.baseX + side * spread, 900, CFG.worldWidth - 900), side };
 }
 
 // Per-boss entrance rigging, run right after the boss entity is spawned.
@@ -405,17 +415,19 @@ function nightEnemyType() {
     return "shade";
   }
   if (Game.nightSpawned === 0) {
-    // Spawn every unlocked boss each night (strongest first via the schedule check)
+    const biomeBoss = BIOME_BOSS_TYPES[activeBiomeId()];
+    if (d >= 3 && biomeBoss) return biomeBoss;
     if (BOSS_SCHEDULE[d]) return BOSS_SCHEDULE[d];
-    // After unlock night, keep spawning the highest-tier boss available
-    const unlocked = Object.keys(BOSS_SCHEDULE).map(Number).filter(n => d > n).sort((a, b) => b - a);
-    if (unlocked.length) return BOSS_SCHEDULE[unlocked[0]];
   }
-  // Second boss slot: spawn the other unlocked boss as enemy #2
-  if (Game.nightSpawned === 1) {
+  // Second boss slot: legacy ember bosses only; biome bosses are tied to the
+  // active world biome and use the first slot above.
+  if (Game.nightSpawned === 1 && !BIOME_BOSS_TYPES[activeBiomeId()]) {
     const unlocked = Object.keys(BOSS_SCHEDULE).map(Number).filter(n => d >= n).sort((a, b) => b - a);
     if (unlocked.length >= 2) return BOSS_SCHEDULE[unlocked[1]];
   }
+  const biomeType = biomeWaveEnemyType(d, r);
+  if (biomeType) return biomeType;
+
   const flyingImpChance = Math.min(0.55, Math.max(0, d - 2) * 0.055 * difficultyPressure + eliteBonus * 0.85);
   const emberBruteChance = d >= 2 ? Math.min(0.34, (d - 1) * 0.035 * difficultyPressure + eliteBonus) : eliteBonus * 0.35;
   const ashPriestChance = d >= 4 ? Math.min(0.26, (d - 3) * 0.028 * difficultyPressure + eliteBonus * 0.65) : eliteBonus * 0.25;

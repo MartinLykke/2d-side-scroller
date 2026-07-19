@@ -2,9 +2,9 @@ import { Game, state } from '../../core/state.js';
 import { CFG, FOREST } from '../../config/config.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { spawnVagrant, planNight } from '../world/SpawnSystem.js';
-import { addForestCamp, buildForest } from '../world/ForestSystem.js';
+import { addForestCamp, buildForest } from '../world/ForestSystem.js?v=biomeactive1';
 import { initMineVeins } from '../world/MineSystem.js';
-import { buildStations } from './GameInit.js?v=biomeweapons1';
+import { buildStations } from './GameInit.js?v=biomeactive1';
 import { permanentForestCampPlans } from './RoguelikeSystem.js';
 import { autoSpendSkillPoints } from '../economy/SkillSystem.js';
 import { ensureCastleUpgrades, baseMaxHpForLevel } from '../../util/DefenseStats.js';
@@ -17,6 +17,8 @@ export function saveGame() {
     const { player, base, walls, units, vagrants, forestTrees } = state;
     const snap = {
       day: Game.day, time: Game.time, treeSeed: Game.treeSeed,
+      activeBiome: Game.activeBiome || "forest",
+      unlockedBiomes: Array.isArray(Game.unlockedBiomes) ? Game.unlockedBiomes : ["forest"],
       worldPhase: Game.worldPhase || 1,
       // A destroyed-but-not-yet-shifted portal is saved at 1 hp so a reload
       // during the victory celebration can't strand the run in phase 1.
@@ -84,6 +86,10 @@ export function loadGame() {
     if (!snap) return false;
 
     Game.day = snap.day; Game.time = snap.time; Game.treeSeed = snap.treeSeed;
+    Game.activeBiome = snap.activeBiome || "forest";
+    Game.unlockedBiomes = Array.isArray(snap.unlockedBiomes) && snap.unlockedBiomes.length
+      ? Array.from(new Set(["forest", ...snap.unlockedBiomes]))
+      : ["forest"];
     Game.worldPhase = snap.worldPhase || 1;
     if (Game.worldPhase >= 2) {
       for (const p of state.portals) p.voidRift = true;

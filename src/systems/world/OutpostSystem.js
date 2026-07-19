@@ -1,12 +1,12 @@
 import { CFG, BUILDING_SLOTS } from '../../config/config.js';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeboss1';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive1';
 import { dist, rand } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { floaty, spawnGoldReward, spawnParticles } from './SpawnSystem.js?v=biomeboss1';
+import { floaty, spawnGoldReward, spawnParticles } from './SpawnSystem.js?v=biomeactive1';
 import { addXP } from '../economy/UpgradeSystem.js?v=biomeweapons1';
-import { killEnemy } from '../../util/EnemyUtils.js?v=biomeboss1';
+import { killEnemy } from '../../util/EnemyUtils.js?v=biomeactive1';
 import { crownAegisStats } from '../../util/DefenseStats.js';
 import { makeUnit } from '../../entities/Unit.js';
 

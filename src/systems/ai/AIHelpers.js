@@ -2,9 +2,9 @@ import { CFG } from '../../config/config.js';
 import { dist } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
-import { floaty as showFloaty } from '../world/SpawnSystem.js?v=biomeboss1';
+import { floaty as showFloaty } from '../world/SpawnSystem.js?v=biomeactive1';
 import { entityWallLift } from '../../entities/Wall.js';
-import { spawnHumanBlood } from '../../util/EnemyUtils.js?v=biomeboss1';
+import { spawnHumanBlood } from '../../util/EnemyUtils.js?v=biomeactive1';
 
 export function floaty(x, text, color) {
   if (typeof text === "string" && text.includes("Unders")) return;

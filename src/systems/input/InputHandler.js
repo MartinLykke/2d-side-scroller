@@ -1,16 +1,17 @@
 import { state, Game } from '../../core/state.js';
 import { canvas, W, H } from '../../core/canvas.js';
 import { inject, provide } from '../../core/services.js';
-import { UI, DEV, closeSkillTree, openSkillTree } from '../../rendering/HUD.js?v=biomeweapons1';
+import { UI, DEV, closeSkillTree, openSkillTree } from '../../rendering/HUD.js?v=biomeactive1';
 import { tryOpenShop, handleShopKeys, currentShopList, tryBuyShopItem } from '../economy/ShopSystem.js?v=biomeweapons1';
 import { tryOpenCastleUpgrades, closeCastleUpgrades, buyCastleUpgrade } from '../economy/CastleUpgradeSystem.js?v=biomeweapons1';
 import { toggleMount } from '../economy/MountSystem.js';
 import { equipFromInventory, unequipWeapon, unequipArmor, ensureInventory } from '../economy/InventorySystem.js';
 import { applyUpgrade, checkUpgrade } from '../economy/UpgradeSystem.js?v=biomeweapons1';
-import { triggerBarrage, triggerRoyalRally } from '../ai/AI.js?v=biomeweapons1';
+import { triggerBarrage, triggerRoyalRally } from '../ai/AI.js?v=biomeactive1';
 import { tryToggleMine } from '../world/MineSystem.js';
-import { startAssault } from '../world/AssaultSystem.js?v=biomeweapons1';
-import { setupDevPanel } from './DevPanel.js?v=biomeboss1';
+import { startAssault } from '../world/AssaultSystem.js?v=biomeactive1';
+import { setupDevPanel } from './DevPanel.js?v=biomeactive1';
+import { warpToHubPortal, snapHubToPlaza } from '../infrastructure/RoguelikeSystem.js';
 
 export function setupInputHandlers() {
   // UI buttons
@@ -65,14 +66,15 @@ function handleKeydown(e) {
     if (Game.state === "play" || Game.state === "pause") Game.togglePause();
   }
 
-  // Hub state - start new run with Enter or Space
-  if (Game.state === "hub" && (k === "enter" || k === " " || k === "space")) {
-    e.preventDefault();
-    // Walk to the portal to trigger transition
-    if (state.player) {
-      state.player.x = Math.min(state.player.x + 999, 3940 - 30);
+  // Hub state - start new run with Enter/Space, hop between plazas with Q/E
+  if (Game.state === "hub") {
+    if (k === "enter" || k === " " || k === "space") {
+      e.preventDefault();
+      warpToHubPortal();
+      return;
     }
-    return;
+    if (k === "e") { e.preventDefault(); snapHubToPlaza(1); return; }
+    if (k === "q") { e.preventDefault(); snapHubToPlaza(-1); return; }
   }
 
   if (Game.state !== "play") return;

@@ -1,4 +1,4 @@
-import { DEV } from '../../rendering/HUD.js?v=biomeboss1';
+import { DEV } from '../../rendering/HUD.js?v=biomeactive1';
 import { inject } from '../../core/services.js';
 
 export function setupDevPanel() {

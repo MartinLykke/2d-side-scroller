@@ -1,13 +1,13 @@
 import { CFG } from '../../config/config.js';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeboss1';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive1';
 import { dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, floaty, spawnEnemy } from '../world/SpawnSystem.js?v=biomeboss1';
-import { killEnemyWithAnimation, spawnImpBlood, killEnemy } from '../../util/EnemyUtils.js?v=biomeboss1';
+import { spawnParticles, floaty, spawnEnemy } from '../world/SpawnSystem.js?v=biomeactive1';
+import { killEnemyWithAnimation, spawnImpBlood, killEnemy } from '../../util/EnemyUtils.js?v=biomeactive1';
 import { entityWallLift, wallHeight, wallReady, wallRenderWidth } from '../../entities/Wall.js';
-import { damagePlayer } from '../combat/PlayerCombat.js?v=biomeboss1';
+import { damagePlayer } from '../combat/PlayerCombat.js?v=biomeactive1';
 
 // All night-boss behavior lives here: the fire dragon (night 5), the magma
 // colossus (night 10) and the ground hazards they leave behind. EnemyAI
@@ -1012,11 +1012,19 @@ function updateBiomeWallAttack(e, t, dt) {
   if (e.biomeWallAttackT === undefined) return false;
   e.biomeWallAttackT += dt;
   e.attackKind = "wall";
+  if (t.forestStalker && e.biomeWallAttackT < BIOME_WALL_ATTACK.impact && Math.random() < dt * 22) {
+    // dirt/leaves kicked up during the charge windup, ahead of the lowered antlers
+    spawnParticles(e.x + e.dir * t.w * 0.4, groundY - rand(4, 16), 1, Math.random() < 0.5 ? "#6f8a42" : "#8a6a3a", 60, 60);
+  }
   if (!e.biomeWallDidHit && e.biomeWallAttackT >= BIOME_WALL_ATTACK.impact) {
     e.biomeWallDidHit = true;
     const mult = t.forestStalker ? 1.25 : t.sunkenBehemoth ? 1.15 : t.voidMindflayer ? 0.82 : 1;
     damageBiomeBossWall(e, t, e.biomeWall, mult, t.eye);
-    if (t.forestStalker) stunArchersNear(e.biomeWall.x, 190, playerWeaponIs("lumberjack_axe") ? 0.45 : 1.35, "#b66bff");
+    if (t.forestStalker) {
+      stunArchersNear(e.biomeWall.x, 190, playerWeaponIs("lumberjack_axe") ? 0.45 : 1.35, "#b66bff");
+      spawnParticles(e.biomeWall.x, groundY - 20, 16, "#8a6a3a", 130, 90);
+      spawnParticles(e.biomeWall.x, groundY - 30, 10, "#b66bff", 90, 100);
+    }
     if (t.duneBroodmother) spawnAcidBossPool(e.biomeWall.x + e.biomeWall.side * 28, 60, 4.5);
   }
   if (e.biomeWallAttackT < BIOME_WALL_ATTACK.duration) return true;
@@ -1097,6 +1105,10 @@ function updateBiomeBoss(e, t, dt) {
     Audio.dragonRoar();
   }
 
+  if (t.forestStalker && Math.random() < dt * (e.enraged ? 10 : 5)) {
+    // Corruption mist wisping off the antlers — thicker and redder once enraged.
+    spawnParticles(e.x + e.dir * t.w * 0.42, groundY - t.w * 0.92, 1, e.enraged ? "#8a4bd6" : "#b66bff", 22, 55);
+  }
   if (t.voidMindflayer) updateMindflayerAura(e, t, dt);
   if (t.ignitedCore && !e.supernovaUsed && e.hp < e.maxHp * 0.5) startSupernova(e);
   if (updateSupernova(e, t, dt)) return;
@@ -1721,10 +1733,11 @@ export function updateFirePools(dt) {
     const p = pools[i];
     const isVoid = p.kind === "void";
     const isAcid = p.kind === "acid";
+    const isMud = p.kind === "mud";
     const playerOwned = p.source === "player";
     p.life -= dt;
-    const poolCol = isVoid ? "#8a5aff" : isAcid ? "#7fe05a" : "#ff6a20";
-    const poolHi = isVoid ? "#d7f6ff" : isAcid ? "#b8ff7a" : "#ffd060";
+    const poolCol = isVoid ? "#8a5aff" : isAcid ? "#7fe05a" : isMud ? "#5f6f3a" : "#ff6a20";
+    const poolHi = isVoid ? "#d7f6ff" : isAcid ? "#b8ff7a" : isMud ? "#b8b86a" : "#ffd060";
     if (Math.random() < dt * (isVoid ? 10 : 14)) spawnParticles(p.x + rand(-p.r * 0.8, p.r * 0.8), groundY - 4, 1, poolCol, 14, isVoid ? 62 : 42);
     if (Math.random() < dt * (isVoid ? 7 : 5))  spawnParticles(p.x + rand(-p.r * 0.6, p.r * 0.6), groundY - 6, 1, poolHi, 8, isVoid ? 72 : 52);
     if (isVoid && p.pull) {
@@ -1776,6 +1789,20 @@ export function updateFirePools(dt) {
           if (e.hp <= 0) killEnemy(e);
         }
       } else {
+        if (isMud) {
+          if (player && dist(p.x, player.x) < p.r
+              && (player.jumpH || 0) + entityWallLift(player) <= 20) {
+            player.mudSlow = Math.max(player.mudSlow || 0, 0.6);
+          }
+          for (const u of state.units) {
+            if (u.hp <= 0 || u.dying || u.onWall || u.mine) continue;
+            if (dist(p.x, u.x) < p.r) {
+              u.panic = Math.max(u.panic || 0, 0.4);
+              u.cooldown = Math.max(u.cooldown || 0, 0.22);
+            }
+          }
+          continue;
+        }
         if (player && dist(p.x, player.x) < p.r
             && (player.jumpH || 0) + entityWallLift(player) <= 20) {
           if (damagePlayer(p.dmg || 1) !== null) spawnParticles(player.x, groundY - 40, 7, poolCol, 60, 80);
