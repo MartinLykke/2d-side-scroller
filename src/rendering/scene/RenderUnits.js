@@ -57,6 +57,66 @@ function drawHumanoid(x, anim, bodyCol, headCol, tool, dir, moving) {
   ctx.restore();
 }
 
+function drawHound(u) {
+  const t = performance.now() / 1000;
+  const dir = u.dir || 1;
+  const moving = Math.abs(u.vx || 0) > 4 || u.moving;
+  const bob = moving ? Math.abs(Math.sin(u.anim * 1.8)) * 2.2 : Math.sin(t * 2 + u.x) * 0.6;
+  const bite = Math.max(0, u.biteFlash || 0) / 0.18;
+  const y = groundY - 13 - bob;
+
+  ctx.save();
+  ctx.translate(u.x, 0);
+  if (dir < 0) ctx.scale(-1, 1);
+  ctx.fillStyle = "rgba(0,0,0,0.22)";
+  ctx.beginPath(); ctx.ellipse(0, groundY - 1, 20, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+
+  ctx.fillStyle = "#4a3424";
+  ctx.beginPath(); ctx.ellipse(0, y, 18, 9, -0.05, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.beginPath(); ctx.ellipse(-4, y - 2, 10, 4, -0.1, 0, Math.PI * 2); ctx.fill();
+
+  const legSwing = moving ? Math.sin(u.anim * 2.4) * 3.5 : 0;
+  ctx.strokeStyle = "#2f2118";
+  ctx.lineWidth = 3;
+  ctx.lineCap = "round";
+  for (const [lx, phase] of [[-10, 1], [-3, -1], [7, -1], [13, 1]]) {
+    ctx.beginPath();
+    ctx.moveTo(lx, y + 5);
+    ctx.lineTo(lx + legSwing * phase * 0.35, groundY - 2);
+    ctx.stroke();
+  }
+  ctx.lineCap = "butt";
+
+  ctx.fillStyle = "#5b402c";
+  ctx.beginPath(); ctx.ellipse(17 + bite * 3, y - 5, 8, 6, 0.08, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#2f2118";
+  ctx.beginPath(); ctx.moveTo(13, y - 10); ctx.lineTo(15, y - 18); ctx.lineTo(19, y - 9); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(21, y - 9); ctx.lineTo(25, y - 16); ctx.lineTo(25, y - 7); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#f2c14e";
+  ctx.beginPath(); ctx.arc(20 + bite * 3, y - 6, 1.7, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#1b1210";
+  ctx.beginPath(); ctx.arc(25 + bite * 4, y - 3, 2.2, 0, Math.PI * 2); ctx.fill();
+
+  ctx.strokeStyle = "#3a281d";
+  ctx.lineWidth = 3;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(-16, y - 2);
+  ctx.quadraticCurveTo(-26, y - 13 + Math.sin(t * 8 + u.x) * 2, -31, y - 4);
+  ctx.stroke();
+  ctx.lineCap = "butt";
+
+  if (bite > 0) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = bite * 0.75;
+    ctx.strokeStyle = "#ffe07a"; ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.arc(26, y - 4, 12 + bite * 8, -0.7, 0.85); ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
 export function drawVagrants() {
   const view = visibleWorldBounds(90);
   for (const v of state.vagrants) {
@@ -177,6 +237,8 @@ export function drawUnits() {
       drawVillager(u);
     } else if (u.role === "guard") {
       drawGuard(u);
+    } else if (u.role === "hound") {
+      drawHound(u);
     } else {
       drawHumanoid(u.x, u.anim, body, head, tool, u.dir, u.moving);
     }

@@ -1,17 +1,17 @@
 import { CFG } from '../../config/config.js';
-import { WEAPONS, effectiveWeapon } from '../../config/weapons.js';
-import { mergeUpgradeEffects, cachedUpgradeEffects } from '../../config/weaponUpgrades.js';
+import { WEAPONS, effectiveWeapon } from '../../config/weapons.js?v=biomeweapons1';
+import { mergeUpgradeEffects } from '../../config/weaponUpgrades.js?v=biomeweapons1';
 import { ARMORS, ARMOR_RARITY_COL, armorBlockChance } from '../../config/armor.js';
-import { ENEMY_TYPES } from '../../config/enemies.js';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeboss1';
 import { clamp, dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { inject } from '../../core/services.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnGoldReward, spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js';
-import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js';
-import { shootArrow } from './ProjectileSystem.js';
-import { castSpell, chainLightning } from './SpellSystem.js';
+import { spawnGoldReward, spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js?v=biomeboss1';
+import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeboss1';
+import { shootArrow } from './ProjectileSystem.js?v=biomeboss1';
+import { castSpell, chainLightning } from './SpellSystem.js?v=biomeboss1';
 import { startArcherShoot } from '../../rendering/sprites/Archer.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { entityWallLift } from '../../entities/Wall.js';
@@ -116,6 +116,43 @@ function meleeWeaponImpact(weaponId, x, y, enemyTgt = null) {
       if (enemyTgt) enemyTgt.frost = Math.max(enemyTgt.frost || 0, 1.8); // chills the target
       Game.screenShake = Math.max(Game.screenShake, 0.15);
       break;
+    case "lumberjack_axe":
+      spawnParticles(x, y, 10, "#b8884e", 70, 70);
+      spawnParticles(x, y + 4, 8, "#d2b07a", 65, 45);
+      Game.screenShake = Math.max(Game.screenShake, 0.2);
+      break;
+    case "icicle_spear":
+      spawnParticles(x, y, 12, "#bfefff", 70, 95);
+      spawnParticles(x, y, 6, "#ffffff", 42, 110);
+      if (enemyTgt) enemyTgt.frost = Math.max(enemyTgt.frost || 0, 2.2);
+      Game.screenShake = Math.max(Game.screenShake, 0.16);
+      break;
+    case "cactus_whip":
+      spawnParticles(x, y, 10, "#7fe05a", 72, 70);
+      spawnParticles(x, y + 6, 6, "#375d28", 45, 45);
+      Game.screenShake = Math.max(Game.screenShake, 0.12);
+      break;
+    case "gator_hammer":
+      spawnParticles(x, y, 14, "#6d8a42", 95, 75);
+      spawnParticles(x, groundY - 8, 16, "#4b3a28", 145, 45);
+      Game.screenShake = Math.max(Game.screenShake, 0.5);
+      break;
+    case "obsidian_brand":
+      spawnParticles(x, y, 14, "#ff6a28", 92, 110);
+      spawnParticles(x, y, 7, "#1c1618", 55, 65);
+      if (enemyTgt) {
+        enemyTgt.burn = Math.max(enemyTgt.burn || 0, 2.2);
+        enemyTgt.burnTick = Math.min(enemyTgt.burnTick || 1, 0.7);
+        enemyTgt.burnDmg = Math.max(enemyTgt.burnDmg || 0, 1);
+        enemyTgt.ignited = true;
+      }
+      Game.screenShake = Math.max(Game.screenShake, 0.24);
+      break;
+    case "shadow_scythe":
+      spawnParticles(x, y, 16, "#8c4cff", 90, 100);
+      spawnParticles(x, y + 8, 10, "#160a2c", 60, 50);
+      Game.screenShake = Math.max(Game.screenShake, 0.34);
+      break;
     default:
       spawnParticles(x, y, 6, "#8a4a8a", 50, 60);
       break;
@@ -134,6 +171,18 @@ const WEAPON_AMBIENT = {
   dark_bow:       { rate: 3,   cols: ["#880099", "#aa44cc"] },
   void_bow:       { rate: 3,   cols: ["#9933ff", "#ddaaff"] },
   dragons_bow:    { rate: 4,   cols: ["#ff6820", "#ffcc40"] },
+  splinter_bow:   { rate: 3,   cols: ["#8fd05a", "#d8ffd0"] },
+  lumberjack_axe: { rate: 2,   cols: ["#b8884e", "#d2b07a"] },
+  icicle_spear:   { rate: 4,   cols: ["#bfefff", "#ffffff"] },
+  blizzard_chime: { rate: 5,   cols: ["#d8f8ff", "#ffffff"] },
+  cactus_whip:    { rate: 3,   cols: ["#7fe05a", "#d8ff9a"] },
+  sandstorm_sling:{ rate: 3,   cols: ["#d8b46a", "#ffe0a0"] },
+  acid_blowgun:   { rate: 3,   cols: ["#7fe05a", "#b8ff7a"] },
+  gator_hammer:   { rate: 2,   cols: ["#6d8a42", "#4b3a28"] },
+  obsidian_brand: { rate: 5,   cols: ["#ff6a28", "#ffd060"] },
+  magma_mortar:   { rate: 4,   cols: ["#ff7a2a", "#ffd060"] },
+  shadow_scythe:  { rate: 4,   cols: ["#8c4cff", "#160a2c"] },
+  possessed_heart:{ rate: 5,   cols: ["#c45cff", "#f0c8ff"] },
   fire_tome:      { rate: 3,   cols: ["#ff6a2a", "#ffcc60"] },
   hydro_tome:     { rate: 2.5, cols: ["#4ab8e8", "#a0e8ff"] },
   lightning_tome: { rate: 3,   cols: ["#f0e060", "#ffffff"] },
@@ -143,11 +192,71 @@ const WEAPON_AMBIENT = {
   void_tome:      { rate: 4,   cols: ["#9922ff", "#ddaaff"] },
 };
 
+function mergeInnateEffects(wBase, upgrades) {
+  const fx = mergeUpgradeEffects(upgrades || []);
+  const innate = wBase?.innate || null;
+  if (!innate) return fx;
+  const merged = { ...fx, _vfxCols: [...(fx._vfxCols || [])], _ids: [...(fx._ids || [])] };
+  for (const k in innate) {
+    const v = innate[k];
+    if (typeof v === "number") merged[k] = (merged[k] || 0) + v;
+    else if (v === true) merged[k] = true;
+    else merged[k] = v;
+  }
+  return merged;
+}
+
+function poisonEnemy(e, seconds, dmg = 1, col = "#7fe05a") {
+  if (!e || !seconds) return;
+  e.poison = Math.max(e.poison || 0, seconds);
+  e.poisonTick = Math.min(e.poisonTick || 1, 0.55);
+  e.poisonDmg = Math.max(e.poisonDmg || 0, dmg || 1);
+  spawnParticles(e.x, groundY + (e.fy || 0) - 24, 7, col, 40, 60);
+}
+
+function triggerHeatBurst(player, primary, damage, fx, col) {
+  const needed = Math.max(1, Math.round(fx.heatStacks || 0));
+  if (!needed) return;
+  const now = performance.now() / 1000;
+  const heat = player.weaponHeat && player.weaponHeat.weapon === player.weapon && now - player.weaponHeat.t < 4
+    ? player.weaponHeat
+    : { weapon: player.weapon, n: 0, t: now };
+  heat.n++;
+  heat.t = now;
+  player.weaponHeat = heat;
+  if (heat.n < needed) {
+    if (heat.n >= needed - 1) floaty(player.x, "Overheat ready", col, 12);
+    return;
+  }
+  heat.n = 0;
+  const radius = fx.heatBurstRadius || 120;
+  const burstDmg = Math.max(1, Math.round(damage * (fx.heatBurstFrac || 0.65)));
+  spawnParticles(primary.x, groundY - 22, 28, col, radius, 135);
+  spawnParticles(primary.x, groundY - 18, 14, "#ffd060", radius * 0.7, 150);
+  Game.screenShake = Math.max(Game.screenShake || 0, 0.48);
+  Audio.explosion();
+  for (const e of state.enemies) {
+    if (e === primary || e.fleeing || e.dying || e.hp <= 0) continue;
+    if (dist(e.x, primary.x) > radius) continue;
+    e.hp -= burstDmg;
+    e.flash = 0.14;
+    e.burn = Math.max(e.burn || 0, 3);
+    e.burnTick = Math.min(e.burnTick || 1, 0.55);
+    e.burnDmg = Math.max(e.burnDmg || 0, 1);
+    e.ignited = true;
+    spawnImpBlood(e, 0.8 + burstDmg * 0.06, groundY + (e.fy || 0) - 24);
+    floaty(e.x, "-" + burstDmg, col);
+    if (!ENEMY_TYPES[e.type]?.noKnockback) e.knock = (e.knock || 0) + Math.sign(e.x - primary.x || 1) * 190;
+    if (e.hp <= 0) killEnemyWithAnimation(e, Math.sign(e.x - primary.x) || 1);
+  }
+}
+
 function updateWeaponAmbientFX(dt) {
   const { player } = state;
   if (!player.weapon || Game.inMine || player.hp <= 0) return;
+  const wBase = WEAPONS[player.weapon];
   const amb = WEAPON_AMBIENT[player.weapon];
-  const fx = cachedUpgradeEffects(player.weaponUpgrades);
+  const fx = mergeInnateEffects(wBase, player.weaponUpgrades);
   const upgCols = fx._vfxCols || [];
   if (!amb && !upgCols.length) return;
   const lift = entityWallLift(player) + (player.jumpH || 0) + playerMountLift(player);
@@ -160,6 +269,17 @@ function updateWeaponAmbientFX(dt) {
   // Applied upgrades weave their own colors into the weapon's aura.
   if (upgCols.length && Math.random() < (1.5 + fx._tierRank * 1.2) * dt) {
     spawnParticles(handX(), handY(), 1, upgCols[Math.floor(Math.random() * upgCols.length)], 14, 26);
+  }
+  if (fx.frostAura) {
+    const r = fx.frostAuraRadius || 175;
+    let touched = 0;
+    for (const e of state.enemies) {
+      if (e.fleeing || e.dying || e.hp <= 0 || dist(e.x, player.x) > r) continue;
+      e.slow = Math.max(e.slow || 0, fx.frostAura);
+      if (Math.random() < dt * 5) spawnParticles(e.x, groundY + (e.fy || 0) - 24, 1, "#d8f8ff", 20, 42);
+      touched++;
+    }
+    if (touched && Math.random() < dt * 8) spawnParticles(player.x + rand(-r * 0.35, r * 0.35), groundY - 10, 1, "#d8f8ff", 24, 55);
   }
 }
 
@@ -279,6 +399,14 @@ export function meleeHitPlayer(e, t, knockForce) {
   const { player } = state;
   const lift = entityWallLift(player);
   if (lift > 20 && !e.wallTopWall && e.aiState !== "climbOver" && e.aiState !== "vaulting") return false;
+  if ((e.blindedHits || 0) > 0) {
+    e.blindedHits--;
+    e.blind = Math.max(e.blind || 0, 0.7);
+    e.attackAnim = Math.max(e.attackAnim || 0, 0.16);
+    floaty(e.x, "Miss", "#d8b46a", 12);
+    spawnParticles(e.x, groundY - 24 + (e.fy || 0), 7, "#d8b46a", 42, 45);
+    return true;
+  }
   const dealt = damagePlayer(t.meleeDmg, { knock: Math.sign(player.x - e.x) * knockForce });
   if (dealt === null) return false;
   // Imps snatch a coin when their hit actually lands — a block protects the purse too.
@@ -502,6 +630,9 @@ function meleeStrike(player, tgt, tgtIsAnimal, wBase, fx, rawDmg, playerLift) {
     tgt.rooted = Math.max(tgt.rooted || 0, 1.5);
     spawnParticles(tgt.x, groundY - 14, 8, "#8fd8ff", 26, 40);
   }
+  if (fx.slowHit) tgt.slow = Math.max(tgt.slow || 0, fx.slowHit);
+  if (fx.poisonHit) poisonEnemy(tgt, fx.poisonHit, fx.poisonDmg || 1, wBase.col);
+  if (fx.heatStacks) triggerHeatBurst(player, tgt, crit.damage, fx, wBase.col);
   spawnImpBlood(tgt, 1 + crit.damage * 0.12, groundY - 28);
   const et = ENEMY_TYPES[tgt.type];
   if (!et.noKnockback) tgt.knock = (tgt.knock || 0) + Math.sign(tgt.x - player.x) * (220 + (fx.knockBonus || 0));
@@ -547,6 +678,21 @@ function applyArrowUpgrades(ar, fx) {
   if (fx.gravityArrow) ar.gravityChance = fx.gravityArrow;
   if (fx.frostHit) ar.frostArrow = true;
   if (fx.rootHit && Math.random() < fx.rootHit) ar.rootArrow = true;
+  if (fx.splinterCount) {
+    ar.splinterCount = Math.max(ar.splinterCount || 0, Math.round(fx.splinterCount));
+    ar.splinterRadius = fx.splinterRadius || 135;
+    ar.splinterDmgFrac = fx.splinterDmgFrac || 0.4;
+  }
+  if (fx.poisonArrow) {
+    ar.poisonArrow = fx.poisonArrow;
+    ar.poisonDmg = fx.poisonDmg || 1;
+  }
+  if (fx.acidPool) ar.acidPool = fx.acidPool;
+  if (fx.sandBlind) {
+    ar.sandBlind = Math.max(ar.sandBlind || 0, Math.round(fx.sandBlind));
+    ar.sandBlindRadius = fx.sandBlindRadius || 75;
+  }
+  if (fx.slowHit) ar.slowHit = fx.slowHit;
   if (fx.healOnKill) ar.healOnKill = fx.healOnKill;
   if (fx.goldOnKill) ar.goldOnKill = fx.goldOnKill;
   if (fx.barrierOnKill) ar.barrierOnKill = fx.barrierOnKill;
@@ -585,15 +731,19 @@ export function updatePlayerAttack(dt) {
   if (player.attackCd > 0) return;
   const wBase = WEAPONS[player.weapon];
   const w = effectiveWeapon(player.weapon, player.weaponUpgrades || []);
-  const fx = mergeUpgradeEffects(player.weaponUpgrades);
+  const fx = mergeInnateEffects(wBase, player.weaponUpgrades);
+  const canHuntAnimals = wBase.type === "ranged";
   let tgt = null, bd = w.range, tgtIsAnimal = false;
   for (const e of enemies) {
     if (e.fleeing || e.dying || e.hp <= 0) continue;
     const d = dist(player.x, e.x);
     if (d < bd) { bd = d; tgt = e; tgtIsAnimal = false; }
   }
+  const hasEnemyTarget = !!tgt;
   for (const a of state.animals) {
-    if (a.type !== "bear" || !a.alive || a.dying) continue;
+    const isBear = a.type === "bear";
+    if (!a.alive || a.dying) continue;
+    if (!isBear && (!canHuntAnimals || hasEnemyTarget)) continue;
     const d = dist(player.x, a.x);
     if (d < bd) { bd = d; tgt = a; tgtIsAnimal = true; }
   }

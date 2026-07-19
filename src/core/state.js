@@ -48,6 +48,7 @@ export const Game = {
   phaseTransition: null,  // { t, swapped } while the phase-2 flash plays
   oneSidedNightSide: null, // -1|1 while tonight's attacks only come from one portal side, else null
   oneSidedAnnounce: null,  // { timer, maxTimer, side } banner shown at nightfall
+  bountyRaidersRemaining: 0,
 };
 
 // All mutable entity arrays and per-play variables live here so every
@@ -59,6 +60,7 @@ export const state = {
   vagrants: [],
   enemies: [],
   coins: [],
+  goldCollectors: [],
   arrows: [],
   animals: [],
   walls: [],

@@ -4,7 +4,7 @@ import { Game, state } from '../../core/state.js';
 import { groundY } from '../../core/canvas.js';
 import { Audio } from '../infrastructure/Audio.js';
 import { spawnParticles, spawnGoldReward } from './SpawnSystem.js';
-import { makeTree } from '../../rendering/Effects.js';
+import { biomeAt, makeTree } from '../../rendering/Effects.js?v=biomes4';
 import { currentPopCap } from '../../util/DefenseStats.js';
 
 const CAMP_SPACING = 1700;
@@ -63,6 +63,8 @@ function makePonds(r) {
   for (let tries = 0; tries < 80 && ponds.length < count; tries++) {
     const hw = 70 + r() * r() * 190; // half-width 70–260, small ponds most common
     const x = 1000 + r() * (CFG.worldWidth - 2000);
+    const b = biomeAt(x);
+    if (b.dry || b.hot || b.corrupt) continue;
     if (x + hw > excludeLeft && x - hw < excludeRight) continue; // keep the base area dry
     if (ponds.some(p => Math.abs(p.x - x) < p.hw + hw + 650)) continue;
     ponds.push({ x, hw, seed: Math.floor(r() * 1e9) });
@@ -151,6 +153,19 @@ function clearTreesNearCamp(x) {
     if (ft.chopped || ft.lying || ft.falling || ft.carriedBy) continue;
     if (Math.abs(ft.x - x) < CAMP_CLEAR_DIST) ft.chopped = true;
   }
+}
+
+export function addForestCamp(x, vagrants = 1) {
+  state.forestCamps = state.forestCamps || [];
+  let cx = x;
+  const pond = nearPond(cx, CAMP_CLEAR_DIST);
+  if (pond) cx += (cx < pond.x ? -1 : 1) * (pond.hw + CAMP_CLEAR_DIST + 18);
+  const camp = makeForestCamp(cx);
+  camp.vagrants = Math.max(1, Math.floor(vagrants));
+  camp.mapped = true;
+  clearTreesNearCamp(camp.x);
+  state.forestCamps.push(camp);
+  return camp;
 }
 
 const FALL_TIME = 0.85; // seconds for a felled tree to hit the ground

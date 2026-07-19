@@ -7,12 +7,46 @@ import { visibleWorldBounds } from './Viewport.js';
 import { renderBudget } from './RenderFrame.js';
 
 // ---------- Biomes ----------
+// The world is still one continuous map, but each band now has a strong
+// identity. Forest stays around the base as the starting biome.
+const BIOME_BLEND = 180;
 export const BIOME_DEFS = [
-  { c:300,  name:"snow",   treeL:[206,219,235], treeD:[120,142,178], gT:[214,224,238], gB:[168,184,208], fog:[214,226,240], sky:[150,176,206], leaf:"#e7f0fb", deco:"snow",   snow:1, moss:0 },
-  { c:2050, name:"autumn", treeL:[200,124,52],  treeD:[112,58,32],   gT:[126,98,56],   gB:[80,60,38],    fog:[206,176,142], sky:[206,164,122], leaf:"#d9883c", deco:"autumn", snow:0, moss:0 },
-  { c:3800, name:"pine",   treeL:[86,128,78],   treeD:[32,58,42],    gT:[78,108,60],   gB:[42,66,42],    fog:[156,184,172], sky:[120,186,214], leaf:"#9bd05a", deco:"meadow", snow:0, moss:0 },
-  { c:5600, name:"dark",   treeL:[46,82,74],    treeD:[16,32,34],    gT:[40,60,50],    gB:[20,32,30],    fog:[78,108,108],  sky:[92,124,134],  leaf:"#3a7a5a", deco:"dark",   snow:0, moss:1 },
-  { c:7300, name:"swamp",  treeL:[92,100,58],   treeD:[40,46,30],    gT:[66,72,44],    gB:[36,42,28],    fog:[118,128,96],  sky:[122,132,108], leaf:"#8a9a4a", deco:"swamp",  snow:0, moss:1 },
+  {
+    id:"frozen", name:"Frozen Wastes", c:680, start:0, end:1400,
+    treeL:[218,230,242], treeD:[118,146,184], gT:[226,235,244], gB:[170,190,214],
+    fog:[224,236,246], sky:[150,182,214], leaf:"#edf6ff", deco:"frozen",
+    snow:1, moss:0, dry:0, hot:0, wet:0, corrupt:0, fallKind:"snow",
+  },
+  {
+    id:"desert", name:"Desert", c:2300, start:1400, end:3200,
+    treeL:[170,136,80], treeD:[94,66,42], gT:[202,164,92], gB:[122,84,46],
+    fog:[224,188,126], sky:[214,174,112], leaf:"#d7b063", deco:"desert",
+    snow:0, moss:0, dry:1, hot:0, wet:0, corrupt:0, fallKind:"dust",
+  },
+  {
+    id:"forest", name:"Forest", c:4500, start:3200, end:5850,
+    treeL:[82,132,74], treeD:[28,62,42], gT:[76,112,58], gB:[42,68,42],
+    fog:[148,184,168], sky:[120,186,214], leaf:"#9bd05a", deco:"forest",
+    snow:0, moss:0, dry:0, hot:0, wet:1, corrupt:0, fallKind:"leaf",
+  },
+  {
+    id:"swamp", name:"Swamp", c:6500, start:5850, end:7200,
+    treeL:[88,112,58], treeD:[34,48,30], gT:[58,76,42], gB:[28,42,30],
+    fog:[116,132,94], sky:[118,136,112], leaf:"#8a9a4a", deco:"swamp",
+    snow:0, moss:1, dry:0, hot:0, wet:1, corrupt:0, fallKind:"spore",
+  },
+  {
+    id:"volcano", name:"Volcano", c:7950, start:7200, end:8600,
+    treeL:[122,92,70], treeD:[42,34,34], gT:[88,66,56], gB:[42,34,34],
+    fog:[168,118,92], sky:[166,108,82], leaf:"#ff7a36", deco:"volcano",
+    snow:0, moss:0, dry:1, hot:1, wet:0, corrupt:0, fallKind:"ash",
+  },
+  {
+    id:"corrupted", name:"Corrupted Lands", c:8930, start:8600, end:CFG.worldWidth,
+    treeL:[94,64,126], treeD:[30,20,44], gT:[52,42,62], gB:[24,20,34],
+    fog:[126,86,148], sky:[92,66,122], leaf:"#a56bff", deco:"corrupted",
+    snow:0, moss:1, dry:0, hot:0, wet:0, corrupt:1, fallKind:"ash",
+  },
 ];
 
 // Phase 2 ("the Hollow"): the whole land shifts toward a dead violet-grey.
@@ -27,28 +61,54 @@ const HOLLOW_LEAF = "#8a6fb0";
 function applyWorldPhase(b) {
   if ((Game.worldPhase || 1) < 2) return b;
   return {
+    ...b,
     treeL: lerpColor(b.treeL, HOLLOW_TINT.treeL, 0.6),
     treeD: lerpColor(b.treeD, HOLLOW_TINT.treeD, 0.6),
     gT: lerpColor(b.gT, HOLLOW_TINT.gT, 0.55),
     gB: lerpColor(b.gB, HOLLOW_TINT.gB, 0.55),
     fog: lerpColor(b.fog, HOLLOW_TINT.fog, 0.6),
     sky: lerpColor(b.sky, HOLLOW_TINT.sky, 0.55),
-    leaf: HOLLOW_LEAF, deco: b.deco, snow: 0, moss: b.moss,
+    leaf: b.corrupt ? b.leaf : HOLLOW_LEAF, deco: b.corrupt ? "corrupted" : b.deco,
+    snow: 0, moss: b.moss || b.corrupt,
   };
 }
 
-export function biomeAt(x) {
-  const d = BIOME_DEFS;
-  if (x <= d[0].c) return applyWorldPhase(d[0]);
-  if (x >= d[d.length-1].c) return applyWorldPhase(d[d.length-1]);
-  let i = 0; while (i < d.length-1 && !(x >= d[i].c && x <= d[i+1].c)) i++;
-  const a = d[i], b = d[i+1], t = (x - a.c) / (b.c - a.c), near = t < 0.5 ? a : b;
-  return applyWorldPhase({
+function mixBiome(a, b, t) {
+  const near = t < 0.5 ? a : b;
+  return {
+    ...near,
     treeL: lerpColor(a.treeL,b.treeL,t), treeD: lerpColor(a.treeD,b.treeD,t),
     gT: lerpColor(a.gT,b.gT,t), gB: lerpColor(a.gB,b.gB,t),
     fog: lerpColor(a.fog,b.fog,t), sky: lerpColor(a.sky,b.sky,t),
     leaf: near.leaf, deco: near.deco, snow: near.snow, moss: near.moss,
-  });
+    dry: near.dry, hot: near.hot, wet: near.wet, corrupt: near.corrupt,
+    fallKind: near.fallKind,
+  };
+}
+
+export function biomeById(id) {
+  return BIOME_DEFS.find(b => b.id === id) || BIOME_DEFS.find(b => b.id === "forest") || BIOME_DEFS[0];
+}
+
+export function biomeCenterX(id) {
+  const b = biomeById(id);
+  return clamp(b.c ?? (b.start + b.end) / 2, 120, CFG.worldWidth - 120);
+}
+
+export function biomeAt(x) {
+  const d = BIOME_DEFS;
+  const wx = clamp(Number.isFinite(x) ? x : CFG.baseX, 0, CFG.worldWidth);
+  for (let i = 0; i < d.length - 1; i++) {
+    const a = d[i], b = d[i + 1], edge = a.end;
+    const blend = Math.min(BIOME_BLEND, Math.max(40, (b.end - a.start) * 0.08));
+    if (wx >= edge - blend && wx <= edge + blend) {
+      const t = clamp((wx - (edge - blend)) / (blend * 2), 0, 1);
+      const smooth = t * t * (3 - 2 * t);
+      return applyWorldPhase(mixBiome(a, b, smooth));
+    }
+  }
+  for (const b of d) if (wx >= b.start && wx <= b.end) return applyWorldPhase(b);
+  return applyWorldPhase(wx < d[0].start ? d[0] : d[d.length - 1]);
 }
 
 // ---------- Sky / time-of-day ----------
@@ -151,12 +211,20 @@ export function updateFX(dt) {
   for (const f of FX.flies)  { f.ph += dt; f.x += Math.sin(f.ph)*11*dt - camDelta; f.y += Math.cos(f.ph*1.3)*9*dt; f.y=clamp(f.y,groundY-165,groundY-6); if (f.x<0) f.x=W; if (f.x>W) f.x=0; }
   for (const d of FX.dust)   { d.ph += dt; d.x += (wind*d.z*0.7+Math.sin(d.ph)*4)*dt - camDelta; d.y += Math.cos(d.ph*0.7)*3*dt - 2*d.z*dt; if (d.y<0) d.y=H; if (d.y>H) d.y=0; if (d.x<0) d.x=W; if (d.x>W) d.x=0; }
 
-  const cb = biomeAt(Game.cam + W/2), heavyFall = cb.deco==="autumn" || cb.snow;
+  const cb = biomeAt(Game.cam + W/2);
+  const fallKind = cb.fallKind || (cb.snow ? "snow" : "leaf");
+  const heavyFall = cb.snow || cb.deco==="volcano" || cb.deco==="corrupted" || cb.deco==="swamp" || cb.deco==="desert";
   // deep in the woods a stray leaf drifts down now and then, whatever the biome
   const inForest = Math.abs(Game.cam + W/2 - CFG.baseX) > 800;
-  const fallRate = heavyFall ? 0.025 : inForest ? 0.005 : 0;
+  const fallRate = heavyFall ? (fallKind==="dust" ? 0.018 : 0.025) : inForest ? 0.005 : 0;
   for (const p of FX.fall) {
-    if (!p.active) { if (fallRate && Math.random()<fallRate) { p.active=true; p.x=Math.random()*W; p.y=-12; p.snow=!!cb.snow; p.color=cb.snow?"#eef4fb":cb.leaf; } continue; }
+    if (!p.active) {
+      if (fallRate && Math.random()<fallRate) {
+        p.active=true; p.x=Math.random()*W; p.y=-12; p.kind=fallKind; p.snow=fallKind==="snow";
+        p.color=fallKind==="snow"?"#eef4fb":fallKind==="ash"?"#6d6264":fallKind==="dust"?"#d8b06a":fallKind==="spore"?"#b5d66c":cb.leaf;
+      }
+      continue;
+    }
     p.ph+=dt; p.rot+=dt*2.4; p.y+=p.sp*dt*(p.snow?0.5:1); p.x+=(Math.sin(p.ph*2)*p.sway+wind*1.3)*dt - camDelta;
     if (p.y > H+12) p.active=false;
   }
@@ -301,27 +369,36 @@ export function drawWildBirds() {
 // ---------- Trees ----------
 function pickType(b, r) {
   const t = r();
-  if (b.snow)              return t<0.5?"fir":t<0.8?"pine":t<0.92?"dead":"birch";
-  if (b.deco==="autumn")   return t<0.4?"oak":t<0.66?"birch":t<0.85?"crooked":t<0.93?"bush":"dead";
-  if (b.deco==="dark")     return t<0.45?"fir":t<0.72?"pine":t<0.88?"crooked":"dead";
-  if (b.deco==="swamp")    return t<0.4?"dead":t<0.66?"crooked":t<0.84?"oak":"bush";
+  if (b.snow || b.deco==="frozen") return t<0.58?"fir":t<0.78?"pine":t<0.90?"birch":"dead";
+  if (b.deco==="desert")   return t<0.64?"cactus":t<0.82?"dead":"petrified";
+  if (b.deco==="volcano")  return t<0.68?"petrified":t<0.92?"dead":"cactus";
+  if (b.deco==="corrupted") return t<0.70?"corrupt":t<0.88?"dead":"petrified";
+  if (b.deco==="swamp")    return t<0.38?"mangrove":t<0.62?"crooked":t<0.78?"dead":t<0.90?"oak":"bush";
   return t<0.4?"pine":t<0.66?"fir":t<0.82?"oak":t<0.92?"widepine":"birch";
 }
 
 export function makeTree(x, baseH, r, opts = {}) {
   const b = biomeAt(x);
   let type = pickType(b, r);
-  if (opts.harvestable && type === "dead") type = r() < 0.5 ? "fir" : "oak";
+  if (opts.harvestable && type === "dead" && !b.dry && !b.hot && !b.corrupt) type = r() < 0.5 ? "fir" : "oak";
   const heightBoost = opts.harvestable ? 1.18 : 1;
   let h = baseH * heightBoost * (0.76+r()*0.56);
   if (type === "dead") h *= 0.82;
-  const w = (type==="widepine"?h*0.74:(type==="oak"||type==="bush")?h*0.82:type==="dead"?h*0.42:h*0.52) * (0.82+r()*0.4);
-  const tiers = 3+((r()*4)|0), lean = (r()-0.5)*(type==="crooked"?0.5:0.16);
-  let clusters=null, branches=null;
-  if (type==="oak"||type==="bush"||type==="crooked"||type==="birch") {
+  if (type === "cactus") h *= 0.62 + r() * 0.18;
+  if (type === "petrified") h *= 0.72 + r() * 0.2;
+  if (type === "corrupt") h *= 0.95 + r() * 0.2;
+  if (type === "mangrove") h *= 0.9;
+  const w = (type==="widepine"?h*0.74:
+    (type==="oak"||type==="bush"||type==="mangrove")?h*0.82:
+    type==="cactus"?h*0.34:
+    type==="petrified"?h*0.38:
+    (type==="dead"||type==="corrupt")?h*0.46:h*0.52) * (0.82+r()*0.4);
+  const tiers = 3+((r()*4)|0), lean = (r()-0.5)*(type==="crooked"||type==="corrupt"?0.5:0.16);
+  let clusters=null, branches=null, arms=null, roots=null, cracks=null, crystals=null;
+  if (type==="oak"||type==="bush"||type==="crooked"||type==="birch"||type==="mangrove") {
     clusters=[];
-    const n=type==="bush"?8:type==="birch"?8:9+((r()*5)|0), cy=type==="bush"?0.34:type==="birch"?0.84:0.74;
-    const bottomClearance=type==="bush"?0.04:type==="birch"?0.24:0.20;
+    const n=type==="bush"?8:type==="birch"?8:type==="mangrove"?12:9+((r()*5)|0), cy=type==="bush"?0.34:type==="birch"?0.84:type==="mangrove"?0.62:0.74;
+    const bottomClearance=type==="bush"?0.04:type==="birch"?0.24:type==="mangrove"?0.08:0.20;
     for (let i=0;i<n;i++) {
       const ring = i / Math.max(1, n - 1);
       const clr = (0.20+r()*0.20)*w*(type==="birch"?0.95:1);
@@ -329,12 +406,34 @@ export function makeTree(x, baseH, r, opts = {}) {
       clusters.push({ dx:(r()-0.5)*w*(0.55+ring*0.45), dy, r:clr });
     }
   }
-  if (type==="dead") {
+  if (type==="dead" || type==="petrified" || type==="corrupt") {
     branches=[];
-    const n=3+((r()*4)|0);
-    for (let i=0;i<n;i++) branches.push({ hf:0.38+r()*0.56, side:r()<0.5?-1:1, len:(0.18+r()*0.22)*h, up:0.3+r()*0.5, broken:r()<0.3 });
+    const n=type==="corrupt"?5+((r()*4)|0):3+((r()*4)|0);
+    for (let i=0;i<n;i++) branches.push({ hf:0.30+r()*0.62, side:r()<0.5?-1:1, len:(0.16+r()*0.28)*h, up:type==="corrupt"?0.08+r()*0.52:0.3+r()*0.5, broken:r()<0.42 });
   }
-  return { x, type, h, w, phase:r()*6, tiers, lean, trunkW:0.08+r()*0.035, broken:r()<0.16, snow:b.snow&&r()<0.85, moss:b.moss&&r()<0.6, clusters, branches };
+  if (type==="cactus") {
+    arms=[];
+    const n=1+((r()*3)|0);
+    for (let i=0;i<n;i++) arms.push({ hf:0.34+r()*0.42, side:r()<0.5?-1:1, len:(0.16+r()*0.14)*h, lift:(0.18+r()*0.22)*h });
+  }
+  if (type==="mangrove") {
+    roots=[];
+    for (let i=0;i<6;i++) roots.push({ side:r()<0.5?-1:1, len:(0.08+r()*0.18)*h, spread:(0.15+r()*0.22)*w });
+  }
+  if (type==="petrified" || type==="corrupt") {
+    cracks=[];
+    const n=type==="corrupt"?4+((r()*4)|0):3+((r()*3)|0);
+    for (let i=0;i<n;i++) cracks.push({ hf:0.14+r()*0.68, side:r()<0.5?-1:1, len:0.06+r()*0.12 });
+  }
+  if (type==="corrupt") {
+    crystals=[];
+    for (let i=0;i<3;i++) crystals.push({ hf:0.18+r()*0.74, side:r()<0.5?-1:1, s:0.5+r()*0.8 });
+  }
+  return {
+    x, type, h, w, phase:r()*6, tiers, lean, trunkW:0.08+r()*0.035,
+    broken:r()<0.16, snow:b.snow&&r()<0.85, moss:b.moss&&r()<0.6,
+    hot:!!b.hot, corrupt:!!b.corrupt, clusters, branches, arms, roots, cracks, crystals,
+  };
 }
 
 // Offscreen cache for cluster canopies (oak/bush/crooked/birch). Keyed on a
@@ -381,12 +480,113 @@ function drawCanopySprite(t, cx, baseY, light, dark, Ht, sw) {
   ctx.drawImage(c.cv, cx+sw(avgDy)+c.ox, baseY+c.oy, c.cv.width/2, c.cv.height/2);
 }
 
+function drawCactusTree(t, cx, baseY, light, dark, Ht, Wd, sw) {
+  const body = lerpColor(light, [72, 126, 78], 0.42);
+  const shadeCol = lerpColor(dark, [30, 76, 50], 0.35);
+  const hi = shade(body, 1.18);
+  const trunkW = Math.max(8, Wd * 0.20);
+  ctx.lineCap = "round";
+  ctx.strokeStyle = withA(shadeCol, 1);
+  ctx.lineWidth = trunkW;
+  ctx.beginPath(); ctx.moveTo(cx, baseY - 2); ctx.lineTo(cx + sw(1) * 0.35, baseY - Ht); ctx.stroke();
+  ctx.strokeStyle = withA(body, 1);
+  ctx.lineWidth = trunkW * 0.72;
+  ctx.beginPath(); ctx.moveTo(cx - trunkW * 0.08, baseY - 4); ctx.lineTo(cx + sw(1) * 0.25 - trunkW * 0.08, baseY - Ht + 2); ctx.stroke();
+  for (const a of t.arms || []) {
+    const bx = cx + sw(a.hf) * 0.25;
+    const by = baseY - Ht * a.hf;
+    const elbowX = bx + a.side * a.len;
+    const elbowY = by;
+    const tipY = by - a.lift;
+    ctx.strokeStyle = withA(shadeCol, 1);
+    ctx.lineWidth = trunkW * 0.68;
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(elbowX, elbowY); ctx.lineTo(elbowX, tipY); ctx.stroke();
+    ctx.strokeStyle = withA(body, 1);
+    ctx.lineWidth = trunkW * 0.44;
+    ctx.beginPath(); ctx.moveTo(bx, by - 1); ctx.lineTo(elbowX, elbowY - 1); ctx.lineTo(elbowX, tipY + 1); ctx.stroke();
+  }
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = withA(hi, 0.5);
+  for (let i = 0; i < 7; i++) {
+    const hf = (i + 1) / 8;
+    const y = baseY - Ht * hf;
+    const sx = cx + sw(hf) * 0.28;
+    ctx.beginPath(); ctx.moveTo(sx - trunkW * 0.22, y); ctx.lineTo(sx - trunkW * 0.15, y - 3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx + trunkW * 0.22, y + 1); ctx.lineTo(sx + trunkW * 0.14, y - 2); ctx.stroke();
+  }
+  if ((t.x | 0) % 3 === 0) {
+    ctx.fillStyle = "#f0b2d0";
+    ctx.beginPath(); ctx.arc(cx + sw(1) * 0.25, baseY - Ht - 3, 3.2, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.lineCap = "butt";
+}
+
+function drawPetrifiedTree(t, cx, baseY, light, dark, Ht, Wd, sw) {
+  const hot = t.hot;
+  const corrupt = t.corrupt;
+  const trunk = corrupt ? lerpColor(dark, [42, 26, 62], 0.5) : lerpColor(dark, [42, 38, 38], 0.55);
+  const edge = corrupt ? [142, 84, 190] : hot ? [255, 100, 40] : shade(light, 1.05);
+  const trunkW = Math.max(8, Wd * 0.19);
+  ctx.lineCap = "round";
+  ctx.strokeStyle = withA(trunk, 1);
+  ctx.lineWidth = trunkW;
+  ctx.beginPath();
+  ctx.moveTo(cx, baseY);
+  ctx.quadraticCurveTo(cx + sw(0.45) * 0.35, baseY - Ht * 0.5, cx + sw(1), baseY - Ht);
+  ctx.stroke();
+  ctx.strokeStyle = withA(shade(trunk, 1.35), 0.55);
+  ctx.lineWidth = Math.max(2, trunkW * 0.28);
+  ctx.beginPath();
+  ctx.moveTo(cx - trunkW * 0.25, baseY - 5);
+  ctx.quadraticCurveTo(cx - trunkW * 0.1 + sw(0.45) * 0.25, baseY - Ht * 0.5, cx + sw(1) - trunkW * 0.08, baseY - Ht + 8);
+  ctx.stroke();
+  ctx.strokeStyle = withA(trunk, 0.95);
+  for (const br of t.branches || []) {
+    const yy=baseY-br.hf*Ht, xx=cx+sw(br.hf), ex=xx+br.side*br.len, ey=yy-br.len*br.up;
+    ctx.lineWidth=Math.max(1.5,Wd*0.08);
+    ctx.beginPath(); ctx.moveTo(xx,yy); ctx.lineTo(ex,ey);
+    if (!br.broken) ctx.lineTo(ex+br.side*br.len*0.25,ey-br.len*0.42);
+    ctx.stroke();
+  }
+  ctx.save();
+  ctx.globalCompositeOperation = hot || corrupt ? "lighter" : "source-over";
+  ctx.strokeStyle = withA(edge, hot || corrupt ? 0.72 : 0.42);
+  ctx.lineWidth = hot || corrupt ? 1.5 : 1;
+  for (const cr of t.cracks || []) {
+    const y = baseY - Ht * cr.hf;
+    const x = cx + sw(cr.hf) + cr.side * trunkW * 0.18;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + cr.side * trunkW * cr.len, y - Ht * 0.08); ctx.stroke();
+  }
+  ctx.restore();
+  if (corrupt) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    for (const c of t.crystals || []) {
+      const x = cx + sw(c.hf) + c.side * trunkW * 0.7;
+      const y = baseY - Ht * c.hf;
+      const s = 7 * c.s;
+      ctx.fillStyle = "rgba(178,100,255,0.9)";
+      ctx.beginPath(); ctx.moveTo(x, y - s); ctx.lineTo(x + c.side * s * 0.45, y); ctx.lineTo(x, y + s * 0.35); ctx.lineTo(x - c.side * s * 0.35, y); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+  ctx.lineCap = "butt";
+}
+
 export function drawTree(t, cx, baseY, light, dark, depthDark, swayAmp) {
   const Ht=t.h, Wd=t.w, lean=t.lean;
   const sw = (hf) => windSway(t.phase, swayAmp)*Math.pow(clamp(hf,0,1),1.35) + lean*hf*Wd*0.7;
   const trunkCol = shade(dark, 0.68);
   const trunkHi = shade(trunkCol, 1.35);
   if (depthDark < 0.5) { ctx.save(); ctx.globalAlpha=0.16*(1-depthDark); ctx.fillStyle="#0a0810"; ctx.beginPath(); ctx.ellipse(cx,baseY-2,Wd*0.5*(1.15-depthDark),Wd*0.5*(1.15-depthDark)*0.26,0,0,Math.PI*2); ctx.fill(); ctx.restore(); }
+
+  if (t.type==="cactus") {
+    drawCactusTree(t, cx, baseY, light, dark, Ht, Wd, sw);
+    return;
+  }
+  if (t.type==="petrified" || t.type==="corrupt") {
+    drawPetrifiedTree(t, cx, baseY, light, dark, Ht, Wd, sw);
+    return;
+  }
 
   if (t.type==="pine"||t.type==="fir"||t.type==="widepine") {
     // tapered trunk
@@ -431,6 +631,17 @@ export function drawTree(t, cx, baseY, light, dark, depthDark, swayAmp) {
   } else {
     const trunkH=t.type==="bush"?Ht*0.12:t.type==="birch"?Ht*0.68:Ht*0.5;
     const tw=Wd*(t.trunkW || 0.09), isBirch=t.type==="birch";
+    if (t.type==="mangrove") {
+      ctx.strokeStyle=withA(shade(dark,0.62),0.95); ctx.lineWidth=Math.max(1.5,tw*0.72); ctx.lineCap="round";
+      for (const root of t.roots || []) {
+        const rx = cx + root.side * tw * 0.45;
+        ctx.beginPath();
+        ctx.moveTo(rx, baseY - Ht * 0.22);
+        ctx.quadraticCurveTo(rx + root.side * root.spread * 0.35, baseY - Ht * 0.12, cx + root.side * root.spread, baseY + 2);
+        ctx.stroke();
+      }
+      ctx.lineCap="butt";
+    }
     ctx.strokeStyle=withA(isBirch?lerpColor(light,[232,234,236],0.55):trunkCol,1);
     ctx.lineWidth=Math.max(2,tw*2); ctx.lineCap="round";
     ctx.beginPath(); ctx.moveTo(cx,baseY); ctx.lineTo(cx+sw(trunkH/Ht),baseY-trunkH); ctx.stroke();
@@ -491,6 +702,33 @@ function drawLowDetailTree(t, cx, baseY, light, dark, depthDark, swayAmp) {
     return;
   }
 
+  if (t.type === "cactus") {
+    ctx.strokeStyle = withA(lerpColor(light, [72, 126, 78], 0.5), 0.95);
+    ctx.lineWidth = Math.max(5, Wd * 0.12);
+    ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(cx, baseY); ctx.lineTo(cx + sway * 0.3, baseY - Ht * 0.82); ctx.stroke();
+    for (let i = 0; i < 2; i++) {
+      const side = i ? 1 : -1;
+      const y = baseY - Ht * (0.38 + i * 0.16);
+      ctx.beginPath(); ctx.moveTo(cx, y); ctx.lineTo(cx + side * Wd * 0.22, y); ctx.lineTo(cx + side * Wd * 0.22, y - Ht * 0.16); ctx.stroke();
+    }
+    ctx.lineCap = "butt";
+    return;
+  }
+
+  if (t.type === "petrified" || t.type === "corrupt") {
+    ctx.strokeStyle = withA(t.corrupt ? [58, 34, 78] : [54, 48, 46], 0.96);
+    ctx.lineWidth = Math.max(4, Wd * 0.1);
+    ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(cx, baseY); ctx.lineTo(cx + sway * 0.8, baseY - Ht * 0.9); ctx.stroke();
+    ctx.lineWidth = Math.max(1.2, Wd * 0.04);
+    ctx.strokeStyle = withA(t.corrupt ? [170, 100, 255] : t.hot ? [255, 110, 50] : [150, 132, 120], 0.55);
+    ctx.beginPath(); ctx.moveTo(cx + sway * 0.2, baseY - Ht * 0.25); ctx.lineTo(cx + sway * 0.5 + Wd * 0.12, baseY - Ht * 0.38); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx + sway * 0.45, baseY - Ht * 0.55); ctx.lineTo(cx + sway * 0.65 - Wd * 0.1, baseY - Ht * 0.7); ctx.stroke();
+    ctx.lineCap = "butt";
+    return;
+  }
+
   ctx.fillStyle = withA(trunkCol, 0.9);
   ctx.fillRect(cx - trunkW * 0.5, baseY - Ht * 0.48, trunkW, Ht * 0.5);
 
@@ -530,38 +768,93 @@ function drawLowDetailTree(t, cx, baseY, light, dark, depthDark, swayAmp) {
   ctx.fill();
 }
 
+function layerTreeForBiome(t, b) {
+  if (b.deco!=="desert" && b.deco!=="volcano" && b.deco!=="corrupted") return t;
+  const seed = Math.abs(Math.sin(t.x * 12.9898 + t.phase * 78.233));
+  const type = b.deco==="desert" ? "cactus" : b.deco==="volcano" ? "petrified" : "corrupt";
+  const h = t.h * (type==="cactus" ? 0.58 : type==="petrified" ? 0.82 : 0.96);
+  const w = t.w * (type==="cactus" ? 0.44 : 0.52);
+  const out = {
+    ...t, type, h, w,
+    snow:false, moss:false, hot:!!b.hot, corrupt:!!b.corrupt,
+    clusters:null, arms:null, branches:null, cracks:null, crystals:null,
+  };
+  if (type==="cactus") {
+    out.arms = [
+      { hf:0.38 + (seed % 0.2), side:seed > 0.45 ? 1 : -1, len:h*0.2, lift:h*0.2 },
+      { hf:0.54 + ((seed * 1.7) % 0.16), side:seed > 0.7 ? -1 : 1, len:h*0.16, lift:h*0.16 },
+    ];
+  } else {
+    out.branches = [];
+    for (let i=0;i<5;i++) out.branches.push({
+      hf:0.28 + ((seed + i * 0.17) % 0.58),
+      side:((t.x + i * 37) | 0) % 2 ? 1 : -1,
+      len:h * (0.12 + ((seed + i * 0.11) % 0.16)),
+      up:type==="corrupt" ? 0.1 + ((seed + i * 0.07) % 0.4) : 0.35 + ((seed + i * 0.09) % 0.38),
+      broken:i % 2 === 0,
+    });
+    out.cracks = [];
+    for (let i=0;i<4;i++) out.cracks.push({
+      hf:0.18 + ((seed + i * 0.19) % 0.62),
+      side:i % 2 ? 1 : -1,
+      len:0.08 + ((seed + i * 0.13) % 0.08),
+    });
+    if (type==="corrupt") {
+      out.crystals = [];
+      for (let i=0;i<3;i++) out.crystals.push({
+        hf:0.22 + ((seed + i * 0.21) % 0.58),
+        side:i % 2 ? 1 : -1,
+        s:0.5 + ((seed + i * 0.2) % 0.8),
+      });
+    }
+  }
+  return out;
+}
+
 export function drawTreeLayer(trees, factor, depthDark, swayAmp, alpha=1) {
   const dark=darkness(), haze=hazeColor(dark), off=Game.cam*factor;
   const lowDetailLayer = factor < 0.7;
+  const cameraBiome = biomeAt(Game.cam + W / 2);
   if (alpha<1) { ctx.save(); ctx.globalAlpha=alpha; }
   for (let i = 0; i < trees.length; i++) {
     const t = trees[i];
     const px=t.x-off; if (px<-140||px>W+140) continue;
-    const b=biomeAt(t.x);
+    const visualTree = factor < 1 ? layerTreeForBiome(t, cameraBiome) : t;
+    const b=factor < 1 ? cameraBiome : biomeAt(t.x);
     const light = atmo(b.treeL,haze,depthDark);
     const darkCol = atmo(b.treeD,haze,depthDark);
-    if (lowDetailLayer) drawLowDetailTree(t, px, groundY+4, light, darkCol, depthDark, swayAmp);
-    else drawTree(t, px, groundY+4, light, darkCol, depthDark, swayAmp);
+    if (lowDetailLayer) drawLowDetailTree(visualTree, px, groundY+4, light, darkCol, depthDark, swayAmp);
+    else drawTree(visualTree, px, groundY+4, light, darkCol, depthDark, swayAmp);
   }
   if (alpha<1) ctx.restore();
 }
 
 let treeCache = null;
+function biomeTreeDensity(x) {
+  const b = biomeAt(x);
+  if (b.deco==="desert") return 0.34;
+  if (b.deco==="volcano") return 0.46;
+  if (b.deco==="corrupted") return 0.66;
+  if (b.deco==="frozen") return 0.72;
+  if (b.deco==="swamp") return 1.08;
+  return 1;
+}
+
 export function getTrees() {
   if (treeCache && treeCache.seed===Game.treeSeed) return treeCache;
   const r=mulberry32(Game.treeSeed||1);
   const far=[],mid=[],near=[],fore=[],hills=[],mountains=[];
   const campX = CFG.baseX;
   // occasional giants poke above each canopy layer so the treeline isn't a flat band
-  for (let x=-140;x<CFG.worldWidth+140;x+=96)  { const tx=x+r()*70; if(Math.abs(tx-campX)>260) far.push(makeTree(tx, r()<0.08?250:165, r)); }
-  for (let x=-120;x<CFG.worldWidth+120;x+=82)  { const tx=x+r()*58; if(Math.abs(tx-campX)>300) mid.push(makeTree(tx, r()<0.08?330:225, r)); }
-  for (let x=-100;x<CFG.worldWidth+100;x+=74)  { const tx=x+r()*48; if(Math.abs(tx-campX)>380) near.push(makeTree(tx, r()<0.1?405:285, r)); }
-  for (let x=-100;x<CFG.worldWidth+100;x+=520) { const tx=x+r()*220; if(Math.abs(tx-campX)>700) fore.push(makeTree(tx, 150, r)); }
+  for (let x=-140;x<CFG.worldWidth+140;x+=96)  { const tx=x+r()*70; if(Math.abs(tx-campX)>260 && r()<biomeTreeDensity(tx)) far.push(makeTree(tx, r()<0.08?250:165, r)); }
+  for (let x=-120;x<CFG.worldWidth+120;x+=82)  { const tx=x+r()*58; if(Math.abs(tx-campX)>300 && r()<biomeTreeDensity(tx)) mid.push(makeTree(tx, r()<0.08?330:225, r)); }
+  for (let x=-100;x<CFG.worldWidth+100;x+=74)  { const tx=x+r()*48; if(Math.abs(tx-campX)>380 && r()<biomeTreeDensity(tx)) near.push(makeTree(tx, r()<0.1?405:285, r)); }
+  for (let x=-100;x<CFG.worldWidth+100;x+=520) { const tx=x+r()*220; if(Math.abs(tx-campX)>700 && r()<biomeTreeDensity(tx)) fore.push(makeTree(tx, 150, r)); }
   for (let x=-300;x<CFG.worldWidth+300;x+=170) hills.push({ x:x+r()*120, h:50+r()*130, w:200+r()*230 });
   treeCache={ seed:Game.treeSeed, far, mid, near, fore, hills, mountains };
   return treeCache;
 }
-export function clearTreeCache() { treeCache=null; }
+export function clearTreeCache() { treeCache=null; decoCache=null; groundTexCache=null; }
 
 // ---------- Ground decoration cache ----------
 let decoCache=null;
@@ -573,10 +866,11 @@ export function getDeco() {
     if (Math.abs(x - CFG.baseX) < 650) { r(); continue; } // clear deco near camp
     const b=biomeAt(x), t=r();
     let kind;
-    if      (b.snow)              kind=t<0.56?"snowtuft":(t<0.72?"stone":(t<0.86?"tallgrass":"stump"));
-    else if (b.deco==="autumn")   kind=t<0.30?"grass":(t<0.48?"leafpile":(t<0.60?"bush":(t<0.72?"tallgrass":(t<0.82?"stone":(t<0.90?"flower":(t<0.96?"sapling":"stump"))))));
-    else if (b.deco==="swamp")    kind=t<0.36?"reed":(t<0.54?"grass":(t<0.68?"tallgrass":(t<0.80?"mushroom":(t<0.92?"fern":"stone"))));
-    else if (b.deco==="dark")     kind=t<0.36?"grass":(t<0.56?"fern":(t<0.68?"mushroom":(t<0.78?"bush":(t<0.88?"tallgrass":(t<0.95?"stone":"sapling")))));
+    if      (b.deco==="frozen" || b.snow) kind=t<0.42?"snowtuft":(t<0.58?"iceShard":(t<0.74?"stone":(t<0.88?"tallgrass":"stump")));
+    else if (b.deco==="desert")   kind=t<0.28?"drygrass":(t<0.44?"sandstone":(t<0.58?"smallCactus":(t<0.72?"stone":(t<0.88?"dustPatch":"deadRoot"))));
+    else if (b.deco==="swamp")    kind=t<0.30?"reed":(t<0.48?"bogBubble":(t<0.62?"grass":(t<0.76?"mushroom":(t<0.90?"fern":"stone"))));
+    else if (b.deco==="volcano")  kind=t<0.30?"lavaCrack":(t<0.48?"obsidian":(t<0.66?"ashVent":(t<0.82?"stone":"deadRoot")));
+    else if (b.deco==="corrupted") kind=t<0.34?"corruptShard":(t<0.52?"deadRoot":(t<0.68?"mushroom":(t<0.82?"obsidian":(t<0.93?"tallgrass":"stone"))));
     else                          kind=t<0.34?"grass":(t<0.50?"flower":(t<0.62?"tallgrass":(t<0.72?"bush":(t<0.80?"fern":(t<0.88?"stone":(t<0.95?"grass":"sapling"))))));
     items.push({ x, kind, s:0.7+r()*0.8, ph:r()*6, leaf:b.leaf, flower:["#e58fb0","#f2c14e","#cfe6f2","#e87b5a"][(r()*4)|0], berry:r()<0.45 });
   }
@@ -700,6 +994,62 @@ export function drawHills(hills, dark) {
     const px=h.x-off; if (px<-h.w||px>W+h.w) continue;
     const b=biomeAt(h.x);
     const hillCol=lerpColor(atmo(b.gT,haze,0.9),b.snow?[236,241,248]:haze,b.snow?0.5:0.22);
+    if (b.deco==="desert") {
+      ctx.fillStyle=rgb(lerpColor([198,150,82],[74,48,30],dark));
+      ctx.beginPath();
+      ctx.moveTo(px-h.w,groundY+6);
+      ctx.quadraticCurveTo(px-h.w*0.45,groundY-h.h*0.34,px+h.w*0.15,groundY-h.h*0.12);
+      ctx.quadraticCurveTo(px+h.w*0.55,groundY-h.h*0.02,px+h.w,groundY+6);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle=withA(lerpColor([238,190,112],[96,66,42],dark),0.34);
+      ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(px-h.w*0.72,groundY-h.h*0.12); ctx.quadraticCurveTo(px-h.w*0.18,groundY-h.h*0.24,px+h.w*0.34,groundY-h.h*0.06); ctx.stroke();
+      continue;
+    }
+    if (b.deco==="volcano") {
+      const rock=lerpColor([64,54,54],[18,16,20],dark);
+      ctx.fillStyle=rgb(rock);
+      ctx.beginPath();
+      ctx.moveTo(px-h.w,groundY+8);
+      ctx.lineTo(px-h.w*0.42,groundY-h.h*0.36);
+      ctx.lineTo(px-h.w*0.12,groundY-h.h*0.28);
+      ctx.lineTo(px+h.w*0.08,groundY-h.h*0.86);
+      ctx.lineTo(px+h.w*0.34,groundY-h.h*0.24);
+      ctx.lineTo(px+h.w,groundY+8);
+      ctx.closePath(); ctx.fill();
+      ctx.save(); ctx.globalCompositeOperation="lighter";
+      ctx.strokeStyle=withA([255,92,36],0.34+0.18*Math.sin(Game.windT+h.x));
+      ctx.lineWidth=2.5;
+      ctx.beginPath(); ctx.moveTo(px+h.w*0.08,groundY-h.h*0.82); ctx.lineTo(px+h.w*0.02,groundY-h.h*0.48); ctx.lineTo(px+h.w*0.16,groundY-h.h*0.18); ctx.stroke();
+      ctx.restore();
+      continue;
+    }
+    if (b.deco==="corrupted") {
+      const col=lerpColor([46,36,62],[14,12,22],dark);
+      ctx.fillStyle=rgb(col);
+      ctx.beginPath(); ctx.moveTo(px-h.w,groundY+8);
+      for (let i=0;i<5;i++) {
+        const t=i/4, sx=px-h.w+t*h.w*2;
+        const spike=groundY-h.h*(0.18+0.62*Math.abs(Math.sin(h.x*0.01+i)));
+        ctx.lineTo(sx-h.w*0.11,groundY-h.h*0.15);
+        ctx.lineTo(sx,spike);
+        ctx.lineTo(sx+h.w*0.11,groundY-h.h*0.18);
+      }
+      ctx.lineTo(px+h.w,groundY+8); ctx.closePath(); ctx.fill();
+      ctx.save(); ctx.globalCompositeOperation="lighter";
+      ctx.strokeStyle=withA([178,92,255],0.24);
+      ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(px-h.w*0.4,groundY-h.h*0.25); ctx.lineTo(px-h.w*0.2,groundY-h.h*0.58); ctx.lineTo(px,groundY-h.h*0.2); ctx.stroke();
+      ctx.restore();
+      continue;
+    }
+    if (b.deco==="swamp") {
+      ctx.fillStyle=rgb(lerpColor(atmo(b.gT,haze,0.9),[18,28,24],dark*0.7));
+      ctx.beginPath(); ctx.moveTo(px-h.w,groundY+5); ctx.quadraticCurveTo(px-h.w*0.35,groundY-h.h*0.22,px,groundY-h.h*0.14); ctx.quadraticCurveTo(px+h.w*0.5,groundY-h.h*0.3,px+h.w,groundY+5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle=withA(lerpColor(b.fog,[20,22,36],dark),0.16);
+      ctx.beginPath(); ctx.ellipse(px,groundY-h.h*0.08,h.w*0.72,12,0,0,Math.PI*2); ctx.fill();
+      continue;
+    }
     ctx.fillStyle=rgb(hillCol);
     ctx.beginPath(); ctx.moveTo(px-h.w,groundY+4); ctx.quadraticCurveTo(px,groundY+4-h.h,px+h.w,groundY+4); ctx.closePath(); ctx.fill();
     if (b.snow) { ctx.fillStyle="rgba(245,248,252,0.7)"; ctx.beginPath(); ctx.moveTo(px-h.w*0.3,groundY+4-h.h*0.7); ctx.quadraticCurveTo(px,groundY+4-h.h,px+h.w*0.3,groundY+4-h.h*0.7); ctx.lineTo(px,groundY+4-h.h*0.45); ctx.closePath(); ctx.fill(); }
@@ -782,7 +1132,7 @@ export function drawAmbientFront(dark, bi) {
     ctx.fillRect(d.x,d.y,s,s);
   }
   ctx.restore();
-  if (!lowDetail && dark<0.5) {
+  if (!lowDetail && dark<0.5 && !bi.dry && !bi.hot && !bi.corrupt) {
     for (const bf of FX.butter) {
       const w=Math.abs(Math.sin(bf.ph*6));
       ctx.globalAlpha=1-dark*2;
@@ -795,7 +1145,7 @@ export function drawAmbientFront(dark, bi) {
     }
     ctx.globalAlpha=1;
   }
-  if (!lowDetail && dark>0.4) {
+  if (!lowDetail && dark>0.4 && (bi.wet || bi.corrupt) && !bi.hot) {
     ctx.save();
     ctx.globalCompositeOperation="lighter";
     for (let i = 0; i < FX.flies.length; i += every) {
@@ -813,10 +1163,16 @@ export function drawAmbientFront(dark, bi) {
     const p = FX.fall[i];
     if (!p.active) continue;
     ctx.globalAlpha=0.85;
-    if (p.snow) {
+    if (p.kind==="snow" || p.snow) {
       ctx.fillStyle=p.color;
       ctx.beginPath();
       ctx.arc(p.x,p.y,1.8,0,Math.PI*2);
+      ctx.fill();
+    } else if (p.kind==="ash" || p.kind==="dust" || p.kind==="spore") {
+      ctx.globalAlpha = p.kind==="spore" ? 0.65 : 0.45;
+      ctx.fillStyle=p.color;
+      ctx.beginPath();
+      ctx.ellipse(p.x,p.y,p.kind==="dust"?3.2:2.1,p.kind==="dust"?1.2:1.6,0,0,Math.PI*2);
       ctx.fill();
     } else {
       ctx.save();

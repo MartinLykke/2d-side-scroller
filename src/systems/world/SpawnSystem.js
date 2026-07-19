@@ -1,12 +1,13 @@
 import { CFG } from '../../config/config.js';
-import { ENEMY_TYPES, BOSS_SCHEDULE } from '../../config/enemies.js';
+import { ENEMY_TYPES, BOSS_SCHEDULE, BIOME_BOSS_TYPES } from '../../config/enemies.js?v=biomeboss1';
 import { clamp, rand, pick } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { goldCoinChunks, goldRewardAmount } from '../economy/EconomyBalance.js';
-import { eliteChanceBonus, enemyVitalityMultiplier, nightQuotaMetaMultiplier, portalSpawnIntervalMultiplier } from '../infrastructure/RoguelikeSystem.js';
+import { bountyRaiderCount, eliteChanceBonus, enemyVitalityMultiplier, nightQuotaMetaMultiplier, portalSpawnIntervalMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { currentDifficulty } from '../infrastructure/DifficultySystem.js';
 import { currentPopCap } from '../../util/DefenseStats.js';
+import { biomeCenterX } from '../../rendering/Effects.js?v=biomes4';
 
 function dayThreatProgress() {
   return Math.max(0, (Game.day || 1) - 2);
@@ -189,13 +190,13 @@ export function spawnEnemy(type, portal) {
   const strength = enemyStrengthForDay(t);
   const hp = Math.ceil(t.hp * enemyVitalityMultiplier() * strength.hp);
   const enemy = {
-    x: portal.x, vx: 0, type, tag: type === "imp" || type === "fireImp" ? "Imp" : "Enemy",
+    x: portal.x, vx: 0, type, tag: type === "imp" || type === "fireImp" || type === "chainImp" ? "Imp" : "Enemy",
     hp, maxHp: hp,
     strengthHpMult: strength.hp,
     damageMult: strength.damage,
     speedMult: strength.speed,
     dir: portal.side > 0 ? -1 : 1,
-    state: "advance", aiState: type === "imp" ? "advance" : undefined, target: null, attackCd: 0,
+    state: "advance", aiState: type === "imp" || type === "chainImp" ? "advance" : undefined, target: null, attackCd: 0,
     carry: 0, anim: rand(0, 6), flash: 0, attackAnim: 0, fleeing: false, portal,
     fy: t.flying ? -(t.fireball ? rand(105, 145) : 80 + rand(0, 30)) : 0,
     shootCd: (t.flying || t.caster) ? rand(0.5, t.fireball ? 1.4 : (t.shootInterval || 3)) : 0,
@@ -218,6 +219,46 @@ export function spawnEnemy(type, portal) {
   }
   state.enemies.push(enemy);
   return enemy;
+}
+
+function bountyRaiderType() {
+  const d = Game.day || 1;
+  if ((Game.worldPhase || 1) >= 2) {
+    if (d >= 4 && Math.random() < 0.35) return "voidBrute";
+    if (d >= 3 && Math.random() < 0.55) return "voidWraith";
+    return "shade";
+  }
+  if (d >= 5 && Math.random() < 0.28) return "siegeImp";
+  if (d >= 4 && Math.random() < 0.34) return "ashPriest";
+  if (d >= 3 && Math.random() < 0.45) return "emberBrute";
+  return "fireImp";
+}
+
+function spawnBountyRaider(portal) {
+  const e = spawnEnemy(bountyRaiderType(), portal);
+  e.bounty = true;
+  e.maxHp = Math.ceil(e.maxHp * 1.28);
+  e.hp = e.maxHp;
+  e.bountyReward = 3 + Math.ceil((Game.day || 1) * 0.6);
+  e.bountyGold = 4 + Math.ceil((Game.day || 1) * 0.8);
+  e.flash = 0.25;
+  spawnParticles(e.x, groundY - 32 + (e.fy || 0), 18, "#ff6a4a", 110, 120);
+  spawnParticles(e.x, groundY - 24 + (e.fy || 0), 10, "#ffe07a", 70, 100);
+  return e;
+}
+
+function biomeBossPortal(type, fallback = null) {
+  const t = ENEMY_TYPES[type];
+  if (!t?.biome) return fallback || pick(state.portals);
+
+  if (t.biome === "forest") {
+    const side = fallback?.side || pick([-1, 1]);
+    return { x: clamp(CFG.baseX + side * 900, 900, CFG.worldWidth - 900), side };
+  }
+
+  const x = clamp(biomeCenterX(t.biome), 420, CFG.worldWidth - 420);
+  const side = x < CFG.baseX ? -1 : 1;
+  return { x, side };
 }
 
 // Per-boss entrance rigging, run right after the boss entity is spawned.
@@ -254,17 +295,70 @@ const BOSS_RIGGERS = {
     spawnParticles(portal.x, groundY - 160, 34, "#8a5aff", 180, 220);
     spawnParticles(portal.x, groundY - 110, 18, "#d7f6ff", 120, 180);
   },
+  forestStalker(stalker, portal) {
+    stalker.dir = portal.side > 0 ? -1 : 1;
+    stalker.specialCd = rand(2.8, 4.2);
+    Game.screenShake = Math.max(Game.screenShake || 0, 0.28);
+    spawnParticles(portal.x, groundY - 16, 24, "#6f8a42", 140, 120);
+    spawnParticles(portal.x, groundY - 62, 18, "#b66bff", 115, 150);
+  },
+  skadiWrath(skadi, portal) {
+    skadi.dir = portal.side > 0 ? -1 : 1;
+    skadi.fy = -132;
+    skadi.specialCd = rand(3.8, 5.2);
+    skadi.cryoShieldCd = rand(6, 8);
+    spawnParticles(portal.x, groundY - 130, 34, "#bfefff", 150, 210);
+    spawnParticles(portal.x, groundY - 72, 18, "#1b2842", 130, 120);
+  },
+  duneBroodmother(brood, portal) {
+    brood.dir = portal.side > 0 ? -1 : 1;
+    brood.specialCd = rand(2.6, 3.8);
+    brood.burrowT = 1.15;
+    Game.screenShake = Math.max(Game.screenShake || 0, 0.2);
+    spawnParticles(portal.x, groundY - 8, 34, "#d8b46a", 220, 90);
+  },
+  sunkenBehemoth(behemoth, portal) {
+    behemoth.dir = portal.side > 0 ? -1 : 1;
+    behemoth.specialCd = rand(4.2, 5.8);
+    Game.screenShake = Math.max(Game.screenShake || 0, 0.35);
+    spawnParticles(portal.x, groundY - 18, 34, "#4f6a34", 180, 130);
+    spawnParticles(portal.x, groundY - 55, 14, "#b8ff7a", 90, 120);
+  },
+  ignitedCore(core, portal) {
+    core.dir = portal.side > 0 ? -1 : 1;
+    core.fy = -86;
+    core.specialCd = rand(3.4, 4.6);
+    core.coreHeat = 0.4;
+    Game.screenShake = Math.max(Game.screenShake || 0, 0.4);
+    spawnParticles(portal.x, groundY - 95, 38, "#ff6a28", 190, 230);
+    spawnParticles(portal.x, groundY - 88, 18, "#fff0a0", 120, 240);
+  },
+  voidMindflayer(mindflayer, portal) {
+    mindflayer.dir = portal.side > 0 ? -1 : 1;
+    mindflayer.fy = -155;
+    mindflayer.specialCd = rand(3.2, 4.8);
+    mindflayer.goldDecayCd = 4.5;
+    spawnParticles(portal.x, groundY - 145, 38, "#8c4cff", 180, 230);
+    spawnParticles(portal.x, groundY - 105, 18, "#d7a8ff", 120, 190);
+  },
 };
 
 export function spawnBoss(type, portal) {
-  spawnEnemy(type, portal);
+  const spawnPortal = biomeBossPortal(type, portal);
+  spawnEnemy(type, spawnPortal);
   const boss = state.enemies[state.enemies.length - 1];
-  BOSS_RIGGERS[type]?.(boss, portal);
+  BOSS_RIGGERS[type]?.(boss, spawnPortal);
   return boss;
 }
 
 export function spawnFireDragon(portal) {
   return spawnBoss("fireDragon", portal);
+}
+
+export function spawnBiomeBoss(biomeId) {
+  const type = BIOME_BOSS_TYPES[biomeId];
+  if (!type) return null;
+  return spawnBoss(type, biomeBossPortal(type));
 }
 
 export function planNight() {
@@ -278,6 +372,8 @@ export function planNight() {
   // From round 3 onward, double the enemy count
   if (d >= 3) quotaMult *= 2;
   Game.nightQuota   = Math.round((3 + d * 3.5 + Math.pow(d * 0.7, 1.6) + Math.max(0, d - 8) * 2.25) * quotaMult * hordeMult * nightQuotaMetaMultiplier());
+  Game.bountyRaidersRemaining = bountyRaiderCount();
+  Game.nightQuota += Game.bountyRaidersRemaining || 0;
   Game.nightSpawned = 0;
   Game.spawnTimer   = 0;
   Game.nightCleared = false;
@@ -325,10 +421,13 @@ function nightEnemyType() {
   const ashPriestChance = d >= 4 ? Math.min(0.26, (d - 3) * 0.028 * difficultyPressure + eliteBonus * 0.65) : eliteBonus * 0.25;
   // Siege imps roll in from day 4: a slow, heavily-shielded battering column.
   const siegeImpChance = d >= 4 ? Math.min(0.22, (d - 3) * 0.03 * difficultyPressure + eliteBonus * 0.5) : 0;
+  // Chain imps arrive from day 3 as wall-breach support for the horde.
+  const chainImpChance = d >= 3 ? Math.min(0.16, (d - 2) * 0.028 * difficultyPressure + eliteBonus * 0.4) : 0;
   if (r < emberBruteChance) return "emberBrute";
   if (r < emberBruteChance + ashPriestChance) return "ashPriest";
   if (r < emberBruteChance + ashPriestChance + siegeImpChance) return "siegeImp";
-  if (r < emberBruteChance + ashPriestChance + siegeImpChance + flyingImpChance) return "fireImp";
+  if (r < emberBruteChance + ashPriestChance + siegeImpChance + chainImpChance) return "chainImp";
+  if (r < emberBruteChance + ashPriestChance + siegeImpChance + chainImpChance + flyingImpChance) return "fireImp";
   return "imp";
 }
 
@@ -340,7 +439,6 @@ export function updateSpawning(dt) {
     Game.spawnTimer -= dt;
     if (Game.spawnTimer <= 0) {
       Game.spawnTimer = nextNightSpawnInterval();
-      const type = nightEnemyType();
       let livePortals = state.portals.filter(p => !p.destroyed);
       if (Game.oneSidedNightSide != null) {
         const sided = livePortals.filter(p => p.side === Game.oneSidedNightSide);
@@ -348,27 +446,35 @@ export function updateSpawning(dt) {
       }
       const portal = pick(livePortals.length ? livePortals : state.portals);
       let spawned;
-      if (ENEMY_TYPES[type] && ENEMY_TYPES[type].boss) {
-        spawned = spawnBoss(type, portal);
+      const shouldSpawnBounty = (Game.bountyRaidersRemaining || 0) > 0 && Game.nightSpawned >= 1
+        && (Game.nightSpawned % 4 === 0 || Game.nightSpawned + Game.bountyRaidersRemaining >= Game.nightQuota);
+      if (shouldSpawnBounty) {
+        Game.bountyRaidersRemaining--;
+        spawned = spawnBountyRaider(portal);
       } else {
-        spawnEnemy(type, portal);
-        spawned = state.enemies[state.enemies.length - 1];
+        const type = nightEnemyType();
+        if (ENEMY_TYPES[type] && ENEMY_TYPES[type].boss) {
+          spawned = spawnBoss(type, portal);
+        } else {
+          spawnEnemy(type, portal);
+          spawned = state.enemies[state.enemies.length - 1];
+        }
+        if (ENEMY_TYPES[type] && ENEMY_TYPES[type].legendary) {
+          const lb = spawned;
+          lb.specialCd  = 3;
+          lb.specialPhase = 0;
+          lb.specialTimer = 0;
+          state.legendaryBoss = lb;
+          // Intro popup
+          Game.legendaryIntro = { timer: 5.5, maxTimer: 5.5, bossType: type };
+          // Rally all fighters
+          for (const u of state.units) u.rallied = true;
+          const bossCol = ENEMY_TYPES[type].eye || "#ff2020";
+          for (let k = 0; k < 30; k++)
+            state.particles.push({ x: CFG.baseX + rand(-120,120), y: groundY - rand(40,160), vx: rand(-60,60), vy: rand(-80,-20), life: rand(0.6,1.2), color: bossCol, size: rand(2,5) });
+        }
       }
       Game.nightSpawned++;
-      if (ENEMY_TYPES[type] && ENEMY_TYPES[type].legendary) {
-        const lb = spawned;
-        lb.specialCd  = 3;
-        lb.specialPhase = 0;
-        lb.specialTimer = 0;
-        state.legendaryBoss = lb;
-        // Intro popup
-        Game.legendaryIntro = { timer: 5.5, maxTimer: 5.5, bossType: type };
-        // Rally all fighters
-        for (const u of state.units) u.rallied = true;
-        const bossCol = ENEMY_TYPES[type].eye || "#ff2020";
-        for (let k = 0; k < 30; k++)
-          state.particles.push({ x: CFG.baseX + rand(-120,120), y: groundY - rand(40,160), vx: rand(-60,60), vy: rand(-80,-20), life: rand(0.6,1.2), color: bossCol, size: rand(2,5) });
-      }
     }
   }
 }

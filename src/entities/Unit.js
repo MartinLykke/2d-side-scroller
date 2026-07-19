@@ -10,8 +10,8 @@ export function generateArcherName() {
 export function makeUnit(role, x) {
   const u = {
     role, tag: role === "guard" ? "Guard" : "Unit", x, vx: 0, dir: 1, state: "idle", targetX: x,
-    hp:    role === "archer" ? 6 : role === "guard" ? 8 : 5,
-    maxHp: role === "archer" ? 6 : role === "guard" ? 8 : 5,
+    hp:    role === "archer" ? 6 : role === "guard" ? 8 : role === "hound" ? 4 : 5,
+    maxHp: role === "archer" ? 6 : role === "guard" ? 8 : role === "hound" ? 4 : 5,
     cooldown: 0, anim: rand(0, 6),
     wall: null, retreating: false, workTimer: 0, panic: 0,
     patrolDir: Math.random() < 0.5 ? -1 : 1,
@@ -44,6 +44,12 @@ export function makeUnit(role, x) {
     u.wallClimbTimer = 0;
     u.level = 1;
     u.xp = 0;
+  }
+  if (role === "hound") {
+    u.tag = "Hound";
+    u.aiState = "patrol";
+    u.homeX = x;
+    u.biteFlash = 0;
   }
   return u;
 }

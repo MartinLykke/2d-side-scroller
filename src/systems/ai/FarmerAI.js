@@ -2,8 +2,8 @@ import { CFG, STATIONS_X } from '../../config/config.js';
 import { dist } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
-import { spawnParticles, spawnGoldReward } from '../world/SpawnSystem.js';
-import { moveToward, sunsetApproaching } from './AIHelpers.js';
+import { spawnParticles, spawnGoldReward } from '../world/SpawnSystem.js?v=biomeboss1';
+import { moveToward, sunsetApproaching } from './AIHelpers.js?v=biomeboss1';
 
 export function farmerAI(u, dt) {
   if (u.panic > 0) { moveToward(u, CFG.baseX, 150, dt); return; }

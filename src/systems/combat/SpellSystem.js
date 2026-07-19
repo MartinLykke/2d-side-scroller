@@ -1,13 +1,13 @@
-import { WEAPONS, effectiveWeapon } from '../../config/weapons.js';
-import { mergeUpgradeEffects } from '../../config/weaponUpgrades.js';
+import { WEAPONS, effectiveWeapon } from '../../config/weapons.js?v=biomeweapons1';
+import { mergeUpgradeEffects } from '../../config/weaponUpgrades.js?v=biomeweapons1';
 import { CFG } from '../../config/config.js';
 import { dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, floaty, critFloaty, spawnGoldReward } from '../world/SpawnSystem.js';
-import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js';
-import { ENEMY_TYPES } from '../../config/enemies.js';
+import { spawnParticles, floaty, critFloaty, spawnGoldReward } from '../world/SpawnSystem.js?v=biomeboss1';
+import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeboss1';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeboss1';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { entityWallLift } from '../../entities/Wall.js';
 import { playerMountLift } from '../economy/MountSystem.js';
@@ -39,6 +39,41 @@ function playerMomentumDamageMultiplier() {
 
 function playerRiposteDamageMultiplier(player) {
   return (player?.riposteT || 0) > 0 ? (CFG.dodgeRiposteDamageMult || 1.6) : 1;
+}
+
+function mergeInnateEffects(wBase, upgrades) {
+  const fx = mergeUpgradeEffects(upgrades || []);
+  const innate = wBase?.innate || null;
+  if (!innate) return fx;
+  const merged = { ...fx, _vfxCols: [...(fx._vfxCols || [])], _ids: [...(fx._ids || [])] };
+  for (const k in innate) {
+    const v = innate[k];
+    if (typeof v === "number") merged[k] = (merged[k] || 0) + v;
+    else if (v === true) merged[k] = true;
+    else merged[k] = v;
+  }
+  return merged;
+}
+
+function payWeaponCastCost(player, fx, col) {
+  const goldCost = Math.max(0, Math.round(fx.castGoldCost || 0));
+  if (!goldCost) return true;
+  if ((player.coins || 0) >= goldCost) {
+    player.coins -= goldCost;
+    floaty(player.x, "-" + goldCost + " coin", col, 12);
+    return true;
+  }
+  const hpCost = Math.max(0, Math.round(fx.castHpCost || 0));
+  if (hpCost && player.hp > hpCost) {
+    player.hp -= hpCost;
+    player.hurt = Math.max(player.hurt || 0, 0.25);
+    player.hpShowTimer = Math.max(player.hpShowTimer || 0, 2.2);
+    spawnParticles(player.x, groundY - 42, 10, col, 55, 85);
+    floaty(player.x, "-" + hpCost + " hp", col, 12);
+    return true;
+  }
+  floaty(player.x, "Needs coin or life", col, 12);
+  return false;
 }
 
 // Spell damage against a bear (bears live in state.animals, not enemies).
@@ -522,7 +557,8 @@ export function chainLightning(x, dmg, bounces) {
 
 export function castSpell(player, wBase, tgt) {
   const ew = effectiveWeapon(player.weapon, player.weaponUpgrades || []);
-  const fx = mergeUpgradeEffects(player.weaponUpgrades || []);
+  const fx = mergeInnateEffects(wBase, player.weaponUpgrades || []);
+  if (!payWeaponCastCost(player, fx, wBase.col)) return;
   const dmgMult = permanentDamageMultiplier() * playerMomentumDamageMultiplier() * playerRiposteDamageMultiplier(player);
   const aoeR = (wBase.aoeRadius || 0) + (ew.range - wBase.range) * 0.2 + (fx.aoeBonus || 0);
   const castOrigin = playerTomeCastOrigin(player);

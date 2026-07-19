@@ -1,18 +1,18 @@
 import { CFG } from '../../config/config.js';
-import { ENEMY_TYPES } from '../../config/enemies.js';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeboss1';
 import { clamp, dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnGoldReward, spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js';
-import { spawnLevelUpBeam } from '../../rendering/Effects.js';
-import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js';
+import { spawnGoldReward, spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js?v=biomeboss1';
+import { spawnLevelUpBeam } from '../../rendering/Effects.js?v=biomes4';
+import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeboss1';
 import { startArcherShoot, SHOOT_RELEASE_TIME } from '../../rendering/sprites/Archer.js';
 import { entityWallLift } from '../../entities/Wall.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
-import { spawnFirePool, spawnVoidPool } from '../ai/BossAI.js';
-import { damagePlayer } from './PlayerCombat.js';
-import { chainLightning } from './SpellSystem.js';
+import { spawnFirePool, spawnVoidPool } from '../ai/BossAI.js?v=biomeboss1';
+import { damagePlayer } from './PlayerCombat.js?v=biomeboss1';
+import { chainLightning } from './SpellSystem.js?v=biomeboss1';
 import { addSkillPoints } from '../economy/SkillSystem.js';
 import { playerMountLift } from '../economy/MountSystem.js';
 
@@ -43,6 +43,17 @@ function arrowTrail(ar) {
     spawnParticles(ar.x, ar.y, 2, "#bfefff", 14, 14);
     if (Math.random() < 0.5) spawnParticles(ar.x, ar.y, 1, "#ffffff", 8, 16);
   }
+  if (ar.splinterCount) {
+    if (Math.random() < 0.65) spawnParticles(ar.x, ar.y, 1, "#8fd05a", 10, 10);
+  }
+  if (ar.poisonArrow) {
+    spawnParticles(ar.x, ar.y, 1, "#7fe05a", 10, 12);
+    if (Math.random() < 0.35) spawnParticles(ar.x, ar.y, 1, "#b8ff7a", 6, 16);
+  }
+  if (ar.sandBlind) {
+    spawnParticles(ar.x, ar.y, 2, "#d8b46a", 16, 10);
+    if (Math.random() < 0.45) spawnParticles(ar.x, ar.y, 1, "#ffe0a0", 9, 12);
+  }
   if (ar.upgradeCol) {
     const rate = ar.upgradeRank >= 3 ? 0.85 : 0.55;
     if (Math.random() < rate) spawnParticles(ar.x, ar.y, 1, ar.upgradeCol, 12 + (ar.upgradeRank || 1) * 3, 12);
@@ -56,6 +67,10 @@ function arrowTrail(ar) {
     if (Math.random() < 0.4) spawnParticles(ar.x, ar.y, 1, "#ffcc40", 8, 8);
   } else if (ar.weaponId === "crossbow") {
     if (Math.random() < 0.4) spawnParticles(ar.x, ar.y, 1, "#c8ccd4", 8, 5); // bolt slipstream
+  } else if (ar.weaponId === "acid_blowgun") {
+    if (Math.random() < 0.65) spawnParticles(ar.x, ar.y, 1, "#7fe05a", 9, 8);
+  } else if (ar.weaponId === "sandstorm_sling") {
+    if (Math.random() < 0.65) spawnParticles(ar.x, ar.y, 1, "#d8b46a", 10, 8);
   } else if (ar.weaponId === "long_bow") {
     if (Math.random() < 0.25) spawnParticles(ar.x, ar.y, 1, "#e8e0c8", 6, 5); // faint air streak
   }
@@ -190,6 +205,74 @@ function enemyIndexStart(index, minX) {
   return lo;
 }
 
+function poisonEnemy(e, seconds, dmg = 1) {
+  if (!e || !seconds) return;
+  e.poison = Math.max(e.poison || 0, seconds);
+  e.poisonTick = Math.min(e.poisonTick || 1, 0.55);
+  e.poisonDmg = Math.max(e.poisonDmg || 0, dmg || 1);
+}
+
+function spawnAcidPool(x, strength = 1) {
+  if (!state.firePools) state.firePools = [];
+  const life = 2.4 + strength * 0.45;
+  state.firePools.push({
+    x,
+    r: 46 + strength * 18,
+    life,
+    maxLife: life,
+    tick: rand(0.3, 0.55),
+    ph: rand(0, 6),
+    source: "player",
+    kind: "acid",
+    dmg: 1,
+    burnDmg: 1,
+    col: "#7fe05a",
+  });
+}
+
+function blindDustBurst(ar, primary, index, y) {
+  const radius = ar.sandBlindRadius || 80;
+  const count = ar.sandBlind || 1;
+  let blinded = 0;
+  spawnParticles(ar.x, y, 16, "#d8b46a", radius, 80);
+  spawnParticles(ar.x, y, 8, "#ffe0a0", radius * 0.55, 95);
+  const start = enemyIndexStart(index, ar.x - radius);
+  for (let ni = start; ni < index.length; ni++) {
+    const ne = index[ni];
+    if (ne.x > ar.x + radius) break;
+    if (ne.fleeing || ne.dying || ne.hp <= 0 || dist(ne.x, ar.x) > radius) continue;
+    ne.blindedHits = Math.max(ne.blindedHits || 0, count);
+    ne.blind = Math.max(ne.blind || 0, 3.2);
+    ne.slow = Math.max(ne.slow || 0, ar.slowHit || 0.45);
+    blinded++;
+  }
+  if (blinded > 0) floaty(primary.x, "Blinded x" + blinded, "#d8b46a");
+}
+
+function splinterArrowBurst(ar, primary, index, damage, y) {
+  const count = ar.splinterCount || 0;
+  if (!count) return;
+  const radius = ar.splinterRadius || 135;
+  const splinterDmg = Math.max(1, Math.round(damage * (ar.splinterDmgFrac || 0.4)));
+  let hit = 0;
+  spawnParticles(primary.x, y, 14, "#8fd05a", radius * 0.55, 85);
+  spawnParticles(primary.x, y, 8, "#d2b07a", radius * 0.4, 70);
+  const start = enemyIndexStart(index, primary.x - radius);
+  for (let ni = start; ni < index.length && hit < count; ni++) {
+    const ne = index[ni];
+    if (ne.x > primary.x + radius) break;
+    if (ne === primary || ne.fleeing || ne.dying || ne.hp <= 0 || dist(ne.x, primary.x) > radius) continue;
+    ne.hp -= splinterDmg;
+    ne.flash = Math.max(ne.flash || 0, 0.12);
+    if (ar.rootArrow) ne.rooted = Math.max(ne.rooted || 0, 1.5);
+    spawnParticles(ne.x, groundY + (ne.fy || 0) - 24, 7, "#8fd05a", 40, 56);
+    spawnImpBlood(ne, 0.55 + splinterDmg * 0.05, groundY + (ne.fy || 0) - 24);
+    floaty(ne.x, "-" + splinterDmg, "#8fd05a");
+    if (ne.hp <= 0) killEnemyWithAnimation(ne, Math.sign(ne.x - primary.x) || 1);
+    hit++;
+  }
+}
+
 function detonateAshFireball(ar) {
   if (!ar.ashFireball || ar.ashBlastDone) return false;
   ar.ashBlastDone = true;
@@ -291,6 +374,9 @@ export function shootArrow(x, y, target, sourceUnit = null, weaponId = null, opt
   else if (weaponId === "void_bow") spawnParticles(x, y, 6, "#9933ff", 30, 50);
   else if (weaponId === "dragons_bow") { spawnParticles(x, y, 10, "#ff6620", 50, 80); spawnParticles(x, y, 5, "#ffcc40", 30, 60); }
   else if (weaponId === "crossbow") spawnParticles(x, y, 4, "#c8ccd4", 35, 30); // string snap kick
+  else if (weaponId === "splinter_bow") spawnParticles(x, y, 7, "#8fd05a", 35, 45);
+  else if (weaponId === "sandstorm_sling") spawnParticles(x, y, 7, "#d8b46a", 42, 38);
+  else if (weaponId === "acid_blowgun") spawnParticles(x, y, 5, "#7fe05a", 30, 38);
 }
 
 export function updateArrows(dt) {
@@ -392,6 +478,15 @@ export function updateArrows(dt) {
             e.rooted = Math.max(e.rooted || 0, 3);
             spawnParticles(e.x, enemyDrawY, 12, "#8fd8ff", 30, 60);
           }
+          if (ar.slowHit) e.slow = Math.max(e.slow || 0, ar.slowHit);
+          if (ar.poisonArrow) {
+            poisonEnemy(e, ar.poisonArrow, ar.poisonDmg || 1);
+            spawnParticles(e.x, enemyDrawY, 12, "#7fe05a", 58, 70);
+            spawnParticles(e.x, enemyDrawY, 5, "#b8ff7a", 32, 80);
+          }
+          if (ar.sandBlind) blindDustBurst(ar, e, enemyXIndex, enemyDrawY);
+          if (ar.splinterCount) splinterArrowBurst(ar, e, enemyXIndex, crit.damage, enemyDrawY);
+          if (ar.acidPool) spawnAcidPool(ar.x, ar.acidPool);
           if (ar.weaponId === "dark_bow") {
             spawnParticles(e.x, enemyDrawY, 12, "#aa44cc", 70, 90);
             spawnParticles(e.x, enemyDrawY, 6, "#440066", 40, 50);
@@ -409,6 +504,15 @@ export function updateArrows(dt) {
             spawnParticles(e.x, enemyDrawY, 7, "#c8ccd4", 55, 55);
             spawnParticles(e.x, enemyDrawY, 4, "#8a2a4a", 40, 45);
             Game.screenShake = Math.max(Game.screenShake, 0.1);
+          } else if (ar.weaponId === "splinter_bow") {
+            spawnParticles(e.x, enemyDrawY, 10, "#8fd05a", 62, 75);
+            spawnParticles(e.x, enemyDrawY, 5, "#d2b07a", 42, 55);
+          } else if (ar.weaponId === "sandstorm_sling") {
+            spawnParticles(e.x, enemyDrawY, 12, "#d8b46a", 68, 65);
+            spawnParticles(e.x, enemyDrawY, 6, "#ffe0a0", 42, 75);
+          } else if (ar.weaponId === "acid_blowgun") {
+            spawnParticles(e.x, enemyDrawY, 10, "#7fe05a", 58, 75);
+            spawnParticles(e.x, enemyDrawY, 5, "#b8ff7a", 36, 85);
           } else if (ar.weaponId === "long_bow") {
             spawnParticles(e.x, enemyDrawY, 5, "#8a2a4a", 40, 50);
             spawnParticles(e.x, enemyDrawY, 3, "#e8e0c8", 25, 40);
@@ -492,6 +596,9 @@ export function updateArrows(dt) {
                 playerShot: ar.playerShot, powered: ar.powered,
                 explosiveR: ar.explosiveR, explosiveFrac: ar.explosiveFrac,
                 gravityChance: ar.gravityChance, chainBounces: ar.chainBounces,
+                splinterCount: ar.splinterCount, splinterRadius: ar.splinterRadius, splinterDmgFrac: ar.splinterDmgFrac,
+                poisonArrow: ar.poisonArrow, poisonDmg: ar.poisonDmg, acidPool: ar.acidPool,
+                sandBlind: ar.sandBlind, sandBlindRadius: ar.sandBlindRadius, slowHit: ar.slowHit,
                 healOnKill: ar.healOnKill, goldOnKill: ar.goldOnKill, barrierOnKill: ar.barrierOnKill,
                 upgradeCol: ar.upgradeCol, upgradeRank: ar.upgradeRank,
                 _hitEnemies: new Set([e]), // never re-hit the enemy it bounced off

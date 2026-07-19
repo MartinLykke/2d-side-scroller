@@ -6,6 +6,7 @@ import { inject } from '../../core/services.js';
 import { Audio } from '../infrastructure/Audio.js';
 import { spawnCoin, spawnParticles } from '../world/SpawnSystem.js';
 import { currentCoinCap } from '../../util/DefenseStats.js';
+import { goldCollectorStats } from '../infrastructure/RoguelikeSystem.js';
 
 function flyingCoin(fromX, toX) {
   state.particles.push({
@@ -71,12 +72,11 @@ export function updatePayment(dt) {
   state.lastPaidStation = near;
 
   const payHeld = keys["arrowdown"] || keys["s"];
-  const payStarted = payHeld && state.payHoldTime <= 0;
   if (!payHeld) state.payHoldTime = 0;
   else state.payHoldTime += dt;
 
   if (near.instantPurchase) {
-    if (payStarted && state.payCooldown <= 0) completeInstantPurchase(near, player);
+    if (payHeld && state.payCooldown <= 0) completeInstantPurchase(near, player);
     return;
   }
 
@@ -107,6 +107,88 @@ function playerCoinMagnetRange() {
   }
   if (Game.nightCleared || (!Game.isNight && Game.time < CFG.phases.day)) range += 18;
   return range;
+}
+
+function seedCollectorFallback(index) {
+  const p = state.player;
+  const side = index % 2 ? 1 : -1;
+  return {
+    x: (p?.x || CFG.baseX) + side * (44 + index * 22),
+    y: groundY - 56,
+    homeOffset: 42 + index * 26,
+    side,
+    bob: Math.random() * Math.PI * 2,
+    sparkleT: Math.random(),
+    target: null,
+  };
+}
+
+function nearestCollectorCoin(collector, range, claimed) {
+  let best = null, bd = range;
+  for (const c of state.coins) {
+    if (!c.settled || c.mine || claimed.has(c)) continue;
+    const d = dist(collector.x, c.x);
+    if (d < bd) { bd = d; best = c; }
+  }
+  return best;
+}
+
+function updateGoldCollectors(dt) {
+  const stats = goldCollectorStats();
+  if (stats.count <= 0 || !state.player) {
+    if (state.goldCollectors?.length) state.goldCollectors = [];
+    return;
+  }
+
+  state.goldCollectors = state.goldCollectors || [];
+  while (state.goldCollectors.length < stats.count) {
+    state.goldCollectors.push(seedCollectorFallback(state.goldCollectors.length));
+  }
+  if (state.goldCollectors.length > stats.count) state.goldCollectors.length = stats.count;
+
+  const { player, coins, goldCollectors } = state;
+  const coinCap = currentCoinCap();
+  const claimed = new Set();
+
+  for (let i = 0; i < goldCollectors.length; i++) {
+    const w = goldCollectors[i];
+    w.bob = (w.bob || 0) + dt * (3.2 + i * 0.45);
+    w.sparkleT = Math.max(0, (w.sparkleT || 0) - dt);
+    w.flash = Math.max(0, (w.flash || 0) - dt);
+
+    if (w.target && (!coins.includes(w.target) || !w.target.settled || w.target.mine || claimed.has(w.target))) {
+      w.target = null;
+    }
+
+    if (player.coins >= coinCap) {
+      w.target = null;
+    } else if (!w.target) {
+      w.target = nearestCollectorCoin(w, stats.range, claimed);
+    }
+
+    if (w.target) claimed.add(w.target);
+
+    const behind = -(player.dir || 1) * (w.homeOffset || (42 + i * 26));
+    const homeX = player.x + behind + (w.side || 1) * 8 + Math.sin((w.bob || 0) * 0.7 + i) * 9;
+    const targetX = w.target ? w.target.x : homeX;
+    const speed = (w.target ? stats.speed : stats.speed * 0.72) * dt;
+    const dx = targetX - w.x;
+    w.x += Math.sign(dx) * Math.min(Math.abs(dx), speed);
+    w.y = groundY - 54 - Math.sin(w.bob || 0) * 7 - (w.target ? 10 : 0);
+
+    if (w.target && Math.abs(w.x - w.target.x) < stats.pickupRange) {
+      player.coins = clamp(player.coins + w.target.value, 0, coinCap);
+      const idx = coins.indexOf(w.target);
+      if (idx >= 0) coins.splice(idx, 1);
+      w.target = null;
+      w.flash = 0.24;
+      w.sparkleT = 0.18;
+      Audio.coin();
+      spawnParticles(w.x, groundY - 46, 5, "#ffe07a", 34, 48);
+    } else if (Math.random() < dt * (w.target ? 7 : 2)) {
+      spawnParticles(w.x, w.y || groundY - 56, 1, "#ffe9a3", 8, 16);
+    }
+  }
 }
 
 export function updateCoins(dt) {
@@ -149,4 +231,5 @@ export function updateCoins(dt) {
       }
     }
   }
+  updateGoldCollectors(dt);
 }

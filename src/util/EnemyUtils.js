@@ -1,14 +1,17 @@
-import { ENEMY_TYPES } from '../config/enemies.js';
-import { WEAPONS } from '../config/weapons.js';
+import { ENEMY_TYPES } from '../config/enemies.js?v=biomeboss1';
+import { WEAPONS, BIOME_WEAPON_DROPS } from '../config/weapons.js?v=biomeweapons1';
 import { groundY } from '../core/canvas.js';
 import { Game, state } from '../core/state.js';
 import { inject } from '../core/services.js';
-import { spawnGoldReward, spawnParticles, floaty } from '../systems/world/SpawnSystem.js';
+import { spawnGoldReward, spawnParticles, floaty } from '../systems/world/SpawnSystem.js?v=biomeboss1';
 import { Audio } from '../systems/infrastructure/Audio.js';
 import { registerEnemyKill } from '../systems/infrastructure/RoguelikeSystem.js';
+import { biomeAt } from '../rendering/Effects.js?v=biomes4';
 
 const PORTAL_GUARDIAN_WEAPON_DROP_CHANCE = 0.25;
 const PORTAL_GUARDIAN_WEAPON_RARITIES = [1, 2, 3];
+const BIOME_WEAPON_DROP_CHANCE = 0.045;
+const BIOME_WEAPON_BOSS_DROP_CHANCE = 0.28;
 const MAX_DEATH_PARTICLES = 700;
 
 const DEFAULT_DEATH_PROFILE = {
@@ -46,6 +49,11 @@ const ENEMY_DEATH_PROFILES = {
     chunks: ["#2a0a08", "#5a2416", "#8a4a2a", "#6b5a45"],
     ember: true,
     mass: 3.0,
+  },
+  chainImp: {
+    blood: ["#4b0710", "#7a1020", "#b12835"],
+    chunks: ["#3a2a22", "#6b6b72", "#3a3a40", "#7a5142"],
+    mass: 0.6,
   },
   fireDragon: {
     blood: ["#3a0706", "#7a1408", "#b02a18"],
@@ -279,10 +287,28 @@ export function spawnHumanBlood(u, intensity = 1, dir = 0, y = null) {
 
 function rollPortalGuardianWeaponDrop(e) {
   if (Math.random() > PORTAL_GUARDIAN_WEAPON_DROP_CHANCE) return;
-  const candidates = Object.keys(WEAPONS).filter(id => PORTAL_GUARDIAN_WEAPON_RARITIES.includes(WEAPONS[id].rarity));
+  const candidates = Object.keys(WEAPONS).filter(id => !WEAPONS[id].biomeOnly && PORTAL_GUARDIAN_WEAPON_RARITIES.includes(WEAPONS[id].rarity));
   if (!candidates.length) return;
   const weaponId = candidates[Math.floor(Math.random() * candidates.length)];
   state.lootItems.push({ x: e.x, weaponId, dropVy: -350, dropY: groundY - 150 });
+}
+
+function rollBiomeWeaponDrop(e, t) {
+  const biome = biomeAt(e.x);
+  const pool = BIOME_WEAPON_DROPS[biome?.id] || null;
+  if (!pool || !pool.length) return;
+  const chance = t?.boss ? BIOME_WEAPON_BOSS_DROP_CHANCE : BIOME_WEAPON_DROP_CHANCE;
+  if (Math.random() > chance) return;
+  const owned = new Set();
+  if (state.player?.weapon) owned.add(state.player.weapon);
+  for (const it of state.player?.inventory || []) if (it.kind === "weapon") owned.add(it.weaponId);
+  const candidates = pool.filter(id => WEAPONS[id] && !owned.has(id));
+  const dropPool = candidates.length ? candidates : pool.filter(id => WEAPONS[id]);
+  if (!dropPool.length) return;
+  const weaponId = dropPool[Math.floor(Math.random() * dropPool.length)];
+  state.lootItems.push({ x: e.x, weaponId, dropVy: -350, dropY: groundY - 150 });
+  spawnParticles(e.x, groundY - 36, 18, WEAPONS[weaponId].col, 90, 120);
+  floaty(e.x, biome.name + " relic", WEAPONS[weaponId].col, 14);
 }
 
 export function spawnImpBlood(e, intensity = 1, y = null) {
@@ -387,11 +413,12 @@ export function killEnemyWithAnimation(e, knockDirection = 0) {
     Game.screenShake = Math.max(Game.screenShake || 0, Math.min(t.boss ? 0.9 : 0.55, 0.1 + violence * 0.1 + (t.boss ? 0.38 : 0)));
   }
 
+  const killReward = t.reward + (e.bountyReward || 0);
   Audio.enemyDie();
-  registerEnemyKill(t.reward);
+  registerEnemyKill(killReward);
   registerMomentumKill(e, t);
   const addXP = inject('addXP');
-  if (addXP) addXP(t.reward * 8);
+  if (addXP) addXP(killReward * 8);
 
   if (t.legendary && state.legendaryBoss === e) {
     state.legendaryBoss = null;
@@ -401,6 +428,7 @@ export function killEnemyWithAnimation(e, knockDirection = 0) {
   }
 
   if (e.portalGuardian) rollPortalGuardianWeaponDrop(e);
+  rollBiomeWeaponDrop(e, t);
   if (e.type === "fireDragon") {
     state.lootItems.push({ x: e.x, weaponId: "meteor_tome", dropVy: -350, dropY: groundY - 150 });
   }
@@ -436,7 +464,7 @@ export function updateDyingEnemies(dt) {
 
       // Drop coins once during animation
       if (e.shouldDropCoins && e.deathT > 0.1) {
-        spawnGoldReward(e.x, et.reward, et.boss ? "boss" : "enemy", { fromY: groundY - 28, spreadX: 22, vx: 80, vyMin: 120, vyMax: 260 });
+        spawnGoldReward(e.x, et.reward + (e.bountyGold || 0), et.boss ? "boss" : "enemy", { fromY: groundY - 28, spreadX: 22, vx: 80, vyMin: 120, vyMax: 260 });
         e.shouldDropCoins = false;
       }
 

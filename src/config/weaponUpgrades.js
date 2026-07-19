@@ -260,6 +260,43 @@ export const UNIQUE_UPGRADES = {
     { id:"eventide_pages",tier:"epic",      name:"Eventide Sigil",   desc:"The staff carves a second void sigil and tears a smaller scar", effect:{ spellEcho:0.25, aoeBonus:25, voidScar:0.8 }, vfxCol:"#c080ff" },
     { id:"total_collapse",tier:"legendary", name:"Total Collapse",   desc:"Reality collapses twice, pulling enemies into splitting void scars", effect:{ singularity:true, splitOrbs:3, freeCast:0.2, spellEcho:0.35, voidScar:1.6 }, vfxCol:"#ffffff" },
   ],
+  // --- Biome-drop weapons ---
+  splinter_bow: [
+    { id:"rootmothers_embrace", tier:"legendary", name:"Rootmother's Embrace", desc:"Splinters pin enemies in place and arrows bite through the line", effect:{ splinterCount:2, splinterDmgFrac:0.18, rootHit:0.55, pierce:1 }, vfxCol:"#d6b15a" },
+  ],
+  lumberjack_axe: [
+    { id:"heartwood_cleaver", tier:"legendary", name:"Heartwood Cleaver", desc:"Every chop tears a wider heartwood shock and yanks nearby enemies around", effect:{ splashFrac:0.35, splashR:35, knockBonus:120, alwaysCleave:true }, vfxCol:"#d18c45" },
+  ],
+  icicle_spear: [
+    { id:"permafrost_pike", tier:"legendary", name:"Permafrost Pike", desc:"Frozen kills burst into a cold shockwave while the lance hits harder", effect:{ frostHit:2, rootHit:0.35, shatter:4, novaR:115, novaFrac:0.55, novaCol:"#bfefff" }, vfxCol:"#ffffff" },
+  ],
+  blizzard_chime: [
+    { id:"glacial_rhapsody", tier:"legendary", name:"Glacial Rhapsody", desc:"The frost aura bites harder and every cast erupts into a larger freezing geyser", effect:{ aoeBonus:32, spellFrost:2.5, geyser:1.2, frostAura:0.45, frostAuraRadius:45 }, vfxCol:"#ffffff" },
+  ],
+  cactus_whip: [
+    { id:"dune_stinger_whip", tier:"legendary", name:"Dune-Stinger Whip", desc:"Scorpion barbs spread poison down the line and snap faster", effect:{ poisonHit:2.5, slowHit:0.45, splashFrac:0.22, splashR:45, speedBonus:0.14 }, vfxCol:"#d9a642" },
+  ],
+  sandstorm_sling: [
+    { id:"khamsin_wrath", tier:"legendary", name:"Khamsin Wrath", desc:"Shots burst into a dragging dust storm that blinds clustered enemies", effect:{ explosiveR:105, explosiveFrac:0.65, gravityArrow:0.45, sandBlind:2 }, vfxCol:"#ffe0a0" },
+  ],
+  acid_blowgun: [
+    { id:"hydras_breath", tier:"legendary", name:"Hydra's Breath", desc:"The blowgun spits more darts and leaves acid eating through the wave", effect:{ multishot:0.65, poisonArrow:2.5, acidPool:1 }, vfxCol:"#b8ff7a" },
+  ],
+  gator_hammer: [
+    { id:"apex_sovereign", tier:"legendary", name:"Apex Sovereign", desc:"The maul's mud-wave crushes weak enemies and throws the rest back", effect:{ execute:0.18, splashFrac:0.35, splashR:45, knockBonus:180 }, vfxCol:"#a6d36a" },
+  ],
+  obsidian_brand: [
+    { id:"magma_overlord", tier:"legendary", name:"Magma Overlord", desc:"Overheated cuts throw a molten ground wave and burn everything they touch", effect:{ burnHit:2, heatStacks:-1, heatBurstRadius:50, beamChance:0.35, beamFrac:0.9 }, vfxCol:"#ffcc60" },
+  ],
+  magma_mortar: [
+    { id:"volcanic_eruption", tier:"legendary", name:"Volcanic Eruption", desc:"Mortar shots break into a storm of lava fragments over a wider crater", effect:{ meteorFragments:3, aoeBonus:40, firePool:true, spellBurn:1 }, vfxCol:"#fff0a0" },
+  ],
+  shadow_scythe: [
+    { id:"void_reaper", tier:"legendary", name:"Void Reaper", desc:"Reaping arcs send shadow blades through the line and feed you on kills", effect:{ beamChance:0.45, beamFrac:0.9, healOnKill:0.25, novaR:90, novaFrac:0.55, novaCol:"#5d2ca8" }, vfxCol:"#d0a4ff" },
+  ],
+  possessed_heart: [
+    { id:"eldritch_catalyst", tier:"legendary", name:"Eldritch Catalyst", desc:"The heart opens into a stronger void beam that echoes and leaves deeper scars", effect:{ splitOrbs:2, spellEcho:0.35, voidScar:1, freeCast:0.15 }, vfxCol:"#f0c8ff" },
+  ],
 };
 
 // Dedicated "Aura & Control" branch for the Short Bow — offered one at a time, in order.

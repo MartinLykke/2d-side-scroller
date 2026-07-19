@@ -1,16 +1,16 @@
 import { CFG } from '../../config/config.js';
-import { ENEMY_TYPES } from '../../config/enemies.js';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeboss1';
 import { clamp, lerp, dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { inject } from '../../core/services.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js';
-import { meleeHitPlayer, damagePlayer } from '../combat/PlayerCombat.js';
-import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js';
-import { fortOnWallStruck } from '../world/FortificationSystem.js';
+import { spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js?v=biomeboss1';
+import { meleeHitPlayer, damagePlayer } from '../combat/PlayerCombat.js?v=biomeboss1';
+import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeboss1';
+import { fortOnWallStruck } from '../world/FortificationSystem.js?v=biomeweapons1';
 import { wallHeight, wallReady, wallRenderWidth, entityWallLift } from '../../entities/Wall.js';
-import { updateBoss, dropRiderFromDragon, spawnFirePool } from './BossAI.js';
+import { updateBoss, dropRiderFromDragon, spawnFirePool } from './BossAI.js?v=biomeboss1';
 
 const IMP_STACK_STEP = 18;
 const IMP_ATTACH_RANGE = 34;
@@ -97,6 +97,40 @@ function debuffSpeedMult(e) {
   return m;
 }
 
+function tickPoisonAndBlind(e, dt) {
+  if (e.blind > 0) {
+    e.blind -= dt;
+    if (e.blind <= 0) {
+      e.blind = 0;
+      e.blindedHits = 0;
+    }
+  }
+  if (!(e.poison > 0)) return false;
+  e.poison -= dt;
+  e.poisonTick = (e.poisonTick || 0) - dt;
+  const py = groundY + (e.fy || 0) - 24;
+  if (Math.random() < dt * 7) spawnParticles(e.x + rand(-6, 6), py + rand(-7, 5), 1, "#7fe05a", 20, 35);
+  if (e.poisonTick <= 0) {
+    const dmg = e.poisonDmg || 1;
+    e.hp -= dmg;
+    e.flash = Math.max(e.flash || 0, 0.08);
+    e.poisonTick = 0.85;
+    spawnParticles(e.x, py, 7, "#7fe05a", 44, 62);
+    spawnParticles(e.x, py, 3, "#b8ff7a", 28, 72);
+    spawnImpBlood(e, 0.35, py);
+    floaty(e.x, "-" + dmg, "#7fe05a", 12);
+    if (e.hp <= 0) {
+      killEnemy(e);
+      return true;
+    }
+  }
+  if (e.poison <= 0) {
+    e.poison = 0;
+    e.poisonDmg = 0;
+  }
+  return false;
+}
+
 function wallAt(side, x) {
   let best = null;
   for (const w of state.walls) {
@@ -159,6 +193,9 @@ function clearImpStackDrop(e) {
   e.leftStack = false;
   e.hasLeftStack = false;
   e.leftStackWall = null;
+  e.wallDropT = 0;
+  e.wallDropStartFy = undefined;
+  e.wallDropLand = 0;
 }
 
 function impStackDropBypassesWall(e, wall) {
@@ -428,6 +465,14 @@ function killWall(w) {
 // Shared wall-chipping attack: crit roll, hit feedback and collapse check.
 // Runeforge wards retaliate against the attacker when one is provided.
 function damageWall(wall, baseDmg, particleCount = 3, attacker = null) {
+  if ((attacker?.blindedHits || 0) > 0) {
+    attacker.blindedHits--;
+    attacker.blind = Math.max(attacker.blind || 0, 0.7);
+    attacker.attackAnim = Math.max(attacker.attackAnim || 0, 0.16);
+    floaty(attacker.x, "Miss", "#d8b46a", 12);
+    spawnParticles(attacker.x, groundY - 24 + (attacker.fy || 0), 7, "#d8b46a", 42, 45);
+    return;
+  }
   const crit = applyCrit(baseDmg, CFG.critChance, CFG.critMultiplier);
   wall.hp -= crit.damage;
   wall.flash = 0.15;
@@ -611,7 +656,7 @@ function updateImpAttack(e, t, dt) {
 
 function updateImpPlayerCombat(e, t, dt) {
   const player = state.player;
-  if (!player || player.hp <= 0 || Game.inMine || e.wallTopWall || e.aiState === "climbOver" || e.aiState === "stacking" || e.aiState === "stackQueue") return false;
+  if (!player || player.hp <= 0 || Game.inMine || e.wallTopWall || e.aiState === "climbOver" || e.aiState === "stacking" || e.aiState === "stackQueue" || e.aiState === "climbChain") return false;
   if (playerCombatLift() > 20) return false;
   const d = dist(e.x, player.x);
   const near = d < 130 && e.carry === 0;
@@ -762,6 +807,8 @@ function updateBruteThrow(e, t, dt) {
   if (!imp) return;
   e.throwCd = rand(5, 9);
   e.attackAnim = 0.3 * swingMult(e);
+  e.throwAnim = 0.55; // render-only: drives the distinct grab→wind-up→hurl pose
+  e.throwDir = Math.sign(wall.x - e.x) || e.dir;
   breakImpStack(imp);
   imp.thrownT = 0;
   imp.thrownStartX = imp.x;
@@ -1020,8 +1067,13 @@ function updateAshPriest(e, t, dt) {
 
 function updateImp(e, t, dt) {
   if (e.aiState === "thrown") return updateThrownImp(e, t, dt);
-  if (e.knock && (e.aiState === "stacking" || e.aiState === "climbOver")) {
+  if (e.knock && (e.aiState === "stacking" || e.aiState === "climbOver" || e.aiState === "climbChain")) {
+    const wasChain = e.aiState === "climbChain";
     breakImpStack(e);
+    if (wasChain) {
+      e.chainClimbWall = null;
+      if ((e.fy || 0) < -2) { e.leftStack = true; e.hasLeftStack = false; e.vy = 0; }
+    }
     setImpState(e, "recovery");
   }
 
@@ -1033,6 +1085,7 @@ function updateImp(e, t, dt) {
 
   if (e.aiState === "impAttack") return updateImpAttack(e, t, dt);
   if (e.aiState === "combat") return updateImpCombat(e, t, dt);
+  if (e.aiState === "climbChain") return updateImpChainClimb(e, t, dt);
 
   if (updateImpPlayerCombat(e, t, dt)) return true;
 
@@ -1070,6 +1123,8 @@ function updateImp(e, t, dt) {
       if (e.vaultT < 1) return true;
       e.vaultWall = null;
       e.fy = 0;
+      e.wallDropLand = 0.18;
+      spawnParticles(e.x, groundY - 4, 5, "#6b5a45", 32, 24);
     } else {
       e.fy = Math.min(0, (e.fy || 0) + 120 * dt);
     }
@@ -1113,6 +1168,17 @@ function updateImp(e, t, dt) {
     breakImpStack(e);
     setImpState(e, "advance");
     return false;
+  }
+
+  // A chain imp's grappling line is a fast climbing route: once close enough,
+  // commit to the chain instead of building a slow stack.
+  if (chainForWall(wall) && Math.abs(e.x - wallOutsideX(wall)) < 260) {
+    breakImpStack(e);
+    e.chainClimbWall = wall;
+    e.climbChainT = 0;
+    e.climbChainSlot = rand(-3, 3);   // hug the hanging chain line
+    setImpState(e, "climbChain");
+    return updateImpChainClimb(e, t, dt);
   }
 
   const attachX = wallOutsideX(wall);
@@ -1220,6 +1286,138 @@ function updateImp(e, t, dt) {
     e.attackAnim = 0.18;
     damageWall(wall, Math.max(1, t.dmg * 0.12), 2, e);
   }
+  return true;
+}
+
+// ── Chain Imp ─────────────────────────────────────────────────────────────────
+// A lean support imp that hangs back and hooks a grappling chain onto a wall.
+// While the chain is live, the rest of the imp horde climbs it to vault the wall
+// far faster than stacking. The chain lives on the chain imp entity — kill it
+// (or knock a climber loose) and any imps mid-climb drop back outside.
+const CHAIN_STANDOFF = 92;          // how far out from the wall the chain imp braces
+const IMP_CHAIN_CLIMB_RATE = 1.5;   // full climb in ~0.67s — much faster than a stack
+
+// The live chain (if any) a given wall currently has hooked to it.
+function chainForWall(w) {
+  if (!w) return null;
+  for (const e of state.enemies) {
+    if (e.type !== "chainImp" || e.dying || e.fleeing) continue;
+    if (e.chainWall === w && e.aiState === "holding") return e;
+  }
+  return null;
+}
+
+// Nearest standing wall on the imp's side that isn't already chained by someone else.
+function chainImpTargetWall(e) {
+  const side = e.x < CFG.baseX ? -1 : 1;
+  let best = null, bd = 1e9;
+  for (const w of state.walls) {
+    if (!wallReady(w) || w.side !== side) continue;
+    const holder = chainForWall(w);
+    if (holder && holder !== e) continue;
+    const d = Math.abs(e.x - w.x);
+    if (d < bd) { bd = d; best = w; }
+  }
+  return best;
+}
+
+// An imp scrambling up a chain: scoot to the anchor, race up the line, then
+// vault over the top exactly like a stack-topping imp would.
+function updateImpChainClimb(e, t, dt) {
+  const w = e.chainClimbWall;
+  if (!w || !wallReady(w) || !chainForWall(w)) {
+    // chain cut or its imp is dead — drop back down outside the wall
+    e.chainClimbWall = null;
+    e.climbChainT = 0;
+    if ((e.fy || 0) < -2) { e.leftStack = true; e.hasLeftStack = false; e.vy = 0; }
+    setImpState(e, e.breachedWall ? "vaulting" : "advance");
+    return true;
+  }
+  const anchorX = wallOutsideX(w) + (e.climbChainSlot || 0);
+  if ((e.climbChainT || 0) <= 0 && Math.abs(e.x - anchorX) > 2) {
+    e.dir = Math.sign(anchorX - e.x) || e.dir;
+    e.x += Math.sign(anchorX - e.x) * Math.min(Math.abs(anchorX - e.x), t.speed * 1.5 * dt);
+    e.fy = 0;
+    return true;
+  }
+  e.x = anchorX;
+  e.dir = -w.side;
+  e.climbChainT = Math.min(1, (e.climbChainT || 0) + dt * IMP_CHAIN_CLIMB_RATE);
+  const ct = e.climbChainT;
+  const eased = ct * ct * (3 - 2 * ct);
+  e.fy = mix(0, -wallHeight(w), eased);
+  if (Math.random() < 0.25) spawnParticles(e.x, groundY + (e.fy || 0), 1, "#6b5a45", 10, 16);
+  if (ct >= 1) {
+    breakImpStack(e);
+    e.chainClimbWall = null;
+    e.climbChainT = 0;
+    e.wallTopWall = null;
+    e.x = w.x;
+    e.fy = -wallHeight(w);
+    const defender = nearestTopDefenderForWall(w, e.x, e);
+    if (defender) { e.combatTarget = defender; setImpState(e, "combat"); return updateImpCombat(e, t, dt); }
+    if (hasTopDefenderForWall(w)) { setImpState(e, "combat"); return updateImpCombat(e, t, dt); }
+    startImpVault(e, w);
+  }
+  return true;
+}
+
+function updateChainImp(e, t, dt) {
+  const { base } = state;
+
+  // Holding a live chain: crouch at the standoff point and keep it taut.
+  if (e.aiState === "holding") {
+    const w = e.chainWall;
+    if (!w || !wallReady(w)) { e.chainWall = null; e.chainAttached = false; setImpState(e, "advance"); }
+    else {
+      const standX = wallOutsideX(w) + w.side * CHAIN_STANDOFF;
+      if (Math.abs(e.x - standX) > 3) {
+        e.dir = Math.sign(standX - e.x) || e.dir;
+        e.x += Math.sign(standX - e.x) * Math.min(Math.abs(standX - e.x), t.speed * 0.7 * dt);
+      } else e.dir = -w.side;
+      if (Math.random() < dt * 3) spawnParticles(e.x, groundY - 8, 1, "#6b5a45", 10, 14);
+      return true;
+    }
+  }
+
+  // Winding up the throw: plant feet, spin the hook, then bite it into the wall.
+  if (e.aiState === "hooking") {
+    const w = e.chainWall;
+    const rival = chainForWall(w);
+    if (!w || !wallReady(w) || (rival && rival !== e)) { e.chainWall = null; setImpState(e, "advance"); return true; }
+    e.dir = -w.side;
+    e.hookT = (e.hookT || 0) + dt;
+    e.attackAnim = Math.max(e.attackAnim || 0, 0.2);
+    if (Math.random() < 0.6) spawnParticles(e.x + e.dir * 6, groundY - 30, 1, "#8a6a3a", 22, 30);
+    if (e.hookT >= (t.hookWindup || 0.95)) {
+      e.chainAttached = true;
+      setImpState(e, "holding");
+      const hy = groundY - wallHeight(w);
+      spawnParticles(wallOutsideX(w), hy, 12, "#caa46a", 60, 55);
+      spawnParticles(wallOutsideX(w), hy, 5, "#ffd48a", 40, 40);
+      floaty(e.x, "Hooked!", "#caa46a", 13);
+      Audio.hit();
+    }
+    return true;
+  }
+
+  // Seek a wall to exploit; if there's none, loiter behind the horde.
+  const wall = chainImpTargetWall(e);
+  if (!wall) {
+    e.dir = Math.sign(base.x - e.x) || e.dir;
+    e.x += e.dir * t.speed * 0.5 * debuffSpeedMult(e) * dt;
+    return true;
+  }
+  e.chainWall = wall;
+  const standX = wallOutsideX(wall) + wall.side * CHAIN_STANDOFF;
+  e.dir = Math.sign(wall.x - e.x) || e.dir;
+  if (Math.abs(e.x - standX) > 6) {
+    e.x += Math.sign(standX - e.x) * t.speed * debuffSpeedMult(e) * unopposedSprintMult(e) * dt;
+    return true;
+  }
+  e.hookT = 0;
+  e.attackAnim = 0.4;
+  setImpState(e, "hooking");
   return true;
 }
 
@@ -1402,6 +1600,7 @@ export function updateEnemies(dt) {
       if (e.slow > 0) e.slow -= dt;
       if (e.frost > 0) e.frost -= dt;
       if (e.rooted > 0) e.rooted -= dt;
+      if (tickPoisonAndBlind(e, dt)) continue;
       if (e.fleeing) {
         if (fleeToPortal(e, t, dt)) enemies.splice(i, 1);
         continue;
@@ -1416,6 +1615,10 @@ export function updateEnemies(dt) {
       if (e.attackAnim > 0) e.attackAnim -= dt;
       e.attackCd -= dt;
       if (e.shootCd !== undefined) e.shootCd -= dt;
+      if (e.slow > 0) e.slow -= dt;
+      if (e.frost > 0) e.frost -= dt;
+      if (e.rooted > 0) e.rooted -= dt;
+      if (tickPoisonAndBlind(e, dt)) continue;
       if (e.fleeing) {
         if (fleeToPortal(e, t, dt)) enemies.splice(i, 1);
         continue;
@@ -1461,6 +1664,8 @@ export function updateEnemies(dt) {
     if (e.type === "imp" && e.leftStack && !e.hasLeftStack) {
       if (e.fy === undefined) e.fy = -60; // Start slightly airborne, as if hopping off the wall
       if (e.vy === undefined) e.vy = 0;
+      if (e.wallDropStartFy === undefined) e.wallDropStartFy = Math.min(-12, e.fy || -60);
+      e.wallDropT = (e.wallDropT || 0) + dt;
       e.climbProgress = undefined; // Clear climb animation
       e.stackPos = undefined;
 
@@ -1472,7 +1677,13 @@ export function updateEnemies(dt) {
         e.fy = 0;
         e.vy = 0;
         e.hasLeftStack = true; // Mark as permanently left stack
+        e.wallDropLand = 0.22;
+        e.wallDropT = 0;
+        e.wallDropStartFy = undefined;
+        spawnParticles(e.x, groundY - 4, 5, "#6b5a45", 32, 24);
       }
+    } else if (e.type === "imp" && (e.wallDropLand || 0) > 0) {
+      e.wallDropLand = Math.max(0, (e.wallDropLand || 0) - dt);
     }
 
     // Handle knockback with recovery state (thrown imps keep their arc)
@@ -1505,6 +1716,7 @@ export function updateEnemies(dt) {
       }
       if (e.burn <= 0) { e.burn = 0; e.ignited = false; e.burnDmg = 0; }
     }
+    if (tickPoisonAndBlind(e, dt)) continue;
     if (e.slow > 0) e.slow -= dt;
     if (e.frost > 0) {
       e.frost -= dt;
@@ -1525,6 +1737,7 @@ export function updateEnemies(dt) {
       if (e.stompCd === undefined) e.stompCd = rand(t.stompMin, t.stompMax);
       if (e.chargeFlash > 0) e.chargeFlash -= dt;
       if (e.stompFlash > 0) e.stompFlash -= dt;
+      if (e.throwAnim > 0) e.throwAnim -= dt;
 
       if (e.charging) {
         e.chargeT = (e.chargeT || 0) + dt;
@@ -1597,6 +1810,8 @@ export function updateEnemies(dt) {
     if (e.type === "ashPriest" && updateAshPriest(e, t, dt)) continue;
 
     if (e.type === "siegeImp" && updateSiegeImp(e, t, dt)) continue;
+
+    if (e.type === "chainImp" && updateChainImp(e, t, dt)) continue;
 
     if (e.type === "imp" && updateImp(e, t, dt)) continue;
 

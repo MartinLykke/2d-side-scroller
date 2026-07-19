@@ -4,7 +4,7 @@ import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
 import { spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js';
-import { meleeHitPlayer } from '../combat/PlayerCombat.js';
+import { meleeHitPlayer } from '../combat/PlayerCombat.js?v=biomeweapons1';
 import { wallHeight } from '../../entities/Wall.js';
 import {
   mix, changeState, wallAt, wallInsideX, playerCombatLift,

@@ -4,14 +4,14 @@
 // renderer and the inventory preview share one implementation.
 import { clamp, lerp } from '../util/math.js';
 import { ctx, groundY } from '../core/canvas.js';
-import { WEAPONS, RARITY_COL } from '../config/weapons.js';
-import { cachedUpgradeEffects } from '../config/weaponUpgrades.js';
+import { WEAPONS, RARITY_COL } from '../config/weapons.js?v=biomeweapons1';
+import { cachedUpgradeEffects } from '../config/weaponUpgrades.js?v=biomeweapons1';
 import { ARMORS, ARMOR_RARITY_COL } from '../config/armor.js';
 import { shootPose, ease, drawBow, limb } from './sprites/Archer.js';
-import { drawWandModel, wandTipLength, roundedRect } from './DrawHelpers.js';
+import { drawWandModel, wandTipLength, roundedRect } from './DrawHelpers.js?v=biomeweapons1';
 import { armorOutfit } from './ArmorOutfits.js';
 
-export const WEAPON_TYPE_LABEL = { melee: "Melee", ranged: "Bow", magic: "Magic" };
+export const WEAPON_TYPE_LABEL = { melee: "Melee", ranged: "Ranged", magic: "Magic" };
 
 // ---------- Small helpers ----------
 function rarityHalo(rarity, col, r, extra = 0) {
@@ -514,6 +514,51 @@ export function drawMeleeWeaponModel(weaponId, w, len, fx) {
   const upgEpic = rank >= 2;
   const upgLeg = rank >= 3;
   const vCol = upgradeColor(fx, w.col);
+  if (weaponId.includes("whip")) {
+    const t = performance.now() / 1000;
+    ctx.save();
+    ctx.strokeStyle = "#3a281a"; ctx.lineWidth = 3.3; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-8, 0); ctx.lineTo(4, 0); ctx.stroke();
+    ctx.strokeStyle = w.col; ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.moveTo(2, 0);
+    for (let i = 1; i <= 18; i++) {
+      const p = i / 18;
+      const x = p * len;
+      const y = Math.sin(p * Math.PI * 2.4 + t * 3) * (3 + p * 7);
+      if (i === 1) ctx.lineTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.fillStyle = "#e8d8a8";
+    for (let k = 0; k < 7; k++) {
+      const p = 0.22 + k * 0.1;
+      const x = p * len;
+      const y = Math.sin(p * Math.PI * 2.4 + t * 3) * (3 + p * 7);
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 2.2, y - 3); ctx.lineTo(x + 0.8, y - 1.2); ctx.closePath(); ctx.fill();
+    }
+    if (upgLeg) drawGlowLine(3, 0, len, Math.sin(t * 3) * 5, vCol, 8, 0.22);
+    ctx.restore();
+    return;
+  }
+  if (weaponId.includes("scythe")) {
+    const t = performance.now() / 1000;
+    ctx.save();
+    ctx.strokeStyle = "#150d22"; ctx.lineWidth = 3.4; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-8, 0); ctx.lineTo(len + 10, 0); ctx.stroke();
+    ctx.strokeStyle = "#4b2a75"; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(-5, -1.1); ctx.lineTo(len + 7, -1.1); ctx.stroke();
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.36 + 0.14 * Math.sin(t * 4);
+    ctx.strokeStyle = vCol; ctx.lineWidth = upgLeg ? 9 : 6; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.arc(len + 5, -5, 17 + upgLeg * 4, -2.8, -0.2); ctx.stroke();
+    ctx.restore();
+    const blade = ctx.createLinearGradient(len - 2, -22, len + 18, 2);
+    blade.addColorStop(0, "#f0d8ff"); blade.addColorStop(0.45, w.col); blade.addColorStop(1, "#120018");
+    ctx.strokeStyle = blade; ctx.lineWidth = 3.2; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.arc(len + 5, -5, 18, -2.75, -0.08); ctx.stroke();
+    ctx.fillStyle = "#d0a4ff"; ctx.beginPath(); ctx.arc(len + 4, 0, 2.2, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    return;
+  }
   if (weaponId.includes("spear")) {
     const gilded = weaponId === "gilded_spear";
     const t = performance.now() / 1000;
@@ -662,6 +707,49 @@ export function drawMeleeWeaponModel(weaponId, w, len, fx) {
     return;
   }
   drawSwordLikeWeapon(weaponId, w, len, fx);
+}
+
+function drawSlingWeaponModel(w, fx = null, loaded = true) {
+  const t = performance.now() / 1000;
+  const col = upgradeColor(fx, w.col);
+  ctx.save();
+  ctx.strokeStyle = "#5b3a22"; ctx.lineWidth = 2.2; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-9, -8); ctx.quadraticCurveTo(1, -2, 10, -2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-9, 8); ctx.quadraticCurveTo(1, 2, 10, 2); ctx.stroke();
+  ctx.fillStyle = "#7a4f28";
+  roundedRect(6, -5, 10, 10, 4); ctx.fill();
+  ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke();
+  if (loaded) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.32 + 0.12 * Math.sin(t * 5);
+    const g = ctx.createRadialGradient(12, 0, 1, 12, 0, 12);
+    g.addColorStop(0, "#ffe0a0"); g.addColorStop(1, "rgba(120,80,30,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(12, 0, 13, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(12, 0, 4.5, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawBlowgunWeaponModel(w, fx = null) {
+  const t = performance.now() / 1000;
+  const col = upgradeColor(fx, w.col);
+  ctx.save();
+  ctx.strokeStyle = "#4f3422"; ctx.lineWidth = 4; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-17, 0); ctx.lineTo(21, 0); ctx.stroke();
+  ctx.strokeStyle = "#8b5d36"; ctx.lineWidth = 1.3;
+  ctx.beginPath(); ctx.moveTo(-14, -1.1); ctx.lineTo(18, -1.1); ctx.stroke();
+  ctx.strokeStyle = col; ctx.lineWidth = 1.1;
+  for (let k = 0; k < 4; k++) {
+    const x = -10 + k * 7;
+    ctx.beginPath(); ctx.moveTo(x, -2.5); ctx.lineTo(x + 2.4, 2.5); ctx.stroke();
+  }
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.25 + 0.08 * Math.sin(t * 4);
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(21, 0, 9, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = "#d8f0c0";
+  ctx.beginPath(); ctx.ellipse(-18, -3, 2.2, 4.4, -0.7, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-16, 4, 2, 4, 0.6, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
 }
 
 function drawHeldCrossbow(hx, hy, aim, pull, recoil, loaded, col, fx = null) {
@@ -871,6 +959,11 @@ export function drawWeaponModel(weaponId, s = 1, opts = {}) {
     ctx.rotate(-0.72);
     ctx.translate(-(len - 4) / 2, 0);
     drawMeleeWeaponModel(weaponId, w, len, modelFx);
+  } else if (weaponId === "sandstorm_sling") {
+    drawSlingWeaponModel(w, modelFx, true);
+  } else if (weaponId === "acid_blowgun") {
+    ctx.rotate(-0.18);
+    drawBlowgunWeaponModel(w, modelFx);
   } else if (weaponId === "crossbow") {
     const crossCol = modelFx?._vfxCols?.length ? modelFx._vfxCols[modelFx._vfxCols.length - 1] : w.col;
     drawHeldCrossbow(-2, 0, 1, 0, 0, true, crossCol, modelFx);
@@ -1672,6 +1765,31 @@ export function drawHeldWeapon(player, px = 0) {
       drawPlayerWeaponArm(frontSh.x, frontSh.y, grip.x + 4 - recoil * 3, grip.y, 2.8);
       const crossCol = weaponFx._vfxCols?.length ? weaponFx._vfxCols[weaponFx._vfxCols.length - 1] : w.col;
       drawHeldCrossbow(grip.x + 6, grip.y, aim, pull, recoil, true, crossCol, weaponFx);
+    } else if (player.weapon === "sandstorm_sling") {
+      const slingSwing = shoot?.phase === "draw" ? ease(shoot.p) : shoot?.phase === "release" ? 1 - shoot.p : 0;
+      const grip = { x: frontSh.x + 5 + aim * 7, y: frontSh.y + 8 - aim * 6 };
+      drawPlayerWeaponArm(backSh.x, backSh.y, grip.x - 7, grip.y + 6, 2.6);
+      drawPlayerWeaponArm(frontSh.x, frontSh.y, grip.x, grip.y, 2.8);
+      ctx.save();
+      ctx.translate(grip.x + 5, grip.y);
+      ctx.rotate(-0.35 + aim * 0.28 + slingSwing * 1.15);
+      drawSlingWeaponModel(w, weaponFx, true);
+      ctx.restore();
+    } else if (player.weapon === "acid_blowgun") {
+      const puff = shoot?.phase === "release" ? 1 - shoot.p : 0;
+      const grip = { x: frontSh.x + 6 + aim * 8 + puff * 2, y: frontSh.y + 5 - aim * 5 };
+      drawPlayerWeaponArm(backSh.x, backSh.y, grip.x - 11, grip.y + 2, 2.6);
+      drawPlayerWeaponArm(frontSh.x, frontSh.y, grip.x + 5, grip.y - 1, 2.7);
+      ctx.save();
+      ctx.translate(grip.x + 5, grip.y);
+      ctx.rotate(-0.12 + aim * 0.12);
+      drawBlowgunWeaponModel(w, weaponFx);
+      if (puff > 0) {
+        ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = puff * 0.35;
+        ctx.fillStyle = "#7fe05a"; ctx.beginPath(); ctx.ellipse(26, 0, 14, 5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+      ctx.restore();
     } else {
       if (shoot) {
         if (shoot.phase === "reach") { const p = ease(shoot.p); drawHand = { x: backSh.x + 2 - p * 6, y: backSh.y + 8 - p * 14 }; }

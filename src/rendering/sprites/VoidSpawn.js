@@ -45,112 +45,175 @@ function voidMotes(T, x0, y0, n, rise, spread, seed = 0) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Shade: a hooded scrap of night that glides on a skirt of torn shadow.
-// No legs — the hem streams behind it while it moves, and its long claw
-// arms rake forward with a cyan smear on the attack.
+// Shade: a thin, hunched thing of black smoke and flickering solid darkness.
+// Long claw arms nearly scrape the ground; a smooth faceless head with two
+// narrow eyes and a jagged glowing "mouth" crack that opens on attacks. Two
+// readable states — solid (sharp, clawed) and shifted (transparent, smeary
+// with smoke). It reads e.voidShift / e.shiftWarn / e.lungeP / e.shadeStuck.
 // ─────────────────────────────────────────────────────────────────────────
 export function drawShade(e, t, dark, atkF) {
   const T = performance.now() / 1000;
   const flash = e.flash > 0 && !e.dying;
+
+  // ── state: solid vs void-shifted (with a pre-shift flicker warning) ──
+  const shifted = (e.voidShift || 0) > 0 && !e.dying;
+  const warn = (e.shiftWarn || 0) > 0 && !e.dying;
+  const flicker = warn ? (Math.sin(T * 34) > 0 ? 0.5 : 1) : 1;
+  const solidity = shifted ? 0.32 : 1;                 // how corporeal it looks
+  const bodyAlpha = clamp01(solidity * flicker);
+
   const body = col(flash, VOID.body);
   const bodyDk = col(flash, VOID.dk);
   const bodyMid = col(flash, VOID.mid);
 
-  // attackAnim is 0.22–0.25 on a generic melee swing
+  // ── attack / lunge posing ──
+  const lungeP = clamp01(e.lungeP ?? -1) >= 0 ? clamp01(e.lungeP) : -1;
   const swingRemain = Math.max(0, e.attackAnim || 0);
   const p = swingRemain > 0 ? 1 - Math.min(1, swingRemain / 0.25) : -1;
-  const lunge = p >= 0 ? Math.sin(clamp01(p * 1.4) * Math.PI) * 6 : 0;
+  const stuck = (e.shadeStuck || 0) > 0 && !e.dying;
+  const attacking = p >= 0 || lungeP >= 0;
+  const lunge = lungeP >= 0 ? Math.sin(lungeP * Math.PI) * 12 : (p >= 0 ? Math.sin(clamp01(p * 1.4) * Math.PI) * 6 : 0);
+  const crouch = lungeP >= 0 && lungeP < 0.25 ? (0.25 - lungeP) * 20 : 0;
 
   const drift = Math.sin(T * 2.2 + e.x * 0.13);
-  const hover = drift * 1.6;               // it never quite touches the ground
-  const gait = Math.sin(e.anim * 2.4);     // hem flutter speeds up while moving
+  const hover = drift * 1.6 + 1.5;         // glides a touch above the ground
+  const gait = Math.sin(e.anim * 2.4);
   const y = groundY - 4 + hover;
 
-  contactShadow(11, 0.16);
+  contactShadow(11, 0.12 * solidity);
 
   ctx.save();
-  ctx.translate(lunge, 0);
+  ctx.globalAlpha = bodyAlpha;
+  ctx.translate(lunge, crouch);
 
-  // torn shadow skirt: overlapping streamers trailing away from the facing side
+  // when shifted, a blurry smear halo behind the body sells the incorporeal look
+  if (shifted) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.14;
+    const sg = ctx.createRadialGradient(0, y - 16, 2, 0, y - 16, 20);
+    sg.addColorStop(0, "rgba(100,80,150,0.6)"); sg.addColorStop(1, "rgba(20,10,40,0)");
+    ctx.fillStyle = sg; ctx.beginPath(); ctx.ellipse(0, y - 16, 18, 22, 0, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
+  // torn shadow-cloak: overlapping streamers dissolving into drifting particles
   for (let k = 0; k < 4; k++) {
     const back = -(4 + k * 4);
-    const sway = Math.sin(T * 3 + k * 1.7) * 2.4 + gait * (1.4 + k * 0.5);
+    const sway = Math.sin(T * 3 + k * 1.7) * 2.4 + gait * (1.4 + k * 0.5) + (shifted ? Math.sin(T * 6 + k) * 3 : 0);
     ctx.fillStyle = k % 2 ? bodyDk : body;
+    ctx.globalAlpha = bodyAlpha * (shifted ? 0.6 : 1);
     ctx.beginPath();
     ctx.moveTo(3, y - 18);
     ctx.quadraticCurveTo(back * 0.4, y - 10 + k, back + sway, y + 2 - k * 1.2);
     ctx.quadraticCurveTo(back * 0.5 + 3, y - 6, 5 - k, y - 14);
     ctx.closePath(); ctx.fill();
   }
+  ctx.globalAlpha = bodyAlpha;
 
-  // hunched torso rising out of the skirt
-  ctx.fillStyle = body;
-  ctx.beginPath();
-  ctx.moveTo(-6, y - 8);
-  ctx.quadraticCurveTo(-8, y - 22, 0, y - 27);
-  ctx.quadraticCurveTo(8, y - 24, 7, y - 12);
-  ctx.quadraticCurveTo(2, y - 4, -6, y - 8);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = bodyMid;
-  ctx.beginPath(); ctx.ellipse(2, y - 16, 3.6, 6, -0.2, 0, TAU); ctx.fill();
-
-  // hood: a sharp cowl leaning toward its prey
-  const hx = 4, hy = y - 28;
+  // feet fade into smoke rather than clear toes
+  ctx.save(); ctx.globalAlpha = bodyAlpha * 0.5;
   ctx.fillStyle = bodyDk;
-  ctx.beginPath();
-  ctx.moveTo(hx - 7, hy + 4);
-  ctx.quadraticCurveTo(hx - 5, hy - 8, hx + 2, hy - 8.5);
-  ctx.quadraticCurveTo(hx + 9, hy - 7, hx + 8.5, hy + 2);
-  ctx.quadraticCurveTo(hx + 4, hy + 6, hx - 7, hy + 4);
-  ctx.closePath(); ctx.fill();
-  // nothing inside the hood but two slanted starlit eyes
-  const eyeGlow = 0.6 + 0.3 * dark + (p >= 0 ? 0.35 : 0) + Math.sin(T * 5 + e.x) * 0.08;
-  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = clamp01(eyeGlow);
-  ctx.fillStyle = t.eye;
-  ctx.beginPath();
-  ctx.ellipse(hx + 1.5, hy - 1, 2.1, 1.1, -0.32, 0, TAU);
-  ctx.ellipse(hx + 6, hy - 1.6, 1.8, 1, -0.32, 0, TAU);
-  ctx.fill();
+  for (let k = 0; k < 3; k++) {
+    const fx = -3 + k * 3 + Math.sin(T * 4 + k) * 1.2;
+    ctx.beginPath(); ctx.ellipse(fx, y - 1, 2.2, 1.3, 0, 0, TAU); ctx.fill();
+  }
   ctx.restore();
 
-  // long raking claw arms
-  ctx.strokeStyle = body; ctx.lineWidth = 2.4; ctx.lineCap = "round";
-  if (p >= 0) {
-    // both claws sweep forward through the target with a cyan smear
-    const sw = Math.sin(clamp01(p * 1.3) * Math.PI);
-    const a = -1.9 + p * 2.6;
-    const rx = 4 + Math.cos(a) * 13, ry = y - 18 + Math.sin(a) * 13;
+  // hunched thin torso
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(-5, y - 8);
+  ctx.quadraticCurveTo(-7, y - 22, 0, y - 27);
+  ctx.quadraticCurveTo(7, y - 24, 6, y - 12);
+  ctx.quadraticCurveTo(2, y - 4, -5, y - 8);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = bodyMid;
+  ctx.beginPath(); ctx.ellipse(1.5, y - 16, 3, 6, -0.2, 0, TAU); ctx.fill();
+
+  // smooth faceless head
+  const hx = 4, hy = y - 29;
+  ctx.fillStyle = shifted ? bodyDk : body;
+  ctx.beginPath(); ctx.ellipse(hx, hy, 5.2, 6, -0.1, 0, TAU); ctx.fill();
+  // two narrow glowing eyes
+  const eyeGlow = (shifted ? 0.9 : 0.6) + 0.3 * dark + (attacking ? 0.35 : 0) + Math.sin(T * 5 + e.x) * 0.08;
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = clamp01(eyeGlow) * (warn ? flicker : 1);
+  ctx.fillStyle = t.eye;
+  ctx.beginPath();
+  ctx.ellipse(hx + 0.5, hy - 0.6, 1.9, 0.85, -0.3, 0, TAU);
+  ctx.ellipse(hx + 4.5, hy - 1, 1.6, 0.8, -0.3, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+  // jagged glowing mouth-crack opening when it attacks
+  const maw = attacking ? Math.sin(clamp01((lungeP >= 0 ? lungeP : p) * 1.3) * Math.PI) : 0;
+  if (maw > 0.05) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = maw * 0.9;
+    ctx.strokeStyle = t.eye; ctx.lineWidth = 1 + maw * 1.2; ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(hx - 3, hy + 2.4);
+    ctx.lineTo(hx - 1, hy + 3 + maw * 1.5);
+    ctx.lineTo(hx + 1.5, hy + 2.2);
+    ctx.lineTo(hx + 3.5, hy + 3.2 + maw);
+    ctx.lineTo(hx + 5, hy + 2.4);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // long raking claw arms (crisp when solid, faint when shifted)
+  ctx.strokeStyle = body; ctx.lineWidth = 2.2; ctx.lineCap = "round";
+  ctx.globalAlpha = bodyAlpha * (shifted ? 0.55 : 1);
+  if (attacking && !shifted) {
+    // both claws stretch and rake forward through the target with a cyan smear
+    const pr = lungeP >= 0 ? lungeP : p;
+    const sw = Math.sin(clamp01(pr * 1.3) * Math.PI);
+    const a = -1.9 + pr * 2.7;
+    const reach = 14 + (lungeP >= 0 ? 4 : 0);           // arms stretch on the strike
+    const rx = 4 + Math.cos(a) * reach, ry = y - 18 + Math.sin(a) * reach;
     ctx.beginPath(); ctx.moveTo(3, y - 19); ctx.lineTo(rx, ry); ctx.stroke();
     ctx.strokeStyle = bodyDk; ctx.lineWidth = 1.1;
     for (let k = -1; k <= 1; k++) {
       ctx.beginPath(); ctx.moveTo(rx, ry);
-      ctx.lineTo(rx + Math.cos(a + 0.9 + k * 0.3) * 4.5, ry + Math.sin(a + 0.9 + k * 0.3) * 4.5);
+      ctx.lineTo(rx + Math.cos(a + 0.9 + k * 0.3) * 5, ry + Math.sin(a + 0.9 + k * 0.3) * 5);
       ctx.stroke();
     }
     ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = sw * 0.7;
     ctx.strokeStyle = VOID.cyan; ctx.lineWidth = 2.2;
-    ctx.beginPath(); ctx.arc(3, y - 18, 14, -2.1, 0.7); ctx.stroke();
+    ctx.beginPath(); ctx.arc(3, y - 18, reach + 1, -2.1, 0.7); ctx.stroke();
     ctx.restore();
   } else {
-    const dangle = Math.sin(e.anim * 2.4) * 1.6 + drift * 0.8;
-    ctx.beginPath(); ctx.moveTo(3, y - 19); ctx.quadraticCurveTo(9, y - 13, 10 + dangle, y - 6); ctx.stroke();
+    const dangle = Math.sin(e.anim * 2.4) * 1.6 + drift * 0.8 + (stuck ? 3 : 0);
+    ctx.beginPath(); ctx.moveTo(3, y - 19); ctx.quadraticCurveTo(9, y - 12, 11 + dangle, y - 3); ctx.stroke();
     ctx.strokeStyle = bodyDk; ctx.lineWidth = 1.1;
     for (let k = 0; k < 3; k++) {
-      ctx.beginPath(); ctx.moveTo(10 + dangle, y - 6);
-      ctx.lineTo(11.5 + dangle + k * 0.6, y - 2.4 + k * 0.8); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(11 + dangle, y - 3);
+      ctx.lineTo(12.5 + dangle + k * 0.6, y + 0.6 + k * 0.8); ctx.stroke();
     }
-    ctx.strokeStyle = col(flash, VOID.mid); ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(-3, y - 17); ctx.quadraticCurveTo(-8, y - 12, -7 - dangle, y - 7); ctx.stroke();
+    ctx.strokeStyle = col(flash, VOID.mid); ctx.lineWidth = 1.9;
+    ctx.beginPath(); ctx.moveTo(-3, y - 17); ctx.quadraticCurveTo(-8, y - 11, -8 - dangle, y - 4); ctx.stroke();
   }
   ctx.lineCap = "butt";
+  ctx.globalAlpha = bodyAlpha;
 
-  voidMotes(T, -2, y - 12, 3, 26, 4, e.x * 0.01);
+  // extra smoke streaks while shifted
+  if (shifted) {
+    ctx.save(); ctx.globalAlpha = 0.4;
+    ctx.strokeStyle = bodyMid; ctx.lineWidth = 1.4; ctx.lineCap = "round";
+    for (let k = 0; k < 3; k++) {
+      const o = Math.sin(T * 3 + k * 2) * 4;
+      ctx.beginPath(); ctx.moveTo(-4 + k * 4, y - 6); ctx.quadraticCurveTo(-8 + k * 4 + o, y - 16, -6 + k * 4 + o, y - 26); ctx.stroke();
+    }
+    ctx.lineCap = "butt";
+    ctx.restore();
+  }
+
+  voidMotes(T, -2, y - 12, shifted ? 5 : 3, 26, shifted ? 7 : 4, e.x * 0.01);
   ctx.restore();
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Void wraith: a floating cowled caster held aloft by three angular shard
-// "wings" per side. Gathers a violet star between its hands to cast.
+// Void Wrath: a legless caster floating on a twisting tail of smoke, its thin
+// skeletal torso ringed by cracked armour shards that orbit without touching.
+// A broken helm hides all but one bright eye; two long arms cup a void sphere
+// before it casts, and two tears in space flex like wings behind its shoulders.
+// Reads e.attackAnim (Void Bolt), e.rainChannel, e.callFlash, e.riftShield(+Max).
 // ─────────────────────────────────────────────────────────────────────────
 export function drawVoidWraith(e, t, dark, atkF) {
   const T = performance.now() / 1000;
@@ -158,89 +221,173 @@ export function drawVoidWraith(e, t, dark, atkF) {
   const body = col(flash, VOID.body);
   const bodyDk = col(flash, VOID.dk);
   const bodyMid = col(flash, VOID.mid);
+  const ink = col(flash, "#0b0620");
 
   const castRemain = Math.max(0, e.attackAnim || 0);
   const cast = castRemain > 0 ? 1 - Math.min(1, castRemain / 0.38) : -1;
+  const rain = clamp01(e.rainChannel || 0);            // Void Rain: arms raised overhead
+  const callF = clamp01(e.callFlash || 0);             // Call of the Void: outward pulse
   const bob = Math.sin(T * 2.1 + e.x * 0.07) * 2.2;
-  const y = groundY - 18 + bob;
-  const flap = Math.sin(e.anim * 3.2);
+  const y = groundY - 22 + bob;
+  const gather = Math.max(cast >= 0 ? Math.sin(clamp01(cast * 1.25) * Math.PI) : 0, rain);
 
-  // shard wings: angular petals that scull the air
+  // ── space-tear "wings": two rifts that stretch and contract behind it ──
+  const flex = 0.7 + 0.3 * Math.sin(e.anim * 2.2);
   for (const side of [-1, 1]) {
+    const rx = side * 9, ry = y - 20;
+    const rw = 4 + flex * 3, rh = 15 + flex * 7 + rain * 6;
+    ctx.save();
+    ctx.translate(rx, ry); ctx.rotate(side * 0.3);
+    // the tear itself — a black lens
+    ctx.fillStyle = ink;
+    ctx.beginPath(); ctx.ellipse(0, 0, rw, rh, 0, 0, TAU); ctx.fill();
+    // pale violet/white rim
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.4 + 0.25 * flex;
+    ctx.strokeStyle = VOID.violet; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.ellipse(0, 0, rw, rh, 0, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = "#d7f6ff"; ctx.lineWidth = 0.6; ctx.globalAlpha *= 0.7;
+    ctx.beginPath(); ctx.ellipse(0, 0, rw * 0.6, rh * 0.8, 0, 0, TAU); ctx.stroke();
+    ctx.restore();
+    // debris pulled toward the rift before vanishing
+    ctx.fillStyle = bodyMid;
     for (let k = 0; k < 3; k++) {
-      const baseA = side < 0 ? Math.PI - 0.35 : 0.35;
-      const a = baseA + side * (k * 0.42 + flap * 0.22 + 0.1);
-      const len = 15 - k * 3;
-      const wx = side * 5, wy = y - 22 + k * 3;
-      const tipX = wx + Math.cos(a) * len, tipY = wy - Math.abs(Math.sin(a)) * (len * 0.55) - flap * 3;
-      ctx.fillStyle = k === 1 ? bodyMid : body;
-      ctx.beginPath();
-      ctx.moveTo(wx, wy);
-      ctx.lineTo(tipX, tipY);
-      ctx.lineTo(wx + Math.cos(a) * len * 0.45, wy + 3.4 - k * 0.5);
-      ctx.closePath(); ctx.fill();
-      // starlit rim on the leading edge
-      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.35 + 0.2 * Math.abs(flap);
-      ctx.strokeStyle = VOID.violet; ctx.lineWidth = 0.8;
-      ctx.beginPath(); ctx.moveTo(wx, wy); ctx.lineTo(tipX, tipY); ctx.stroke();
-      ctx.restore();
+      const wt = (T * 0.8 + k * 0.33 + side) % 1;
+      const dx2 = side * (14 - wt * 14), dy2 = -8 + k * 6 - wt * 4;
+      ctx.globalAlpha = (1 - wt) * 0.5;
+      ctx.beginPath(); ctx.arc(dx2, dy2, 1.1 * (1 - wt) + 0.4, 0, TAU); ctx.fill();
     }
+    ctx.globalAlpha = 1;
+    ctx.restore();
   }
 
-  // tattered robe, hem streaming below
+  // ── smoke tail below the waist (no legs) ──
   ctx.fillStyle = body;
   ctx.beginPath();
-  ctx.moveTo(-7, y - 26);
-  ctx.quadraticCurveTo(-9, y - 8, -5 + Math.sin(T * 3.1) * 2, y + 6);
-  ctx.lineTo(-1, y + 1);
-  ctx.lineTo(2 + Math.sin(T * 2.6 + 1) * 2, y + 8);
-  ctx.lineTo(5, y);
-  ctx.quadraticCurveTo(9, y - 12, 6, y - 26);
-  ctx.quadraticCurveTo(0, y - 31, -7, y - 26);
+  ctx.moveTo(-5, y - 6);
+  ctx.quadraticCurveTo(-7 + Math.sin(T * 3.1) * 3, y + 6, -2 + Math.sin(T * 2.4) * 4, y + 18);
+  ctx.quadraticCurveTo(0, y + 24, 2 + Math.sin(T * 2.7 + 1) * 4, y + 16);
+  ctx.quadraticCurveTo(6 + Math.sin(T * 3.3) * 3, y + 5, 5, y - 6);
   ctx.closePath(); ctx.fill();
-  ctx.fillStyle = bodyMid;
-  ctx.beginPath(); ctx.ellipse(1, y - 18, 4, 8, 0, 0, TAU); ctx.fill();
-
-  // deep cowl with a void face and wide starlit eyes
-  const hx = 2, hy = y - 30;
-  ctx.fillStyle = bodyDk;
-  ctx.beginPath();
-  ctx.moveTo(hx - 6.5, hy + 4);
-  ctx.quadraticCurveTo(hx - 6, hy - 6.5, hx + 1, hy - 7);
-  ctx.quadraticCurveTo(hx + 8, hy - 6, hx + 7, hy + 3.4);
-  ctx.quadraticCurveTo(hx + 1, hy + 6.5, hx - 6.5, hy + 4);
-  ctx.closePath(); ctx.fill();
-  const eyeGlow = 0.65 + 0.3 * dark + (cast >= 0 ? 0.3 : 0);
-  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = clamp01(eyeGlow);
-  ctx.fillStyle = t.eye;
-  ctx.beginPath();
-  ctx.arc(hx + 1, hy - 0.5, 1.7, 0, TAU);
-  ctx.arc(hx + 5.4, hy - 1, 1.5, 0, TAU);
-  ctx.fill();
+  ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = bodyDk;
+  for (let k = 0; k < 3; k++) {
+    const wt = (T * 0.5 + k * 0.34) % 1;
+    ctx.beginPath(); ctx.arc(Math.sin(T * 2 + k) * 4, y + 18 + wt * 12, 2.4 * (1 - wt) + 0.6, 0, TAU); ctx.fill();
+  }
   ctx.restore();
 
-  // arms: folded at rest, thrown forward around a gathering star when casting
-  ctx.strokeStyle = bodyMid; ctx.lineWidth = 2.1; ctx.lineCap = "round";
-  if (cast >= 0) {
-    const reach = Math.sin(clamp01(cast * 1.25) * Math.PI);
-    const handX = 8 + reach * 5, handY = y - 20 - reach * 2;
-    ctx.beginPath(); ctx.moveTo(2, y - 23); ctx.quadraticCurveTo(6, y - 24, handX, handY); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, y - 21); ctx.quadraticCurveTo(5, y - 19, handX - 1.5, handY + 3); ctx.stroke();
-    // the bolt condensing between its palms
+  // ── thin skeletal torso ──
+  ctx.fillStyle = body;
+  ctx.beginPath();
+  ctx.moveTo(-5, y - 6);
+  ctx.quadraticCurveTo(-7, y - 20, 0, y - 25);
+  ctx.quadraticCurveTo(7, y - 20, 5, y - 6);
+  ctx.quadraticCurveTo(0, y - 2, -5, y - 6);
+  ctx.closePath(); ctx.fill();
+  // rib hint
+  ctx.strokeStyle = bodyDk; ctx.lineWidth = 0.9;
+  for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.moveTo(-3.5, y - 9 - k * 4); ctx.lineTo(3.5, y - 9 - k * 4); ctx.stroke(); }
+
+  // ── orbiting cracked armour shards (do not touch the body) ──
+  ctx.fillStyle = bodyMid;
+  for (let k = 0; k < 4; k++) {
+    const a = T * (0.5 + k * 0.05) + k * (TAU / 4);
+    const ox = Math.cos(a) * (13 + (k % 2) * 3), oy = y - 15 + Math.sin(a) * (10 + (k % 2) * 2);
+    const sr = 3 + (k % 2);
+    ctx.save(); ctx.translate(ox, oy); ctx.rotate(a * 1.3);
+    ctx.fillStyle = k % 2 ? bodyDk : bodyMid;
+    ctx.beginPath(); ctx.moveTo(-sr, sr * 0.7); ctx.lineTo(0, -sr); ctx.lineTo(sr, sr * 0.8); ctx.lineTo(sr * 0.3, sr * 0.9); ctx.closePath(); ctx.fill();
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.4;
+    ctx.strokeStyle = VOID.violet; ctx.lineWidth = 0.6;
+    ctx.beginPath(); ctx.moveTo(-sr, sr * 0.7); ctx.lineTo(0, -sr); ctx.stroke();
+    ctx.restore();
+    ctx.restore();
+  }
+
+  // ── broken helm: an empty black hollow with one bright eye ──
+  const hx = 2, hy = y - 29;
+  ctx.fillStyle = ink;
+  ctx.beginPath();
+  ctx.moveTo(hx - 6, hy + 4);
+  ctx.quadraticCurveTo(hx - 6.5, hy - 7, hx + 1, hy - 8);
+  ctx.quadraticCurveTo(hx + 8, hy - 6.5, hx + 6.5, hy + 3.5);
+  ctx.quadraticCurveTo(hx + 1, hy + 6, hx - 6, hy + 4);
+  ctx.closePath(); ctx.fill();
+  // chipped crown of the broken helmet
+  ctx.strokeStyle = bodyMid; ctx.lineWidth = 1.2; ctx.lineJoin = "miter";
+  ctx.beginPath();
+  ctx.moveTo(hx - 5, hy - 4); ctx.lineTo(hx - 3.5, hy - 8); ctx.lineTo(hx - 1.5, hy - 5);
+  ctx.lineTo(hx + 1, hy - 8.5); ctx.lineTo(hx + 3, hy - 5.5); ctx.lineTo(hx + 5.5, hy - 7);
+  ctx.stroke();
+  // single bright eye (with a faint cluster of sparks around it)
+  const eyeGlow = 0.7 + 0.3 * dark + (cast >= 0 ? 0.3 : 0) + rain * 0.3;
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = clamp01(eyeGlow);
+  const eg = ctx.createRadialGradient(hx + 2, hy - 1, 0.5, hx + 2, hy - 1, 5);
+  eg.addColorStop(0, "rgba(230,248,255,1)"); eg.addColorStop(0.5, "rgba(150,110,255,0.6)"); eg.addColorStop(1, "rgba(40,20,110,0)");
+  ctx.fillStyle = eg; ctx.beginPath(); ctx.arc(hx + 2, hy - 1, 5, 0, TAU); ctx.fill();
+  ctx.fillStyle = "#eaf6ff"; ctx.beginPath(); ctx.arc(hx + 2, hy - 1, 1.5, 0, TAU); ctx.fill();
+  ctx.fillStyle = t.eye;
+  for (let k = 0; k < 3; k++) { const a = T * 2 + k * 2.1; ctx.globalAlpha = clamp01(eyeGlow) * 0.5; ctx.beginPath(); ctx.arc(hx + 2 + Math.cos(a) * 3, hy - 1 + Math.sin(a) * 2, 0.7, 0, TAU); ctx.fill(); }
+  ctx.restore();
+
+  // ── arms: long, pointed fingers; cup a void sphere before a cast ──
+  ctx.strokeStyle = bodyMid; ctx.lineWidth = 2; ctx.lineCap = "round";
+  if (rain > 0.02) {
+    // Void Rain: both arms thrust overhead around a growing sphere
+    const handY = y - 34 - rain * 4;
+    ctx.beginPath(); ctx.moveTo(2, y - 20); ctx.quadraticCurveTo(5, y - 30, 3, handY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-2, y - 20); ctx.quadraticCurveTo(-5, y - 30, -1, handY); ctx.stroke();
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.5 + rain * 0.5;
+    const g = ctx.createRadialGradient(1, handY - 2, 0.5, 1, handY - 2, 6 + rain * 8);
+    g.addColorStop(0, "rgba(230,248,255,0.95)"); g.addColorStop(0.4, "rgba(150,110,255,0.6)"); g.addColorStop(1, "rgba(60,30,140,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(1, handY - 2, 6 + rain * 8, 0, TAU); ctx.fill();
+    ctx.restore();
+  } else if (cast >= 0) {
+    const reach = gather;
+    const handX = 8 + reach * 5, handY = y - 16 - reach * 2;
+    ctx.beginPath(); ctx.moveTo(2, y - 19); ctx.quadraticCurveTo(6, y - 20, handX, handY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, y - 17); ctx.quadraticCurveTo(5, y - 15, handX - 1.5, handY + 3); ctx.stroke();
+    // pointed fingers
+    ctx.lineWidth = 1;
+    for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.moveTo(handX, handY + 1); ctx.lineTo(handX + 3 + k, handY + 1 + k * 1.6); ctx.stroke(); }
+    ctx.lineWidth = 2;
+    // void sphere condensing between the palms — black core, pale rim
     ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.5 + reach * 0.5;
-    const g = ctx.createRadialGradient(handX + 2, handY + 1.5, 0.5, handX + 2, handY + 1.5, 7 + reach * 4);
-    g.addColorStop(0, "rgba(220,240,255,0.95)");
-    g.addColorStop(0.4, "rgba(150,110,255,0.6)");
-    g.addColorStop(1, "rgba(60,30,140,0)");
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(handX + 2, handY + 1.5, 7 + reach * 4, 0, TAU); ctx.fill();
+    const g = ctx.createRadialGradient(handX + 3, handY + 1.5, 0.5, handX + 3, handY + 1.5, 7 + reach * 4);
+    g.addColorStop(0, "rgba(20,10,40,0.9)"); g.addColorStop(0.4, "rgba(150,110,255,0.7)"); g.addColorStop(1, "rgba(60,30,140,0)");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(handX + 3, handY + 1.5, 7 + reach * 4, 0, TAU); ctx.fill();
     ctx.restore();
   } else {
     const sway = Math.sin(T * 2.4) * 1.2;
-    ctx.beginPath(); ctx.moveTo(2, y - 23); ctx.quadraticCurveTo(7, y - 18, 5 + sway, y - 13); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(-2, y - 22); ctx.quadraticCurveTo(-7, y - 17, -5 - sway, y - 12); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(2, y - 19); ctx.quadraticCurveTo(8, y - 14, 6 + sway, y - 6); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-2, y - 18); ctx.quadraticCurveTo(-8, y - 13, -6 - sway, y - 5); ctx.stroke();
   }
   ctx.lineCap = "butt";
+
+  // ── Rift Shield: a rotating ring of broken space with cracks per block used ──
+  if ((e.riftShield || 0) > 0) {
+    const maxB = e.riftShieldMax || t.riftShieldBlocks || 4;
+    const used = clamp01((maxB - e.riftShield) / maxB);
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.5 + 0.2 * Math.sin(T * 6);
+    ctx.strokeStyle = "#b9a0ff"; ctx.lineWidth = 2;
+    for (let k = 0; k < 8; k++) {
+      const a0 = k * TAU / 8 + T * 0.8;
+      // segments "crack" (go dim/short) as blocks are consumed
+      const broken = k / 8 < used;
+      ctx.globalAlpha = broken ? 0.12 : 0.5 + 0.2 * Math.sin(T * 6 + k);
+      ctx.beginPath(); ctx.arc(1, y - 15, 20, a0, a0 + 0.55); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ── Call of the Void: an expanding pulse ring ──
+  if (callF > 0.02) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = callF * 0.7;
+    ctx.strokeStyle = "#d7f6ff"; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(1, y - 15, (1 - callF) * 60 + 8, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = VOID.violet; ctx.lineWidth = 1.4; ctx.globalAlpha = callF * 0.5;
+    ctx.beginPath(); ctx.arc(1, y - 15, (1 - callF) * 44 + 6, 0, TAU); ctx.stroke();
+    ctx.restore();
+  }
 
   voidMotes(T, 0, y - 8, 4, 30, 6, e.x * 0.02);
 }

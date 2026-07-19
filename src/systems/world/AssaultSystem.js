@@ -1,14 +1,14 @@
 import { CFG } from '../../config/config.js';
-import { clamp, dist, rand, randInt } from '../../util/math.js';
+import { clamp, clampCameraTarget, dist, rand, randInt } from '../../util/math.js';
 import { groundY, W } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnEnemy, spawnParticles, spawnGoldReward, floaty, planNight } from './SpawnSystem.js';
-import { shootArrow } from '../combat/Combat.js';
-import { moveToward, nearestEnemy } from '../ai/AIHelpers.js';
+import { spawnEnemy, spawnParticles, spawnGoldReward, floaty, planNight } from './SpawnSystem.js?v=biomeboss1';
+import { shootArrow } from '../combat/Combat.js?v=biomeboss1';
+import { moveToward, nearestEnemy } from '../ai/AIHelpers.js?v=biomeboss1';
 import { buildForest } from './ForestSystem.js';
-import { clearTreeCache } from '../../rendering/Effects.js';
-import { addXP } from '../economy/UpgradeSystem.js';
+import { clearTreeCache } from '../../rendering/Effects.js?v=biomes4';
+import { addXP } from '../economy/UpgradeSystem.js?v=biomeweapons1';
 
 // ── Portal assault ───────────────────────────────────────────────────────
 // The player sounds the war horn (G): every archer and guard marches on the
@@ -290,7 +290,7 @@ export function performPhaseShift() {
   player.knock = 0;
   player.invuln = Math.max(player.invuln || 0, 1.4);
   Game.inMine = false;
-  Game.cam = clamp(CFG.baseX - W / 2, 0, Math.max(0, CFG.worldWidth - W / (Game.zoom || 1)));
+  Game.cam = clampCameraTarget(CFG.baseX - W / 2, CFG.worldWidth, W, Game.zoom || 1);
 
   for (const u of state.units) {
     if (u.assault) {

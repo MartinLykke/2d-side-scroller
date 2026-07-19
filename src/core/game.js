@@ -3,45 +3,45 @@
 // ---------- Bootstrap ----------
 import { CFG, WALL_SLOTS, PORTALS, STATIONS_X, MINE, FOREST } from '../config/config.js';
 import { ARMORS } from '../config/armor.js';
-import { clamp, dist, lerp, rand, randInt, pick } from '../util/math.js';
+import { clamp, clampCameraTarget, dist, lerp, rand, randInt, pick } from '../util/math.js';
 import { canvas, ctx, W, H, groundY, resize } from './canvas.js';
 import { Game, state } from './state.js';
 
 import { Audio } from '../systems/infrastructure/Audio.js';
 import { keys } from '../systems/input/Input.js';
-import { saveGame, hasSave, loadGame, deleteSave } from '../systems/infrastructure/SaveSystem.js';
-import { updateSpawning, floaty, spawnParticles, spawnAnimal, planNight, spawnEnemy } from '../systems/world/SpawnSystem.js';
+import { saveGame, hasSave, loadGame, deleteSave } from '../systems/infrastructure/SaveSystem.js?v=biomeweapons1';
+import { updateSpawning, floaty, spawnParticles, spawnAnimal, planNight, spawnEnemy } from '../systems/world/SpawnSystem.js?v=biomeboss1';
 import { updatePayment, updateCoins } from '../systems/economy/Economy.js';
 import { updateForestTrees, updateForestCamps } from '../systems/world/ForestSystem.js';
 import { updateMine } from '../systems/world/MineSystem.js';
-import { updateBuildings } from '../systems/world/OutpostSystem.js';
-import { updateUnits, updateAssignments, updateVagrants, updateAnimals, nearestEnemy, updateCaltrops } from '../systems/ai/AI.js';
-import { updateEnemies, updateArrows, updatePlayerAttack, updateSpells } from '../systems/combat/Combat.js';
-import { updateFirePools } from '../systems/ai/BossAI.js';
-import { updateDyingEnemies } from '../util/EnemyUtils.js';
+import { updateBuildings } from '../systems/world/OutpostSystem.js?v=biomeboss1';
+import { updateUnits, updateAssignments, updateVagrants, updateAnimals, nearestEnemy, updateCaltrops } from '../systems/ai/AI.js?v=biomeboss1';
+import { updateEnemies, updateArrows, updatePlayerAttack, updateSpells } from '../systems/combat/Combat.js?v=biomeboss1';
+import { updateFirePools } from '../systems/ai/BossAI.js?v=biomeboss1';
+import { updateDyingEnemies } from '../util/EnemyUtils.js?v=biomeboss1';
 
-import { FX, initFX, updateFX as updateFXEffects, biomeAt } from '../rendering/Effects.js';
-import { render, drawEntityShadows } from '../rendering/Renderer.js';
-import { UI, DEV, baseName } from '../rendering/HUD.js';
+import { FX, initFX, updateFX as updateFXEffects, biomeAt } from '../rendering/Effects.js?v=biomes4';
+import { render, drawEntityShadows } from '../rendering/Renderer.js?v=biomeboss1';
+import { UI, DEV, baseName } from '../rendering/HUD.js?v=biomeboss1';
 import { updateArcherShoot } from '../rendering/sprites/Archer.js';
 
 import { makePlayer } from '../entities/Player.js';
 import { makeWall, wallReady, wallBackDir, wallClimbAnchorX, nearWallClimbAnchor, nearWallClimbAccess, overWallPlatform } from '../entities/Wall.js';
 import { makeUnit } from '../entities/Unit.js';
 
-import { WEAPON_SHOP, ARMOR_SHOP, updateShop, setPickupWeapon as setShopPickupWeapon } from '../systems/economy/ShopSystem.js';
-import { updateCastleUpgradeMenu } from '../systems/economy/CastleUpgradeSystem.js';
+import { WEAPON_SHOP, ARMOR_SHOP, updateShop, setPickupWeapon as setShopPickupWeapon } from '../systems/economy/ShopSystem.js?v=biomeweapons1';
+import { updateCastleUpgradeMenu } from '../systems/economy/CastleUpgradeSystem.js?v=biomeweapons1';
 import { mountSpeedMult, activeMount } from '../systems/economy/MountSystem.js';
-import { upgradeBase, pickupWeapon, setBuildStations } from '../util/GameStateHelpers.js';
+import { upgradeBase, pickupWeapon, setBuildStations } from '../util/GameStateHelpers.js?v=biomeweapons1';
 import { currentCoinCap } from '../util/DefenseStats.js';
-import { addXP, checkUpgrade } from '../systems/economy/UpgradeSystem.js';
-import { newGame, buildStations } from '../systems/infrastructure/GameInit.js';
-import { initMeta, enterDeathHub, updateHub, updateHubTransition, renderHub } from '../systems/infrastructure/RoguelikeSystem.js';
+import { addXP, checkUpgrade } from '../systems/economy/UpgradeSystem.js?v=biomeweapons1';
+import { newGame, buildStations } from '../systems/infrastructure/GameInit.js?v=biomeweapons1';
+import { initMeta, enterDeathHub, updateHub, updateHubTransition, renderHub, permanentDayLengthBonusSeconds } from '../systems/infrastructure/RoguelikeSystem.js';
 import { applyDifficulty } from '../systems/infrastructure/DifficultySystem.js';
 import { updateLootItems, updateWeaponPickup, updateChests, updateLootPhysics, setPickupWeapon as setLootPickupWeapon } from '../systems/economy/LootSystem.js';
-import { updateAssault, performPhaseShift } from '../systems/world/AssaultSystem.js';
-import { updateFortifications } from '../systems/world/FortificationSystem.js';
-import { setupInputHandlers } from '../systems/input/InputHandler.js';
+import { updateAssault, performPhaseShift } from '../systems/world/AssaultSystem.js?v=biomeboss1';
+import { updateFortifications } from '../systems/world/FortificationSystem.js?v=biomeboss1';
+import { setupInputHandlers } from '../systems/input/InputHandler.js?v=biomeboss1';
 import { provide } from './services.js';
 // Profiler uses window._perf (set by HUD toggle) to avoid ES module cache issues
 
@@ -63,7 +63,11 @@ provide('enterDeathHub', enterDeathHub);
 // ---------- Update ----------
 function updateTime(dt) {
   const timeScale = Game.isNight && Game.nightCleared ? (CFG.nightClearTimeScale || 1) : 1;
-  Game.time += (dt / CFG.dayLength) * timeScale;
+  const daylightBonus = permanentDayLengthBonusSeconds();
+  const dayLength = !Game.isNight && Game.time <= CFG.phases.dusk
+    ? CFG.dayLength + daylightBonus / CFG.phases.dusk
+    : CFG.dayLength;
+  Game.time += (dt / dayLength) * timeScale;
   if (Game.isNight && Game.nightCleared && Game.time > CFG.phases.night) {
     Game.time = 1;
   }
@@ -438,7 +442,7 @@ function updateCamera() {
   // keep the mine floor on screen while the player is underground
   if (Game.inMine && Game.zoom > 1.25) Game.zoom = 1.25;
   const zoom = Game.zoom;
-  const target=clamp(state.player.x-W/2, 0, Math.max(0, CFG.worldWidth - W/zoom));
+  const target=clampCameraTarget(state.player.x-W/2, CFG.worldWidth, W, zoom);
   Game.cam+=(target-Game.cam)*0.12;
 }
 
@@ -591,7 +595,7 @@ Game.start = function(continueGame) {
   applyDifficulty(Game, diff);
   if (continueGame && hasSave()) { newGame(); loadGame(); }
   else newGame();
-  import('../rendering/Effects.js').then(({clearTreeCache})=>clearTreeCache());
+  import('../rendering/Effects.js?v=biomes4').then(({clearTreeCache})=>clearTreeCache());
   Game.state="play";
   UI.startScreen.classList.add("hidden");
   UI.endScreen.classList.add("hidden");
@@ -773,14 +777,14 @@ function loop(now) {
     updateDyingEnemies(sdt);
     if (Game.screenShake > 0) Game.screenShake = Math.max(0, Game.screenShake - dt * 9);
     const zoom = Game.zoom;
-    const target = clamp(state.player.x - W / 2, 0, Math.max(0, CFG.worldWidth - W / zoom));
+    const target = clampCameraTarget(state.player.x - W / 2, CFG.worldWidth, W, zoom);
     Game.cam += (target - Game.cam) * Math.min(1, dt * 3);
     if (Game.deathTimer > 3.4) endGame(Game.defeatText);
   }
   if (Game.state === "defeat-pan") {
     Game.defeatPanTimer += dt;
     const zoom = Game.zoom;
-    const target = clamp(state.base.x - W / (2 * zoom), 0, Math.max(0, CFG.worldWidth - W / zoom));
+    const target = clampCameraTarget(state.base.x - W / 2, CFG.worldWidth, W, zoom);
     Game.cam += (target - Game.cam) * Math.min(1, dt * 2.5);
     if (Game.defeatPanTimer > 2.2) endGame(Game.defeatText);
   }
@@ -803,7 +807,7 @@ function renderMenuBackground() {
     state.player = makePlayer();
     state.base   = { x:CFG.baseX, level:1, hp:CFG.baseMaxHp[1], maxHp:CFG.baseMaxHp[1], paid:0, flash:0 };
     state.walls  = WALL_SLOTS.map(makeWall);
-    state.units=[]; state.vagrants=[]; state.enemies=[]; state.coins=[];
+    state.units=[]; state.vagrants=[]; state.enemies=[]; state.coins=[]; state.goldCollectors=[];
     state.arrows=[]; state.animals=[]; state.particles=[]; state.floatTexts=[];
     state.portals=PORTALS.map(p=>({...p}));
   }
@@ -814,7 +818,7 @@ function renderMenuBackground() {
 resize();
 initFX();
 initMeta();
-Game.cam = clamp(CFG.baseX - W/2, 0, Math.max(0, CFG.worldWidth - W));
+Game.cam = clampCameraTarget(CFG.baseX - W/2, CFG.worldWidth, W, Game.zoom || 1);
 setupInputHandlers();
 if (hasSave()) document.getElementById("btn-continue")?.classList.remove("hidden");
 requestAnimationFrame(loop);

@@ -2,9 +2,10 @@ import { Game, state } from '../../core/state.js';
 import { CFG, FOREST } from '../../config/config.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { spawnVagrant, planNight } from '../world/SpawnSystem.js';
-import { buildForest } from '../world/ForestSystem.js';
+import { addForestCamp, buildForest } from '../world/ForestSystem.js';
 import { initMineVeins } from '../world/MineSystem.js';
-import { buildStations } from './GameInit.js';
+import { buildStations } from './GameInit.js?v=biomeweapons1';
+import { permanentForestCampPlans } from './RoguelikeSystem.js';
 import { autoSpendSkillPoints } from '../economy/SkillSystem.js';
 import { ensureCastleUpgrades, baseMaxHpForLevel } from '../../util/DefenseStats.js';
 
@@ -33,10 +34,25 @@ export function saveGame() {
       base: { level: base.level, hp: base.hp, maxHp: base.maxHp },
       walls: walls.map(w => ({ commissioned: w.commissioned, level: w.level, hp: w.hp, maxHp: w.maxHp, buildProgress: w.buildProgress })),
       buildings: (state.buildings || []).map(b => ({ built: b.built, level: b.level })),
+      chests: (state.chests || []).map(ch => ({
+        x: ch.x,
+        lootGold: ch.lootGold,
+        weaponId: ch.weaponId || null,
+        open: !!ch.open,
+        openAnim: ch.openAnim || 0,
+        market: !!ch.market,
+      })),
       forestTrees: forestTrees.map(t => ({ marked: t.marked, chopped: t.chopped, chopProgress: t.chopProgress, lying: t.lying || !!t.carriedBy, regrowTimer: t.regrowTimer || 0 })),
       units: units
         .filter(u => !u.dying && u.hp > 0)
-        .map(u => ({ role: u.role, x: u.x, archerName: u.archerName, level: u.level, xp: u.xp })),
+        .map(u => ({
+          role: u.role,
+          x: u.x,
+          archerName: u.archerName,
+          level: u.level,
+          xp: u.xp,
+          homeX: u.role === "hound" ? u.homeX : undefined,
+        })),
       vagrants: vagrants.length,
       farm: state.farmBuilt,
       farmLevel: state.farmLevel,
@@ -86,6 +102,7 @@ export function loadGame() {
         forestTrees[i].regrowTimer = FOREST.regrowMin + Math.random() * (FOREST.regrowMax - FOREST.regrowMin);
       }
     });
+    for (const camp of permanentForestCampPlans()) addForestCamp(camp.x, camp.vagrants);
     player.coins = snap.coins; player.x = snap.px; player.hasCrown = snap.hasCrown;
     player.hp = snap.hp || CFG.playerMaxHp;
     player.weapon = snap.weapon || null;
@@ -105,11 +122,27 @@ export function loadGame() {
     base.hp = Number.isFinite(snap.base.hp) ? Math.max(0, snap.base.hp) : base.maxHp;
     walls.forEach((w, i) => { const s = snap.walls[i]; if (s) Object.assign(w, s); });
     if (snap.buildings) snap.buildings.forEach((s, i) => { if (state.buildings[i]) Object.assign(state.buildings[i], s); });
+    if (Array.isArray(snap.chests)) {
+      state.chests = snap.chests
+        .filter(ch => ch && Number.isFinite(ch.x))
+        .map(ch => ({
+          x: ch.x,
+          lootGold: Math.max(0, Math.floor(ch.lootGold || 0)),
+          weaponId: ch.weaponId || null,
+          open: !!ch.open,
+          openAnim: ch.openAnim || 0,
+          market: !!ch.market,
+        }));
+    }
     state.units = snap.units.map(s => {
       const u = makeUnit(s.role, s.x);
       if (s.archerName) u.archerName = s.archerName;
       if (s.level) u.level = s.level;
       if (s.xp) u.xp = s.xp;
+      if (u.role === "hound") {
+        const kennel = state.buildings.find(b => b.type === "kennel" && b.built);
+        u.homeX = Number.isFinite(s.homeX) ? s.homeX : (kennel ? kennel.x : u.x);
+      }
       return u;
     });
     state.vagrants = [];

@@ -1,13 +1,14 @@
 import { CFG, BUILDING_SLOTS } from '../../config/config.js';
-import { ENEMY_TYPES } from '../../config/enemies.js';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeboss1';
 import { dist, rand } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { floaty, spawnParticles } from './SpawnSystem.js';
-import { addXP } from '../economy/UpgradeSystem.js';
-import { killEnemy } from '../../util/EnemyUtils.js';
+import { floaty, spawnGoldReward, spawnParticles } from './SpawnSystem.js?v=biomeboss1';
+import { addXP } from '../economy/UpgradeSystem.js?v=biomeweapons1';
+import { killEnemy } from '../../util/EnemyUtils.js?v=biomeboss1';
 import { crownAegisStats } from '../../util/DefenseStats.js';
+import { makeUnit } from '../../entities/Unit.js';
 
 // Buildings unlocked by base upgrades: watchtowers, lumber camps, the healing
 // shrine and (at base level 6) ballista emplacements. Forest slots must be
@@ -57,6 +58,10 @@ export function buildingLabel(b) {
     if (b.level < 2) return `Upgrade ballista (lvl ${b.level}→${b.level + 1})`;
     return "Ballista (max level)";
   }
+  if (b.type === "kennel") return "Ember kennel (keeps hounds nearby)";
+  if (b.type === "trap_foundry") return "Trap foundry (lays snap traps)";
+  if (b.type === "raven_roost") return "Omen roost (harasses elite enemies)";
+  if (b.type === "market_cart") return "Pilgrim market (delivers supply chests)";
   return "";
 }
 
@@ -204,6 +209,115 @@ function updateShrine(b, dt) {
   if (healed) spawnParticles(b.x, groundY - 32, 12, "#bfefff", 40, 70);
 }
 
+function updateKennel(b, dt) {
+  b.timer = Math.max(0, (b.timer || 0) - dt);
+  b.fireFlash = Math.max(0, (b.fireFlash || 0) - dt);
+  const maxHounds = Math.max(1, b.level || 1);
+  const hounds = state.units.filter(u => u.role === "hound" && u.hp > 0 && !u.dying && Math.abs((u.homeX || b.x) - b.x) < 12);
+  if (hounds.length >= maxHounds || b.timer > 0) return;
+  const h = makeUnit("hound", b.x + rand(-22, 22));
+  h.homeX = b.x;
+  h.transform = 0.55;
+  state.units.push(h);
+  b.timer = 18;
+  b.fireFlash = 0.45;
+  spawnParticles(b.x, groundY - 24, 12, "#ffb45f", 70, 80);
+  Audio.recruit();
+}
+
+function trapFoundryX(b) {
+  const aliveEnemy = state.enemies.find(e => !e.fleeing && !e.dying && e.hp > 0 && Math.abs(e.x - CFG.baseX) < 900);
+  if (aliveEnemy) return aliveEnemy.x + rand(-34, 34);
+  const slots = state.walls && state.walls.length
+    ? state.walls.map(w => w.x)
+    : [CFG.baseX - 520, CFG.baseX - 315, CFG.baseX + 315, CFG.baseX + 520];
+  b.trapIdx = ((b.trapIdx || 0) + 1) % slots.length;
+  return slots[b.trapIdx] + rand(-34, 34);
+}
+
+function updateTrapFoundry(b, dt) {
+  b.timer = Math.max(0, (b.timer || 0) - dt);
+  b.fireFlash = Math.max(0, (b.fireFlash || 0) - dt);
+  const cap = 5 + (b.level || 1) * 3;
+  if ((state.caltrops || []).length >= cap || b.timer > 0) return;
+  const x = trapFoundryX(b);
+  state.caltrops.push({
+    x, y: groundY - 3, vx: 0, vy: 0,
+    state: "armed",
+    life: 24 + (b.level || 1) * 8,
+    settle: 0.3,
+    snapT: 0,
+    rot: rand(-0.25, 0.25),
+    spin: 0,
+  });
+  b.timer = Game.isNight ? Math.max(3.8, 6.2 - (b.level || 1) * 0.9) : 12;
+  b.fireFlash = 0.22;
+  spawnParticles(x, groundY - 7, 6, "#cfd3d9", 34, 18);
+  Audio.hit();
+}
+
+function roostTarget(b) {
+  let best = null, score = -1;
+  for (const e of state.enemies) {
+    if (e.fleeing || e.dying || e.hp <= 0) continue;
+    if (dist(e.x, b.x) > 980) continue;
+    const t = ENEMY_TYPES[e.type];
+    let s = 1000 - dist(e.x, b.x);
+    if (t?.boss) s += 450;
+    if (t?.flying) s += 250;
+    if (t?.caster || t?.siege || t?.chainImp) s += 180;
+    if (e.bounty) s += 220;
+    if (s > score) { score = s; best = e; }
+  }
+  return best;
+}
+
+function updateRavenRoost(b, dt) {
+  b.timer = Math.max(0, (b.timer || 0) - dt);
+  b.fireFlash = Math.max(0, (b.fireFlash || 0) - dt);
+  if (b.timer > 0) return;
+  const target = roostTarget(b);
+  if (!target) { b.timer = 0.6; return; }
+  const dmg = 1 + (b.level || 1);
+  target.hp -= dmg;
+  target.flash = 0.14;
+  target.slow = Math.max(target.slow || 0, 0.9);
+  target.hunterMark = Math.max(target.hunterMark || 0, 2.4);
+  b.fireFlash = 0.35;
+  b.timer = Math.max(2.6, 4.6 - (b.level || 1) * 0.7);
+  spawnParticles(target.x, groundY + (target.fy || 0) - 26, 8, "#b9a7ff", 55, 70);
+  floaty(target.x, "-" + dmg + " omen", "#b9a7ff");
+  Audio.hit();
+  if (target.hp <= 0) killEnemy(target);
+}
+
+const MARKET_WEAPONS = ["dagger", "short_bow", "spear", "crossbow", "fire_tome", "hydro_tome", "long_bow"];
+
+function updateMarketCart(b, dt) {
+  if (Game.isNight) return;
+  b.timer = Math.max(0, (b.timer || 0) - dt);
+  b.fireFlash = Math.max(0, (b.fireFlash || 0) - dt);
+  const waiting = (state.chests || []).filter(ch => ch.market && !ch.open).length;
+  if (waiting >= 2 || b.timer > 0) return;
+  const level = b.level || 1;
+  const weaponId = level >= 2 && Math.random() < 0.35
+    ? MARKET_WEAPONS[Math.floor(Math.random() * MARKET_WEAPONS.length)]
+    : null;
+  state.chests.push({
+    x: b.x + rand(-28, 28),
+    lootGold: 8 + Game.day * 2 + level * 4,
+    weaponId,
+    open: false,
+    openAnim: 0,
+    market: true,
+  });
+  b.timer = Math.max(28, 52 - level * 9);
+  b.fireFlash = 0.5;
+  spawnGoldReward(b.x, 1 + level, "passive", { spreadX: 18, fromY: groundY - 20, vx: 30 });
+  spawnParticles(b.x, groundY - 26, 14, "#7fd6a4", 60, 70);
+  Audio.chest();
+}
+
 export function updateBuildings(dt) {
   if (!state.buildings) return;
   // Forest slots become buildable once the trees around them are felled.
@@ -214,6 +328,10 @@ export function updateBuildings(dt) {
     if (b.type === "tower") updateTower(b, dt);
     else if (b.type === "shrine") updateShrine(b, dt);
     else if (b.type === "ballista") updateBallista(b, dt);
+    else if (b.type === "kennel") updateKennel(b, dt);
+    else if (b.type === "trap_foundry") updateTrapFoundry(b, dt);
+    else if (b.type === "raven_roost") updateRavenRoost(b, dt);
+    else if (b.type === "market_cart") updateMarketCart(b, dt);
   }
   updateCrownAegis(dt);
 }

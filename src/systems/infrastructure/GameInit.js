@@ -7,14 +7,14 @@ import { makeWall } from '../../entities/Wall.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { Audio } from './Audio.js';
 import { spawnParticles, spawnAnimal, planNight, purchaseFloaty } from '../world/SpawnSystem.js';
-import { buildForest } from '../world/ForestSystem.js';
-import { makeBuildings, buildingCost, buildingLabel, payBuilding } from '../world/OutpostSystem.js';
-import { upgradeBase } from '../../util/GameStateHelpers.js';
-import { addXP } from '../economy/UpgradeSystem.js';
-import { baseName } from '../../rendering/HUD.js';
-import { applyPermanentUpgrades, applyPermanentWorldUpgrades } from './RoguelikeSystem.js';
+import { addForestCamp, buildForest } from '../world/ForestSystem.js';
+import { makeBuildings, buildingCost, buildingLabel, payBuilding } from '../world/OutpostSystem.js?v=biomeweapons1';
+import { upgradeBase } from '../../util/GameStateHelpers.js?v=biomeweapons1';
+import { addXP } from '../economy/UpgradeSystem.js?v=biomeweapons1';
+import { baseName } from '../../rendering/HUD.js?v=biomeweapons1';
+import { applyPermanentUpgrades, applyPermanentWorldUpgrades, permanentForestCampPlans } from './RoguelikeSystem.js';
 import { initMineVeins } from '../world/MineSystem.js';
-import { fortNext, purchaseFortUpgrade } from '../world/FortificationSystem.js';
+import { fortNext, purchaseFortUpgrade } from '../world/FortificationSystem.js?v=biomeweapons1';
 import { currentPopCap, wallMaxHpForLevel } from '../../util/DefenseStats.js';
 
 function missingDefenseHp() {
@@ -265,6 +265,7 @@ export function newGame() {
   state.vagrants   = [];
   state.enemies    = [];
   state.coins      = [];
+  state.goldCollectors = [];
   state.arrows     = [];
   state.animals    = [];
   state.particles  = [];
@@ -323,6 +324,7 @@ export function newGame() {
   Game.treeSeed = randInt(1, 99999);
   buildStations();
   buildForest();
+  for (const camp of permanentForestCampPlans()) addForestCamp(camp.x, camp.vagrants);
 
   // Game clock
   Game.time              = 0.06;
@@ -342,10 +344,19 @@ export function newGame() {
   Game.momentumTimer     = 0;
   Game.lastStandDay      = 0;
   Game.nightPortalWarnT  = 0;
+  Game.bountyRaidersRemaining = 0;
 
   // Seed starting population
   for (let i = 0; i < 2; i++)
     state.units.push(makeUnit("peasant", CFG.baseX + rand(-180, 180)));
+  while (state.pendingFarmers > 0) {
+    const peasant = state.units.find(u => u.role === "peasant");
+    if (!peasant) break;
+    peasant.role = "farmer";
+    peasant.workTimer = 0;
+    peasant.transform = 0.55;
+    state.pendingFarmers--;
+  }
   for (let i = 0; i < 10; i++) spawnAnimal();
   planNight();
 }

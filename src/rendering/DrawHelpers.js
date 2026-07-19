@@ -55,6 +55,9 @@ const WAND_LOOKS = {
   arcane_tome:    { len:44, wood:"#4a3a72", woodLt:"#7a62b3", trim:"#d19aff", gem:"#b080ff", core:"#f0e4ff", kind:"arcane" },
   shadow_tome:    { len:42, wood:"#1a1322", woodLt:"#382348", trim:"#9b4bd6", gem:"#8822cc", core:"#e8d0ff", kind:"shadow" },
   void_tome:      { len:46, wood:"#0b0812", woodLt:"#2a1638", trim:"#e0a0ff", gem:"#07050d", core:"#e0a0ff", kind:"void" },
+  blizzard_chime: { len:42, wood:"#c8d8e8", woodLt:"#f0fbff", trim:"#bfefff", gem:"#d8f8ff", core:"#ffffff", kind:"storm" },
+  magma_mortar:   { len:46, wood:"#221715", woodLt:"#5a3324", trim:"#ff7a2a", gem:"#2a1814", core:"#ffd060", kind:"meteor" },
+  possessed_heart:{ len:38, wood:"#160a22", woodLt:"#3d1b5c", trim:"#c45cff", gem:"#24102f", core:"#f0c8ff", kind:"void" },
 };
 const DEFAULT_WAND = { len:38, wood:"#3a2448", woodLt:"#5c3d70", trim:"#d0a0ff", gem:"#b080ff", core:"#f0e4ff", kind:"arcane" };
 

@@ -1,24 +1,24 @@
 import { CFG, STATIONS_X } from '../../config/config.js';
-import { ENEMY_TYPES } from '../../config/enemies.js';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeboss1';
 import { ARROW_RAIN_COOLDOWN } from '../../config/archerSkills.js';
 import { clamp, dist, rand, pick } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, spawnGoldCoins, spawnGoldReward, floaty as showFloaty } from '../world/SpawnSystem.js';
-import { shootArrow, killEnemy, damagePlayer } from '../combat/Combat.js';
-import { killEnemyWithAnimation, spawnImpBlood, spawnHumanBlood } from '../../util/EnemyUtils.js';
+import { spawnParticles, spawnGoldCoins, spawnGoldReward, floaty as showFloaty } from '../world/SpawnSystem.js?v=biomeboss1';
+import { shootArrow, killEnemy, damagePlayer } from '../combat/Combat.js?v=biomeboss1';
+import { killEnemyWithAnimation, spawnImpBlood, spawnHumanBlood } from '../../util/EnemyUtils.js?v=biomeboss1';
 import { wallHeight, wallStandX, wallBackDir, wallRenderWidth, wallPlatformDepth, overWallPlatform, entityWallLift } from '../../entities/Wall.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { nearestChoppableTree, chopTree, nearestLog, deliverLog, pondAt, nearestPond } from '../world/ForestSystem.js';
 import { minerAI } from '../world/MineSystem.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { addSkillPoints } from '../economy/SkillSystem.js';
-import { archerAI as archerRoleAI } from './ArcherAI.js';
-import { builderAI as builderRoleAI } from './BuilderAI.js';
-import { farmerAI as farmerRoleAI } from './FarmerAI.js';
-import { guardAI as guardRoleAI } from './GuardAI.js';
-import { assaultUnitAI } from '../world/AssaultSystem.js';
+import { archerAI as archerRoleAI } from './ArcherAI.js?v=biomeboss1';
+import { builderAI as builderRoleAI } from './BuilderAI.js?v=biomeboss1';
+import { farmerAI as farmerRoleAI } from './FarmerAI.js?v=biomeboss1';
+import { guardAI as guardRoleAI } from './GuardAI.js?v=biomeboss1';
+import { assaultUnitAI } from '../world/AssaultSystem.js?v=biomeboss1';
 
 function hasSkill(id) { return state.archerSkills.includes(id); }
 
@@ -1179,6 +1179,50 @@ function assignFixedSide(u) {
   return u.fixedSide;
 }
 
+function houndAI(u, dt) {
+  if (u.panic > 0) {
+    moveToward(u, u.homeX || CFG.baseX, 190, dt);
+    return;
+  }
+
+  const sight = Game.isNight ? 520 : 360;
+  let target = u.combatTarget;
+  if (!target || target.hp <= 0 || target.dying || target.fleeing || dist(u.x, target.x) > sight + 80) {
+    target = nearestEnemy(u.x, sight, false);
+    u.combatTarget = target;
+  }
+
+  if (target) {
+    const biteRange = 32;
+    if (dist(u.x, target.x) > biteRange) {
+      moveToward(u, target.x, 235, dt);
+      return;
+    }
+    u.dir = Math.sign(target.x - u.x) || u.dir || 1;
+    if (u.cooldown <= 0) {
+      const dmg = 1.25 * permanentDamageMultiplier();
+      target.hp -= dmg;
+      target.flash = 0.12;
+      target.slow = Math.max(target.slow || 0, 0.45);
+      target.combatTarget = u;
+      u.cooldown = 0.74;
+      u.biteFlash = 0.18;
+      spawnImpBlood(target, 0.55, groundY + (target.fy || 0) - 16);
+      spawnParticles(target.x, groundY + (target.fy || 0) - 16, 3, "#f2c14e", 24, 36);
+      Audio.hit();
+      if (target.hp <= 0) killEnemy(target);
+    }
+    return;
+  }
+
+  const center = u.homeX || CFG.baseX;
+  if (!Number.isFinite(u.targetX) || Math.abs(u.x - u.targetX) < 8 || Math.random() < 0.006) {
+    u.targetX = center + rand(-160, 160);
+  }
+  if (sunsetApproaching() && Math.abs(u.x - CFG.baseX) > 260) u.targetX = CFG.baseX + rand(-120, 120);
+  moveToward(u, u.targetX, 118, dt);
+}
+
 // Dispatch table replaces the if/else chain in updateUnits.
 const AI_HANDLERS = {
   archer:  archerRoleAI,
@@ -1187,6 +1231,7 @@ const AI_HANDLERS = {
   peasant: peasantAI,
   guard:   guardRoleAI,
   miner:   minerAI,
+  hound:   houndAI,
 };
 
 function lastStandActive() {
@@ -1218,6 +1263,19 @@ function unitCooldownRate(u, activeLastStand) {
 function updateUnitBuffTimers(u, dt) {
   if ((u.rallyHomeT || 0) > 0) u.rallyHomeT = Math.max(0, u.rallyHomeT - dt);
   if ((u.rallyBoostT || 0) > 0) u.rallyBoostT = Math.max(0, u.rallyBoostT - dt);
+  if ((u.stunned || 0) > 0) u.stunned = Math.max(0, u.stunned - dt);
+  if ((u.rooted || 0) > 0) u.rooted = Math.max(0, u.rooted - dt);
+  if ((u.possessed || 0) > 0) u.possessed = Math.max(0, u.possessed - dt);
+  if ((u.poison || 0) > 0) {
+    u.poison = Math.max(0, u.poison - dt);
+    u.poisonTick = (u.poisonTick || 0.8) - dt;
+    if (u.poisonTick <= 0) {
+      u.poisonTick = 0.8;
+      u.hp -= u.poisonDmg || 1;
+      u.panic = Math.max(u.panic || 0, 0.6);
+      spawnHumanBlood(u, 0.35, u.dir || 1, groundY - 30);
+    }
+  }
 }
 
 function rallyUnitHome(u, dt) {
@@ -1249,6 +1307,7 @@ export function updateUnits(dt) {
     if (u.caltropCd > 0) u.caltropCd -= dt;
     if (u.grappleCd > 0) u.grappleCd -= dt;
     if (u.powerFlash > 0) u.powerFlash -= dt;
+    if (u.biteFlash > 0) u.biteFlash -= dt;
     if (u.meleeMode > 0) u.meleeMode -= dt;
     if (u.panic > 0) u.panic -= dt;
     if (u.strike > 0) u.strike -= dt;
@@ -1294,6 +1353,18 @@ export function updateUnits(dt) {
     if (u.hp <= 0) { startUnitDeath(u); continue; }
     if (u.transform > 0) { u.transform -= dt; if (u.transform < 0) u.transform = 0; }
     if (u.knock) { u.x = clamp(u.x + u.knock * dt, 120, CFG.worldWidth - 120); u.knock *= 0.82; if (Math.abs(u.knock) < 6) u.knock = 0; }
+    if ((u.stunned || 0) > 0 || (u.possessed || 0) > 0) {
+      u.vx = 0;
+      u.shootState = null;
+      u.moving = false;
+      continue;
+    }
+    if ((u.rooted || 0) > 0 && (u.role === "builder" || u.role === "farmer" || u.role === "miner")) {
+      u.vx = 0;
+      u.shootState = null;
+      u.moving = false;
+      continue;
+    }
     if (rallyUnitHome(u, dt)) {
       u.moving = Math.abs(u.x - px0) > 0.04;
       u.moveSpeed = dt > 0 ? Math.abs(u.x - px0) / dt : 0;

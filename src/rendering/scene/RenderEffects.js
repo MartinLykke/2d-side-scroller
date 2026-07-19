@@ -1,7 +1,7 @@
 import { clamp } from '../../util/math.js';
 import { ctx, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
-import { FX } from '../Effects.js';
+import { FX } from '../Effects.js?v=biomes4';
 import { visibleWorldBounds } from '../Viewport.js';
 import { renderBudget } from '../RenderFrame.js';
 
@@ -99,6 +99,7 @@ export function drawFirePools() {
     if (p.x < view.left || p.x > view.right) continue;
     const fade = Math.min(1, p.life / 1.2) * Math.min(1, (p.maxLife - p.life) / 0.3 + 0.2);
     const isVoid = p.kind === "void";
+    const isAcid = p.kind === "acid";
     ctx.save();
     // molten puddle / collapsing void scar
     ctx.globalAlpha = 0.85 * fade;
@@ -108,6 +109,11 @@ export function drawFirePools() {
       pg.addColorStop(0.26, "rgba(138,90,255,0.78)");
       pg.addColorStop(0.68, "rgba(30,12,70,0.62)");
       pg.addColorStop(1, "rgba(3,1,12,0)");
+    } else if (isAcid) {
+      pg.addColorStop(0, "rgba(210,255,126,0.92)");
+      pg.addColorStop(0.38, "rgba(127,224,90,0.78)");
+      pg.addColorStop(0.78, "rgba(45,90,38,0.55)");
+      pg.addColorStop(1, "rgba(12,40,18,0)");
     } else {
       pg.addColorStop(0, "rgba(255,214,96,0.95)");
       pg.addColorStop(0.4, "rgba(255,106,32,0.8)");
@@ -122,7 +128,7 @@ export function drawFirePools() {
       const fx = p.x + Math.sin(p.ph + k * 2.4) * p.r * 0.6;
       const fh = (7 + Math.sin(T * (9 + k) + p.ph + k) * 3.5) * fade;
       ctx.globalAlpha = 0.5 * fade;
-      ctx.fillStyle = isVoid ? "#8a5aff" : "#ff6a20";
+      ctx.fillStyle = isVoid ? "#8a5aff" : isAcid ? "#7fe05a" : "#ff6a20";
       if (isVoid) {
         const tx = p.x + (fx - p.x) * (0.7 + 0.15 * Math.sin(T * 2 + k));
         ctx.beginPath();
@@ -134,14 +140,14 @@ export function drawFirePools() {
         ctx.beginPath(); ctx.ellipse(fx, groundY - 4 - fh * 0.5, 3.2, fh, Math.sin(T * 4 + k) * 0.2, 0, Math.PI * 2); ctx.fill();
       }
       ctx.globalAlpha = 0.45 * fade;
-      ctx.fillStyle = isVoid ? "#d7f6ff" : "#ffd060";
+      ctx.fillStyle = isVoid ? "#d7f6ff" : isAcid ? "#b8ff7a" : "#ffd060";
       ctx.beginPath(); ctx.ellipse(fx, groundY - 3 - fh * 0.35, isVoid ? 1.8 : 1.4, fh * 0.5, 0, 0, Math.PI * 2); ctx.fill();
     }
     // ground glow
     ctx.globalAlpha = 0.3 * fade;
     const glow = ctx.createRadialGradient(p.x, groundY - 6, 4, p.x, groundY - 6, p.r * 1.5);
-    glow.addColorStop(0, isVoid ? "rgba(138,90,255,0.72)" : "rgba(255,140,40,0.7)");
-    glow.addColorStop(1, isVoid ? "rgba(20,5,60,0)" : "rgba(120,20,0,0)");
+    glow.addColorStop(0, isVoid ? "rgba(138,90,255,0.72)" : isAcid ? "rgba(127,224,90,0.65)" : "rgba(255,140,40,0.7)");
+    glow.addColorStop(1, isVoid ? "rgba(20,5,60,0)" : isAcid ? "rgba(20,70,24,0)" : "rgba(120,20,0,0)");
     ctx.fillStyle = glow;
     ctx.beginPath(); ctx.ellipse(p.x, groundY - 8, p.r * 1.5, p.r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
     if (isVoid) {

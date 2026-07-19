@@ -5,6 +5,22 @@ export const rand = (a, b) => a + Math.random() * (b - a);
 export const randInt = (a, b) => Math.floor(rand(a, b + 1));
 export const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
+export function cameraBounds(worldWidth, viewportWidth, zoom = 1) {
+  const z = Math.max(0.001, zoom || 1);
+  const halfView = viewportWidth / (2 * z);
+  const screenCenter = viewportWidth / 2;
+  const min = halfView - screenCenter;
+  const max = worldWidth - screenCenter - halfView;
+  if (min <= max) return { min, max };
+  const centered = worldWidth / 2 - screenCenter;
+  return { min: centered, max: centered };
+}
+
+export function clampCameraTarget(target, worldWidth, viewportWidth, zoom = 1) {
+  const { min, max } = cameraBounds(worldWidth, viewportWidth, zoom);
+  return clamp(target, min, max);
+}
+
 
 export function applyCrit(damage, critChance, critMultiplier) {
   if (Math.random() < critChance) {

@@ -1,9 +1,9 @@
 import { clamp, dist } from '../../util/math.js';
-import { WEAPONS, RARITY_COL } from '../../config/weapons.js';
+import { WEAPONS, RARITY_COL } from '../../config/weapons.js?v=biomeweapons1';
 import { ctx, groundY } from '../../core/canvas.js';
 import { state } from '../../core/state.js';
-import { groundShadow } from '../DrawHelpers.js';
-import { drawWeaponModel } from '../ItemRender.js';
+import { groundShadow } from '../DrawHelpers.js?v=biomeweapons1';
+import { drawWeaponModel } from '../ItemRender.js?v=biomeweapons1';
 import { visibleWorldBounds } from '../Viewport.js';
 
 const STUCK_ARROW_FADE_TIME = 0.55;
@@ -99,6 +99,44 @@ export function drawCoins(mineLayer = false) {
     }
     ctx.fillStyle=inner; ctx.beginPath(); ctx.ellipse(c.x,yy,2.4*sc,3.4*sc,0,0,Math.PI*2); ctx.fill();
     ctx.fillStyle="rgba(255,250,210,0.9)"; ctx.beginPath(); ctx.ellipse(c.x-1.4*sc,yy-1.8*sc,1*sc,1.6*sc,0,0,Math.PI*2); ctx.fill();
+  }
+}
+
+export function drawGoldCollectors() {
+  if (!state.goldCollectors || !state.goldCollectors.length) return;
+  const t = performance.now() / 1000;
+  const view = visibleWorldBounds(100);
+  for (const w of state.goldCollectors) {
+    if (w.x < view.left || w.x > view.right) continue;
+    const y = w.y || groundY - 56;
+    const flash = clamp((w.flash || 0) / 0.24, 0, 1);
+    groundShadow(w.x, 8 + flash * 5, 0.12 + flash * 0.08);
+    ctx.save();
+    ctx.translate(w.x, y);
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const glow = ctx.createRadialGradient(0, 0, 1, 0, 0, 24 + flash * 14);
+    glow.addColorStop(0, `rgba(255,232,150,${0.55 + flash * 0.35})`);
+    glow.addColorStop(0.5, "rgba(242,193,78,0.22)");
+    glow.addColorStop(1, "rgba(242,193,78,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(0, 0, 24 + flash * 14, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = "#ffe9a3";
+    ctx.beginPath(); ctx.ellipse(0, 0, 6.5 + flash * 1.5, 7.5 + flash * 1.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#c98524";
+    ctx.beginPath(); ctx.ellipse(0, 0, 2.5, 4.2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#fff6c8";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(0, 0, 10, t * 2, t * 2 + Math.PI * 1.35); ctx.stroke();
+
+    ctx.fillStyle = w.target ? "#ffffff" : "#f2c14e";
+    for (let i = 0; i < 2; i++) {
+      const a = t * 4 + i * Math.PI + (w.bob || 0);
+      ctx.beginPath(); ctx.arc(Math.cos(a) * 12, Math.sin(a) * 6, 1.6, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
   }
 }
 
@@ -247,7 +285,35 @@ export function drawArrows() {
       ctx.beginPath(); ctx.moveTo(-18,0); ctx.lineTo(5,0); ctx.stroke();
       ctx.restore();
     }
-    if (wid === "dark_bow") {
+    if (wid === "acid_blowgun") {
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.55;
+      const ag = ctx.createRadialGradient(0,0,1,0,0,11);
+      ag.addColorStop(0,"rgba(184,255,122,0.8)"); ag.addColorStop(1,"rgba(50,120,35,0)");
+      ctx.fillStyle=ag; ctx.beginPath(); ctx.arc(0,0,11,0,Math.PI*2); ctx.fill(); ctx.restore();
+      ctx.strokeStyle="#5b3a24"; ctx.lineWidth=1.8;
+      ctx.beginPath(); ctx.moveTo(-14,0); ctx.lineTo(6,0); ctx.stroke();
+      ctx.fillStyle="#7fe05a"; ctx.beginPath(); ctx.moveTo(6,-1.6); ctx.lineTo(11,0); ctx.lineTo(6,1.6); ctx.closePath(); ctx.fill();
+      ctx.fillStyle="#b8ff7a"; ctx.beginPath(); ctx.arc(3,0,1.3,0,Math.PI*2); ctx.fill();
+    } else if (wid === "sandstorm_sling") {
+      ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.5;
+      const sg=ctx.createRadialGradient(0,0,1,0,0,15);
+      sg.addColorStop(0,"rgba(255,224,160,0.75)"); sg.addColorStop(1,"rgba(120,80,30,0)");
+      ctx.fillStyle=sg; ctx.beginPath(); ctx.arc(0,0,15,0,Math.PI*2); ctx.fill(); ctx.restore();
+      ctx.fillStyle="#d8b46a"; ctx.beginPath(); ctx.ellipse(0,0,5.2,4.2,0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle="#ffe0a0"; ctx.beginPath(); ctx.arc(-1.2,-1.2,1.2,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle="rgba(255,224,160,0.65)"; ctx.lineWidth=1.1;
+      ctx.beginPath(); ctx.arc(-5,0,8,-0.7,0.7); ctx.stroke();
+    } else if (wid === "splinter_bow") {
+      ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.42;
+      const lg=ctx.createRadialGradient(0,0,1,0,0,13);
+      lg.addColorStop(0,"rgba(143,208,90,0.8)"); lg.addColorStop(1,"rgba(30,100,30,0)");
+      ctx.fillStyle=lg; ctx.beginPath(); ctx.arc(0,0,13,0,Math.PI*2); ctx.fill(); ctx.restore();
+      ctx.strokeStyle="#8d673a"; ctx.lineWidth=1.7;
+      ctx.beginPath(); ctx.moveTo(-12,0); ctx.lineTo(6,0); ctx.stroke();
+      ctx.fillStyle="#c9b48a"; ctx.beginPath(); ctx.moveTo(6,-1.8); ctx.lineTo(11,0); ctx.lineTo(6,1.8); ctx.closePath(); ctx.fill();
+      ctx.fillStyle="#8fd05a";
+      for (let k=0;k<3;k++) { const bx=-8+k*4; ctx.beginPath(); ctx.ellipse(bx, k%2?-2.2:2.2, 1.2, 2.4, 0.7, 0, Math.PI*2); ctx.fill(); }
+    } else if (wid === "dark_bow") {
       ctx.save(); ctx.globalCompositeOperation="lighter"; ctx.globalAlpha=0.55;
       const dg=ctx.createRadialGradient(0,0,1,0,0,12);
       dg.addColorStop(0,"rgba(180,80,255,0.8)"); dg.addColorStop(1,"rgba(40,0,80,0)");

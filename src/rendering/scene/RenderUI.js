@@ -1,20 +1,20 @@
 import { clamp } from '../../util/math.js';
-import { WEAPONS, RARITY_COL, RARITY_NAME, effectiveWeapon } from '../../config/weapons.js';
-import { UPGRADE_TIERS } from '../../config/weaponUpgrades.js';
+import { WEAPONS, RARITY_COL, RARITY_NAME, effectiveWeapon } from '../../config/weapons.js?v=biomeweapons1';
+import { UPGRADE_TIERS } from '../../config/weaponUpgrades.js?v=biomeweapons1';
 import { ARMORS, ARMOR_RARITY_COL, ARMOR_RARITY_NAME, armorBlockChance } from '../../config/armor.js';
-import { ENEMY_TYPES } from '../../config/enemies.js';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeboss1';
 import { ctx, W, H, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { inject, provide } from '../../core/services.js';
-import { roundedRect, drawHeart } from '../DrawHelpers.js';
-import { drawWeaponModel, drawArmorModel, drawHeldWeapon, WEAPON_TYPE_LABEL } from '../ItemRender.js';
+import { roundedRect, drawHeart } from '../DrawHelpers.js?v=biomeweapons1';
+import { drawWeaponModel, drawArmorModel, drawHeldWeapon, WEAPON_TYPE_LABEL } from '../ItemRender.js?v=biomeweapons1';
 import { MOUNTS } from '../../config/mounts.js';
 import { drawMountModel } from '../sprites/Mount.js';
 import { drawPlayer as drawPlayerBody } from '../sprites/Player.js';
 import { weaponLevel, ensureInventory } from '../../systems/economy/InventorySystem.js';
-import { currentShopList, isShopItemOwned, SHOP_COLS } from '../../systems/economy/ShopSystem.js';
+import { currentShopList, isShopItemOwned, SHOP_COLS } from '../../systems/economy/ShopSystem.js?v=biomeweapons1';
 import { CASTLE_UPGRADES } from '../../config/castleUpgrades.js';
-import { castleUpgradeCost } from '../../systems/economy/CastleUpgradeSystem.js';
+import { castleUpgradeCost } from '../../systems/economy/CastleUpgradeSystem.js?v=biomeweapons1';
 import { ensureCastleUpgrades, currentPopCap, currentCoinCap, crownAegisStats } from '../../util/DefenseStats.js';
 
 // ---------- Shared UI helpers ----------
@@ -87,8 +87,22 @@ function upgradeSummary(u) {
   if (u.effect.runeTrap) return "rune trap";
   if (u.effect.shadowCurse) return "shadow curse";
   if (u.effect.voidScar) return "void scar";
+  if (u.effect.splinterCount) return "splinter shots";
+  if (u.effect.poisonHit || u.effect.poisonArrow) return "poison";
+  if (u.effect.sandBlind) return "blinding sand";
+  if (u.effect.heatStacks) return "overheat";
+  if (u.effect.frostAura) return "frost aura";
   return UPGRADE_TIERS[u.tier]?.name.toLowerCase() || "special";
 }
+
+const BIOME_DROP_LABELS = {
+  forest: "Forest",
+  frozen: "Frozen Wastes",
+  desert: "Desert",
+  swamp: "Swamp",
+  volcano: "Volcano",
+  corrupted: "Corrupted Lands",
+};
 
 function armorAbilityText(a) {
   return a?.ability ? a.ability.name + ": " + a.ability.desc : "";
@@ -109,6 +123,7 @@ function drawItemTooltip(item, mx, my) {
     lines.push({ t: "Damage: " + eff.dmg + (eff.dmg > w.dmg ? "  (+" + Math.round((eff.dmg - w.dmg) * 10) / 10 + ")" : ""), c: "#9bd05a" });
     lines.push({ t: "Range: " + eff.range + " px" + (eff.range > w.range ? "  (+" + (eff.range - w.range) + ")" : ""), c: "#e8d8a8" });
     lines.push({ t: "Attack time: " + eff.speed + "s" + (eff.speed < w.speed ? "  (faster)" : ""), c: "#6ab4ff" });
+    if (w.biomeOnly) lines.push({ t: "Biome drop: " + (BIOME_DROP_LABELS[w.biome] || w.biome), c: w.col, gap: 4 });
     if (upgs.length) {
       lines.push({ t: "Upgrades:", c: MUTED, gap: 4 });
       for (const u of upgs) lines.push({ t: "• " + u.name + " — " + upgradeSummary(u), c: UPGRADE_TIERS[u.tier]?.col || "#9bd05a" });
@@ -1032,6 +1047,12 @@ export function drawLegendaryIntro() {
   };
   descs.voidTitan = "Sealed void plates halve damage until the star-core opens. Tears gravity scars into the battlefield.";
   descs.voidSeraph = "A flying ritual horror that fires black-star lances, screams shockwaves and summons the Hollow.";
+  descs.forestStalker = "Rams walls, stuns archers and grows roots through the base. Splinter Bow clears roots; Lumberjack's Hatchet cracks its bark.";
+  descs.skadiWrath = "Deep Freeze makes your strongest wall brittle and Cryo-Shield reflects arrows. Icicle Lance breaks the shield; Blizzard Chime protects archers.";
+  descs.duneBroodmother = "Burrows under the line, breaches near the outer wall and leaves acid rain. Sandstorm Sling makes her big attacks miss.";
+  descs.sunkenBehemoth = "Sucks in coins and defenders, healing from swallowed gold. Acid Blowgun blocks the healing; Gator Maul interrupts the suction.";
+  descs.ignitedCore = "Opens lava cracks and charges a Supernova at half HP. Obsidian Brand and Magma Mortar can interrupt the core.";
+  descs.voidMindflayer = "Possesses archers and decays your gold. Shadow Scythe cuts the control tentacles; Possessed Heart cracks the mask.";
   ctx.fillText(descs[intro.bossType] || "", tx, py + 120);
   ctx.fillStyle = "rgba(255,255,255,0.1)"; roundedRect(tx, py + 140, panW - 230, 12, 6); ctx.fill();
   ctx.fillStyle = ET.eye;

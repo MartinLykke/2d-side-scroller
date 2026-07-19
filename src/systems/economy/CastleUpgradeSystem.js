@@ -6,7 +6,7 @@ import { clamp, dist } from '../../util/math.js';
 import { ensureCastleUpgrades, reapplyDefenseMaxHp, currentCoinCap } from '../../util/DefenseStats.js';
 import { spawnParticles, floaty } from '../world/SpawnSystem.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { addXP } from './UpgradeSystem.js';
+import { addXP } from './UpgradeSystem.js?v=biomeweapons1';
 
 export const CASTLE_MENU_RANGE = 155;
 

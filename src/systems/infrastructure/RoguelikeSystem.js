@@ -1,5 +1,5 @@
-import { CFG } from '../../config/config.js';
-import { clamp, dist, lerp } from '../../util/math.js';
+import { CFG, FOREST } from '../../config/config.js';
+import { clamp, clampCameraTarget, dist, lerp } from '../../util/math.js';
 import { ctx, W, H, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { keys } from '../input/Input.js';
@@ -11,9 +11,9 @@ import { baseMaxHpForLevel, wallMaxHpForLevel } from '../../util/DefenseStats.js
 const META_KEY = "kingdom_embers_meta_v1";
 const LEADERBOARD_MAX_ENTRIES = 5;
 const HUB = {
-  width: 4300,
+  width: 5920,
   spawnX: 520,
-  portalX: 3940,
+  portalX: 5520,
 };
 const HUB_TRANSITION_TIME = 1.15;
 const HUB_UPGRADE_LABELS = {
@@ -38,6 +38,16 @@ const HUB_UPGRADE_LABELS = {
   hungry_portals: "Faster portals",
   ashen_elites: "Elite enemies",
   iron_hide: "Enemy vitality",
+  gold_wisp: "Gold wisp",
+  trail_map: "Trail map",
+  reliquary: "Run chest",
+  seed_deed: "Starter farm",
+  dusk_bell: "Longer day",
+  ember_kennel: "Kennel",
+  trap_foundry: "Trap foundry",
+  raven_roost: "Raven roost",
+  pilgrim_market: "Market cart",
+  raider_writ: "Bounty raids",
 };
 
 export const META_UPGRADES = [
@@ -272,6 +282,116 @@ export const META_UPGRADES = [
     icon: "HARD",
     cost: lvl => 42 + lvl * 34,
   },
+  {
+    id: "gold_wisp",
+    tier: "wonder",
+    name: "Miser's Wisp",
+    desc: "start with a wisp that gathers loose gold; each rank adds one",
+    max: 3,
+    x: 3870,
+    color: "#ffe07a",
+    icon: "WISP",
+    cost: lvl => 34 + lvl * 30,
+  },
+  {
+    id: "trail_map",
+    tier: "wonder",
+    name: "Threadbare Trail Map",
+    desc: "+1 mapped survivor camp near the forest edge per rank",
+    max: 2,
+    x: 3980,
+    color: "#7fd6a4",
+    icon: "MAP",
+    cost: lvl => 38 + lvl * 34,
+  },
+  {
+    id: "reliquary",
+    tier: "wonder",
+    name: "Run Reliquary",
+    desc: "start with treasure chests; rank 2 may hold a weapon",
+    max: 2,
+    x: 4090,
+    color: "#d9e8ff",
+    icon: "CHEST",
+    cost: lvl => 44 + lvl * 42,
+  },
+  {
+    id: "seed_deed",
+    tier: "wonder",
+    name: "Widow's Seed Deed",
+    desc: "start with a working farm and farmer; rank 2 upgrades it",
+    max: 2,
+    x: 4200,
+    color: "#b6e86e",
+    icon: "FARM",
+    cost: lvl => 52 + lvl * 48,
+  },
+  {
+    id: "dusk_bell",
+    tier: "wonder",
+    name: "Dusk-Bound Bell",
+    desc: "+8 seconds before nightfall per rank",
+    max: 3,
+    x: 4310,
+    color: "#ffcf5a",
+    icon: "BELL",
+    cost: lvl => 36 + lvl * 32,
+  },
+  {
+    id: "ember_kennel",
+    tier: "mythic",
+    name: "Ember Kennel",
+    desc: "start with a kennel that keeps loyal hounds",
+    max: 2,
+    x: 4620,
+    color: "#ffb45f",
+    icon: "HOUND",
+    cost: lvl => 68 + lvl * 58,
+  },
+  {
+    id: "trap_foundry",
+    tier: "mythic",
+    name: "Tinkerer's Jawworks",
+    desc: "start with a foundry that lays snap traps near your walls",
+    max: 2,
+    x: 4730,
+    color: "#cfd3d9",
+    icon: "TRAP",
+    cost: lvl => 64 + lvl * 54,
+  },
+  {
+    id: "raven_roost",
+    tier: "mythic",
+    name: "Omen Roost",
+    desc: "start with a roost; spectral ravens harry elite enemies",
+    max: 2,
+    x: 4840,
+    color: "#b9a7ff",
+    icon: "ROOST",
+    cost: lvl => 72 + lvl * 62,
+  },
+  {
+    id: "pilgrim_market",
+    tier: "mythic",
+    name: "Pilgrim Market",
+    desc: "start with a cart that delivers supply chests by day",
+    max: 2,
+    x: 4950,
+    color: "#7fd6a4",
+    icon: "CART",
+    cost: lvl => 76 + lvl * 66,
+  },
+  {
+    id: "raider_writ",
+    tier: "curse",
+    name: "Raider's Writ",
+    desc: "+1 bounty raider each night and +5% embers per rank",
+    max: 3,
+    x: 5060,
+    color: "#ff6a4a",
+    icon: "RAID",
+    cost: lvl => 58 + lvl * 48,
+  },
 ];
 
 function defaultMeta() {
@@ -422,7 +542,8 @@ export function permanentRewardMultiplier() {
     + metaLevel("blood_moon") * 0.08
     + metaLevel("hungry_portals") * 0.06
     + metaLevel("ashen_elites") * 0.06
-    + metaLevel("iron_hide") * 0.07;
+    + metaLevel("iron_hide") * 0.07
+    + metaLevel("raider_writ") * 0.05;
 }
 
 export function permanentBaseHpBonus() {
@@ -447,6 +568,95 @@ export function eliteChanceBonus() {
 
 export function enemyVitalityMultiplier() {
   return 1 + metaLevel("iron_hide") * 0.10;
+}
+
+export function bountyRaiderCount() {
+  return metaLevel("raider_writ");
+}
+
+export function goldCollectorStats() {
+  const rank = metaLevel("gold_wisp");
+  if (rank <= 0) return { count: 0, range: 0, speed: 0, pickupRange: 0 };
+  return {
+    count: rank,
+    range: 430 + rank * 110,
+    speed: 235 + rank * 55,
+    pickupRange: 26,
+  };
+}
+
+export function permanentDayLengthBonusSeconds() {
+  return metaLevel("dusk_bell") * 8;
+}
+
+const RELIQUARY_WEAPONS = ["dagger", "spear", "short_bow", "crossbow", "fire_tome", "hydro_tome"];
+
+function starterReliquaryWeapon(rank, index) {
+  if (rank < 2 || index <= 0) return null;
+  return RELIQUARY_WEAPONS[Math.floor(Math.random() * RELIQUARY_WEAPONS.length)];
+}
+
+function seedGoldCollectors() {
+  const stats = goldCollectorStats();
+  state.goldCollectors = [];
+  for (let i = 0; i < stats.count; i++) {
+    state.goldCollectors.push({
+      x: CFG.baseX - 42 - i * 26,
+      y: groundY - 58 - i * 3,
+      homeOffset: 42 + i * 26,
+      side: i % 2 ? 1 : -1,
+      bob: Math.random() * Math.PI * 2,
+      sparkleT: Math.random(),
+      target: null,
+    });
+  }
+}
+
+function seedReliquaryChests(rank) {
+  if (rank <= 0) return;
+  const offsets = [-95, 105];
+  for (let i = 0; i < rank; i++) {
+    state.chests.push({
+      x: CFG.baseX + offsets[i % offsets.length],
+      lootGold: 9 + i * 5 + rank * 2,
+      weaponId: starterReliquaryWeapon(rank, i),
+      open: false,
+      openAnim: 0,
+    });
+  }
+}
+
+function seedStarterFarm(rank) {
+  if (rank <= 0) return;
+  state.farmBuilt = true;
+  state.farmLevel = Math.max(state.farmLevel || 0, Math.min(2, rank));
+  state.pendingFarmers = Math.max(state.pendingFarmers || 0, 1);
+}
+
+function seedMetaBuilding(id, type, x, level) {
+  if (level <= 0) return;
+  state.buildings = state.buildings || [];
+  if (state.buildings.some(b => b.metaUpgrade === id)) return;
+  state.buildings.push({
+    type,
+    x,
+    unlock: 1,
+    needsClearing: false,
+    cleared: true,
+    built: true,
+    level,
+    timer: 0,
+    fireFlash: 0,
+    meta: true,
+    metaUpgrade: id,
+  });
+}
+
+function seedMetaBuildings() {
+  seedMetaBuilding("ember_kennel", "kennel", CFG.baseX + 705, metaLevel("ember_kennel"));
+  seedMetaBuilding("trap_foundry", "trap_foundry", CFG.baseX - 705, metaLevel("trap_foundry"));
+  seedMetaBuilding("raven_roost", "raven_roost", CFG.baseX - 845, metaLevel("raven_roost"));
+  seedMetaBuilding("pilgrim_market", "market_cart", CFG.baseX + 585, metaLevel("pilgrim_market"));
 }
 
 export function applyPermanentUpgrades(player) {
@@ -479,6 +689,11 @@ export function applyPermanentWorldUpgrades() {
     const armorRank = metaLevel("armory_token");
     if (armorRank > 0) state.player.armor = armorRank > 1 ? "chainmail" : "leather_cap";
   }
+
+  seedGoldCollectors();
+  seedReliquaryChests(metaLevel("reliquary"));
+  seedStarterFarm(metaLevel("seed_deed"));
+  seedMetaBuildings();
 
   const extraVagrants = metaLevel("wanderer_lantern");
   for (let i = 0; i < extraVagrants; i++) {
@@ -531,6 +746,18 @@ export function applyPermanentWorldUpgrades() {
   }
 }
 
+export function permanentForestCampPlans() {
+  const mappedCamps = metaLevel("trail_map");
+  if (mappedCamps <= 0) return [];
+  const plans = [];
+  for (let i = 0; i < mappedCamps; i++) {
+    const side = i % 2 === 0 ? -1 : 1;
+    const x = CFG.baseX + side * (FOREST.startDist + 390 + i * 120);
+    plans.push({ x, vagrants: i === 0 ? 1 : 2 });
+  }
+  return plans;
+}
+
 export function registerEnemyKill(reward = 1) {
   if (Game.state !== "play" && Game.state !== "defeat-pan") return;
   Game.runKills = (Game.runKills || 0) + Math.max(1, reward);
@@ -566,16 +793,17 @@ export function enterDeathHub(message = "") {
     weapon: null, weaponUpgrades: [], pendingUpgrade: false,
   });
   state.base = { x: HUB.spawnX - 220, level: 1, hp: 1, maxHp: 1 };
-  state.units = []; state.vagrants = []; state.enemies = []; state.coins = []; state.arrows = [];
+  state.units = []; state.vagrants = []; state.enemies = []; state.coins = []; state.goldCollectors = []; state.arrows = [];
   state.animals = []; state.walls = []; state.portals = []; state.lootItems = []; state.chests = [];
   state.groundBows = []; state.groundHammers = []; state.spells = []; state.spellFields = []; state.caltrops = [];
   state.particles = []; state.floatTexts = [];
   state.stations = buildMetaStations();
   Game.hubMessage = message;
   Game.hubT = 0;
+  Game.bountyRaidersRemaining = 0;
   Game.state = "hub";
   Game.zoom = 1.2;
-  Game.cam = clamp(state.player.x - W / 2, 0, Math.max(0, HUB.width - W / Game.zoom));
+  Game.cam = clampCameraTarget(state.player.x - W / 2, HUB.width, W, Game.zoom);
 }
 
 function buildMetaStations() {
@@ -763,7 +991,7 @@ export function updateHub(dt, startNewRun) {
   }
   updateHubParticles(dt);
   const zoom = Game.zoom || 1.2;
-  Game.cam += (clamp(state.player.x - W / 2, 0, Math.max(0, HUB.width - W / zoom)) - Game.cam) * 0.12;
+  Game.cam += (clampCameraTarget(state.player.x - W / 2, HUB.width, W, zoom) - Game.cam) * 0.12;
   if (state.player.x > HUB.portalX - 32) {
     saveMeta(Game.meta);
     Game.state = "hub-transition";
@@ -805,7 +1033,7 @@ export function updateHubTransition(dt, startNewRun) {
 
   updateHubParticles(dt);
   const zoom = Game.zoom || 1.2;
-  Game.cam += (clamp(HUB.portalX - W / 2, 0, Math.max(0, HUB.width - W / zoom)) - Game.cam) * 0.1;
+  Game.cam += (clampCameraTarget(HUB.portalX - W / 2, HUB.width, W, zoom) - Game.cam) * 0.1;
 
   if (t >= 1) {
     saveMeta(Game.meta);
@@ -1313,6 +1541,122 @@ function drawUpgradeRelic(upg, lvl, maxed, affordable, spin, t) {
       ctx.strokeStyle = "#e7edf6"; ctx.lineWidth = 1;
       for (const x of [-5, 0, 5]) { ctx.beginPath(); ctx.moveTo(x, -10); ctx.lineTo(x, 9); ctx.stroke(); }
       break;
+    case "gold_wisp":
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = "rgba(255,224,122,0.42)";
+      ctx.beginPath(); ctx.arc(0, -4, 18, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.strokeStyle = color; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, -5, 10, 0.18 * Math.PI, 1.82 * Math.PI); ctx.stroke();
+      ctx.fillStyle = "#ffe9a3";
+      ctx.beginPath(); ctx.arc(0, -5, 5.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#b87a22";
+      ctx.beginPath(); ctx.ellipse(0, -5, 2.2, 3.2, 0, 0, Math.PI * 2); ctx.fill();
+      for (let i = 0; i < 3; i++) {
+        const a = t * 1.8 + i * Math.PI * 2 / 3;
+        ctx.fillStyle = i % 2 ? "#f2c14e" : "#fff2bc";
+        ctx.beginPath(); ctx.arc(Math.cos(a) * 15, -5 + Math.sin(a) * 8, 2, 0, Math.PI * 2); ctx.fill();
+      }
+      break;
+    case "trail_map":
+      ctx.fillStyle = "#d8be84";
+      ctx.beginPath();
+      ctx.moveTo(-15, -14); ctx.quadraticCurveTo(-6, -18, 1, -13); ctx.quadraticCurveTo(8, -9, 15, -13);
+      ctx.lineTo(13, 15); ctx.quadraticCurveTo(6, 11, -1, 15); ctx.quadraticCurveTo(-8, 18, -15, 13);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 1.4; ctx.stroke();
+      ctx.strokeStyle = "#7a5a34"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(-10, 8); ctx.quadraticCurveTo(-2, -3, 8, -1); ctx.quadraticCurveTo(13, 0, 9, -9); ctx.stroke();
+      ctx.fillStyle = "#7fd6a4";
+      ctx.beginPath(); ctx.arc(-10, 8, 2.6, 0, Math.PI * 2); ctx.arc(9, -9, 2.6, 0, Math.PI * 2); ctx.fill();
+      break;
+    case "reliquary":
+      ctx.fillStyle = "#6a4a28";
+      ctx.fillRect(-16, -2, 32, 18);
+      ctx.fillStyle = "#8a6a34";
+      ctx.beginPath(); ctx.moveTo(-16, -2); ctx.quadraticCurveTo(0, -18, 16, -2); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.strokeRect(-16, -2, 32, 18);
+      ctx.fillStyle = "#d9e8ff";
+      ctx.beginPath(); ctx.arc(0, 5, 4.2, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#f2c14e"; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(-14, 6); ctx.lineTo(14, 6); ctx.moveTo(-7, -10); ctx.lineTo(7, -10); ctx.stroke();
+      break;
+    case "seed_deed":
+      ctx.fillStyle = "#5d3b24";
+      ctx.fillRect(-17, 10, 34, 7);
+      ctx.fillStyle = "#7a4f2e";
+      for (let i = 0; i < 4; i++) ctx.fillRect(-15 + i * 9, 3, 5, 14);
+      ctx.strokeStyle = "#b6e86e"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, 5); ctx.quadraticCurveTo(0, -6, -10, -12); ctx.moveTo(0, 5); ctx.quadraticCurveTo(1, -8, 11, -15); ctx.stroke();
+      ctx.fillStyle = "#9bd05a";
+      ctx.beginPath(); ctx.ellipse(-11, -12, 5.5, 3.2, -0.55, 0, Math.PI * 2); ctx.ellipse(12, -15, 5.8, 3.3, 0.55, 0, Math.PI * 2); ctx.fill();
+      break;
+    case "dusk_bell":
+      ctx.fillStyle = "#b88a32";
+      ctx.beginPath();
+      ctx.moveTo(-12, 9); ctx.quadraticCurveTo(-10, -10, 0, -15); ctx.quadraticCurveTo(10, -10, 12, 9);
+      ctx.lineTo(16, 14); ctx.lineTo(-16, 14); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.stroke();
+      ctx.fillStyle = "#ffe9a3";
+      ctx.beginPath(); ctx.arc(0, 16, 3.4, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#fff2bc"; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(0, -17, 4, 0, Math.PI * 2); ctx.moveTo(-20, -8); ctx.quadraticCurveTo(-7, -20, 8, -18); ctx.stroke();
+      break;
+    case "ember_kennel":
+      ctx.fillStyle = "#5d3b24";
+      ctx.fillRect(-17, 1, 34, 17);
+      ctx.fillStyle = "#7a4f2e";
+      ctx.beginPath(); ctx.moveTo(-20, 1); ctx.lineTo(0, -17); ctx.lineTo(20, 1); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 1.4; ctx.stroke();
+      ctx.fillStyle = "#1b1210";
+      ctx.beginPath(); ctx.arc(0, 13, 7, Math.PI, 0); ctx.lineTo(7, 18); ctx.lineTo(-7, 18); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#ffb45f";
+      ctx.beginPath(); ctx.arc(-8, -7, 2.2, 0, Math.PI * 2); ctx.arc(8, -7, 2.2, 0, Math.PI * 2); ctx.fill();
+      break;
+    case "trap_foundry":
+      ctx.fillStyle = "#3a3a40";
+      ctx.fillRect(-17, 9, 34, 8);
+      ctx.fillStyle = "#55555e";
+      ctx.fillRect(-5, -8, 10, 18);
+      ctx.strokeStyle = color; ctx.lineWidth = 2;
+      for (const s of [-1, 1]) {
+        ctx.beginPath(); ctx.moveTo(s * 2, 0); ctx.quadraticCurveTo(s * 11, -7, s * 15, -17); ctx.stroke();
+      }
+      ctx.fillStyle = "#f2c14e";
+      ctx.beginPath(); ctx.arc(0, -15, 2.4, 0, Math.PI * 2); ctx.fill();
+      break;
+    case "raven_roost":
+      ctx.strokeStyle = "#3a2f40"; ctx.lineWidth = 4; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(0, 17); ctx.lineTo(0, -18); ctx.stroke();
+      ctx.lineWidth = 2.4;
+      ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(-15, -16); ctx.moveTo(0, -4); ctx.lineTo(14, -13); ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.ellipse(-12, -18, 7, 4, -0.2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-18, -17); ctx.lineTo(-25, -20); ctx.lineTo(-18, -21); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#d8f6ff";
+      ctx.beginPath(); ctx.arc(-10, -19, 1.1, 0, Math.PI * 2); ctx.fill();
+      ctx.lineCap = "butt";
+      break;
+    case "pilgrim_market":
+      ctx.fillStyle = "#7a4f2e";
+      ctx.fillRect(-18, -1, 36, 17);
+      ctx.fillStyle = "#b65a35";
+      ctx.beginPath(); ctx.moveTo(-22, -1); ctx.lineTo(-12, -15); ctx.lineTo(12, -15); ctx.lineTo(22, -1); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 1.4; ctx.stroke();
+      ctx.fillStyle = "#2f2118";
+      for (const x of [-11, 11]) { ctx.beginPath(); ctx.arc(x, 17, 4, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = "#f2c14e";
+      ctx.beginPath(); ctx.arc(0, 7, 3.5, 0, Math.PI * 2); ctx.fill();
+      break;
+    case "raider_writ":
+      ctx.fillStyle = "#2a1714";
+      ctx.beginPath(); ctx.moveTo(-14, 15); ctx.lineTo(14, 15); ctx.lineTo(10, -11); ctx.lineTo(-10, -11); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = color; ctx.lineWidth = 1.6; ctx.stroke();
+      ctx.fillStyle = "#ff6a4a";
+      ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(13, 0); ctx.lineTo(4, 0); ctx.lineTo(9, 16); ctx.lineTo(-9, -2); ctx.lineTo(0, -2); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#ffe07a";
+      ctx.beginPath(); ctx.arc(0, 3, 2.6, 0, Math.PI * 2); ctx.fill();
+      break;
     default:
       ctx.fillStyle = color;
       ctx.beginPath(); ctx.moveTo(0, -17); ctx.lineTo(13, 0); ctx.lineTo(0, 17); ctx.lineTo(-13, 0); ctx.closePath(); ctx.fill();
@@ -1464,6 +1808,16 @@ const HUB_TIERS = [
     rank: "V",
     title: "DREAD PACTS",
     x0: 3210, x1: 3660, cx: 3435, width: 300, color: "#ff5d6c",
+  },
+  {
+    rank: "VI",
+    title: "ODD LITTLE MIRACLES",
+    x0: 3810, x1: 4370, cx: 4090, width: 326, color: "#ffe07a",
+  },
+  {
+    rank: "VII",
+    title: "LIVING RELICS",
+    x0: 4560, x1: 5120, cx: 4840, width: 326, color: "#ffb45f",
   },
 ];
 

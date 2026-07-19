@@ -1,4 +1,4 @@
-import { DEV } from '../../rendering/HUD.js';
+import { DEV } from '../../rendering/HUD.js?v=biomeboss1';
 import { inject } from '../../core/services.js';
 
 export function setupDevPanel() {
@@ -42,6 +42,7 @@ export function setupDevPanel() {
   bind('[data-dev="emberBrute"]',   () => DEV.spawnEnemyNearBase('emberBrute'));
   bind('[data-dev="ashPriest"]',    () => DEV.spawnEnemyNearBase('ashPriest'));
   bind('[data-dev="siegeImp"]',     () => DEV.spawnEnemyNearBase('siegeImp'));
+  bind('[data-dev="chainImp"]',     () => DEV.spawnEnemyNearBase('chainImp'));
   bind('[data-dev="8imp"]',         () => DEV.spawn8ImpsRight());
   bind('[data-dev="dragon"]',       () => DEV.spawnFireDragonBoss());
   bind('[data-dev="magmaGolem"]',   () => DEV.spawnMagmaGolemBoss());
@@ -51,9 +52,21 @@ export function setupDevPanel() {
   bind('[data-dev="voidBrute"]',    () => DEV.spawnEnemyNearBase('voidBrute'));
   bind('[data-dev="voidTitan"]',    () => DEV.spawnVoidTitanBoss());
   bind('[data-dev="voidSeraph"]',   () => DEV.spawnVoidSeraphBoss());
+  bind('[data-dev="forestBoss"]',      () => DEV.spawnBiomeBossDev('forest'));
+  bind('[data-dev="frozenBoss"]',      () => DEV.spawnBiomeBossDev('frozen'));
+  bind('[data-dev="desertBoss"]',      () => DEV.spawnBiomeBossDev('desert'));
+  bind('[data-dev="swampBoss"]',       () => DEV.spawnBiomeBossDev('swamp'));
+  bind('[data-dev="volcanoBoss"]',     () => DEV.spawnBiomeBossDev('volcano'));
+  bind('[data-dev="corruptedBoss"]',   () => DEV.spawnBiomeBossDev('corrupted'));
   bind('[data-dev="startAssault"]', () => DEV.startAssaultDev());
   bind('[data-dev="crackPortals"]', () => DEV.crackPortals());
   bind('[data-dev="phase2"]',       () => DEV.beginPhase2());
+  bind('[data-dev="biomeForest"]',    () => DEV.teleportBiome('forest'));
+  bind('[data-dev="biomeFrozen"]',    () => DEV.teleportBiome('frozen'));
+  bind('[data-dev="biomeDesert"]',    () => DEV.teleportBiome('desert'));
+  bind('[data-dev="biomeSwamp"]',     () => DEV.teleportBiome('swamp'));
+  bind('[data-dev="biomeVolcano"]',   () => DEV.teleportBiome('volcano'));
+  bind('[data-dev="biomeCorrupted"]', () => DEV.teleportBiome('corrupted'));
 
   // Spawn unit
   bind('[data-dev="unitArcher"]',  () => DEV.spawnUnit('archer'));

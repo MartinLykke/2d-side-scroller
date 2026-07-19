@@ -8,6 +8,10 @@ import { ctx, groundY } from '../../core/canvas.js';
 const TAU = Math.PI * 2;
 const mix = (a, b, u) => a + (b - a) * u;
 const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+const smooth01 = v => {
+  const u = clamp01(v);
+  return u * u * (3 - 2 * u);
+};
 
 // Two-bone IK: middle joint of a limb spanning (x1,y1)→(x2,y2) with segment
 // lengths l1/l2. bend=+1 pops the joint one side of the limb line, -1 the other.
@@ -83,11 +87,21 @@ export function drawImp(e, t, dark, atkF) {
   const p = pounce >= 0 ? pounce : (e.attackAnim || 0) > 0 ? clamp01(1 - e.attackAnim / swingDur) : -1;
   const clawing = p >= 0 && atkKind !== "tail" && pounce < 0;
 
-  const climbing = e.aiState === "stacking" || e.aiState === "climbOver";
-  const scrambling = e.aiState === "climbOver";
+  const chainClimb = e.aiState === "climbChain";
+  const wallMantle = e.aiState === "climbOver";
+  const stackClimb = e.aiState === "stacking";
+  const climbing = stackClimb || wallMantle || chainClimb;
   const thrown = e.aiState === "thrown";
   const vaulting = e.aiState === "vaulting" && (e.fy || 0) < -4;
+  const fallingFromWall = !e.dying && (vaulting || (e.leftStack && !e.hasLeftStack && (e.fy || 0) < -1));
+  const landingSquash = !e.dying ? clamp01((e.wallDropLand || 0) / 0.22) : 0;
   const climbSeed = (e.stackJoinOrder || 0) * 3.7;
+  const chainPhase = (e.climbChainT || 0) * TAU * 3.3 + climbSeed;
+  const wallPhase = (e.climbT || 0) * TAU * 2.5 + climbSeed;
+  const climbPhase = chainClimb ? chainPhase : wallMantle ? wallPhase : T * 2.5 + climbSeed;
+  const climbStroke = Math.sin(climbPhase);
+  const fallT = vaulting ? clamp01(e.vaultT || 0) : clamp01(e.wallDropT || 0);
+  const fallSpeed = clamp01((e.vy || 0) / 520);
 
   const ph = e.anim * 3;
   const bob = Math.abs(Math.sin(ph)) * 2.2 * run + Math.sin(T * 2.7 + e.x * 0.31) * 0.5;
@@ -106,6 +120,7 @@ export function drawImp(e, t, dark, atkF) {
   // Whole-body pounce pose: coil low during windup, stretch flat into the leap,
   // dive nose-first at the end, then squash on landing.
   let pounceAir = -1;
+  let poseRestore = false;
   if (pounce >= 0) {
     const windup = 0.22;
     const pivotY = groundY - 6;
@@ -126,9 +141,17 @@ export function drawImp(e, t, dark, atkF) {
       }
     }
     ctx.save();
+    poseRestore = true;
     ctx.translate(0, pivotY); ctx.rotate(rot); ctx.scale(sx, sy); ctx.translate(0, -pivotY);
+  } else if (landingSquash > 0) {
+    const sq = landingSquash * landingSquash;
+    ctx.save();
+    poseRestore = true;
+    ctx.translate(0, groundY - 4);
+    ctx.scale(1 + sq * 0.18, 1 - sq * 0.2);
+    ctx.translate(0, -groundY + sq * 2.5);
   }
-  const airborne = (pounceAir > 0 && pounceAir < 1) || vaulting || thrown;
+  const airborne = (pounceAir > 0 && pounceAir < 1) || fallingFromWall || thrown;
 
   // ember streak trailing the leap
   if (pounceAir > 0 && pounceAir < 1) {
@@ -150,6 +173,23 @@ export function drawImp(e, t, dark, atkF) {
   aura.addColorStop(1, "rgba(120,20,0,0)");
   ctx.fillStyle = aura; ctx.beginPath(); ctx.ellipse(0, groundY - 17 - bob, 20, 24, 0, 0, TAU); ctx.fill();
   ctx.restore();
+
+  // Chain climbers get a few foreground links between the hands so the pose
+  // reads as hand-over-hand hauling rather than hovering beside the wall line.
+  if (chainClimb && !e.dying) {
+    ctx.save();
+    ctx.globalAlpha = 0.7 * (1 - dp);
+    const chainX = 7.5 + Math.sin(climbPhase) * 0.45;
+    for (let k = 0; k < 7; k++) {
+      const y = groundY - 38 + k * 6.6 + Math.sin(T * 7 + k) * 0.35;
+      ctx.strokeStyle = k % 2 ? "#77777f" : "#3b3b42";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.ellipse(chainX, y, 1.8, 2.4, k % 2 ? Math.PI / 2 : 0, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 
   // drifting soot wisps rising off the shoulders
   ctx.save(); ctx.globalAlpha = 0.16 * (1 - dp);
@@ -179,6 +219,14 @@ export function drawImp(e, t, dark, atkF) {
     tTip = tip;
     // control point lags behind the tip so the tail bows like a real whip
     tCtrl = { x: mix(tBase.x, tip.x, 0.45) - (tip.x - tBase.x) * 0.22, y: mix(tBase.y, tip.y, 0.4) + 7 - w * 16 };
+  } else if (fallingFromWall) {
+    const flail = Math.sin(T * 10 + climbSeed) * (1 - fallSpeed * 0.35);
+    tTip = { x: -19 + flail * 2.2, y: groundY - 38 - bob - fallSpeed * 5 };
+    tCtrl = { x: -12 - fallSpeed * 4, y: groundY - 22 - bob + Math.sin(fallT * Math.PI) * 3 };
+  } else if (chainClimb || wallMantle) {
+    const clutch = chainClimb ? climbStroke : Math.sin(climbPhase * 0.75);
+    tTip = { x: -15 - clutch * 2, y: groundY - 4 - bob + clutch * 1.5 };
+    tCtrl = { x: -16, y: groundY - 17 - bob - Math.abs(clutch) * 2 };
   } else {
     const wag = Math.sin(T * 4.6 + e.x * 0.1);
     tTip = { x: -21 - run * 2, y: groundY - 20 - bob - wag * 2.5 - run * 3 };
@@ -218,13 +266,24 @@ export function drawImp(e, t, dark, atkF) {
   const legStep = (side) => {
     const phs = ph + side * Math.PI;
     let fx, fy;
-    if (airborne) { fx = -8 - side * 4; fy = groundY - 4 - side * 2; }
-    else if (scrambling) {
-      const sc = Math.sin(T * 6 + climbSeed + side * Math.PI);
-      fx = -1 + side * 3 + sc * 2.5;
-      fy = groundY - 2 - Math.max(0, sc) * 5;
+    if (fallingFromWall) {
+      const kick = Math.sin(T * 11 + climbSeed + side * 2.4);
+      fx = -8 + side * 15 + kick * 2.5;
+      fy = groundY - 10 + side * 3 + fallSpeed * 5 - Math.sin(fallT * Math.PI) * 2;
     }
-    else if (climbing) {
+    else if (airborne) { fx = -8 - side * 4; fy = groundY - 4 - side * 2; }
+    else if (chainClimb) {
+      const sc = Math.sin(climbPhase + side * Math.PI);
+      fx = 5.5 + side * 3 + sc * 1.8;
+      fy = groundY - 6 - side * 6 - Math.max(0, sc) * 8;
+    }
+    else if (wallMantle) {
+      const ct = smooth01(e.climbT || 0);
+      const sc = Math.sin(climbPhase + side * Math.PI);
+      fx = -5 + side * 9 + sc * 2.2 + ct * 3;
+      fy = groundY - 5 - side * 8 - Math.max(0, sc) * 6 - ct * 4;
+    }
+    else if (stackClimb) {
       const cBob = Math.sin(T * 2.5 + climbSeed + side * 1.8) * 1.5;
       fx = -1 + side * 3 + cBob;
       fy = groundY - 1;
@@ -253,11 +312,22 @@ export function drawImp(e, t, dark, atkF) {
   const shY = groundY - 18.5 - bob;
   {
     let hx2, hy2;
-    if (scrambling) {
-      const armSc = Math.sin(T * 6 + climbSeed + 1.2);
-      hx2 = 3 + armSc * 3; hy2 = groundY - 27 - bob - Math.max(0, armSc) * 4;
+    if (fallingFromWall) {
+      const panic = Math.sin(T * 12 + climbSeed);
+      hx2 = -7 + panic * 2.4;
+      hy2 = groundY - 34 - bob + fallSpeed * 7;
     }
-    else if (climbing) {
+    else if (chainClimb) {
+      const armSc = Math.sin(climbPhase + 1.2);
+      hx2 = 7.5 + armSc * 1.4;
+      hy2 = groundY - 35 - bob + Math.max(0, -armSc) * 12;
+    }
+    else if (wallMantle) {
+      const armSc = Math.sin(climbPhase + 1.2);
+      hx2 = 10 + armSc * 2.4;
+      hy2 = groundY - 32 - bob - Math.max(0, armSc) * 5;
+    }
+    else if (stackClimb) {
       const armBob = Math.sin(T * 2.5 + climbSeed + 0.8) * 2;
       hx2 = 3 + armBob; hy2 = groundY - 27 - bob;
     }
@@ -271,8 +341,11 @@ export function drawImp(e, t, dark, atkF) {
   ctx.save();
   ctx.translate(lunge, 0);
   const coilR = clawing ? (p < 0.32 ? -0.14 * (p / 0.32) : 0.12 * Math.sin(clamp01((p - 0.32) / 0.5) * Math.PI)) : 0;
-  const climbRot = scrambling ? -0.35 + Math.sin(T * 5.5 + climbSeed) * 0.12 : (climbing ? -0.3 : 0);
-  ctx.translate(-2, hipY); ctx.rotate(lean * 0.14 + coilR + climbRot); ctx.translate(2, -hipY);
+  const climbRot = chainClimb ? -0.68 + climbStroke * 0.08
+    : wallMantle ? -0.48 + Math.sin(climbPhase) * 0.12
+      : stackClimb ? -0.24 : 0;
+  const fallRot = fallingFromWall ? 0.38 + fallSpeed * 0.22 + Math.sin(T * 9 + climbSeed) * 0.08 : 0;
+  ctx.translate(-2, hipY); ctx.rotate(lean * 0.14 + coilR + climbRot + fallRot); ctx.translate(2, -hipY);
 
   const breathe = Math.sin(T * 3.1 + e.x * 0.2) * 0.45 * (1 - run * 0.5);
   ctx.fillStyle = body;
@@ -303,15 +376,15 @@ export function drawImp(e, t, dark, atkF) {
   ctx.restore();
 
   // ── head: skull + muzzle, hinged jaw, glow eyes, pinned ears, swept horns ──
-  const hdx = 7.5 + (p >= 0 ? 1.6 : 0) + lean * 1.2;
-  const hdy = groundY - 25 - bob * 0.85 + (climbing ? 3 : 0);
+  const hdx = 7.5 + (p >= 0 ? 1.6 : 0) + lean * 1.2 - (chainClimb ? 1.6 : 0) - (fallingFromWall ? 3.8 : 0);
+  const hdy = groundY - 25 - bob * 0.85 + (climbing ? 3 : 0) + (fallingFromWall ? 6 - fallSpeed * 2 : 0);
   // short thick neck
   ctx.strokeStyle = body; ctx.lineWidth = 4.6; ctx.lineCap = "round";
   ctx.beginPath(); ctx.moveTo(3, groundY - 19 - bob); ctx.lineTo(hdx - 2, hdy + 2); ctx.stroke();
   ctx.lineCap = "butt";
 
   // ears: big bat membranes that pin flat back mid-attack
-  const pin = p >= 0 || pounce >= 0 ? 1 : 0;
+  const pin = p >= 0 || pounce >= 0 || fallingFromWall ? 1 : 0;
   const earTw = Math.sin(T * 4.3 + e.x * 0.7) > 0.9 ? 2.2 : 0;
   const earA = mix(-0.5, 0.32, pin); // tilt down/back when pinned
   for (const [ex0, ey0, sc, col] of [[hdx - 3.4, hdy - 4.4, 0.86, bodyDk], [hdx - 2.6, hdy - 5, 1, body]]) {
@@ -423,12 +496,22 @@ export function drawImp(e, t, dark, atkF) {
       ctx.beginPath(); ctx.arc(shX + 1, shY, 15.5, -2.3, mix(-2.15, 0.7, strike)); ctx.stroke();
       ctx.restore();
     }
-  } else if (scrambling) {
-    const nArmSc = Math.sin(T * 6 + climbSeed + Math.PI);
-    const nx = 8 + nArmSc * 3.5, ny = groundY - 28 - bob - Math.max(0, nArmSc) * 5;
+  } else if (fallingFromWall) {
+    const panic = Math.sin(T * 12 + climbSeed + Math.PI);
+    const nx = -5 + panic * 2.2, ny = groundY - 35 - bob + fallSpeed * 6;
+    limb(shX, shY, nx, ny, 6.5, 8, -1, 2.6, 2.1, body);
+    claws(nx, ny, -2.0, 3.2, hornCol);
+  } else if (chainClimb) {
+    const nArmSc = Math.sin(climbPhase + Math.PI);
+    const nx = 8 + nArmSc * 1.8, ny = groundY - 33 - bob + Math.max(0, -nArmSc) * 12;
+    limb(shX, shY, nx, ny, 6.5, 8, -1, 2.6, 2.1, body);
+    claws(nx, ny, -1.45, 3, hornCol);
+  } else if (wallMantle) {
+    const nArmSc = Math.sin(climbPhase + Math.PI);
+    const nx = 10 + nArmSc * 3, ny = groundY - 30 - bob - Math.max(0, nArmSc) * 7;
     limb(shX, shY, nx, ny, 6.5, 8, -1, 2.6, 2.1, body);
     claws(nx, ny, -1.4, 3, hornCol);
-  } else if (climbing) {
+  } else if (stackClimb) {
     const nArmBob = Math.sin(T * 2.5 + climbSeed + 2.4) * 2;
     limb(shX, shY, 8 + nArmBob, groundY - 28 - bob, 6.5, 8, -1, 2.6, 2.1, body);
     claws(8 + nArmBob, groundY - 28 - bob, -1.4, 3, hornCol);
@@ -454,7 +537,7 @@ export function drawImp(e, t, dark, atkF) {
   }
   ctx.restore();
 
-  if (pounce >= 0) ctx.restore();
+  if (poseRestore) ctx.restore();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
