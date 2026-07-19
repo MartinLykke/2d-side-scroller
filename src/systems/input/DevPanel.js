@@ -41,6 +41,7 @@ export function setupDevPanel() {
   bind('[data-dev="fireImp"]',      () => DEV.spawnEnemyNearBase('fireImp'));
   bind('[data-dev="emberBrute"]',   () => DEV.spawnEnemyNearBase('emberBrute'));
   bind('[data-dev="ashPriest"]',    () => DEV.spawnEnemyNearBase('ashPriest'));
+  bind('[data-dev="siegeImp"]',     () => DEV.spawnEnemyNearBase('siegeImp'));
   bind('[data-dev="8imp"]',         () => DEV.spawn8ImpsRight());
   bind('[data-dev="dragon"]',       () => DEV.spawnFireDragonBoss());
   bind('[data-dev="magmaGolem"]',   () => DEV.spawnMagmaGolemBoss());

@@ -83,16 +83,18 @@ export function drawImp(e, t, dark, atkF) {
   const p = pounce >= 0 ? pounce : (e.attackAnim || 0) > 0 ? clamp01(1 - e.attackAnim / swingDur) : -1;
   const clawing = p >= 0 && atkKind !== "tail" && pounce < 0;
 
-  const climbing = e.aiState === "stacking" || e.aiState === "stackQueue" || e.aiState === "climbOver";
+  const climbing = e.aiState === "stacking" || e.aiState === "climbOver";
+  const scrambling = e.aiState === "climbOver";
   const thrown = e.aiState === "thrown";
   const vaulting = e.aiState === "vaulting" && (e.fy || 0) < -4;
+  const climbSeed = (e.stackJoinOrder || 0) * 3.7;
 
   const ph = e.anim * 3;
   const bob = Math.abs(Math.sin(ph)) * 2.2 * run + Math.sin(T * 2.7 + e.x * 0.31) * 0.5;
   const lunge = clawing ? Math.sin(clamp01(p * 1.5) * Math.PI) * 5 : 0;
 
   // soft contact shadow that shrinks while airborne
-  const off = e.aiState === "stacking" && e.impStackY !== undefined ? e.impStackY : (e.fy || 0);
+  const off = e.fy || 0;
   if (!e.wallTopWall && !climbing && !e.dying) {
     const h = clamp01(-Math.min(0, off) / 70);
     ctx.save(); ctx.globalAlpha = 0.2 * (1 - h * 0.65);
@@ -217,7 +219,16 @@ export function drawImp(e, t, dark, atkF) {
     const phs = ph + side * Math.PI;
     let fx, fy;
     if (airborne) { fx = -8 - side * 4; fy = groundY - 4 - side * 2; }
-    else if (climbing) { fx = -1 + side * 3; fy = groundY - 1; }
+    else if (scrambling) {
+      const sc = Math.sin(T * 6 + climbSeed + side * Math.PI);
+      fx = -1 + side * 3 + sc * 2.5;
+      fy = groundY - 2 - Math.max(0, sc) * 5;
+    }
+    else if (climbing) {
+      const cBob = Math.sin(T * 2.5 + climbSeed + side * 1.8) * 1.5;
+      fx = -1 + side * 3 + cBob;
+      fy = groundY - 1;
+    }
     else if (clawing) { fx = side ? -5 : 3 + lunge * 0.4; fy = groundY; }
     else {
       const lift = Math.max(0, -Math.sin(phs)) * 3.6 * run;
@@ -242,7 +253,14 @@ export function drawImp(e, t, dark, atkF) {
   const shY = groundY - 18.5 - bob;
   {
     let hx2, hy2;
-    if (climbing) { hx2 = 3; hy2 = groundY - 27 - bob; }
+    if (scrambling) {
+      const armSc = Math.sin(T * 6 + climbSeed + 1.2);
+      hx2 = 3 + armSc * 3; hy2 = groundY - 27 - bob - Math.max(0, armSc) * 4;
+    }
+    else if (climbing) {
+      const armBob = Math.sin(T * 2.5 + climbSeed + 0.8) * 2;
+      hx2 = 3 + armBob; hy2 = groundY - 27 - bob;
+    }
     else if (airborne) { hx2 = 10; hy2 = groundY - 22 - bob; }
     else { hx2 = 6.5 + Math.cos(ph + Math.PI) * 2.5 * run; hy2 = groundY - 6.5 - bob * 0.5; }
     limb(3.2, shY + 0.5, hx2, hy2, 6, 8, 1, 2.2, 1.8, limbFar);
@@ -253,7 +271,8 @@ export function drawImp(e, t, dark, atkF) {
   ctx.save();
   ctx.translate(lunge, 0);
   const coilR = clawing ? (p < 0.32 ? -0.14 * (p / 0.32) : 0.12 * Math.sin(clamp01((p - 0.32) / 0.5) * Math.PI)) : 0;
-  ctx.translate(-2, hipY); ctx.rotate(lean * 0.14 + coilR + (climbing ? -0.3 : 0)); ctx.translate(2, -hipY);
+  const climbRot = scrambling ? -0.35 + Math.sin(T * 5.5 + climbSeed) * 0.12 : (climbing ? -0.3 : 0);
+  ctx.translate(-2, hipY); ctx.rotate(lean * 0.14 + coilR + climbRot); ctx.translate(2, -hipY);
 
   const breathe = Math.sin(T * 3.1 + e.x * 0.2) * 0.45 * (1 - run * 0.5);
   ctx.fillStyle = body;
@@ -404,9 +423,15 @@ export function drawImp(e, t, dark, atkF) {
       ctx.beginPath(); ctx.arc(shX + 1, shY, 15.5, -2.3, mix(-2.15, 0.7, strike)); ctx.stroke();
       ctx.restore();
     }
+  } else if (scrambling) {
+    const nArmSc = Math.sin(T * 6 + climbSeed + Math.PI);
+    const nx = 8 + nArmSc * 3.5, ny = groundY - 28 - bob - Math.max(0, nArmSc) * 5;
+    limb(shX, shY, nx, ny, 6.5, 8, -1, 2.6, 2.1, body);
+    claws(nx, ny, -1.4, 3, hornCol);
   } else if (climbing) {
-    limb(shX, shY, 8, groundY - 28 - bob, 6.5, 8, -1, 2.6, 2.1, body);
-    claws(8, groundY - 28 - bob, -1.4, 3, hornCol);
+    const nArmBob = Math.sin(T * 2.5 + climbSeed + 2.4) * 2;
+    limb(shX, shY, 8 + nArmBob, groundY - 28 - bob, 6.5, 8, -1, 2.6, 2.1, body);
+    claws(8 + nArmBob, groundY - 28 - bob, -1.4, 3, hornCol);
   } else if (airborne) {
     limb(shX, shY, 13.5, shY - 2, 6.5, 8, 1, 2.6, 2.1, body);
     claws(13.5, shY - 2, 0.2, 3.4, hornCol);

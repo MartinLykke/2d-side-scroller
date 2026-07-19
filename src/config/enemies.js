@@ -5,8 +5,8 @@ export const ENEMY_TYPES = {
   imp: { hp: 6, speed: 95, w: 22, color: "#8f221c", eye: "#ffd060", reward: 1, dmg: 6, baseDmg: 2, meleeDmg: 1 },
   fireImp: { name: "Flying Imp", hp: 8, speed: 64, w: 25, color: "#9b2418", eye: "#ffd060", reward: 3, dmg: 9, meleeDmg: 2, flying: true, fireball: true, shootRange: 430, shootInterval: 2.8 },
   emberBrute: {
-    name: "Ember Brute", hp: 20, speed: 46, w: 50, color: "#5a1a10", eye: "#ff8a30",
-    reward: 5, dmg: 11, meleeDmg: 2,
+    name: "Ember Brute", hp: 45, speed: 46, w: 50, color: "#5a1a10", eye: "#ff8a30",
+    reward: 7, dmg: 11, meleeDmg: 2,
     charger: true, chargeMin: 5, chargeMax: 8, chargeRangeMin: 140, chargeRangeMax: 420,
     stomper: true, stompMin: 4.5, stompMax: 7, stompRadius: 95,
   },
@@ -18,6 +18,16 @@ export const ENEMY_TYPES = {
     scorchRange: 265, scorchInterval: 4.8,
     wardRange: 285, wardInterval: 7.2,
     burstRadius: 112, burstInterval: 5.8,
+  },
+  siegeImp: {
+    name: "Siege Imp", hp: 58, speed: 34, w: 46, color: "#8a3520", eye: "#ffd060",
+    reward: 9, dmg: 22, baseDmg: 8, meleeDmg: 2,
+    // A huge shield up front deflects frontal arrows; heavy enough to ignore knockback.
+    siege: true, shieldBlock: true, noKnockback: true,
+    // Scrap platform on its back: loose imps can climb aboard and ride to the walls.
+    platform: true, riderSeats: 3,
+    // Ram cadence when braced against a wall/gate.
+    ramWindup: 0.72, ramInterval: 1.55, ramRange: 58,
   },
   fireDragon: { name: "Fire Dragon", hp: 320, speed: 88, w: 120, color: "#7a1408", eye: "#ffd060", reward: 70, dmg: 14, meleeDmg: 2, flying: true, boss: true, dragon: true, noKnockback: true, shootInterval: 2.6, attackName: "Fire Breath" },
   magmaGolem: {

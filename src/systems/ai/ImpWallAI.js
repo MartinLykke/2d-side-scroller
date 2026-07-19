@@ -6,7 +6,7 @@ import { wallHeight, wallReady, wallRenderWidth } from '../../entities/Wall.js';
 import { spawnParticles } from '../world/SpawnSystem.js';
 import {
   IMP_STACK_STEP, IMP_ATTACH_RANGE, IMP_TOP_TRIGGER_PAD,
-  IMP_STACK_EXTRA_SLOTS, IMP_QUEUE_SPACING, IMP_PYRAMID_BASE,
+  IMP_STACK_EXTRA_SLOTS,
   IMP_POUNCE_WALL_LOCKOUT, WALL_DUEL_GAP,
   nextImpStackSequence, mix, wallOutsideX, wallInsideX,
   changeState, damageWall, wallAt, unopposedSprintMult
@@ -26,6 +26,7 @@ export function breakImpStack(e) {
   e.impIndex = undefined;
   e.stackPos = undefined;
   e.climbProgress = undefined;
+  e.climbStartY = undefined;
   e.impStackY = 0;
 }
 
@@ -109,7 +110,8 @@ export function impStackForWall(w) {
     imp.stackPos = idx;
     imp.climbProgress = 1;
     imp.impStackY = -idx * IMP_STACK_STEP;
-    imp.impStackX = ((idx % 2 === 0) ? -1 : 1) * Math.min(7, 2 + idx * 0.45);
+    const seed = (imp.stackJoinOrder || 0) * 7.13;
+    imp.impStackX = ((idx % 2 === 0) ? -1 : 1) * Math.min(8, 2.5 + idx * 0.5) + Math.sin(seed) * 2;
   });
   return stack;
 }
@@ -132,34 +134,40 @@ export function impQueueForWall(w) {
   return queued;
 }
 
-function queueSlotForWall(w, idx) {
-  let row = 0, rem = idx, width = IMP_PYRAMID_BASE;
-  while (row < IMP_PYRAMID_BASE - 1 && rem >= width) { rem -= width; row++; width--; }
-  let col = rem;
-  if (row === IMP_PYRAMID_BASE - 1 && rem >= width) {
-    row = 0;
-    col = IMP_PYRAMID_BASE + (rem - width) + 1;
-  }
-  const x = wallOutsideX(w) + w.side * (IMP_ATTACH_RANGE + 16 + (col + row * 0.5) * IMP_QUEUE_SPACING);
-  return { x, fy: -row * IMP_STACK_STEP };
+const IMP_MOB_ROW_WIDTH = 3;
+const IMP_MOB_ROW_DEPTH = 22;
+const IMP_MOB_LANE_SPREAD = 16;
+
+function queueSlotForWall(w, idx, joinOrder) {
+  const row = Math.floor(idx / IMP_MOB_ROW_WIDTH);
+  const col = idx % IMP_MOB_ROW_WIDTH;
+  const seed = (joinOrder || idx) * 5.17;
+  const jitterX = Math.sin(seed) * 5;
+  const jitterDepth = Math.sin(seed * 1.7) * 4;
+  const laneOff = (col - (IMP_MOB_ROW_WIDTH - 1) / 2) * IMP_MOB_LANE_SPREAD + jitterX;
+  const depth = IMP_ATTACH_RANGE + 14 + row * IMP_MOB_ROW_DEPTH + jitterDepth;
+  const x = wallOutsideX(w) + w.side * depth + laneOff;
+  return { x, fy: 0 };
 }
 
 export function moveImpToQueueSlot(e, t, dt, wall, idx) {
-  const slot = queueSlotForWall(wall, idx);
-  const dx = slot.x - e.x;
+  const slot = queueSlotForWall(wall, idx, e.queueJoinOrder);
+  const T = performance.now() / 1000;
+  const fidgetSeed = (e.queueJoinOrder || 0) * 3.91;
+  const fidgetX = Math.sin(T * 1.4 + fidgetSeed) * 3.5;
+  const fidgetTargetX = slot.x + fidgetX;
+
+  const dx = fidgetTargetX - e.x;
   if (Math.abs(dx) > 2) {
     e.dir = Math.sign(dx);
     e.x += e.dir * Math.min(t.speed * 0.85 * dt, Math.abs(dx));
   } else {
-    e.x = slot.x;
+    e.x = fidgetTargetX;
     e.dir = -wall.side;
   }
-  const nearSlot = Math.abs(slot.x - e.x) < IMP_QUEUE_SPACING;
-  const targetFy = nearSlot ? slot.fy : Math.max(e.fy || 0, slot.fy);
-  const dy = targetFy - (e.fy || 0);
-  if (Math.abs(dy) > 1) {
-    const rate = dy > 0 ? 260 : 110;
-    e.fy = (e.fy || 0) + Math.sign(dy) * Math.min(Math.abs(dy), rate * dt);
+  const targetFy = 0;
+  if ((e.fy || 0) < -1) {
+    e.fy = (e.fy || 0) + Math.min(-(e.fy || 0), 180 * dt);
   } else {
     e.fy = targetFy;
   }
@@ -210,7 +218,6 @@ export function updateImpWall(e, t, dt) {
     }
     e.queueWallRef = null;
     e.queueIndex = undefined;
-    e.fy = 0;
   }
 
   const incomingStack = state.enemies.some(other =>
@@ -257,17 +264,29 @@ export function updateImpWall(e, t, dt) {
   if (Math.abs(attachDx) > 1) e.x += Math.sign(attachDx) * Math.min(Math.abs(attachDx), t.speed * 1.25 * dt);
   else e.x = stackX;
   e.vx = 0;
-  e.fy = e.impStackY || 0;
+  const targetFy = e.impStackY || 0;
+  const fyDiff = targetFy - (e.fy || 0);
+  if (Math.abs(fyDiff) > 1) {
+    const rate = fyDiff > 0 ? 180 : 65;
+    e.fy = (e.fy || 0) + Math.sign(fyDiff) * Math.min(Math.abs(fyDiff), rate * dt);
+  } else {
+    e.fy = targetFy;
+  }
   e.dir = -wall.side;
 
   const wallHasTopImp = !!wallTopImpForWall(wall, e);
   if (isTop && stackTallEnough && !wallHasTopImp) setImpState(e, "climbOver");
 
   if (e.aiState === "climbOver") {
-    if (e.climbStartX === undefined) e.climbStartX = e.x;
-    e.climbT = Math.min(1, (e.climbT || 0) + dt * 0.85);
-    e.fy = -wallHeight(wall) + Math.sin(e.climbT * Math.PI) * -6;
-    e.x = mix(e.climbStartX, wall.x, e.climbT);
+    if (e.climbStartX === undefined) {
+      e.climbStartX = e.x;
+      e.climbStartY = e.fy || 0;
+    }
+    e.climbT = Math.min(1, (e.climbT || 0) + dt * 0.8);
+    const ct = e.climbT;
+    const eased = ct < 0.5 ? 2 * ct * ct : 1 - (-2 * ct + 2) ** 2 / 2;
+    e.fy = mix(e.climbStartY || 0, -wallHeight(wall), eased) - Math.sin(eased * Math.PI) * 14;
+    e.x = mix(e.climbStartX, wall.x, eased);
     if (e.climbT >= 1) {
       breakImpStack(e);
       e.wallTopWall = wall;
@@ -290,6 +309,7 @@ export function updateImpWall(e, t, dt) {
 
   e.climbT = 0;
   e.climbStartX = undefined;
+  e.climbStartY = undefined;
   if (e.attackCd <= 0) {
     e.attackCd = 1.15;
     e.attackAnim = 0.18;

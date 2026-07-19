@@ -153,6 +153,60 @@ export function drawFirePools() {
   }
 }
 
+export function drawSpellFields() {
+  if (!state.spellFields || !state.spellFields.length) return;
+  const T = performance.now() / 1000;
+  const view = visibleWorldBounds(240);
+  for (const f of state.spellFields) {
+    if (f.x + (f.r || 0) < view.left || f.x - (f.r || 0) > view.right) continue;
+    const fade = clamp(f.life / (f.maxLife || 1), 0, 1);
+    ctx.save();
+    if (f.type === "storm") {
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.38 * fade;
+      const cloud = ctx.createRadialGradient(f.x, f.y, 8, f.x, f.y, f.r * 0.75);
+      cloud.addColorStop(0, "rgba(255,255,255,0.62)");
+      cloud.addColorStop(0.32, "rgba(190,190,255,0.42)");
+      cloud.addColorStop(1, "rgba(80,70,150,0)");
+      ctx.fillStyle = cloud;
+      ctx.beginPath(); ctx.ellipse(f.x, f.y, f.r * 0.58, 20 + Math.sin(T * 4 + f.ph) * 3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = f.col || "#ffffff";
+      ctx.lineWidth = 1.4;
+      ctx.globalAlpha = 0.55 * fade;
+      for (let i = 0; i < 4; i++) {
+        const px = f.x + Math.sin(T * 2.7 + f.ph + i * 1.9) * f.r * 0.45;
+        ctx.beginPath();
+        ctx.moveTo(px, f.y + 6);
+        ctx.lineTo(px + Math.sin(T * 8 + i) * 8, f.y + 24);
+        ctx.lineTo(px - Math.cos(T * 7 + i) * 6, f.y + 38);
+        ctx.stroke();
+      }
+    } else if (f.type === "rune") {
+      const armed = clamp(1 - Math.max(0, f.arm || 0) / 0.34, 0, 1);
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = (0.22 + armed * 0.34) * fade;
+      const rg = ctx.createRadialGradient(f.x, groundY - 8, 3, f.x, groundY - 8, f.r);
+      rg.addColorStop(0, f.col || "#ff88ff");
+      rg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = rg;
+      ctx.beginPath(); ctx.ellipse(f.x, groundY - 5, f.r, f.r * 0.22, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = (0.55 + armed * 0.35) * fade;
+      ctx.strokeStyle = f.col || "#ff88ff";
+      ctx.lineWidth = 1.3 + armed;
+      ctx.beginPath(); ctx.ellipse(f.x, groundY - 6, f.r * (0.48 + Math.sin(T * 3 + f.ph) * 0.03), f.r * 0.12, 0, 0, Math.PI * 2); ctx.stroke();
+      for (let k = 0; k < 4; k++) {
+        const a = T * 0.9 + f.ph + k * Math.PI * 0.5;
+        const x1 = f.x + Math.cos(a) * f.r * 0.18;
+        const y1 = groundY - 6 + Math.sin(a) * f.r * 0.05;
+        const x2 = f.x + Math.cos(a) * f.r * 0.38;
+        const y2 = groundY - 6 + Math.sin(a) * f.r * 0.11;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+}
+
 export function drawPoisonShots() {
   if (!state.poisonShots || !state.poisonShots.length) return;
   const view = visibleWorldBounds(90);

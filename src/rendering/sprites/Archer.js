@@ -116,6 +116,10 @@ export function drawBow(hx, hy, aim, pull, pullPt, look = {}) {
   const tip = look.tip || C.bowTip;
   const string = look.string || C.string;
   const grip = look.grip || C.belt;
+  const rank = look.rank || 0;
+  const shortBowUpgraded = look.weaponId === "short_bow" && rank >= 2;
+  const shortBowLegend = look.weaponId === "short_bow" && rank >= 3;
+  const t = performance.now() / 1000;
   if (look.glow) {
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
@@ -129,6 +133,27 @@ export function drawBow(hx, hy, aim, pull, pullPt, look = {}) {
     ctx.stroke();
     ctx.restore();
   }
+  if (shortBowLegend) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.18 + 0.08 * Math.sin(t * 2.4);
+    ctx.fillStyle = "#d8ffd0";
+    for (let k = 0; k < 6; k++) {
+      const a = t * 1.5 + k * Math.PI * 2 / 6;
+      const lx = Math.cos(a) * R * 0.9;
+      const ly = Math.sin(a) * R * 1.12;
+      ctx.save();
+      ctx.translate(lx, ly);
+      ctx.rotate(a);
+      ctx.beginPath();
+      ctx.moveTo(0, -2);
+      ctx.quadraticCurveTo(2.7, 0, 0, 2);
+      ctx.quadraticCurveTo(-2.3, 0, 0, -2);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
   // Limbs: two mirrored curves with recurved tips
   ctx.strokeStyle = wood; ctx.lineWidth = look.limbWidth || 2.4; ctx.lineCap = "round";
   ctx.beginPath();
@@ -136,6 +161,28 @@ export function drawBow(hx, hy, aim, pull, pullPt, look = {}) {
   ctx.quadraticCurveTo(curveX, -R * 0.55, bellyX, 0);
   ctx.quadraticCurveTo(curveX, R * 0.55, tipX, R);
   ctx.stroke();
+  if (shortBowUpgraded) {
+    ctx.save();
+    ctx.strokeStyle = "#3f7f3a";
+    ctx.lineWidth = 1.15;
+    ctx.beginPath();
+    for (let i = 0; i <= 16; i++) {
+      const p = i / 16;
+      const y = -R + p * R * 2;
+      const x = tipX + Math.sin(p * Math.PI * 4 + t * 2) * 1.4;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = look.hasIceExplosion ? "#d8fbff" : "#9bd05a";
+    for (let k = 0; k < 4; k++) {
+      const y = -R * 0.7 + k * R * 0.46;
+      ctx.beginPath();
+      ctx.moveTo(tipX + 0.5, y);
+      ctx.lineTo(tipX + 4.2, y + (k % 2 ? 2.4 : -2.4));
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
   // Recurve tips flick back
   ctx.strokeStyle = tip; ctx.lineWidth = look.tipWidth || 2;
   ctx.beginPath(); ctx.moveTo(tipX, -R); ctx.lineTo(tipX + tipKick, -R - tipKick); ctx.stroke();
@@ -155,6 +202,47 @@ export function drawBow(hx, hy, aim, pull, pullPt, look = {}) {
   }
   ctx.lineTo(tipX + tipKick, R + tipKick);
   ctx.stroke();
+  if (shortBowLegend) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.52 + 0.14 * Math.sin(t * 3.4);
+    ctx.strokeStyle = "#d8ffd0";
+    ctx.lineWidth = 0.85;
+    ctx.beginPath();
+    ctx.moveTo(tipX + tipKick - 3, -R - tipKick);
+    if (pull > 0 && pullPt) {
+      const dx = pullPt.x - hx, dy = pullPt.y - hy;
+      ctx.lineTo(dx * Math.cos(rot) + dy * Math.sin(rot) - 3, -dx * Math.sin(rot) + dy * Math.cos(rot));
+    }
+    ctx.lineTo(tipX + tipKick - 3, R + tipKick);
+    ctx.stroke();
+    ctx.restore();
+  }
+  if (shortBowUpgraded) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    const nockCol = look.hasIceExplosion ? "#ffffff" : look.hasBinding ? "#8fd8ff" : (look.upgradeCol || "#9bd05a");
+    ctx.globalAlpha = 0.34 + 0.18 * Math.sin(t * 4.8);
+    ctx.fillStyle = nockCol;
+    ctx.beginPath(); ctx.arc(bellyX + pull * 1.5, 0, shortBowLegend ? 4.2 : 3.1, 0, Math.PI * 2); ctx.fill();
+    if (look.hasBinding || look.hasIceExplosion) {
+      ctx.strokeStyle = nockCol;
+      ctx.lineWidth = 0.85;
+      for (let k = 0; k < 4; k++) {
+        ctx.beginPath();
+        ctx.ellipse(bellyX + 5 + k * 3.2, 0, 1.5, 2.1, 0.7, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+    if (shortBowLegend) {
+      ctx.strokeStyle = "#e8f8ff";
+      ctx.lineWidth = 1;
+      for (let k = -1; k <= 1; k += 2) {
+        ctx.beginPath(); ctx.moveTo(bellyX - 2, k * 3.2); ctx.lineTo(R + 7, k * 1.4); ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
   ctx.restore();
 }
 

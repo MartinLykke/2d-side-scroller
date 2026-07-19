@@ -6,6 +6,7 @@ import { keys } from '../input/Input.js';
 import { Audio } from './Audio.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { addSkillPoints } from '../economy/SkillSystem.js';
+import { baseMaxHpForLevel, wallMaxHpForLevel } from '../../util/DefenseStats.js';
 
 const META_KEY = "kingdom_embers_meta_v1";
 const LEADERBOARD_MAX_ENTRIES = 5;
@@ -463,12 +464,13 @@ export function applyPermanentWorldUpgrades() {
   const baseLevel = metaLevel("crowned_camp") > 0 ? 2 : 1;
   if (state.base && baseLevel > state.base.level) {
     state.base.level = baseLevel;
-    state.base.maxHp = CFG.baseMaxHp[baseLevel];
+    state.base.maxHp = baseMaxHpForLevel(baseLevel);
     state.base.hp = state.base.maxHp;
   }
   if (state.base && Game.permanentBaseHpBonus > 0) {
-    state.base.maxHp += Game.permanentBaseHpBonus;
-    state.base.hp += Game.permanentBaseHpBonus;
+    const nextMaxHp = baseMaxHpForLevel(state.base.level);
+    state.base.hp += Math.max(0, nextMaxHp - state.base.maxHp);
+    state.base.maxHp = nextMaxHp;
   }
 
   if (state.player) {
@@ -522,7 +524,7 @@ export function applyPermanentWorldUpgrades() {
     for (const w of [state.walls[0], state.walls[2]]) {
       w.commissioned = true;
       w.level = 1;
-      w.maxHp = CFG.wallHp[1] + (Game.permanentWallHpBonus || 0);
+      w.maxHp = wallMaxHpForLevel(1);
       w.hp = w.maxHp;
       w.buildProgress = 1;
     }
@@ -566,7 +568,7 @@ export function enterDeathHub(message = "") {
   state.base = { x: HUB.spawnX - 220, level: 1, hp: 1, maxHp: 1 };
   state.units = []; state.vagrants = []; state.enemies = []; state.coins = []; state.arrows = [];
   state.animals = []; state.walls = []; state.portals = []; state.lootItems = []; state.chests = [];
-  state.groundBows = []; state.groundHammers = []; state.spells = []; state.caltrops = [];
+  state.groundBows = []; state.groundHammers = []; state.spells = []; state.spellFields = []; state.caltrops = [];
   state.particles = []; state.floatTexts = [];
   state.stations = buildMetaStations();
   Game.hubMessage = message;

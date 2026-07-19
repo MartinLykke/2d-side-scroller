@@ -1,10 +1,11 @@
 import { CFG } from '../../config/config.js';
+import { ENEMY_TYPES } from '../../config/enemies.js';
 import { dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
 import { spawnParticles, floaty, spawnEnemy } from '../world/SpawnSystem.js';
-import { killEnemyWithAnimation } from '../../util/EnemyUtils.js';
+import { killEnemyWithAnimation, spawnImpBlood, killEnemy } from '../../util/EnemyUtils.js';
 import { entityWallLift, wallHeight, wallReady, wallRenderWidth } from '../../entities/Wall.js';
 import { damagePlayer } from '../combat/PlayerCombat.js';
 
@@ -41,7 +42,17 @@ function updateFireDragon(e, t, dt) {
   // Fly side to side across the base until dead
   const L = CFG.baseX - 560, R = CFG.baseX + 560;
   if (!e.patrolDir) e.patrolDir = e.x < CFG.baseX ? 1 : -1;
-  e.x += e.patrolDir * t.speed * dt;
+
+  // Rushes in at high speed on its way to the base; once it reaches the
+  // defenses (or clips a friendly unit/player) it settles into its normal
+  // patrol speed for the fight.
+  if (!e.reachedBase) {
+    const nearPlayer = dist(e.x, state.player.x) < 140;
+    const nearUnit = state.units.some(u => u.hp > 0 && !u.dying && dist(e.x, u.x) < 140);
+    if ((e.x > L && e.x < R) || nearPlayer || nearUnit) e.reachedBase = true;
+  }
+  const speed = e.reachedBase ? t.speed : t.speed * 3;
+  e.x += e.patrolDir * speed * dt;
   if (e.x > R) e.patrolDir = -1;
   if (e.x < L) e.patrolDir = 1;
   e.dir = e.patrolDir;
@@ -1044,32 +1055,65 @@ export function updateFirePools(dt) {
   for (let i = pools.length - 1; i >= 0; i--) {
     const p = pools[i];
     const isVoid = p.kind === "void";
+    const playerOwned = p.source === "player";
     p.life -= dt;
     if (Math.random() < dt * (isVoid ? 10 : 14)) spawnParticles(p.x + rand(-p.r * 0.8, p.r * 0.8), groundY - 4, 1, isVoid ? "#8a5aff" : "#ff6a20", 14, isVoid ? 62 : 42);
     if (Math.random() < dt * (isVoid ? 7 : 5))  spawnParticles(p.x + rand(-p.r * 0.6, p.r * 0.6), groundY - 6, 1, isVoid ? "#d7f6ff" : "#ffd060", 8, isVoid ? 72 : 52);
     if (isVoid && p.pull) {
-      if (player && player.hp > 0 && !Game.inMine && dist(p.x, player.x) < p.r * 1.15
-          && (player.jumpH || 0) + entityWallLift(player) <= 45) {
-        player.x += Math.sign(p.x - player.x || 1) * Math.min(70 * dt, Math.abs(p.x - player.x) * 0.08);
-      }
-      for (const u of state.units) {
-        if (u.hp <= 0 || u.dying || u.mine || u.onWall) continue;
-        if (dist(p.x, u.x) < p.r * 1.1) u.x += Math.sign(p.x - u.x || 1) * Math.min(55 * dt, Math.abs(p.x - u.x) * 0.08);
+      if (playerOwned) {
+        for (const e of state.enemies) {
+          if (e.fleeing || e.dying || e.hp <= 0) continue;
+          if (dist(p.x, e.x) >= p.r * 1.2 || ENEMY_TYPES[e.type]?.noKnockback) continue;
+          e.x += Math.sign(p.x - e.x || 1) * Math.min(85 * dt, Math.abs(p.x - e.x) * 0.1);
+          e.slow = Math.max(e.slow || 0, 0.3);
+        }
+      } else {
+        if (player && player.hp > 0 && !Game.inMine && dist(p.x, player.x) < p.r * 1.15
+            && (player.jumpH || 0) + entityWallLift(player) <= 45) {
+          player.x += Math.sign(p.x - player.x || 1) * Math.min(70 * dt, Math.abs(p.x - player.x) * 0.08);
+        }
+        for (const u of state.units) {
+          if (u.hp <= 0 || u.dying || u.mine || u.onWall) continue;
+          if (dist(p.x, u.x) < p.r * 1.1) u.x += Math.sign(p.x - u.x || 1) * Math.min(55 * dt, Math.abs(p.x - u.x) * 0.08);
+        }
       }
     }
     p.tick -= dt;
     if (p.tick <= 0) {
       p.tick = isVoid ? 0.9 : 0.85;
-      if (player && dist(p.x, player.x) < p.r
-          && (player.jumpH || 0) + entityWallLift(player) <= 20) {
-        if (damagePlayer(p.dmg || 1) !== null) spawnParticles(player.x, groundY - 40, 7, isVoid ? "#8a5aff" : "#ff6a20", 60, 80);
-      }
-      for (const u of state.units) {
-        if (u.hp <= 0 || u.dying || u.onWall || u.mine) continue;
-        if (dist(p.x, u.x) < p.r) {
-          u.hp -= p.dmg || 1;
-          u.panic = 1;
-          spawnParticles(u.x, groundY - 30, 4, isVoid ? "#8a5aff" : "#ff6a20", 40, 60);
+      if (playerOwned) {
+        p.tick = isVoid ? 0.58 : 0.66;
+        for (const e of state.enemies) {
+          if (e.fleeing || e.dying || e.hp <= 0 || dist(p.x, e.x) >= p.r) continue;
+          const dmg = p.dmg || 1;
+          const ey = groundY + (e.fy || 0) - 24;
+          e.hp -= dmg;
+          e.flash = Math.max(e.flash || 0, 0.1);
+          if (isVoid) {
+            e.slow = Math.max(e.slow || 0, 0.5);
+          } else {
+            e.burn = Math.max(e.burn || 0, 2.2);
+            e.burnTick = Math.min(e.burnTick || 1, 0.6);
+            e.burnDmg = Math.max(e.burnDmg || 0, p.burnDmg || 1);
+            e.ignited = true;
+          }
+          spawnParticles(e.x, ey, 5, isVoid ? "#8a5aff" : "#ff6a20", 42, 58);
+          spawnImpBlood(e, 0.35, ey);
+          floaty(e.x, "-" + dmg, isVoid ? "#ddaaff" : "#ff8840");
+          if (e.hp <= 0) killEnemy(e);
+        }
+      } else {
+        if (player && dist(p.x, player.x) < p.r
+            && (player.jumpH || 0) + entityWallLift(player) <= 20) {
+          if (damagePlayer(p.dmg || 1) !== null) spawnParticles(player.x, groundY - 40, 7, isVoid ? "#8a5aff" : "#ff6a20", 60, 80);
+        }
+        for (const u of state.units) {
+          if (u.hp <= 0 || u.dying || u.onWall || u.mine) continue;
+          if (dist(p.x, u.x) < p.r) {
+            u.hp -= p.dmg || 1;
+            u.panic = 1;
+            spawnParticles(u.x, groundY - 30, 4, isVoid ? "#8a5aff" : "#ff6a20", 40, 60);
+          }
         }
       }
     }

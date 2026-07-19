@@ -14,7 +14,8 @@ import { addXP } from '../economy/UpgradeSystem.js';
 import { baseName } from '../../rendering/HUD.js';
 import { applyPermanentUpgrades, applyPermanentWorldUpgrades } from './RoguelikeSystem.js';
 import { initMineVeins } from '../world/MineSystem.js';
-import { fortNext, fortDefenseHpMult, purchaseFortUpgrade } from '../world/FortificationSystem.js';
+import { fortNext, purchaseFortUpgrade } from '../world/FortificationSystem.js';
+import { currentPopCap, wallMaxHpForLevel } from '../../util/DefenseStats.js';
 
 function missingDefenseHp() {
   let missing = Math.max(0, state.base.maxHp - state.base.hp);
@@ -44,10 +45,6 @@ function canReinforceDefenses() {
 function reinforceDefenseCost() {
   if (!canReinforceDefenses()) return 0;
   return CFG.reinforceCostBase + Game.day * CFG.reinforceCostPerDay;
-}
-
-function wallMaxHp(level) {
-  return Math.round((CFG.wallHp[level] + (Game.permanentWallHpBonus || 0)) * fortDefenseHpMult());
 }
 
 function baseStationCost(base) {
@@ -98,13 +95,13 @@ export function buildStations() {
   state.stations = [];
 
   state.stations.push({
-    id:"base", x:()=>base.x, paid:0,
+    id:"base", x:()=>base.x, paid:0, instantPurchase:true,
     cost:()=>baseStationCost(base),
     label:()=>baseStationLabel(base),
     onPaid:()=>payBaseStation(base),
   });
   state.stations.push({
-    id:"bow", x:()=>STATIONS_X.bow, paid:0,
+    id:"bow", x:()=>STATIONS_X.bow, paid:0, instantPurchase:true,
     cost:()=>CFG.bowCost,
     label:()=>"Buy bow (creates an archer)",
     onPaid:()=>{
@@ -117,7 +114,7 @@ export function buildStations() {
   });
   if (state.base.level >= 2) {
     state.stations.push({
-      id:"hammer", x:()=>STATIONS_X.hammer, paid:0,
+      id:"hammer", x:()=>STATIONS_X.hammer, paid:0, instantPurchase:true,
       cost:()=>CFG.hammerCost,
       label:()=>"Buy hammer (creates a builder)",
       onPaid:()=>{
@@ -131,7 +128,7 @@ export function buildStations() {
   }
   if (state.base.level >= 2) {
     state.stations.push({
-      id:"farm", x:()=>STATIONS_X.farm, paid:0,
+      id:"farm", x:()=>STATIONS_X.farm, paid:0, instantPurchase:true,
       cost:()=>state.farmLevel>=5?0:CFG.farmUpgradeCosts[state.farmLevel],
       label:()=>{
         if (state.farmLevel===0) return "Build farm (passive gold income)";
@@ -141,7 +138,14 @@ export function buildStations() {
       onPaid:()=>{
         state.farmLevel++;
         state.farmBuilt = true;
-        if (state.farmLevel===1) { state.pendingFarmers++; }
+        if (state.farmLevel===1 && !state.units.some(u => u.role === "farmer" && u.hp > 0 && !u.dying)) {
+          const u = makeUnit("farmer", STATIONS_X.farm + rand(-24, 24));
+          u.transform = 0.55;
+          u.workTimer = 0;
+          state.units.push(u);
+          spawnParticles(u.x, groundY - 28, 12, "#9bd05a", 65, 80);
+          Audio.recruit();
+        }
         Audio.build();
       },
     });
@@ -156,13 +160,13 @@ export function buildStations() {
   }
   if (state.base.level >= 3) {
     state.stations.push({
-      id:"guard", x:()=>STATIONS_X.guard, paid:0,
-      cost:()=> state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level] ? 0 : CFG.guardCost,
-      label:()=> state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level]
+      id:"guard", x:()=>STATIONS_X.guard, paid:0, instantPurchase:true,
+      cost:()=> state.units.length + state.vagrants.length >= currentPopCap() ? 0 : CFG.guardCost,
+      label:()=> state.units.length + state.vagrants.length >= currentPopCap()
         ? "Population cap reached"
         : `Recruit guard (${CFG.guardCost} coins) - melee unit`,
       onPaid:()=>{
-        if (state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level]) return;
+        if (state.units.length + state.vagrants.length >= currentPopCap()) return;
         const u = makeUnit("guard", STATIONS_X.guard + rand(-20, 20));
         u.hp = u.maxHp = 8; u.transform = 0.55;
         state.units.push(u);
@@ -172,7 +176,7 @@ export function buildStations() {
   }
   if (state.base.level >= 3) {
     state.stations.push({
-      id:"runeforge", x:()=>STATIONS_X.runeforge, paid:0,
+      id:"runeforge", x:()=>STATIONS_X.runeforge, paid:0, instantPurchase:true,
       cost:()=>{ const f = fortNext(); return f ? f.cost : 0; },
       label:()=>{
         const f = fortNext();
@@ -185,7 +189,7 @@ export function buildStations() {
   }
   if (state.base.level >= 3 && !state.mineBuilt) {
     state.stations.push({
-      id:"mine", x:()=>STATIONS_X.mine, paid:0,
+      id:"mine", x:()=>STATIONS_X.mine, paid:0, instantPurchase:true,
       cost:()=>CFG.mineCost,
       label:()=>"Build mine (dig for gold beneath the castle)",
       onPaid:()=>{
@@ -199,13 +203,13 @@ export function buildStations() {
   }
   if (state.mineBuilt) {
     state.stations.push({
-      id:"miner", mineLayer:true, x:()=>MINE.stationX, paid:0,
-      cost:()=> state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level] ? 0 : CFG.minerCost,
-      label:()=> state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level]
+      id:"miner", mineLayer:true, x:()=>MINE.stationX, paid:0, instantPurchase:true,
+      cost:()=> state.units.length + state.vagrants.length >= currentPopCap() ? 0 : CFG.minerCost,
+      label:()=> state.units.length + state.vagrants.length >= currentPopCap()
         ? "Population cap reached"
         : `Recruit miner (${CFG.minerCost}🪙) – digs for gold`,
       onPaid:()=>{
-        if (state.units.length + state.vagrants.length >= CFG.popCapByLevel[state.base.level]) return;
+        if (state.units.length + state.vagrants.length >= currentPopCap()) return;
         const u = makeUnit("miner", MINE.stationX + rand(-20, 20));
         u.transform = 0.55;
         state.units.push(u);
@@ -215,7 +219,7 @@ export function buildStations() {
   }
   walls.forEach(w=>{
     state.stations.push({
-      id:"wall", wall:w, x:()=>w.x, paid:0,
+      id:"wall", wall:w, x:()=>w.x, paid:0, instantPurchase:true,
       cost:()=>{
         if (!w.commissioned) return CFG.wallCost;
         if (w.buildProgress < 1) return 0;
@@ -230,10 +234,10 @@ export function buildStations() {
       },
       onPaid:()=>{
         if (!w.commissioned) {
-          w.commissioned=true; w.level=1; w.maxHp=wallMaxHp(1); w.hp=0; w.buildProgress=0;
+          w.commissioned=true; w.level=1; w.maxHp=wallMaxHpForLevel(1); w.hp=0; w.buildProgress=0;
           addXP(15);
         } else if (w.level < 5) {
-          w.level++; w.maxHp=wallMaxHp(w.level);
+          w.level++; w.maxHp=wallMaxHpForLevel(w.level);
           w.buildProgress=clamp(w.hp/w.maxHp,0.2,1);
           addXP(20);
         }
@@ -294,6 +298,7 @@ export function newGame() {
   state.aegisStrikes    = [];
   state.firePools       = [];
   state.spells          = [];
+  state.spellFields     = [];
   state.weaponPickup    = null;
   state.payCooldown     = 0;
   state.payHoldTime     = 0;
@@ -304,6 +309,7 @@ export function newGame() {
   state.mineVeins       = [];
   state.assault         = null;
   state.fortLevel       = 0;
+  state.castleUpgrades  = { masonry: 0, garrison: 0, treasury: 0, aegis: 0 };
   state.sigilPulseT     = 0;
   state.sigilPulse      = 0;
   state.sigilSpin       = 0;
@@ -327,6 +333,8 @@ export function newGame() {
   Game.autosaveTimer     = 0;
   Game.zoom              = 1.2;
   Game.legendaryIntro    = null;
+  Game.castleOpen        = false;
+  Game.castleIdx         = 0;
   Game.runKills          = 0;
   Game.killStreak        = 0;
   Game.killStreakTimer   = 0;

@@ -98,7 +98,8 @@ function settleBudget(load) {
   }
 
   recoveryFrames++;
-  if (recoveryFrames > renderRecoveryFrames(Game)) {
+  const needed = Math.max(renderRecoveryFrames(Game), 90);
+  if (recoveryFrames > needed) {
     heldBudget = target;
     recoveryFrames = 0;
   }

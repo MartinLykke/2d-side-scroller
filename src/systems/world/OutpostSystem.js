@@ -7,6 +7,7 @@ import { Audio } from '../infrastructure/Audio.js';
 import { floaty, spawnParticles } from './SpawnSystem.js';
 import { addXP } from '../economy/UpgradeSystem.js';
 import { killEnemy } from '../../util/EnemyUtils.js';
+import { crownAegisStats } from '../../util/DefenseStats.js';
 
 // Buildings unlocked by base upgrades: watchtowers, lumber camps, the healing
 // shrine and (at base level 6) ballista emplacements. Forest slots must be
@@ -137,17 +138,18 @@ function updateBallista(b, dt) {
   b.timer = b.level >= 2 ? 2.2 : 3.0;
 }
 
-// Crown Aegis (base level 7): the royal capital itself smites the toughest
-// enemy near the walls with a burning ember strike.
+// Crown Aegis: the Royal Capital gets it for free, while the castle's Ember
+// Lens branch can awaken and strengthen it earlier.
 function updateCrownAegis(dt) {
   const base = state.base;
-  if (!base || base.level < CFG.maxBaseLevel) return;
+  const aegis = crownAegisStats();
+  if (!base || !aegis) return;
   base.aegisTimer = (base.aegisTimer || 0) - dt;
   if (base.aegisTimer > 0) return;
   let best = null;
   for (const e of state.enemies) {
     if (e.fleeing || e.dying) continue;
-    if (dist(e.x, base.x) > CFG.aegisRange) continue;
+    if (dist(e.x, base.x) > aegis.range) continue;
     if (!best || e.hp > best.hp) best = e;
   }
   if (!best) { base.aegisTimer = 0.25; return; }
@@ -155,12 +157,13 @@ function updateCrownAegis(dt) {
   const ey = bt && bt.flying ? groundY + (best.fy || -80) : groundY - 24;
   // golden bolt lashing out from the Crown Aegis beacon above the keep
   const now = performance.now() / 1000;
+  const sourceY = groundY - (base.level >= CFG.maxBaseLevel ? 266 : 238);
   state.aegisStrikes.push({
-    x1: base.x, y1: groundY - 266,
+    x1: base.x, y1: sourceY,
     x2: best.x, y2: ey,
     born: now, life: 0.45,
     seed: Math.random() * 100,
-    r: CFG.aegisRadius,
+    r: aegis.radius,
   });
   base.aegisFlashUntil = now + 0.35;
   // pillar of embers falling from the sky onto the strike point
@@ -169,9 +172,9 @@ function updateCrownAegis(dt) {
   spawnParticles(best.x, ey, 16, "#f2c14e", 95, 115);
   for (const e of state.enemies) {
     if (e.fleeing || e.dying) continue;
-    if (Math.abs(e.x - best.x) > CFG.aegisRadius) continue;
+    if (Math.abs(e.x - best.x) > aegis.radius) continue;
     // full smite on the chosen target; enemies caught in the blast only take splash
-    const dmg = e === best ? CFG.aegisDamage : CFG.aegisSplashDamage;
+    const dmg = e === best ? aegis.damage : aegis.splashDamage;
     e.hp -= dmg; e.flash = 0.15;
     e.burn = Math.max(e.burn || 0, 3);
     e.burnTick = 1;
@@ -182,7 +185,7 @@ function updateCrownAegis(dt) {
   }
   Game.screenShake = Math.max(Game.screenShake, 0.3);
   Audio.hit();
-  base.aegisTimer = CFG.aegisInterval;
+  base.aegisTimer = aegis.interval;
 }
 
 function updateShrine(b, dt) {

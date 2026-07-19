@@ -97,7 +97,7 @@ function stickArrowInEnemy(e, ar, enemyDrawY) {
   if (!e.stuckArrows) e.stuckArrows = [];
   if (e.stuckArrows.length >= 5) e.stuckArrows.shift();
   const facing = e.dir < 0 ? -1 : 1;
-  const drawYOff = e.aiState === "stacking" && e.impStackY !== undefined ? e.impStackY : (e.fy || 0);
+  const drawYOff = e.fy || 0;
   const localX = clamp((ar.x - e.x) * facing, -4, 9);
   const localY = clamp(ar.y - drawYOff, groundY - 29, groundY - 10);
   e.stuckArrows.push({
@@ -150,7 +150,7 @@ export function updateStuckArrows(dt, maxLife = stuckArrowLife()) {
 }
 
 function enemyDrawYOffset(e) {
-  return e.type === "imp" && e.aiState === "stacking" && e.impStackY !== undefined ? e.impStackY : (e.fy || 0);
+  return e.fy || 0;
 }
 
 function playerBlastY(player) {
@@ -343,6 +343,17 @@ export function updateArrows(dt) {
             // Piercing and ballista shots plow straight through corpses
             if (ar.pierce > 0 || ar.ballista) continue;
             stickArrowInEnemy(e, ar, enemyDrawY);
+            hit = true;
+            break;
+          }
+          // Siege Imp's plank shield deflects frontal arrows — unless it's
+          // mid-ram (shield lowered), or the shot is a ballista bolt/powershot
+          // heavy enough to punch through. Flank it or shoot the back.
+          if (et.shieldBlock && !e.shieldDown && !ar.ballista && !ar.powered &&
+              (ar.x - e.x) * (e.dir || 1) > -4) {
+            spawnParticles(ar.x, enemyDrawY, 5, "#c9b48a", 42, 44);
+            spawnParticles(ar.x, enemyDrawY, 3, "#9aa2ae", 30, 52);
+            Audio.hit();
             hit = true;
             break;
           }

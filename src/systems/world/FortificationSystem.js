@@ -1,5 +1,4 @@
 import { state, Game } from '../../core/state.js';
-import { CFG } from '../../config/config.js';
 import { FORT_TRACK, fortHpMultAt } from '../../config/fortifications.js';
 import { groundY } from '../../core/canvas.js';
 import { rand } from '../../util/math.js';
@@ -7,6 +6,7 @@ import { wallReady, wallHeight, wallRenderWidth } from '../../entities/Wall.js';
 import { spawnParticles, floaty } from './SpawnSystem.js';
 import { killEnemy } from '../../util/EnemyUtils.js';
 import { Audio } from '../infrastructure/Audio.js';
+import { reapplyDefenseMaxHp } from '../../util/DefenseStats.js';
 
 export function fortLevel() {
   return state.fortLevel || 0;
@@ -25,27 +25,11 @@ export function fortDefenseHpMult() {
   return fortHpMultAt(fortLevel());
 }
 
-// Recompute wall/base max HP from the config tables after an HP-tier purchase,
-// healing by the gained amount so the buff is felt immediately.
-function reapplyDefenseHp() {
-  const mult = fortDefenseHpMult();
-  const base = state.base;
-  const newBaseMax = Math.round((CFG.baseMaxHp[base.level] + (Game.permanentBaseHpBonus || 0)) * mult);
-  base.hp += Math.max(0, newBaseMax - base.maxHp);
-  base.maxHp = newBaseMax;
-  for (const w of state.walls || []) {
-    if (!w.commissioned || w.level < 1) continue;
-    const newMax = Math.round((CFG.wallHp[w.level] + (Game.permanentWallHpBonus || 0)) * mult);
-    w.hp += Math.max(0, newMax - w.maxHp);
-    w.maxHp = newMax;
-  }
-}
-
 export function purchaseFortUpgrade() {
   const f = fortNext();
   if (!f) return false;
   state.fortLevel = fortLevel() + 1;
-  if (f.id === "stone" || f.id === "bulwark") reapplyDefenseHp();
+  if (f.id === "stone" || f.id === "bulwark") reapplyDefenseMaxHp();
   if (f.id === "sigil") { state.sigilPulseT = 1; state.sigilPulse = 0; }
   floaty(state.player.x, `✨ ${f.name} attuned!`, f.col);
   spawnParticles(state.player.x, groundY - 40, 22, f.col, 110, 130);

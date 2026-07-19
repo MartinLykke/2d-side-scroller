@@ -99,18 +99,41 @@ export function drawTent(x, col) {
   const sway=windSway(x,3); ctx.fillStyle="#c1453b"; ctx.beginPath(); ctx.moveTo(x,groundY-54); ctx.lineTo(x+10+sway,groundY-51); ctx.lineTo(x,groundY-48); ctx.fill();
 }
 
-export function drawFlag(x, color) {
-  groundShadow(x,8,0.16);
-  ctx.strokeStyle="#cdbfa3"; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(x,groundY); ctx.lineTo(x,groundY-36); ctx.stroke();
-  const sway=windSway(x,4); ctx.fillStyle=color;
-  ctx.beginPath(); ctx.moveTo(x,groundY-36); ctx.quadraticCurveTo(x+10+sway,groundY-34,x+18+sway,groundY-30); ctx.quadraticCurveTo(x+10+sway,groundY-28,x,groundY-24); ctx.fill();
+export function drawBuildMarker(x, color) {
+  const t = performance.now() / 1000;
+  const pulse = 0.55 + 0.45 * Math.sin(t * 2.2 + x * 0.3);
+
+  groundShadow(x, 16, 0.22);
+  const rg = ctx.createRadialGradient(x, groundY - 2, 2, x, groundY - 2, 22);
+  rg.addColorStop(0, color);
+  rg.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.save();
+  ctx.globalAlpha = 0.35 * pulse;
+  ctx.fillStyle = rg;
+  ctx.beginPath(); ctx.ellipse(x, groundY - 1, 24, 8, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  ctx.fillStyle = "#5a5060";
+  ctx.beginPath(); ctx.moveTo(x - 10, groundY); ctx.lineTo(x + 10, groundY); ctx.lineTo(x + 7, groundY - 8); ctx.lineTo(x - 7, groundY - 8); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#6a6270";
+  ctx.beginPath(); ctx.moveTo(x - 7, groundY - 8); ctx.lineTo(x + 7, groundY - 8); ctx.lineTo(x + 4, groundY - 14); ctx.lineTo(x - 4, groundY - 14); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#7a7482";
+  ctx.beginPath(); ctx.moveTo(x - 4, groundY - 14); ctx.lineTo(x + 4, groundY - 14); ctx.lineTo(x + 1, groundY - 19); ctx.lineTo(x - 1, groundY - 19); ctx.closePath(); ctx.fill();
+
+  ctx.save();
+  ctx.globalAlpha = 0.7 * pulse;
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(x, groundY - 20, 3.5, 0, Math.PI * 2); ctx.fill();
+  const gg = ctx.createRadialGradient(x, groundY - 20, 1, x, groundY - 20, 9);
+  gg.addColorStop(0, color); gg.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = gg;
+  ctx.beginPath(); ctx.arc(x, groundY - 20, 9, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
 }
 
 export function drawStationIcon(x, emoji) {
   const bob=Math.sin(performance.now()/400+x)*3;
-  ctx.save(); ctx.font="20px serif"; ctx.textAlign="center"; ctx.globalAlpha=0.92;
-  ctx.fillText(emoji,x,groundY-48+bob);
-  ctx.strokeStyle="rgba(120,100,70,0.6)"; ctx.lineWidth=2;
-  ctx.beginPath(); ctx.moveTo(x,groundY); ctx.lineTo(x,groundY-28); ctx.stroke();
+  ctx.save(); ctx.font="18px serif"; ctx.textAlign="center"; ctx.globalAlpha=0.92;
+  ctx.fillText(emoji,x,groundY-30+bob);
   ctx.restore();
 }

@@ -315,6 +315,19 @@ export function archerAI(u, dt) {
   if (u.grapple) { updateGrapple(u, dt); return; }
   if (updateArcherWallMelee(u, dt)) return;
 
+  // Ground melee: if an imp is actively attacking this archer, fight back with the dagger
+  if (!u.onWall && u.combatTarget && u.combatTarget.hp > 0 && !u.combatTarget.dying && !u.combatTarget.fleeing
+      && state.enemies.includes(u.combatTarget)) {
+    const foe = u.combatTarget;
+    const d = dist(u.x, foe.x);
+    if (d < 50) {
+      u.dir = Math.sign(foe.x - u.x) || u.dir;
+      archerDaggerDamageEnemy(u, foe, 1, 0.58);
+      return;
+    }
+    if (d >= 50) clearArcherMelee(u);
+  }
+
   if (hasSkill("powershot") && !hasSkill("heavy_ballista")) {
     if (!u.moving && !u.placingTrap) {
       u.powerTimer = (u.powerTimer || 0) + dt;

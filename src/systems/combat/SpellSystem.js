@@ -29,10 +29,7 @@ function targetImpactY(target) {
   const targetType = target?.type && ENEMY_TYPES[target.type];
   if (targetType?.flying) return groundY + (target.fy || -80);
 
-  const stackY = target?.type === "imp" && target.aiState === "stacking" && target.impStackY !== undefined
-    ? target.impStackY
-    : (target?.fy || 0);
-  return groundY - 24 + stackY;
+  return groundY - 24 + (target?.fy || 0);
 }
 
 function playerMomentumDamageMultiplier() {
@@ -137,10 +134,266 @@ function meteorCrashImpact(sp, x, y = groundY - 8) {
   }
   // an icy comet quenches instead of igniting the ground
   if (!icy) {
-    if (!state.firePools) state.firePools = [];
-    state.firePools.push({ x, r: Math.max(24, (sp.aoeRadius || 70) * 0.45), life: 2.2, maxLife: 2.2, tick: rand(0.3, 0.7), ph: rand(0, 6) });
+    spawnPlayerSpellPool(x, Math.max(24, (sp.aoeRadius || 70) * 0.45), 2.2, { dmg: 1, burnDmg: 1 });
   }
+  if (sp.meteorFragments && !sp.isFragment) spawnMeteorFragments(sp, x, impactY);
   Game.screenShake = Math.max(Game.screenShake, 0.95);
+}
+
+function ensureSpellFields() {
+  if (!state.spellFields) state.spellFields = [];
+  return state.spellFields;
+}
+
+function spawnPlayerSpellPool(x, r, life, opts = {}) {
+  if (!state.firePools) state.firePools = [];
+  state.firePools.push({
+    x, r, life, maxLife: life,
+    tick: rand(0.28, 0.62), ph: rand(0, 6),
+    source: "player",
+    kind: opts.kind || null,
+    pull: !!opts.pull,
+    dmg: opts.dmg || 1,
+    burnDmg: opts.burnDmg || 1,
+    col: opts.col,
+  });
+}
+
+function spellDamageEnemy(e, dmg, col, opts = {}) {
+  if (!e || e.fleeing || e.dying || e.hp <= 0) return false;
+  const amount = Math.max(1, Math.round(dmg));
+  const y = opts.y ?? targetImpactY(e);
+  e.hp -= amount;
+  e.flash = Math.max(e.flash || 0, 0.12);
+  if (opts.blood !== false) spawnImpBlood(e, 0.45 + amount * 0.05, y);
+  if (opts.float !== false) floaty(e.x, "-" + amount, col);
+  if (opts.particles !== false) spawnParticles(e.x, y, opts.particleCount || 5, col, opts.spread || 44, opts.life || 62);
+  if (e.hp <= 0) killEnemy(e);
+  return true;
+}
+
+function enemiesNearX(x, radius) {
+  return state.enemies.filter(e => !e.fleeing && !e.dying && e.hp > 0 && dist(e.x, x) < radius);
+}
+
+function flareBurningEnemies(sp, x, y, radius) {
+  const strength = sp.scorchChain || 0;
+  if (!strength || sp.spellType !== "fireball") return;
+  const r = Math.max(radius || 70, 70);
+  const col = sp.upgradeCol || "#ffcc60";
+  let flares = 0;
+  for (const e of enemiesNearX(x, r)) {
+    const alreadyBurning = (e.burn || 0) > 0 || e.ignited;
+    if (!alreadyBurning && Math.random() > strength * 0.55) continue;
+    e.burn = Math.max(e.burn || 0, 2.6 + strength);
+    e.burnTick = Math.min(e.burnTick || 1, 0.35);
+    e.burnDmg = Math.max(e.burnDmg || 0, 1 + Math.floor(strength * 2));
+    e.ignited = true;
+    if (alreadyBurning) spellDamageEnemy(e, sp.dmg * (0.22 + strength * 0.18), col, { particleCount: 8, spread: 64 });
+    for (const ne of enemiesNearX(e.x, 115 + strength * 35)) {
+      if (ne === e) continue;
+      ne.burn = Math.max(ne.burn || 0, 1.8 + strength * 0.6);
+      ne.burnTick = Math.min(ne.burnTick || 1, 0.55);
+      ne.burnDmg = Math.max(ne.burnDmg || 0, 1);
+      ne.ignited = true;
+      if (Math.random() < 0.35) spawnParticles(ne.x, targetImpactY(ne), 3, col, 32, 48);
+    }
+    flares++;
+  }
+  if (flares > 0) {
+    spawnParticles(x, y ?? groundY - 24, 12 + flares * 2, col, r * 0.8, 115);
+    Game.screenShake = Math.max(Game.screenShake, 0.16 + Math.min(0.18, flares * 0.025));
+  }
+}
+
+function eruptGeyser(sp, x, y, radius) {
+  const strength = sp.geyser || 0;
+  if (!strength || sp.spellType !== "waterjet") return;
+  const r = Math.max(58, (radius || 55) * (0.75 + strength * 0.12));
+  const dmg = Math.max(1, sp.dmg * (0.18 + strength * 0.14));
+  const col = sp.upgradeCol || "#a0e8ff";
+  let hit = 0;
+  spawnParticles(x, groundY - 10, 18, "#4ab8e8", r * 0.75, 100);
+  spawnParticles(x, groundY - 46, 12, "#d8fbff", r * 0.35, 150);
+  for (const e of enemiesNearX(x, r)) {
+    const et = ENEMY_TYPES[e.type] || {};
+    spellDamageEnemy(e, dmg, col, { particleCount: 6, spread: 46 });
+    e.frost = Math.max(e.frost || 0, 0.8 + strength * 0.45);
+    e.rooted = Math.max(e.rooted || 0, Math.min(1.8, 0.35 + strength * 0.32));
+    if (!et.noKnockback) e.knock = (e.knock || 0) + Math.sign(e.x - x || 1) * (90 + strength * 55);
+    hit++;
+  }
+  if (hit > 0) {
+    floaty(x, "Geyser x" + hit, col);
+    Audio.hit();
+    Game.screenShake = Math.max(Game.screenShake, 0.18 + Math.min(0.2, hit * 0.025));
+  }
+}
+
+function spawnStormCloud(x, y, dmg, strength, col) {
+  if (!strength) return;
+  ensureSpellFields().push({
+    type: "storm",
+    x,
+    y: Math.min(y - 118, groundY - 150),
+    r: 130 + strength * 28,
+    dmg: Math.max(1, dmg * (0.34 + strength * 0.06)),
+    life: 1.8 + strength * 0.75,
+    maxLife: 1.8 + strength * 0.75,
+    tick: 0.22,
+    ph: rand(0, 6),
+    col: col || "#ffffff",
+  });
+}
+
+function spawnRuneTrap(sp, x, y) {
+  const strength = sp.runeTrap || 0;
+  if (!strength || sp.isSplitOrb) return;
+  const life = 1.1 + strength * 0.35;
+  ensureSpellFields().push({
+    type: "rune",
+    x,
+    y: Math.min(y ?? groundY - 10, groundY - 8),
+    r: 58 + strength * 22,
+    dmg: Math.max(1, sp.dmg * (0.32 + strength * 0.08)),
+    life,
+    maxLife: life,
+    arm: 0.34,
+    ph: rand(0, 6),
+    col: sp.upgradeCol || "#ff88ff",
+  });
+}
+
+function curseEnemies(sp, x, radius) {
+  const strength = sp.shadowCurse || 0;
+  if (!strength || sp.spellType !== "shadow") return;
+  const r = Math.max(radius || 70, 70);
+  const col = sp.upgradeCol || "#aa44cc";
+  let marked = 0;
+  for (const e of enemiesNearX(x, r)) {
+    e.shadowCurse = Math.max(e.shadowCurse || 0, 2.3 + strength * 0.65);
+    e.shadowCurseTick = Math.min(e.shadowCurseTick || 0.6, 0.45);
+    e.shadowCurseDmg = Math.max(e.shadowCurseDmg || 0, sp.dmg * (0.12 + strength * 0.035));
+    e.slow = Math.max(e.slow || 0, 0.55 + strength * 0.1);
+    spawnParticles(e.x, targetImpactY(e), 5, col, 36, 58);
+    marked++;
+  }
+  if (marked > 0) floaty(x, "Cursed x" + marked, col);
+}
+
+function spawnVoidScar(sp, x) {
+  const strength = sp.voidScar || 0;
+  if (!strength || sp.isSplitOrb) return;
+  spawnPlayerSpellPool(x, Math.max(46, (sp.aoeRadius || 70) * (0.48 + strength * 0.08)), 2.4 + strength * 0.75, {
+    kind: "void",
+    pull: true,
+    dmg: Math.max(1, Math.round(sp.dmg * (0.16 + strength * 0.04))),
+    col: sp.upgradeCol || "#ddaaff",
+  });
+}
+
+function spawnMeteorFragments(sp, x, y) {
+  const n = Math.max(1, Math.min(5, Math.round(sp.meteorFragments || 0)));
+  const icy = sp.iceMeteor;
+  for (let i = 0; i < n; i++) {
+    const off = n === 1 ? 0 : (i / (n - 1)) * 2 - 1;
+    const startX = x + off * rand(36, 76) + rand(-20, 20);
+    state.spells.push({
+      x: startX,
+      y: groundY - rand(520, 760),
+      vx: -off * rand(35, 90) + rand(-24, 24),
+      vy: rand(430, 560),
+      spellType: "meteor",
+      dmg: Math.max(1, sp.dmg * 0.28),
+      life: 1.75,
+      col: icy ? "#bfefff" : sp.col,
+      aoeRadius: Math.max(24, (sp.aoeRadius || 70) * 0.34),
+      age: 0,
+      isFragment: true,
+      iceMeteor: icy,
+      burnDps: sp.burnDps ? Math.max(1, sp.burnDps * 0.5) : 0,
+      frostS: sp.frostS ? Math.max(0.7, sp.frostS * 0.55) : 0,
+      upgradeCol: sp.upgradeCol,
+      upgradeRank: sp.upgradeRank,
+    });
+  }
+  spawnParticles(x, y ?? groundY - 20, 14, icy ? "#d8fbff" : "#ffd060", 95, 130);
+}
+
+function updateShadowCurses(dt) {
+  for (const e of state.enemies) {
+    if (!e.shadowCurse || e.dying || e.hp <= 0) continue;
+    e.shadowCurse -= dt;
+    e.shadowCurseTick = (e.shadowCurseTick || 0) - dt;
+    const y = targetImpactY(e);
+    if (Math.random() < dt * 7) spawnParticles(e.x + rand(-7, 7), y + rand(-8, 5), 1, "#440066", 22, 28);
+    if (e.shadowCurseTick <= 0) {
+      e.shadowCurseTick = 0.72;
+      spellDamageEnemy(e, e.shadowCurseDmg || 1, "#aa44cc", { particleCount: 6, spread: 40 });
+    }
+    if (e.shadowCurse <= 0) {
+      e.shadowCurse = 0;
+      e.shadowCurseDmg = 0;
+    }
+  }
+}
+
+function detonateRuneField(f, idx) {
+  let hit = 0;
+  for (const e of enemiesNearX(f.x, f.r)) {
+    spellDamageEnemy(e, f.dmg, f.col, { particleCount: 8, spread: 58 });
+    hit++;
+  }
+  spawnParticles(f.x, groundY - 12, 22, f.col, f.r * 0.95, 125);
+  spawnParticles(f.x, groundY - 20, 8, "#ffffff", f.r * 0.45, 130);
+  state.legendaryEffects.push({ type: "ring", x: f.x, radius: f.r, life: 0.42, totalLife: 0.42, col: f.col, width: 5 });
+  if (hit > 0) Audio.explosion();
+  Game.screenShake = Math.max(Game.screenShake, hit ? 0.28 : 0.15);
+  state.spellFields.splice(idx, 1);
+}
+
+function updateSpellFields(dt) {
+  updateShadowCurses(dt);
+  const fields = state.spellFields;
+  if (!fields || !fields.length) return;
+  for (let i = fields.length - 1; i >= 0; i--) {
+    const f = fields[i];
+    f.life -= dt;
+    f.age = (f.age || 0) + dt;
+    if (f.type === "storm") {
+      if (Math.random() < dt * 12) spawnParticles(f.x + rand(-f.r * 0.55, f.r * 0.55), f.y + rand(-10, 8), 1, f.col, 18, 45);
+      f.tick -= dt;
+      if (f.tick <= 0) {
+        f.tick = rand(0.42, 0.7);
+        let target = null, td = f.r;
+        for (const e of enemiesNearX(f.x, f.r)) {
+          const d = Math.abs(e.x - f.x);
+          if (d < td) { td = d; target = e; }
+        }
+        if (target) {
+          const ey = targetImpactY(target);
+          for (let yy = f.y; yy < ey; yy += 13) {
+            spawnParticles(target.x + rand(-7, 7), yy, 1, "#ffffff", 5, 5);
+            if (Math.random() < 0.35) spawnParticles(target.x + rand(-11, 11), yy, 1, f.col, 10, 8);
+          }
+          spellDamageEnemy(target, f.dmg, f.col, { y: ey, particleCount: 8, spread: 56 });
+          chainLightning(target.x, f.dmg, 1);
+          Audio.spell();
+        }
+      }
+    } else if (f.type === "rune") {
+      f.arm -= dt;
+      if (Math.random() < dt * 10) spawnParticles(f.x + rand(-f.r * 0.35, f.r * 0.35), groundY - 8, 1, f.col, 10, 30);
+      if (f.arm <= 0 && enemiesNearX(f.x, f.r * 0.88).length) {
+        detonateRuneField(f, i);
+        continue;
+      }
+    }
+    if (f.life <= 0) {
+      if (f.type === "rune") detonateRuneField(f, i);
+      else fields.splice(i, 1);
+    }
+  }
 }
 
 // Upgrade riders carried by a spell, applied around an impact point:
@@ -179,9 +432,13 @@ function applySpellField(sp, x, y) {
     Game.screenShake = Math.max(Game.screenShake, 0.25);
   }
   if (sp.firePool && !sp.iceMeteor) {
-    if (!state.firePools) state.firePools = [];
-    state.firePools.push({ x, r: Math.max(30, r * 0.55), life: 3.5, maxLife: 3.5, tick: rand(0.3, 0.7), ph: rand(0, 6) });
+    spawnPlayerSpellPool(x, Math.max(30, r * 0.55), 3.5, { dmg: 1, burnDmg: Math.max(1, sp.burnDps || 1), col: sp.upgradeCol || sp.col });
   }
+  flareBurningEnemies(sp, x, y, r);
+  eruptGeyser(sp, x, y, r);
+  spawnRuneTrap(sp, x, y);
+  curseEnemies(sp, x, r);
+  spawnVoidScar(sp, x);
   if (sp.split && !sp.isSplitOrb) spawnSplitOrbs(sp, x, y ?? groundY - 30);
 }
 
@@ -315,6 +572,9 @@ export function castSpell(player, wBase, tgt) {
     }
 
     chainLightning(tgt.x, ew.dmg * dmgMult, 1 + (fx.chainBonus || 0));
+    if (fx.stormCloud) {
+      spawnStormCloud(tgt.x, enemyY, ew.dmg * dmgMult, fx.stormCloud, upgradeCol || wBase.col);
+    }
 
     // Tempest: the sky answers twice — a second bolt hunts another enemy
     if (fx.extraBolt) {
@@ -403,6 +663,12 @@ export function castSpell(player, wBase, tgt) {
     split: fx.splitOrbs || 0,
     pull: !!fx.singularity,
     iceMeteor: !!fx.meteorIce && wBase.spellType === "meteor",
+    scorchChain: fx.scorchChain || 0,
+    geyser: fx.geyser || 0,
+    runeTrap: fx.runeTrap || 0,
+    shadowCurse: fx.shadowCurse || 0,
+    voidScar: fx.voidScar || 0,
+    meteorFragments: fx.meteorFragments || 0,
     upgradeCol,
     upgradeRank,
   };
@@ -419,6 +685,12 @@ export function castSpell(player, wBase, tgt) {
       dmg: Math.max(1, spell.dmg * 0.55),
       life: life + 0.25,
       aoeRadius: Math.max(24, aoeR * 0.65),
+      scorchChain: spell.scorchChain * 0.65,
+      geyser: spell.geyser * 0.65,
+      runeTrap: spell.runeTrap * 0.55,
+      shadowCurse: spell.shadowCurse * 0.65,
+      voidScar: spell.voidScar * 0.55,
+      meteorFragments: Math.floor(spell.meteorFragments * 0.5),
       isEcho: true,
     };
     state.spells.push(echo);
@@ -439,6 +711,7 @@ export function castSpell(player, wBase, tgt) {
 }
 
 export function updateSpells(dt) {
+  updateSpellFields(dt);
   if (!state.spells || !state.spells.length) return;
   const { spells, enemies } = state;
   for (let i = spells.length - 1; i >= 0; i--) {

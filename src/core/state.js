@@ -18,6 +18,8 @@ export const Game = {
   shopOpen: false,
   shopIdx: 0,
   shopTab: 0,
+  castleOpen: false,
+  castleIdx: 0,
   difficulty: "normal",
   diffMult: 1.0,
   targetFps: 120,
@@ -44,6 +46,8 @@ export const Game = {
   nightPortalWarnT: 0,
   worldPhase: 1,          // 1 = Crown of Embers, 2 = the Hollow (after a portal falls)
   phaseTransition: null,  // { t, swapped } while the phase-2 flash plays
+  oneSidedNightSide: null, // -1|1 while tonight's attacks only come from one portal side, else null
+  oneSidedAnnounce: null,  // { timer, maxTimer, side } banner shown at nightfall
 };
 
 // All mutable entity arrays and per-play variables live here so every
@@ -71,6 +75,7 @@ export const state = {
   groundBows: [],
   groundHammers: [],
   spells: [],
+  spellFields: [],
   vagrantTimer: 1,
   animalTimer: 2,
   pendingHammers: 0,
@@ -99,4 +104,5 @@ export const state = {
   mineActiveLeft: 0,
   mineActiveRight: 0,
   assault: null, // active portal assault ({ phase, portal, ... }) or null
+  castleUpgrades: { masonry: 0, garrison: 0, treasury: 0, aegis: 0 },
 };

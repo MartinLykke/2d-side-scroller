@@ -10,6 +10,7 @@ import { ENEMY_TYPES } from '../../config/enemies.js';
 import { fortHas, fortLevel, fortNext } from '../../systems/world/FortificationSystem.js';
 import { FORT_TRACK } from '../../config/fortifications.js';
 import { renderBudget } from '../RenderFrame.js';
+import { castleUpgradeLevel } from '../../util/DefenseStats.js';
 
 // ---------- Ground ----------
 // True when a ground doodad would sit inside a pond's water footprint.
@@ -627,11 +628,36 @@ function drawKeep(x, h, l, d, dark) {
 }
 
 // ---------- World entities ----------
-function drawFlag(x, color) {
-  groundShadow(x,8,0.16);
-  ctx.strokeStyle="#cdbfa3"; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(x,groundY); ctx.lineTo(x,groundY-36); ctx.stroke();
-  const sway=windSway(x,4); ctx.fillStyle=color;
-  ctx.beginPath(); ctx.moveTo(x,groundY-36); ctx.quadraticCurveTo(x+10+sway,groundY-34,x+18+sway,groundY-30); ctx.quadraticCurveTo(x+10+sway,groundY-28,x,groundY-24); ctx.fill();
+function drawBuildMarker(x, color) {
+  const t = performance.now() / 1000;
+  const pulse = 0.55 + 0.45 * Math.sin(t * 2.2 + x * 0.3);
+
+  groundShadow(x, 16, 0.22);
+  const rg = ctx.createRadialGradient(x, groundY - 2, 2, x, groundY - 2, 22);
+  rg.addColorStop(0, color);
+  rg.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.save();
+  ctx.globalAlpha = 0.35 * pulse;
+  ctx.fillStyle = rg;
+  ctx.beginPath(); ctx.ellipse(x, groundY - 1, 24, 8, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  ctx.fillStyle = "#5a5060";
+  ctx.beginPath(); ctx.moveTo(x - 10, groundY); ctx.lineTo(x + 10, groundY); ctx.lineTo(x + 7, groundY - 8); ctx.lineTo(x - 7, groundY - 8); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#6a6270";
+  ctx.beginPath(); ctx.moveTo(x - 7, groundY - 8); ctx.lineTo(x + 7, groundY - 8); ctx.lineTo(x + 4, groundY - 14); ctx.lineTo(x - 4, groundY - 14); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#7a7482";
+  ctx.beginPath(); ctx.moveTo(x - 4, groundY - 14); ctx.lineTo(x + 4, groundY - 14); ctx.lineTo(x + 1, groundY - 19); ctx.lineTo(x - 1, groundY - 19); ctx.closePath(); ctx.fill();
+
+  ctx.save();
+  ctx.globalAlpha = 0.7 * pulse;
+  ctx.fillStyle = color;
+  ctx.beginPath(); ctx.arc(x, groundY - 20, 3.5, 0, Math.PI * 2); ctx.fill();
+  const gg = ctx.createRadialGradient(x, groundY - 20, 1, x, groundY - 20, 9);
+  gg.addColorStop(0, color); gg.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = gg;
+  ctx.beginPath(); ctx.arc(x, groundY - 20, 9, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
 }
 
 export function drawEntityShadows() {
@@ -1411,7 +1437,7 @@ export function drawWalls(dark) {
   for (const w of state.walls) {
     const x=w.x;
     if (x < view.left || x > view.right) continue;
-    if (!w.commissioned) { drawFlag(x,"#6fb3d6"); continue; }
+    if (!w.commissioned) { drawBuildMarker(x,"#6fb3d6"); continue; }
     const h=wallHeight(w)*(0.3+0.7*clamp(w.buildProgress,0,1));
     const WW=w.level>=5?96:wallRenderWidth(w);
     if (w.flash>0) w.flash-=0.016;
@@ -1573,6 +1599,7 @@ export function drawBase(dark) {
   const { base } = state;
   const x=base.x, lvl=base.level;
   if (base.flash>0) base.flash-=0.016;
+  if (base.castleUpgradePulse>0) base.castleUpgradePulse-=0.016;
   const flash=base.flash>0&&Math.floor(base.flash*20)%2===0;
   ctx.save(); groundShadow(x,lvl>=4?112:lvl>=2?82:48,0.3);
   const stoneL=flash?"#ffd0b0":"#5a5260", stoneD=flash?"#e0b090":"#403a48", night=dark>0.25;
@@ -1589,10 +1616,144 @@ export function drawBase(dark) {
   } else {
     drawGrandCastle(x,stoneL,stoneD,dark,night);
     if (lvl>=5) drawCastleRegalia(x,lvl,dark);
+    drawCastleUpgradeDressing(x,lvl,dark);
   }
   if (fortHas("sigil")) drawCrownSigil(x, lvl);
   drawHpBar(x,groundY-(lvl>=7?292:lvl>=4?250:lvl>=2?130:70),70,base.hp/base.maxHp,"#f2c14e");
   ctx.restore();
+}
+
+function drawCastleUpgradeDressing(x, lvl, dark) {
+  const masonry = castleUpgradeLevel("masonry");
+  const garrison = castleUpgradeLevel("garrison");
+  const treasury = castleUpgradeLevel("treasury");
+  const aegis = castleUpgradeLevel("aegis");
+  const pulse = state.base?.castleUpgradePulse || 0;
+  const t = performance.now() / 1000;
+
+  if (masonry > 0) {
+    const stone = masonry >= 3 ? "#746f78" : "#665f6d";
+    const hi = masonry >= 3 ? "#9a929c" : "#817987";
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < masonry; i++) {
+        const bx = x + side * (154 - i * 42);
+        const h = 58 + i * 18;
+        const w = 18 + i * 4;
+        ctx.fillStyle = stone;
+        ctx.beginPath();
+        ctx.moveTo(bx - side * w * 0.35, groundY);
+        ctx.lineTo(bx - side * w, groundY - h);
+        ctx.lineTo(bx + side * w * 0.55, groundY - h);
+        ctx.lineTo(bx + side * w * 0.9, groundY);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,0.08)";
+        ctx.beginPath();
+        ctx.moveTo(bx - side * w, groundY - h);
+        ctx.lineTo(bx - side * w * 0.55, groundY - h);
+        ctx.lineTo(bx - side * w * 0.18, groundY);
+        ctx.lineTo(bx - side * w * 0.35, groundY);
+        ctx.closePath(); ctx.fill();
+      }
+    }
+    ctx.fillStyle = hi;
+    ctx.fillRect(x - 178, groundY - 8, 356, 8);
+    if (masonry >= 2) {
+      ctx.strokeStyle = "#2d3038"; ctx.lineWidth = 2.4;
+      for (const y of [groundY - 47, groundY - 29]) {
+        ctx.beginPath(); ctx.moveTo(x - 21, y); ctx.lineTo(x + 21, y); ctx.stroke();
+      }
+    }
+    if (masonry >= 3) {
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.12 + pulse * 0.2;
+      ctx.strokeStyle = "#d8d0c0"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(x, groundY - 12, 194, 24, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  if (garrison > 0) {
+    const banner = (bx, by, col) => {
+      const sway = windSway(bx, 3);
+      ctx.strokeStyle = "#cdbfa3"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx, by - 20); ctx.stroke();
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.moveTo(bx, by - 20);
+      ctx.quadraticCurveTo(bx + 10 + sway, by - 18, bx + 18 + sway, by - 14);
+      ctx.quadraticCurveTo(bx + 10 + sway, by - 10, bx, by - 7); ctx.closePath(); ctx.fill();
+    };
+    const posts = [-132, 132, -82, 82, -34, 34].slice(0, 2 + garrison * 2);
+    for (const off of posts) {
+      const py = Math.abs(off) > 100 ? groundY - 178 : groundY - 218;
+      banner(x + off, py, garrison >= 3 ? "#9bd05a" : "#4f8d62");
+      ctx.fillStyle = "#202632";
+      ctx.fillRect(x + off - 3, py + 2, 6, 12);
+      ctx.fillStyle = "#c89468";
+      ctx.beginPath(); ctx.arc(x + off, py - 2, 3.3, 0, Math.PI * 2); ctx.fill();
+    }
+    if (garrison >= 2) {
+      ctx.strokeStyle = "#c9b898"; ctx.lineWidth = 1.4;
+      for (const sx of [x - 196, x + 196]) {
+        for (let i = 0; i < 3; i++) {
+          ctx.beginPath(); ctx.moveTo(sx + i * 5, groundY - 2); ctx.lineTo(sx + i * 5 + 6, groundY - 34); ctx.stroke();
+        }
+      }
+    }
+  }
+
+  if (treasury > 0) {
+    ctx.fillStyle = treasury >= 3 ? "#f2c14e" : "#c9a24a";
+    const trimY = groundY - 69;
+    ctx.fillRect(x - 26, trimY, 52, 3);
+    ctx.fillRect(x - 24, groundY - 5, 48, 3);
+    for (let i = 0; i < treasury; i++) {
+      const cx = x - 72 + i * 72;
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.35 + 0.08 * Math.sin(t * 2 + i);
+      ctx.fillStyle = "#f2c14e";
+      ctx.beginPath(); ctx.arc(cx, groundY - 82, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = "#f2c14e";
+      ctx.beginPath(); ctx.arc(cx, groundY - 82, 3.8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#5a3a20";
+      ctx.beginPath(); ctx.arc(cx, groundY - 82, 1.8, 0, Math.PI * 2); ctx.fill();
+    }
+    if (treasury >= 2) {
+      for (const sx of [x - 128, x + 128]) {
+        ctx.fillStyle = "#5a3a20"; roundedRect(sx - 16, groundY - 18, 32, 18, 3); ctx.fill();
+        ctx.fillStyle = "#8a5a24"; ctx.fillRect(sx - 16, groundY - 18, 32, 5);
+        ctx.fillStyle = "#f2c14e"; ctx.fillRect(sx - 2, groundY - 14, 4, 9);
+      }
+    }
+  }
+
+  if (aegis > 0) {
+    const fy = groundY - (lvl >= 7 ? 266 : 238) + Math.sin(t * 2.1) * 2;
+    const flare = state.base?.aegisFlashUntil ? Math.max(0, Math.min(1, (state.base.aegisFlashUntil - t) / 0.35)) : 0;
+    const r = 18 + aegis * 5 + flare * 16 + pulse * 8;
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    const g = ctx.createRadialGradient(x, fy, 2, x, fy, r * 2.1);
+    g.addColorStop(0, "rgba(255,220,120,0.75)");
+    g.addColorStop(0.45, "rgba(255,130,45,0.28)");
+    g.addColorStop(1, "rgba(255,100,20,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, fy, r * 2.1, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#ffb04a"; ctx.lineWidth = 1.5 + aegis * 0.4;
+    ctx.beginPath(); ctx.ellipse(x, fy, r, r * 0.32, t * 0.35, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(x, fy, r * 0.72, r * 0.24, -t * 0.5, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = "#ffd060";
+    ctx.beginPath();
+    ctx.moveTo(x, fy - 8 - aegis * 2);
+    ctx.lineTo(x + 6 + aegis, fy);
+    ctx.lineTo(x, fy + 8 + aegis * 2);
+    ctx.lineTo(x - 6 - aegis, fy);
+    ctx.closePath(); ctx.fill();
+    if (aegis >= 2) {
+      ctx.strokeStyle = "rgba(255,176,74,0.75)"; ctx.lineWidth = 1.4;
+      for (const off of [-52, 52]) {
+        ctx.beginPath(); ctx.moveTo(x, fy + 10); ctx.quadraticCurveTo(x + off * 0.45, fy + 44, x + off, groundY - 204); ctx.stroke();
+      }
+    }
+  }
 }
 
 // Crown Sigil: a slowly rotating ring of violet runes hovering over the base,
@@ -1704,10 +1865,8 @@ function drawCastleRegalia(x, lvl, dark) {
 
 function drawStationIcon(x, emoji) {
   const bob=Math.sin(performance.now()/400+x)*3;
-  ctx.save(); ctx.font="20px serif"; ctx.textAlign="center"; ctx.globalAlpha=0.92;
-  ctx.fillText(emoji,x,groundY-48+bob);
-  ctx.strokeStyle="rgba(120,100,70,0.6)"; ctx.lineWidth=2;
-  ctx.beginPath(); ctx.moveTo(x,groundY); ctx.lineTo(x,groundY-28); ctx.stroke();
+  ctx.save(); ctx.font="18px serif"; ctx.textAlign="center"; ctx.globalAlpha=0.92;
+  ctx.fillText(emoji,x,groundY-30+bob);
   ctx.restore();
 }
 
@@ -2107,7 +2266,7 @@ export function drawStations() {
   if (seen(STATIONS_X.bow)) drawBowStation(STATIONS_X.bow);
   if (state.base && state.base.level >= 2 && seen(STATIONS_X.hammer)) drawHammerStation(STATIONS_X.hammer);
   const farmLvl = state.farmLevel || 0;
-  if (state.base.level >= 2 && farmLvl === 0 && seen(STATIONS_X.farm)) drawFlag(STATIONS_X.farm, "#9bd05a");
+  if (state.base.level >= 2 && farmLvl === 0 && seen(STATIONS_X.farm)) drawBuildMarker(STATIONS_X.farm, "#9bd05a");
   if (farmLvl >= 1 && seen(STATIONS_X.farm)) {
     const fx = STATIONS_X.farm;
     ctx.fillStyle="#6a4a28"; ctx.fillRect(fx-34,groundY-6,68,6);
@@ -2143,7 +2302,7 @@ export function drawStations() {
   }
   if (state.base && state.base.level >= 2 && seen(STATIONS_X.shop)) drawShopBuilding(STATIONS_X.shop);
   if (state.base && state.base.level >= 3 && seen(STATIONS_X.guard)) drawGuardStation(STATIONS_X.guard);
-  if (state.base && state.base.level >= 3 && !state.mineBuilt && seen(STATIONS_X.mine)) drawFlag(STATIONS_X.mine, "#d8b46a");
+  if (state.base && state.base.level >= 3 && !state.mineBuilt && seen(STATIONS_X.mine)) drawBuildMarker(STATIONS_X.mine, "#d8b46a");
   if (state.mineBuilt && seen(STATIONS_X.mine)) drawMineEntrance(STATIONS_X.mine);
   if (state.base && state.base.level >= 3 && seen(STATIONS_X.runeforge)) drawRuneforge(STATIONS_X.runeforge);
 }
@@ -2245,9 +2404,8 @@ function drawMineEntrance(x) {
 // ---------- Unlockable buildings (watchtower, lumber camp, shrine) ----------
 function towerHeight(lvl) { return [0, 112, 138, 164][lvl] || 112; }
 
-// Overgrown build spot: worn flag + hint to fell the surrounding trees.
 function drawClearingHint(x) {
-  drawFlag(x, "#8a6a3a");
+  drawBuildMarker(x, "#8a6a3a");
   const bob=Math.sin(performance.now()/400+x)*3;
   ctx.save(); ctx.font="15px serif"; ctx.textAlign="center"; ctx.globalAlpha=0.9;
   ctx.fillText("🪓", x, groundY-46+bob);
@@ -2522,8 +2680,8 @@ export function drawBuildings(dark) {
     if (b.x < view.left || b.x > view.right) continue;
     if (!b.built) {
       if (b.needsClearing && !b.cleared) { drawClearingHint(b.x); continue; }
-      const flagCol = b.type==="tower" ? "#c98a4a" : b.type==="lumber" ? "#8a9a5a" : b.type==="ballista" ? "#c1453b" : "#8fd8ff";
-      drawFlag(b.x, flagCol);
+      const markerCol = b.type==="tower" ? "#c98a4a" : b.type==="lumber" ? "#8a9a5a" : b.type==="ballista" ? "#c1453b" : "#8fd8ff";
+      drawBuildMarker(b.x, markerCol);
       drawStationIcon(b.x, b.type==="tower" ? "🏹" : b.type==="lumber" ? "🪵" : b.type==="ballista" ? "🎯" : "⛲");
       continue;
     }

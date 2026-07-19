@@ -245,9 +245,114 @@ function drawWandHead(look, top, t, cast) {
   ctx.lineCap = "butt"; ctx.lineJoin = "miter";
 }
 
+function wandUpgradeRank(fx) {
+  return fx?._tierRank || 0;
+}
+
+function wandUpgradeColor(fx, fallback) {
+  return fx?._vfxCols?.length ? fx._vfxCols[fx._vfxCols.length - 1] : (fx?._tierCol || fallback);
+}
+
+function drawWandOrbit(cx, cy, rx, ry, count, col, t, opts = {}) {
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (let k = 0; k < count; k++) {
+    const a = t * (opts.speed || 1.9) + k * Math.PI * 2 / count + (opts.phase || 0);
+    const p = (Math.sin(a) + 1) * 0.5;
+    ctx.globalAlpha = (opts.alpha || 0.58) * (0.45 + p * 0.55);
+    ctx.fillStyle = k % 3 === 0 ? "#ffffff" : col;
+    ctx.beginPath(); ctx.arc(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry, (opts.size || 1.2) + p * 0.5, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawMagicUpgradeLayer(weaponId, look, top, bot, rank, col, t, cast) {
+  if (rank < 2) return;
+  const legendary = rank >= 3;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  if (weaponId === "fire_tome") {
+    for (let k = 0; k < 4; k++) {
+      const p = (t * 0.45 + k * 0.22) % 1;
+      const y = bot - p * (bot - top + 4);
+      const x = Math.sin(t * 4 + k) * 5;
+      ctx.globalAlpha = (1 - p) * 0.55;
+      ctx.strokeStyle = k % 2 ? "#ffcc60" : col;
+      ctx.lineWidth = 0.9;
+      ctx.beginPath(); ctx.arc(x, y, 2 + p * 2, 0.3, Math.PI * 1.45); ctx.stroke();
+    }
+    ctx.globalAlpha = 0.55 + 0.18 * Math.sin(t * 5);
+    ctx.strokeStyle = legendary ? "#ffe080" : "#ff6a2a";
+    ctx.lineWidth = legendary ? 1.35 : 0.9;
+    ctx.beginPath();
+    ctx.moveTo(-0.8, bot * 0.65); ctx.lineTo(1.1, bot * 0.22); ctx.lineTo(-0.6, top * 0.42); ctx.lineTo(0.9, top + 4);
+    ctx.stroke();
+    if (legendary) {
+      const faceY = top - 7;
+      ctx.fillStyle = "#240808";
+      ctx.globalAlpha = 0.5 + 0.2 * Math.sin(t * 4);
+      ctx.beginPath(); ctx.arc(-1.5, faceY, 0.65, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(1.5, faceY, 0.65, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#240808"; ctx.lineWidth = 0.75;
+      ctx.beginPath(); ctx.arc(0, faceY + 1.8, 1.5, 0.1, Math.PI - 0.1); ctx.stroke();
+    }
+  } else if (weaponId === "hydro_tome") {
+    ctx.strokeStyle = legendary ? "#ffffff" : "#74d8ff";
+    ctx.lineWidth = legendary ? 1.7 : 1.1;
+    ctx.globalAlpha = 0.52 + 0.12 * Math.sin(t * 3.5);
+    ctx.beginPath();
+    for (let i = 0; i <= 18; i++) {
+      const p = i / 18;
+      const y = bot - p * (bot - top + 2);
+      const x = Math.sin(p * Math.PI * 4 + t * 3.2) * (legendary ? 3.6 : 2.4);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    for (let k = 0; k < (legendary ? 8 : 5); k++) {
+      const p = (t * 0.7 + k * 0.19) % 1;
+      ctx.globalAlpha = 0.22 + 0.28 * (1 - p);
+      ctx.fillStyle = k % 2 ? "#e8fbff" : "#74d8ff";
+      ctx.beginPath(); ctx.ellipse(Math.sin(k * 2.1 + t) * 7, top - 4 + p * 20, 0.9, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    if (legendary) {
+      ctx.globalAlpha = 0.42 + 0.12 * Math.sin(t * 2.6);
+      ctx.strokeStyle = "#a0e8ff"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(0, top - 6, 12, 4.5, t * 0.2, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = "#d8fbff";
+      ctx.beginPath(); ctx.moveTo(-6, top - 11); ctx.lineTo(-2, top - 16); ctx.lineTo(0, top - 11); ctx.lineTo(3, top - 17); ctx.lineTo(7, top - 11); ctx.closePath(); ctx.fill();
+    }
+  } else if (weaponId === "void_tome") {
+    ctx.globalAlpha = legendary ? 0.42 : 0.26;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = legendary ? 1.4 : 0.9;
+    for (let k = 0; k < (legendary ? 4 : 2); k++) {
+      ctx.beginPath();
+      ctx.ellipse(0, top - 6, 8 + k * 3.8, 4 + k * 1.4, t * 0.7 + k, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    const g = ctx.createRadialGradient(0, top - 6, 1, 0, top - 6, legendary ? 20 : 13);
+    g.addColorStop(0, "#030208");
+    g.addColorStop(0.45, "rgba(80,20,120,0.75)");
+    g.addColorStop(1, "rgba(224,160,255,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, top - 6, legendary ? 18 : 11, 0, Math.PI * 2); ctx.fill();
+    drawWandOrbit(0, top - 6, legendary ? 17 : 11, legendary ? 8 : 5, legendary ? 9 : 5, col, t, { size: 1, alpha: 0.75, speed: legendary ? 2.8 : 1.9 });
+  } else {
+    ctx.globalAlpha = 0.3 + 0.12 * Math.sin(t * 3);
+    ctx.strokeStyle = col;
+    ctx.lineWidth = legendary ? 1.4 : 0.9;
+    ctx.beginPath(); ctx.moveTo(-4, top + 2); ctx.quadraticCurveTo(4, (top + bot) * 0.5, -3, bot - 2); ctx.stroke();
+    if (legendary) drawWandOrbit(0, top - 4, 12, 7, 5, col, t, { size: 1.1, alpha: 0.55 });
+  }
+  ctx.restore();
+}
+
 export function drawWandModel(weaponId, col, s = 1, opts = {}) {
   const look = WAND_LOOKS[weaponId] || { ...DEFAULT_WAND, trim: col || DEFAULT_WAND.trim };
   const cast = clamp(opts.cast ?? 0, 0, 1);
+  const fx = opts.fx || null;
+  const rank = wandUpgradeRank(fx);
+  const upgCol = wandUpgradeColor(fx, look.trim);
   const glow = (opts.glow ?? 0) + cast * 0.5;
   const t = performance.now() / 1000;
   const top = -look.len * 0.58, bot = look.len * 0.42;
@@ -265,7 +370,19 @@ export function drawWandModel(weaponId, col, s = 1, opts = {}) {
     ctx.beginPath(); ctx.arc(0, top - 4, 18 + glow * 9, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
+  if (rank >= 2) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.1 + rank * 0.06 + 0.05 * Math.sin(t * 2.5);
+    const g2 = ctx.createRadialGradient(0, top - 4, 1, 0, top - 4, 20 + rank * 8);
+    g2.addColorStop(0, upgCol);
+    g2.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g2;
+    ctx.beginPath(); ctx.arc(0, top - 4, 22 + rank * 7, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
   drawWandShaft(look, top, bot);
+  drawMagicUpgradeLayer(weaponId, look, top, bot, rank, upgCol, t, cast);
   // metal ferrule under the head and a butt cap
   ctx.fillStyle = look.trim;
   roundedRect(-2, top + 1.5, 4, 2.4, 1);
@@ -282,6 +399,9 @@ export function drawWandModel(weaponId, col, s = 1, opts = {}) {
     ctx.beginPath(); ctx.moveTo(-1.9, y); ctx.lineTo(1.9, y + 1.2); ctx.stroke();
   }
   drawWandHead(look, top, t, cast);
+  if (rank >= 3) {
+    drawWandOrbit(0, top - 5, weaponId === "void_tome" ? 18 : 12, weaponId === "hydro_tome" ? 5 : 8, weaponId === "void_tome" ? 7 : 4, upgCol, t, { size: 1.1, alpha: 0.45 });
+  }
   ctx.restore();
 }
 

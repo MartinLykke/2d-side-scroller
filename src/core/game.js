@@ -30,8 +30,10 @@ import { makeWall, wallReady, wallBackDir, wallClimbAnchorX, nearWallClimbAnchor
 import { makeUnit } from '../entities/Unit.js';
 
 import { WEAPON_SHOP, ARMOR_SHOP, updateShop, setPickupWeapon as setShopPickupWeapon } from '../systems/economy/ShopSystem.js';
+import { updateCastleUpgradeMenu } from '../systems/economy/CastleUpgradeSystem.js';
 import { mountSpeedMult, activeMount } from '../systems/economy/MountSystem.js';
 import { upgradeBase, pickupWeapon, setBuildStations } from '../util/GameStateHelpers.js';
+import { currentCoinCap } from '../util/DefenseStats.js';
 import { addXP, checkUpgrade } from '../systems/economy/UpgradeSystem.js';
 import { newGame, buildStations } from '../systems/infrastructure/GameInit.js';
 import { initMeta, enterDeathHub, updateHub, updateHubTransition, renderHub } from '../systems/infrastructure/RoguelikeSystem.js';
@@ -65,7 +67,7 @@ function updateTime(dt) {
   if (Game.isNight && Game.nightCleared && Game.time > CFG.phases.night) {
     Game.time = 1;
   }
-  if (Game.time >= 1) { Game.time -= 1; Game.day++; planNight(); }
+  if (Game.time >= 1) { Game.time -= 1; Game.day++; planNight(); ensureMorningFarmer(); }
   const t = Game.time;
   const nowNight = t > CFG.phases.dusk && t <= CFG.phases.night;
   if (nowNight && !Game.isNight) {
@@ -74,6 +76,20 @@ function updateTime(dt) {
   if (!nowNight && Game.isNight) {
     Game.isNight=false; Game.nightCleared=false; Audio.setNight(false); state.enemies.forEach(e=>e.fleeing=true);
   }
+}
+
+function ensureMorningFarmer() {
+  if (!state.farmBuilt && (state.farmLevel || 0) <= 0) return;
+  const hasAliveFarmer = state.units.some(u => u.role === "farmer" && u.hp > 0 && !u.dying);
+  if (hasAliveFarmer) return;
+
+  const farmer = makeUnit("farmer", STATIONS_X.farm + rand(-24, 24));
+  farmer.transform = 0.55;
+  farmer.workTimer = 0;
+  state.units.push(farmer);
+  if (state.pendingFarmers > 0) state.pendingFarmers--;
+  spawnParticles(farmer.x, groundY - 28, 12, "#9bd05a", 65, 80);
+  floaty(farmer.x, "A farmer arrives", "#9bd05a");
 }
 
 function updateNightClear() {
@@ -104,7 +120,7 @@ function grantNightClearReward() {
   if (!player || !base) return;
 
   const gold = Math.max(2, Math.round(2 + Game.day * 0.8 + Math.min(7, (Game.nightQuota || 0) * 0.035)));
-  const room = Math.max(0, CFG.maxCoinsCarry - player.coins);
+  const room = Math.max(0, currentCoinCap() - player.coins);
   const paidGold = Math.min(room, gold);
   if (paidGold > 0) {
     player.coins += paidGold;
@@ -560,6 +576,7 @@ function update(dt) {
   updateNightClear();
   checkUpgrade();
   updateShop();
+  updateCastleUpgradeMenu();
   updateCamera();
   Audio.updateAmbientZones(state.player.x, CFG.baseX, FOREST.startDist);
   checkEndConditions();

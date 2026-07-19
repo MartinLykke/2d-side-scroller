@@ -16,8 +16,6 @@ const IMP_STACK_STEP = 18;
 const IMP_ATTACH_RANGE = 34;
 const IMP_TOP_TRIGGER_PAD = 18;
 const IMP_STACK_EXTRA_SLOTS = 2;
-const IMP_QUEUE_SPACING = 18;
-const IMP_PYRAMID_BASE = 4; // bottom-row width of the waiting pyramid
 const WALL_DUEL_GAP = 22;
 const IMP_POUNCE_WALL_LOCKOUT = 92;
 let impStackSequence = 1;
@@ -134,6 +132,7 @@ function breakImpStack(e) {
   e.impIndex = undefined;
   e.stackPos = undefined;
   e.climbProgress = undefined;
+  e.climbStartY = undefined;
   e.impStackY = 0;
 }
 
@@ -237,7 +236,8 @@ function impStackForWall(w) {
     imp.stackPos = idx;
     imp.climbProgress = 1;
     imp.impStackY = -idx * IMP_STACK_STEP;
-    imp.impStackX = ((idx % 2 === 0) ? -1 : 1) * Math.min(7, 2 + idx * 0.45);
+    const seed = (imp.stackJoinOrder || 0) * 7.13;
+    imp.impStackX = ((idx % 2 === 0) ? -1 : 1) * Math.min(8, 2.5 + idx * 0.5) + Math.sin(seed) * 2;
   });
   entry.stack = stack;
   return stack;
@@ -281,39 +281,40 @@ function sendImpToStackQueue(e, w) {
   invalidateImpWallCache(w);
 }
 
-// Waiting imps form a pyramid just behind the stack: bottom row fills first
-// (nearest the wall = front of queue), upper rows stand on the shoulders of the
-// row below. Overflow beyond the pyramid lines up on the ground behind it.
-function queueSlotForWall(w, idx) {
-  let row = 0, rem = idx, width = IMP_PYRAMID_BASE;
-  while (row < IMP_PYRAMID_BASE - 1 && rem >= width) { rem -= width; row++; width--; }
-  let col = rem;
-  if (row === IMP_PYRAMID_BASE - 1 && rem >= width) { // pyramid full → ground line behind
-    row = 0;
-    col = IMP_PYRAMID_BASE + (rem - width) + 1;
-  }
-  const x = wallOutsideX(w) + w.side * (IMP_ATTACH_RANGE + 16 + (col + row * 0.5) * IMP_QUEUE_SPACING);
-  return { x, fy: -row * IMP_STACK_STEP };
+const IMP_MOB_ROW_WIDTH = 3;
+const IMP_MOB_ROW_DEPTH = 22;
+const IMP_MOB_LANE_SPREAD = 16;
+
+function queueSlotForWall(w, idx, joinOrder) {
+  const row = Math.floor(idx / IMP_MOB_ROW_WIDTH);
+  const col = idx % IMP_MOB_ROW_WIDTH;
+  const seed = (joinOrder || idx) * 5.17;
+  const jitterX = Math.sin(seed) * 5;
+  const jitterDepth = Math.sin(seed * 1.7) * 4;
+  const laneOff = (col - (IMP_MOB_ROW_WIDTH - 1) / 2) * IMP_MOB_LANE_SPREAD + jitterX;
+  const depth = IMP_ATTACH_RANGE + 14 + row * IMP_MOB_ROW_DEPTH + jitterDepth;
+  const x = wallOutsideX(w) + w.side * depth + laneOff;
+  return { x, fy: 0 };
 }
 
-// Move a queued imp toward its pyramid slot; stands perfectly still once there.
 function moveImpToQueueSlot(e, t, dt, wall, idx) {
-  const slot = queueSlotForWall(wall, idx);
-  const dx = slot.x - e.x;
+  const slot = queueSlotForWall(wall, idx, e.queueJoinOrder);
+  const T = performance.now() / 1000;
+  const fidgetSeed = (e.queueJoinOrder || 0) * 3.91;
+  const fidgetX = Math.sin(T * 1.4 + fidgetSeed) * 3.5;
+  const fidgetTargetX = slot.x + fidgetX;
+
+  const dx = fidgetTargetX - e.x;
   if (Math.abs(dx) > 2) {
     e.dir = Math.sign(dx);
     e.x += e.dir * Math.min(t.speed * 0.85 * dt, Math.abs(dx));
   } else {
-    e.x = slot.x;
+    e.x = fidgetTargetX;
     e.dir = -wall.side;
   }
-  // Climb/hop vertically only when roughly over the slot; drop quickly, climb slower.
-  const nearSlot = Math.abs(slot.x - e.x) < IMP_QUEUE_SPACING;
-  const targetFy = nearSlot ? slot.fy : Math.max(e.fy || 0, slot.fy);
-  const dy = targetFy - (e.fy || 0);
-  if (Math.abs(dy) > 1) {
-    const rate = dy > 0 ? 260 : 110; // dy>0 = falling down, dy<0 = hopping up
-    e.fy = (e.fy || 0) + Math.sign(dy) * Math.min(Math.abs(dy), rate * dt);
+  const targetFy = 0;
+  if ((e.fy || 0) < -1) {
+    e.fy = (e.fy || 0) + Math.min(-(e.fy || 0), 180 * dt);
   } else {
     e.fy = targetFy;
   }
@@ -1129,7 +1130,6 @@ function updateImp(e, t, dt) {
     const oldQueueWall = e.queueWallRef;
     e.queueWallRef = null;
     e.queueIndex = undefined;
-    e.fy = 0;
     invalidateImpWallCache(oldQueueWall);
   }
   const incomingStack = activeStack.some(other => other !== e);
@@ -1169,17 +1169,29 @@ function updateImp(e, t, dt) {
   if (Math.abs(attachDx) > 1) e.x += Math.sign(attachDx) * Math.min(Math.abs(attachDx), t.speed * 1.25 * dt);
   else e.x = stackX;
   e.vx = 0;
-  e.fy = e.impStackY || 0;
+  const targetFy = e.impStackY || 0;
+  const fyDiff = targetFy - (e.fy || 0);
+  if (Math.abs(fyDiff) > 1) {
+    const rate = fyDiff > 0 ? 180 : 65;
+    e.fy = (e.fy || 0) + Math.sign(fyDiff) * Math.min(Math.abs(fyDiff), rate * dt);
+  } else {
+    e.fy = targetFy;
+  }
   e.dir = -wall.side;
 
   const wallHasTopImp = !!wallTopImpForWall(wall, e);
   if (isTop && stackTallEnough && !wallHasTopImp) setImpState(e, "climbOver");
 
   if (e.aiState === "climbOver") {
-    if (e.climbStartX === undefined) e.climbStartX = e.x;
-    e.climbT = Math.min(1, (e.climbT || 0) + dt * 0.85);
-    e.fy = -wallHeight(wall) + Math.sin(e.climbT * Math.PI) * -6;
-    e.x = mix(e.climbStartX, wall.x, e.climbT);
+    if (e.climbStartX === undefined) {
+      e.climbStartX = e.x;
+      e.climbStartY = e.fy || 0;
+    }
+    e.climbT = Math.min(1, (e.climbT || 0) + dt * 0.8);
+    const ct = e.climbT;
+    const eased = ct < 0.5 ? 2 * ct * ct : 1 - (-2 * ct + 2) ** 2 / 2;
+    e.fy = mix(e.climbStartY || 0, -wallHeight(wall), eased) - Math.sin(eased * Math.PI) * 14;
+    e.x = mix(e.climbStartX, wall.x, eased);
     if (e.climbT >= 1) {
       breakImpStack(e);
       e.wallTopWall = wall;
@@ -1202,11 +1214,134 @@ function updateImp(e, t, dt) {
 
   e.climbT = 0;
   e.climbStartX = undefined;
+  e.climbStartY = undefined;
   if (e.attackCd <= 0) {
     e.attackCd = 1.15;
     e.attackAnim = 0.18;
     damageWall(wall, Math.max(1, t.dmg * 0.12), 2, e);
   }
+  return true;
+}
+
+// ── Siege Imp ────────────────────────────────────────────────────────────────
+// A slow, heavily-shielded battering unit. Its plank shield deflects frontal
+// arrows (handled in ProjectileSystem); loose imps climb aboard the scrap
+// platform on its back and ride to the walls; braced against a wall or gate it
+// lowers the shield and slams the ram home on a windup→strike cadence.
+const SIEGE_RIDER_BOARD_RANGE = 155;
+const SIEGE_DUST = "#6b5a45";
+
+// A rider hops off the platform, falling to the ground with the wall-drop gravity.
+function dropSiegeRider(imp, breached) {
+  imp.ridingSiege = null;
+  imp.riderSeat = undefined;
+  imp.leftStack = true;      // reuse the imp wall-drop gravity so it falls to the ground
+  imp.hasLeftStack = false;
+  imp.vy = 0;
+  if (breached) markImpBreachedWall(imp);
+  setImpState(imp, "advance");
+}
+
+function siegeRiderCount(e) {
+  let n = 0;
+  for (const r of state.enemies) if (r.ridingSiege === e && !r.dying) n++;
+  return n;
+}
+
+// Pull nearby loose imps up onto the platform, filling open seats.
+function recruitSiegeRiders(e, t) {
+  const seats = t.riderSeats || 3;
+  const taken = new Set();
+  for (const r of state.enemies) if (r.ridingSiege === e && !r.dying && r.riderSeat !== undefined) taken.add(r.riderSeat);
+  if (taken.size >= seats) return;
+  for (const o of state.enemies) {
+    if (o.type !== "imp" || o.fleeing || o.dying || o.ridingSiege || o.ridingDragon) continue;
+    if (o.breachedWall || o.wallTopWall || o.stackWallRef || o.queueWallRef || o.leftStack) continue;
+    if (o.aiState === "stacking" || o.aiState === "climbOver" || o.aiState === "stackQueue" ||
+        o.aiState === "thrown" || o.aiState === "vaulting" || o.aiState === "combat" || o.aiState === "impAttack") continue;
+    if (Math.sign(o.x - e.x) === e.dir) continue;             // in front and racing ahead — leave it be
+    if (dist(e.x, o.x) > SIEGE_RIDER_BOARD_RANGE) continue;
+    let seat = -1;
+    for (let k = 0; k < seats; k++) if (!taken.has(k)) { seat = k; break; }
+    if (seat < 0) break;
+    taken.add(seat);
+    o.ridingSiege = e;
+    o.riderSeat = seat;
+    breakImpStack(o);
+    spawnParticles(o.x, groundY - 20, 4, SIEGE_DUST, 24, 32);
+    if (taken.size >= seats) break;
+  }
+}
+
+function updateSiegeImp(e, t, dt) {
+  const { base } = state;
+  if (e.ramCd === undefined) e.ramCd = t.ramInterval || 1.55;
+  if (e.ramCd > 0) e.ramCd -= dt;
+  if (e.ramWind > 0) e.ramWind -= dt;
+
+  e.dir = Math.sign(base.x - e.x) || e.dir || 1;
+
+  // Recruit riders on the march (never once it's committed to a wall)
+  if (e.riderScanCd === undefined) e.riderScanCd = rand(0.3, 0.9);
+  e.riderScanCd -= dt;
+  if (e.riderScanCd <= 0) {
+    e.riderScanCd = rand(0.6, 1.2);
+    if (!e.siegeDisembark && siegeRiderCount(e) < (t.riderSeats || 3)) recruitSiegeRiders(e, t);
+  }
+
+  const side = e.x < CFG.baseX ? -1 : 1;
+  const wall = wallAt(side, e.x);
+  const ramRange = t.ramRange || 58;
+
+  // Pick a ram target: a wall in the way, else the base once we've closed on it.
+  let target = null;
+  if (wall && dist(e.x, wall.x) < ramRange) target = { kind: "wall", obj: wall, x: wall.x };
+  else if (!wall && dist(e.x, base.x) < ramRange + 44) target = { kind: "base", obj: base, x: base.x };
+
+  if (target) {
+    e.siegeDisembark = true;                                  // riders storm off to swarm the wall
+    e.dir = Math.sign(target.x - e.x) || e.dir;
+    if (e.ramWind > 0) {
+      e.shieldDown = true;                                    // shield lowered, ram hauled back
+      if (e.ramWind <= dt && !e.ramStruck) {
+        e.ramStruck = true;
+        if (target.kind === "wall") {
+          const w = target.obj;
+          if (w.commissioned && w.hp > 0) damageWall(w, t.dmg, 10, e);
+          spawnParticles(target.x - side * 8, groundY - 26, 12, SIEGE_DUST, 72, 62);
+          spawnParticles(target.x - side * 8, groundY - 30, 6, "#ff8a30", 50, 70);
+        } else {
+          const b = target.obj;
+          if (b.hp > 0) {
+            const crit = applyCrit(t.baseDmg ?? t.dmg, CFG.critChance, CFG.critMultiplier);
+            b.hp -= crit.damage; b.flash = 0.3; if (b.hp < 0) b.hp = 0;
+            if (crit.isCrit) critFloaty(b.x, crit.damage);
+            else floaty(b.x, "-" + crit.damage, "#ff6a4a");
+            spawnParticles(b.x + rand(-30, 30), groundY - 30, 8, "#ff6a4a", 90, 80);
+          }
+        }
+        Game.screenShake = Math.max(Game.screenShake || 0, 0.42);
+        Audio.hit();
+        e.attackAnim = 0.32;
+      }
+    } else if (e.ramCd <= 0) {
+      e.ramWind = t.ramWindup || 0.72;                        // begin a fresh wind-up
+      e.ramCd = (t.ramInterval || 1.55) + (t.ramWindup || 0.72);
+      e.ramStruck = false;
+      e.attackAnim = 0.5;
+      spawnParticles(e.x, groundY - 8, 6, SIEGE_DUST, 40, 32);
+    } else {
+      e.shieldDown = false;                                   // shield back up between slams
+    }
+    return true;
+  }
+
+  // Still marching: shield raised, heavy stomping steps.
+  e.shieldDown = false;
+  const slow = debuffSpeedMult(e);
+  const sprint = unopposedSprintMult(e);
+  e.x += e.dir * t.speed * slow * sprint * approachSpeedMult(Math.abs(base.x - e.x)) * dt;
+  if (Math.random() < 0.12) spawnParticles(e.x - e.dir * 14, groundY - 3, 1, SIEGE_DUST, 16, 14);
   return true;
 }
 
@@ -1236,6 +1371,23 @@ export function updateEnemies(dt) {
         e.x = drg.x - drg.dir * (seat * 27 - 16);
         e.fy = (drg.fy || -110) - 50 + (seat % 2) * 4 + Math.sin((drg.anim || 0) * 0.7 + seat) * 2;
         e.dir = drg.dir;
+        continue;
+      }
+    }
+
+    // Imps riding the Siege Imp's back platform form a moving tower until it
+    // reaches the walls (or dies), then they pile off to join the assault.
+    if (e.ridingSiege) {
+      const sIm = e.ridingSiege;
+      if (sIm.dying || !enemies.includes(sIm) || sIm.siegeDisembark) {
+        dropSiegeRider(e, sIm.breachedWall);
+      } else {
+        e.anim += dt * 2;
+        if (e.flash > 0) e.flash -= dt;
+        const seat = e.riderSeat || 0;
+        e.dir = sIm.dir;
+        e.x = sIm.x - sIm.dir * (9 + seat * 3);
+        e.fy = -50 - seat * 15 + Math.sin((sIm.anim || 0) * 0.8 + seat * 1.7) * 1.5;
         continue;
       }
     }
@@ -1337,7 +1489,7 @@ export function updateEnemies(dt) {
     if (e.burn > 0) {
       e.burn -= dt;
       if (e.type === "imp") {
-        const burnY = groundY + (e.aiState === "stacking" && e.impStackY !== undefined ? e.impStackY : (e.fy || 0)) - 22;
+        const burnY = groundY + (e.fy || 0) - 22;
         if (Math.random() < 0.9) spawnParticles(e.x + rand(-6, 6), burnY + rand(-8, 8), 1, "#ff6a20", 18, 34);
         if (Math.random() < 0.45) spawnParticles(e.x + rand(-5, 5), burnY + rand(-10, 4), 1, "#ffd060", 10, 42);
       }
@@ -1345,7 +1497,7 @@ export function updateEnemies(dt) {
       if (e.burnTick <= 0) {
         const burnDmg = e.burnDmg || 1;
         e.hp -= burnDmg; e.flash = 0.08; e.burnTick = 1;
-        const burnY = groundY + (e.aiState === "stacking" && e.impStackY !== undefined ? e.impStackY : (e.fy || 0)) - 24;
+        const burnY = groundY + (e.fy || 0) - 24;
         spawnParticles(e.x, burnY, 7, "#ff6a20", 40, 55);
         spawnParticles(e.x, burnY, 3, "#ffd060", 25, 65);
         spawnImpBlood(e, 0.45, burnY);
@@ -1443,6 +1595,8 @@ export function updateEnemies(dt) {
     }
 
     if (e.type === "ashPriest" && updateAshPriest(e, t, dt)) continue;
+
+    if (e.type === "siegeImp" && updateSiegeImp(e, t, dt)) continue;
 
     if (e.type === "imp" && updateImp(e, t, dt)) continue;
 

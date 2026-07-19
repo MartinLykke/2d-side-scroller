@@ -6,6 +6,7 @@ import { buildForest } from '../world/ForestSystem.js';
 import { initMineVeins } from '../world/MineSystem.js';
 import { buildStations } from './GameInit.js';
 import { autoSpendSkillPoints } from '../economy/SkillSystem.js';
+import { ensureCastleUpgrades, baseMaxHpForLevel } from '../../util/DefenseStats.js';
 
 const SAVE_KEY = "kingdom_embers_save_v1";
 
@@ -40,6 +41,7 @@ export function saveGame() {
       farm: state.farmBuilt,
       farmLevel: state.farmLevel,
       fortLevel: state.fortLevel || 0,
+      castleUpgrades: ensureCastleUpgrades(),
       mineBuilt: state.mineBuilt,
       mineActiveLeft: state.mineActiveLeft,
       mineActiveRight: state.mineActiveRight,
@@ -95,7 +97,12 @@ export function loadGame() {
     player.lastMountId = player.mountId;
     player.level = snap.level || 1;
     player.xp = snap.xp || 0;
-    base.level = snap.base.level; base.hp = snap.base.hp; base.maxHp = snap.base.maxHp;
+    state.fortLevel = snap.fortLevel || 0;
+    state.castleUpgrades = snap.castleUpgrades || {};
+    ensureCastleUpgrades();
+    base.level = snap.base.level;
+    base.maxHp = baseMaxHpForLevel(base.level);
+    base.hp = Number.isFinite(snap.base.hp) ? Math.max(0, snap.base.hp) : base.maxHp;
     walls.forEach((w, i) => { const s = snap.walls[i]; if (s) Object.assign(w, s); });
     if (snap.buildings) snap.buildings.forEach((s, i) => { if (state.buildings[i]) Object.assign(state.buildings[i], s); });
     state.units = snap.units.map(s => {
@@ -109,7 +116,6 @@ export function loadGame() {
     for (let i = 0; i < (snap.vagrants || 0); i++) spawnVagrant();
     state.farmBuilt = snap.farm;
     state.farmLevel = snap.farmLevel || (snap.farm ? 1 : 0);
-    state.fortLevel = snap.fortLevel || 0;
     state.mineBuilt = !!snap.mineBuilt;
     Game.inMine = false; // always resurface on load
     if (state.mineBuilt) {

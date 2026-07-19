@@ -5,6 +5,7 @@ import { Game, state } from '../../core/state.js';
 import { inject } from '../../core/services.js';
 import { Audio } from '../infrastructure/Audio.js';
 import { spawnCoin, spawnParticles } from '../world/SpawnSystem.js';
+import { currentCoinCap } from '../../util/DefenseStats.js';
 
 function flyingCoin(fromX, toX) {
   state.particles.push({
@@ -121,12 +122,13 @@ export function updateCoins(dt) {
     if (!!c.mine !== Game.inMine) continue; // only pick up coins on the player's layer
     const d = dist(c.x, player.x);
     const magnetRange = playerCoinMagnetRange();
-    if (c.settled && d < magnetRange && player.coins < CFG.maxCoinsCarry) {
+    const coinCap = currentCoinCap();
+    if (c.settled && d < magnetRange && player.coins < coinCap) {
       const dx = player.x - c.x;
       const pull = 340 + Math.max(0, magnetRange - d) * 3.6;
       c.x += Math.sign(dx) * Math.min(Math.abs(dx), pull * dt);
       if (d < (CFG.coinPickupRange || 22)) {
-        player.coins = clamp(player.coins + c.value, 0, CFG.maxCoinsCarry);
+        player.coins = clamp(player.coins + c.value, 0, coinCap);
         coins.splice(i, 1);
         Audio.coin();
         spawnParticles(player.x, groundY - 50, 3, "#f2c14e", 30, 40);

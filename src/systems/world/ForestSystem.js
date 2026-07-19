@@ -5,6 +5,7 @@ import { groundY } from '../../core/canvas.js';
 import { Audio } from '../infrastructure/Audio.js';
 import { spawnParticles, spawnGoldReward } from './SpawnSystem.js';
 import { makeTree } from '../../rendering/Effects.js';
+import { currentPopCap } from '../../util/DefenseStats.js';
 
 const CAMP_SPACING = 1700;
 const CAMP_TRIGGER = 120;
@@ -194,7 +195,7 @@ export function updateForestCamps(dt) {
     }
     if (!nearCamp || camp.blockedUntilExit) continue;
 
-    const popCap = CFG.popCapByLevel[state.base.level];
+    const popCap = currentPopCap();
     const freeSlots = Math.max(0, popCap - (state.vagrants.length + state.units.length));
     if (freeSlots <= 0) {
       camp.blockedUntilExit = true;

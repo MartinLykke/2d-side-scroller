@@ -19,6 +19,8 @@ import { expectedGoldForDay, goldRewardAmount } from '../systems/economy/Economy
 import { addSkillPoints, autoSpendSkillPoints } from '../systems/economy/SkillSystem.js';
 import { renderBudget, renderLoad } from './RenderFrame.js';
 import { profilerEnabled, setProfilerEnabled, profilerResults, profilerFrameMs, profilerReset } from '../util/Profiler.js';
+import { canOpenCastleUpgrades } from '../systems/economy/CastleUpgradeSystem.js';
+import { currentCoinCap, currentPopCap, wallMaxHpForLevel } from '../util/DefenseStats.js';
 
 // ── Skill Tree ────────────────────────────────────────────────
 const BRANCH_NAMES = {
@@ -204,7 +206,7 @@ export const UI = {
     const skippedFrac = clamp((CFG.phases.day - Game.time) / CFG.phases.day, 0, 1);
     const gold = goldRewardAmount(expectedGoldForDay() * skippedFrac * 0.45, "passive");
     if (gold > 0) {
-      state.player.coins = clamp(state.player.coins + gold, 0, CFG.maxCoinsCarry);
+      state.player.coins = clamp(state.player.coins + gold, 0, currentCoinCap());
       floaty(state.player.x, "+" + gold + "🪙", "#f2c14e");
     }
     Game.time = CFG.phases.day + 0.005;
@@ -213,6 +215,12 @@ export const UI = {
 
   refresh() {
     const { player, base, units, vagrants, stations } = state;
+    if (Game.castleOpen) {
+      this.hud.classList.add("hidden");
+      this.prompt.classList.add("hidden");
+      return;
+    }
+    this.hud.classList.remove("hidden");
     const ph = phaseName();
     let dayText = ph === "Night" ? "Night " + Game.day : "Day " + Game.day;
     if ((Game.worldPhase || 1) >= 2) dayText = "Phase II · " + dayText;
@@ -232,7 +240,7 @@ export const UI = {
       else if (r === "builder") build++;
       else if (r === "guard") guards++;
     }
-    const popCap = CFG.popCapByLevel[base.level];
+    const popCap = currentPopCap(base.level);
     document.getElementById("hud-pop-text").textContent   = (units.length + vagrants.length) + "/" + popCap;
     document.getElementById("hud-arch-text").textContent  = arch;
     document.getElementById("hud-build-text").textContent = build;
@@ -311,11 +319,13 @@ export const UI = {
     const shopSt=stations.find(s=>s.id==="shop");
     const nearShop=!Game.inMine&&shopSt&&state.base.level>=2&&dist(player.x,shopSt.x())<100;
     const mineLadderNear=state.mineBuilt&&dist(player.x,MINE.entranceX)<70;
+    const nearCastleUpgrades=canOpenCastleUpgrades();
     if (near) {
       this.prompt.classList.remove("hidden");
       const prog=near.paid>0?` (${near.paid}/${near.cost()})` : "";
       const action=near.instantPurchase ? "press \u2193/S" : "hold \u2193/S";
-      this.prompt.innerHTML=`${near.label()} &nbsp;<span class="cost">${near.cost()}\u{1FA99}</span>${prog} &nbsp;<span class="hold">${action}</span>`;
+      const castleHint=near.id==="base"&&nearCastleUpgrades ? ` &nbsp;<span class="hold">C: castle upgrades</span>` : "";
+      this.prompt.innerHTML=`${near.label()} &nbsp;<span class="cost">${near.cost()}\u{1FA99}</span>${prog} &nbsp;<span class="hold">${action}</span>${castleHint}`;
     } else if (mineLadderNear) {
       this.prompt.classList.remove("hidden");
       this.prompt.innerHTML=Game.inMine
@@ -332,6 +342,9 @@ export const UI = {
     } else if (nearShop && !Game.shopOpen) {
       this.prompt.classList.remove("hidden");
       this.prompt.innerHTML=`B - Open shop 🏪`;
+    } else if (nearCastleUpgrades && !Game.castleOpen) {
+      this.prompt.classList.remove("hidden");
+      this.prompt.innerHTML=`Castle upgrades &nbsp;<span class="hold">press C</span>`;
     } else if (!Game.inMine && !state.assault && (Game.worldPhase || 1) === 1 && !Game.isNight
         && state.portals.some(p => !p.destroyed && dist(player.x, p.x) < 520)) {
       this.prompt.classList.remove("hidden");
@@ -488,7 +501,7 @@ export const DEV = {
     const fxCount = (state.particles?.length || 0) + (state.floatTexts?.length || 0);
     const budget = renderBudget();
     const load = renderLoad();
-    const popCap = CFG.popCapByLevel?.[base.level] ?? "-";
+    const popCap = base.level ? currentPopCap(base.level) : "-";
 
     const costs = [];
     costs.push({ label: `Enemies (${load.enemies})`, weight: load.enemies * 1.4 });
@@ -519,7 +532,7 @@ export const DEV = {
 
   addCoins(n) {
     if (Game.state!=="play") return;
-    state.player.coins=clamp(state.player.coins+n,0,CFG.maxCoinsCarry);
+    state.player.coins=clamp(state.player.coins+n,0,currentCoinCap());
     floaty(state.player.x,"+"+n+"🪙","#f2c14e");
   },
 
@@ -606,7 +619,7 @@ export const DEV = {
     for (const w of walls) {
       w.commissioned = true;
       w.level = 5;
-      w.maxHp = CFG.wallHp[5];
+      w.maxHp = wallMaxHpForLevel(5);
       w.hp = w.maxHp;
       w.buildProgress = 1;
     }
@@ -780,7 +793,7 @@ export const DEV = {
       floaty(state.base.x, "Build the mine first (base lvl 3)", "#ff8a6a");
       return;
     }
-    const popCap = CFG.popCapByLevel[state.base.level];
+    const popCap = currentPopCap();
     if (state.units.length + state.vagrants.length >= popCap) {
       floaty(state.base.x,"Population cap reached","#ff8a6a");
       return;

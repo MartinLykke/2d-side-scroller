@@ -6,6 +6,7 @@ import { Game, state } from '../../core/state.js';
 import { goldCoinChunks, goldRewardAmount } from '../economy/EconomyBalance.js';
 import { eliteChanceBonus, enemyVitalityMultiplier, nightQuotaMetaMultiplier, portalSpawnIntervalMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { currentDifficulty } from '../infrastructure/DifficultySystem.js';
+import { currentPopCap } from '../../util/DefenseStats.js';
 
 function dayThreatProgress() {
   return Math.max(0, (Game.day || 1) - 2);
@@ -138,7 +139,7 @@ export function spawnParticles(x, y, n, color, spread = 60, up = 80) {
 
 export function spawnVagrant() {
   const { vagrants, units } = state;
-  if (vagrants.length + units.length >= CFG.popCapByLevel[state.base.level]) return;
+  if (vagrants.length + units.length >= currentPopCap()) return;
   const side = pick([-1, 1]);
   const x = side < 0 ? rand(1600, 2400) : rand(CFG.worldWidth - 2400, CFG.worldWidth - 1600);
   vagrants.push({ x, vx: 0, targetX: CFG.baseX + rand(-260, 260), state: "wander", anim: rand(0, 6) });
@@ -280,6 +281,17 @@ export function planNight() {
   Game.nightSpawned = 0;
   Game.spawnTimer   = 0;
   Game.nightCleared = false;
+
+  // Never on the very first night; afterward, occasionally the horde only presses from one side.
+  const livePortals = state.portals.filter(p => !p.destroyed);
+  if (d > 1 && livePortals.length > 1 && Math.random() < 0.2) {
+    const side = pick(livePortals).side;
+    Game.oneSidedNightSide = side;
+    Game.oneSidedAnnounce = { timer: 6, maxTimer: 6, side };
+  } else {
+    Game.oneSidedNightSide = null;
+    Game.oneSidedAnnounce = null;
+  }
 }
 
 function nightEnemyType() {
@@ -311,9 +323,12 @@ function nightEnemyType() {
   const flyingImpChance = Math.min(0.55, Math.max(0, d - 2) * 0.055 * difficultyPressure + eliteBonus * 0.85);
   const emberBruteChance = d >= 2 ? Math.min(0.34, (d - 1) * 0.035 * difficultyPressure + eliteBonus) : eliteBonus * 0.35;
   const ashPriestChance = d >= 4 ? Math.min(0.26, (d - 3) * 0.028 * difficultyPressure + eliteBonus * 0.65) : eliteBonus * 0.25;
+  // Siege imps roll in from day 4: a slow, heavily-shielded battering column.
+  const siegeImpChance = d >= 4 ? Math.min(0.22, (d - 3) * 0.03 * difficultyPressure + eliteBonus * 0.5) : 0;
   if (r < emberBruteChance) return "emberBrute";
   if (r < emberBruteChance + ashPriestChance) return "ashPriest";
-  if (r < emberBruteChance + ashPriestChance + flyingImpChance) return "fireImp";
+  if (r < emberBruteChance + ashPriestChance + siegeImpChance) return "siegeImp";
+  if (r < emberBruteChance + ashPriestChance + siegeImpChance + flyingImpChance) return "fireImp";
   return "imp";
 }
 
@@ -326,7 +341,11 @@ export function updateSpawning(dt) {
     if (Game.spawnTimer <= 0) {
       Game.spawnTimer = nextNightSpawnInterval();
       const type = nightEnemyType();
-      const livePortals = state.portals.filter(p => !p.destroyed);
+      let livePortals = state.portals.filter(p => !p.destroyed);
+      if (Game.oneSidedNightSide != null) {
+        const sided = livePortals.filter(p => p.side === Game.oneSidedNightSide);
+        if (sided.length) livePortals = sided;
+      }
       const portal = pick(livePortals.length ? livePortals : state.portals);
       let spawned;
       if (ENEMY_TYPES[type] && ENEMY_TYPES[type].boss) {

@@ -41,6 +41,36 @@ function drawStuckArrowShaft(ar, alpha) {
   ctx.fillStyle = ar.powered ? "#ffcc44" : magic ? "#c69fff" : "#8fae4a";
   ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(-13,-2.6); ctx.lineTo(-8.5,-0.6); ctx.closePath(); ctx.fill();
   ctx.beginPath(); ctx.moveTo(-10,0); ctx.lineTo(-13,2.6); ctx.lineTo(-8.5,0.6); ctx.closePath(); ctx.fill();
+  drawArrowBranchCoating(ar, performance.now() / 1000, alpha);
+}
+
+function drawArrowBranchCoating(ar, t, alpha = 1) {
+  if (!ar.frostArrow && !ar.rootArrow) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  if (ar.frostArrow) {
+    ctx.globalAlpha = alpha * (0.36 + 0.16 * Math.sin(t * 12 + ar.x * 0.01));
+    ctx.strokeStyle = "#bfefff";
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(8, 0); ctx.stroke();
+    ctx.fillStyle = "#ffffff";
+    for (let k = 0; k < 4; k++) {
+      const x = -8 + k * 4.6;
+      const y = k % 2 ? 2.2 : -2.2;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + 2, y); ctx.lineTo(x - 1, y * 0.55); ctx.closePath(); ctx.fill();
+    }
+  }
+  if (ar.rootArrow) {
+    ctx.globalAlpha = alpha * 0.62;
+    ctx.strokeStyle = ar.frostArrow ? "#d8fbff" : "#8fd8ff";
+    ctx.lineWidth = 0.9;
+    for (let k = 0; k < 5; k++) {
+      const x = -12 + k * 4.6;
+      ctx.beginPath(); ctx.ellipse(x, Math.sin(t * 8 + k) * 0.5, 1.7, 2.4, 0.75, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+  ctx.restore();
 }
 
 export function drawCoins(mineLayer = false) {
@@ -93,6 +123,7 @@ export function drawArrows() {
       ctx.fillStyle=ug; ctx.beginPath(); ctx.arc(0,0,20 + (ar.upgradeRank || 1) * 3,0,Math.PI*2); ctx.fill();
       ctx.restore();
     }
+    drawArrowBranchCoating(ar, t);
     if (ar.magma) {
       // The colossus throws dense, cracked chunks of the mountain — not a
       // generic fireball. The short ash wake keeps the projectile readable at

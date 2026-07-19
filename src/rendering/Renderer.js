@@ -4,6 +4,7 @@ import { Game, state } from '../core/state.js';
 import { entityWallLift } from '../entities/Wall.js';
 import { drawPlayer as drawPlayerBody } from './sprites/Player.js';
 import { drawHeldWeapon } from './ItemRender.js';
+import { cachedUpgradeEffects } from '../config/weaponUpgrades.js';
 import { drawMount } from './sprites/Mount.js';
 import { activeMount, playerMountLift } from '../systems/economy/MountSystem.js';
 import { darkness, skyColors, drawStars, drawClouds, drawCelestials, drawBirds, drawWildBirds, getTrees, drawHills, drawTreeLayer, drawLowFog, drawAmbientFront, drawLevelUpBeams, biomeAt, FX, windSway } from './Effects.js';
@@ -13,8 +14,8 @@ import { drawGroundTexture, drawGroundDeco, drawPonds, drawEntityShadows, drawPo
 import { drawEnemies } from './scene/RenderEntities.js';
 import { drawVagrants, drawUnits, drawAnimals } from './scene/RenderUnits.js';
 import { drawCoins, drawArrows, drawLootItems, drawChests, drawGroundBows, drawGroundHammers } from './scene/RenderItems.js';
-import { drawCaltrops, drawPoisonShots, drawFirePools, drawLegendaryEffects, drawAegisStrikes, drawParticles, drawFloats, drawSpells, drawCampLight } from './scene/RenderEffects.js';
-import { drawWeaponPickupOverlay, drawInventoryOverlay, drawShopOverlay, drawUpgradeMenu, drawXpBar, drawLegendaryIntro } from './scene/RenderUI.js';
+import { drawCaltrops, drawPoisonShots, drawFirePools, drawSpellFields, drawLegendaryEffects, drawAegisStrikes, drawParticles, drawFloats, drawSpells, drawCampLight } from './scene/RenderEffects.js';
+import { drawWeaponPickupOverlay, drawInventoryOverlay, drawShopOverlay, drawCastleUpgradeOverlay, drawUpgradeMenu, drawXpBar, drawLegendaryIntro, drawOneSidedAnnounce } from './scene/RenderUI.js';
 import { drawMineCutaway } from './scene/RenderMine.js';
 import { drawHeart } from './DrawHelpers.js';
 import { beginRenderFrame } from './RenderFrame.js';
@@ -47,8 +48,8 @@ function drawWeaponSwingArc(x, player) {
   if (!arc) return;
   ctx.save();
   ctx.translate(x, 0);
-  if (w.includes("spear")) { drawSpearThrustFX(dir, baseY, arc, prog); ctx.restore(); return; }
-  if (w.includes("axe"))   { drawAxeChopFX(dir, baseY, arc, prog); ctx.restore(); return; }
+  if (w.includes("spear")) { drawSpearThrustFX(player, dir, baseY, arc, prog); ctx.restore(); return; }
+  if (w.includes("axe"))   { drawAxeChopFX(dir, baseY, arc, prog, player); ctx.restore(); return; }
   const startA = dir > 0 ? -Math.PI*0.7 : Math.PI*0.3;
   const endA   = dir > 0 ? Math.PI*0.1  : Math.PI*1.1;
   const sweepEnd = startA + (endA - startA) * (1 - prog);
@@ -67,12 +68,83 @@ function drawWeaponSwingArc(x, player) {
   ctx.strokeStyle="#ffffff"; ctx.lineWidth=Math.max(1.2,arc.sw*0.35);
   ctx.beginPath(); ctx.arc(0,baseY,arc.r,sweepEnd-0.32*prog,sweepEnd); ctx.stroke();
   ctx.restore();
+  // Legendary upgrade arc overlay — extra glow + spark at the sweep tip
+  const upgFx = cachedUpgradeEffects(player.weaponUpgrades);
+  if (upgFx._tierRank >= 3 && upgFx._vfxCols?.length) {
+    const vCol = upgFx._vfxCols[upgFx._vfxCols.length - 1];
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = prog * 0.4;
+    ctx.strokeStyle = vCol; ctx.lineWidth = arc.sw + 4; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.arc(0, baseY, arc.r + 2, startA, sweepEnd); ctx.stroke();
+    const tipAx = (arc.r + 2) * Math.cos(sweepEnd);
+    const tipAy = baseY + (arc.r + 2) * Math.sin(sweepEnd);
+    ctx.fillStyle = "#ffffff"; ctx.globalAlpha = prog * 0.8;
+    ctx.beginPath(); ctx.arc(tipAx, tipAy, 2.5, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  if (upgFx._tierRank >= 2) {
+    const vCol = upgFx._vfxCols?.length ? upgFx._vfxCols[upgFx._vfxCols.length - 1] : arc.col;
+    const tipAx = (arc.r + 2) * Math.cos(sweepEnd);
+    const tipAy = baseY + (arc.r + 2) * Math.sin(sweepEnd);
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    if (w === "dagger") {
+      ctx.globalAlpha = prog * (upgFx._tierRank >= 3 ? 0.38 : 0.22);
+      ctx.strokeStyle = upgFx._tierRank >= 3 ? "#bb55ff" : "#8a1020";
+      ctx.lineWidth = 2;
+      for (let k = 0; k < (upgFx._tierRank >= 3 ? 4 : 2); k++) {
+        ctx.beginPath(); ctx.arc(0, baseY + k * 1.4 - 2, arc.r + k * 3, startA + k * 0.06, sweepEnd + k * 0.05); ctx.stroke();
+      }
+    } else if (w === "flame_sword" && upgFx._tierRank >= 3) {
+      ctx.globalAlpha = prog * 0.33;
+      ctx.strokeStyle = "#ffe080"; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(tipAx - dir * 18, tipAy - 10);
+      ctx.quadraticCurveTo(tipAx - dir * 2, tipAy - 28, tipAx + dir * 24, tipAy - 8);
+      ctx.moveTo(tipAx - dir * 18, tipAy + 10);
+      ctx.quadraticCurveTo(tipAx - dir * 2, tipAy + 28, tipAx + dir * 24, tipAy + 8);
+      ctx.stroke();
+    } else if (w === "longsword" && upgFx._tierRank >= 3) {
+      ctx.globalAlpha = prog * 0.35;
+      ctx.strokeStyle = "#d8c0ff"; ctx.lineWidth = 1.4;
+      for (let k = 0; k < 4; k++) {
+        const cx = dir * (20 + k * 13);
+        ctx.beginPath();
+        ctx.moveTo(cx, groundY - 3);
+        ctx.lineTo(cx + dir * (8 + k * 2), groundY - 7 - k * 1.5);
+        ctx.moveTo(cx + dir * 3, groundY - 3);
+        ctx.lineTo(cx + dir * (12 + k), groundY - 1);
+        ctx.stroke();
+      }
+    } else if (w === "war_hammer") {
+      const ring = Math.sin((1 - prog) * Math.PI);
+      ctx.globalAlpha = ring * (upgFx._tierRank >= 3 ? 0.36 : 0.22);
+      ctx.strokeStyle = upgFx._tierRank >= 3 ? "#b080ff" : vCol;
+      ctx.lineWidth = upgFx._tierRank >= 3 ? 3 : 2;
+      ctx.beginPath(); ctx.ellipse(dir * 34, groundY - 5, 20 + ring * 42, 5 + ring * 8, 0, 0, Math.PI * 2); ctx.stroke();
+    } else if (w === "thunder_blade" && upgFx._tierRank >= 3) {
+      ctx.globalAlpha = prog * 0.58;
+      ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(tipAx, baseY - 105);
+      ctx.lineTo(tipAx + Math.sin(prog * 12) * 9, baseY - 65);
+      ctx.lineTo(tipAx - Math.cos(prog * 10) * 7, baseY - 28);
+      ctx.lineTo(tipAx, tipAy);
+      ctx.stroke();
+    } else if (w === "rusty_sword" && upgFx._tierRank >= 3) {
+      ctx.globalAlpha = prog * 0.5;
+      for (let k = 0; k < 5; k++) {
+        ctx.fillStyle = k % 2 ? "#9bd05a" : "#d7b04a";
+        ctx.beginPath(); ctx.arc(tipAx - dir * k * 4, tipAy + Math.sin(k) * 6, 1.2, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
   ctx.restore();
 }
 
 // Spear attack visual: forward speed-line streaks with a bright point at the
 // tip, keyed to the thrust window of the held-weapon animation.
-function drawSpearThrustFX(dir, baseY, arc, prog) {
+function drawSpearThrustFX(player, dir, baseY, arc, prog) {
   const attackP = 1 - prog;
   const t = clamp((attackP - 0.3) / 0.35, 0, 1);
   if (t <= 0) return;
@@ -100,11 +172,33 @@ function drawSpearThrustFX(dir, baseY, arc, prog) {
   ctx.fillStyle = "#ffffff";
   ctx.beginPath(); ctx.arc(tipX, y, Math.max(1.5, arc.sw * 0.5), 0, Math.PI * 2); ctx.fill();
   ctx.restore();
+  // Legendary upgrade thrust overlay
+  const spUpgFx = cachedUpgradeEffects(player?.weaponUpgrades);
+  if (spUpgFx?._tierRank >= 3 && spUpgFx._vfxCols?.length) {
+    const vC = spUpgFx._vfxCols[spUpgFx._vfxCols.length - 1];
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = a * 0.5;
+    ctx.strokeStyle = vC; ctx.lineWidth = arc.sw + 3; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(dir * 14, y); ctx.lineTo(tipX, y); ctx.stroke();
+    ctx.fillStyle = "#ffffff"; ctx.globalAlpha = a * 0.7;
+    ctx.beginPath(); ctx.arc(tipX, y, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  if (player.weapon === "spear" && spUpgFx?._tierRank >= 3) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = a * 0.34;
+    ctx.strokeStyle = "#ffb060"; ctx.lineWidth = 7; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(dir * 20, y); ctx.lineTo(tipX + dir * 26, y); ctx.stroke();
+    ctx.globalAlpha = a * 0.75;
+    ctx.fillStyle = "#ffdd60";
+    ctx.beginPath(); ctx.arc(tipX + dir * 7, y - 3, 1.4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(tipX + dir * 7, y + 3, 1.4, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
 }
 
 // Axe attack visual: a steep overhead crescent keyed to the drop phase of the
 // chop, with a small impact flash low in front on follow-through.
-function drawAxeChopFX(dir, baseY, arc, prog) {
+function drawAxeChopFX(dir, baseY, arc, prog, player = null) {
   const attackP = 1 - prog;
   const t = clamp((attackP - 0.42) / 0.3, 0, 1);
   if (t <= 0) return;
@@ -120,6 +214,38 @@ function drawAxeChopFX(dir, baseY, arc, prog) {
     ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = fade * arc.a * 0.35;
     ctx.strokeStyle = arc.glow; ctx.lineWidth = arc.sw + 6; ctx.lineCap = "round";
     ctx.beginPath(); ctx.arc(0, baseY, arc.r, a0, sweepEnd, ccw); ctx.stroke();
+    ctx.restore();
+  }
+  const fx = cachedUpgradeEffects(player?.weaponUpgrades);
+  if (fx?._tierRank >= 2) {
+    const col = fx._vfxCols?.length ? fx._vfxCols[fx._vfxCols.length - 1] : arc.col;
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    if (player?.weapon === "war_axe") {
+      ctx.globalAlpha = fade * (fx._tierRank >= 3 ? 0.42 : 0.25);
+      ctx.strokeStyle = fx._tierRank >= 3 ? "#c02030" : "#a01828";
+      ctx.lineWidth = fx._tierRank >= 3 ? arc.sw + 4 : arc.sw + 1;
+      ctx.beginPath(); ctx.arc(0, baseY, arc.r + 6, a0, sweepEnd, ccw); ctx.stroke();
+      if (fx._tierRank >= 3) {
+        ctx.globalAlpha = fade * 0.24;
+        ctx.fillStyle = "#8a1020";
+        ctx.beginPath(); ctx.arc(dir * 22, baseY - 4, arc.r * 0.65, -1.2, 1.2); ctx.arc(dir * 29, baseY - 4, arc.r * 0.48, 1.2, -1.2, true); ctx.fill();
+      }
+    } else if (player?.weapon === "ice_axe") {
+      ctx.globalAlpha = fade * (fx._tierRank >= 3 ? 0.45 : 0.28);
+      ctx.strokeStyle = "#bfefff"; ctx.lineWidth = arc.sw + (fx._tierRank >= 3 ? 5 : 2);
+      ctx.beginPath(); ctx.arc(0, baseY, arc.r + 4, a0, sweepEnd, ccw); ctx.stroke();
+      if (fx._tierRank >= 3) {
+        for (let k = 0; k < 8; k++) {
+          const a2 = t * 2 + k * Math.PI / 4;
+          ctx.fillStyle = k % 2 ? "#ffffff" : "#bfefff";
+          ctx.beginPath(); ctx.arc(dir * 18 + Math.cos(a2) * 30, baseY + Math.sin(a2) * 18, 1.2, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    } else if (fx._tierRank >= 3) {
+      ctx.globalAlpha = fade * 0.28;
+      ctx.strokeStyle = col; ctx.lineWidth = arc.sw + 3;
+      ctx.beginPath(); ctx.arc(0, baseY, arc.r + 5, a0, sweepEnd, ccw); ctx.stroke();
+    }
     ctx.restore();
   }
   ctx.save();
@@ -256,7 +382,7 @@ export function render() {
   if(p) p.end("draw.structures");
 
   if(p) p.begin("draw.entities");
-  drawAnimals(); drawVagrants(); drawCaltrops(); drawFirePools(); drawUnits(); drawEnemies(dark); drawLegendaryEffects();
+  drawAnimals(); drawVagrants(); drawCaltrops(); drawFirePools(); drawSpellFields(); drawUnits(); drawEnemies(dark); drawLegendaryEffects();
   if (!Game.inMine) drawPlayer(dark);
   if(p) p.end("draw.entities");
 
@@ -277,8 +403,10 @@ export function render() {
   drawWeaponPickupOverlay();
   drawInventoryOverlay();
   drawShopOverlay();
+  drawCastleUpgradeOverlay();
   drawUpgradeMenu();
-  if (Game.state === "play") drawXpBar();
+  if (Game.state === "play" && !Game.castleOpen) drawXpBar();
   drawLegendaryIntro();
+  drawOneSidedAnnounce();
   if(p) p.end("draw.ui");
 }

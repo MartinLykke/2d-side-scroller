@@ -46,6 +46,9 @@
 //     spellEcho      – chance to release a smaller second projectile/cast
 //     meteorIce/meteorDouble – meteor staff specials
 //
+// New staff-specific keys include scorchChain, geyser, stormCloud,
+// meteorFragments, runeTrap, shadowCurse, and voidScar.
+//
 // Each upgrade may carry vfxCol: a color woven into the held weapon's glow and
 // its ambient particles, so upgrades visibly change the weapon.
 
@@ -215,47 +218,47 @@ export const UNIQUE_UPGRADES = {
   ],
   // --- Magic ---
   fire_tome: [
-    { id:"combustion",    tier:"epic",      name:"Combustion",       desc:"Struck enemies keep burning long after the blast", effect:{ spellBurn:2 }, vfxCol:"#ff6a2a" },
-    { id:"pyroclasm",     tier:"legendary", name:"Pyroclasm",        desc:"Fireballs leave the ground itself burning where they land", effect:{ firePool:true }, vfxCol:"#ffcc60" },
-    { id:"ashen_pages",   tier:"epic",      name:"Ashen Embers",     desc:"The wand spits a second smaller flame often enough to carpet a lane", effect:{ spellEcho:0.25, spellBurn:1 }, vfxCol:"#ff9a50" },
-    { id:"living_inferno",tier:"legendary", name:"Living Inferno",   desc:"Flames echo, linger, and keep burning after impact", effect:{ spellEcho:0.45, firePool:true, spellBurn:2 }, vfxCol:"#ffe080" },
+    { id:"combustion",    tier:"epic",      name:"Combustion",       desc:"Burning enemies caught in the blast flare and pass the fire onward", effect:{ spellBurn:2, scorchChain:0.35 }, vfxCol:"#ff6a2a" },
+    { id:"pyroclasm",     tier:"legendary", name:"Pyroclasm",        desc:"Fireballs leave friendly burning ground that cooks the enemy wave", effect:{ firePool:true, scorchChain:0.5 }, vfxCol:"#ffcc60" },
+    { id:"ashen_pages",   tier:"epic",      name:"Ashen Embers",     desc:"The wand spits smaller flames that seed chain-burning embers", effect:{ spellEcho:0.25, spellBurn:1, scorchChain:0.2 }, vfxCol:"#ff9a50" },
+    { id:"living_inferno",tier:"legendary", name:"Living Inferno",   desc:"Flames echo, linger, and turn every burning target into kindling", effect:{ spellEcho:0.45, firePool:true, spellBurn:2, scorchChain:0.65 }, vfxCol:"#ffe080" },
   ],
   hydro_tome: [
-    { id:"riptide",       tier:"epic",      name:"Riptide",          desc:"The surge spreads wider and drenches enemies, slowing them", effect:{ aoeBonus:40, spellFrost:1.5 }, vfxCol:"#4ab8e8" },
-    { id:"maelstrom",     tier:"legendary", name:"Maelstrom",        desc:"Impacts whirl into a vortex that drags enemies toward the center", effect:{ singularity:true, aoeBonus:25 }, vfxCol:"#a0e8ff" },
-    { id:"glacial_current",tier:"epic",     name:"Glacial Current",  desc:"Cold undertow throws echoing water that chills enemies longer", effect:{ spellEcho:0.25, spellFrost:2 }, vfxCol:"#d8fbff" },
-    { id:"tidal_crown",   tier:"legendary", name:"Tidal Crown",      desc:"Echoing waves collapse inward, dragging the wave into a royal whirlpool", effect:{ spellEcho:0.5, singularity:true, aoeBonus:35 }, vfxCol:"#ffffff" },
+    { id:"riptide",       tier:"epic",      name:"Riptide",          desc:"Impacts burst into geysers that pin enemies in the undertow", effect:{ aoeBonus:30, spellFrost:1.5, geyser:1 }, vfxCol:"#4ab8e8" },
+    { id:"maelstrom",     tier:"legendary", name:"Maelstrom",        desc:"The wave becomes a whirlpool, dragging foes in before the geyser breaks", effect:{ singularity:true, aoeBonus:25, geyser:1.15 }, vfxCol:"#a0e8ff" },
+    { id:"glacial_current",tier:"epic",     name:"Glacial Current",  desc:"Cold echoing water erupts beneath survivors and locks their footing", effect:{ spellEcho:0.25, spellFrost:2, geyser:0.75 }, vfxCol:"#d8fbff" },
+    { id:"tidal_crown",   tier:"legendary", name:"Tidal Crown",      desc:"Echoing royal waves collapse inward, then geyser through the crowd", effect:{ spellEcho:0.45, singularity:true, aoeBonus:35, geyser:1.6 }, vfxCol:"#ffffff" },
   ],
   lightning_tome: [
-    { id:"overcharge",    tier:"epic",      name:"Overcharge",       desc:"The lightning arcs two extra times between enemies", effect:{ chainBonus:2 }, vfxCol:"#f0e060" },
-    { id:"tempest",       tier:"legendary", name:"Tempest",          desc:"The sky answers twice: every cast also strikes a second enemy", effect:{ extraBolt:true }, vfxCol:"#ffffff" },
-    { id:"static_memory", tier:"epic",      name:"Static Memory",    desc:"Residual charge can echo the cast and adds another chain arc", effect:{ spellEcho:0.2, chainBonus:1 }, vfxCol:"#fff6a0" },
-    { id:"thunderhead",   tier:"legendary", name:"Thunderhead",      desc:"Storm clouds follow the staff, adding a second strike and a long chain", effect:{ extraBolt:true, chainBonus:3, spellEcho:0.25 }, vfxCol:"#f8fbff" },
+    { id:"overcharge",    tier:"epic",      name:"Overcharge",       desc:"The lightning arcs farther and leaves a crackling storm cloud behind", effect:{ chainBonus:2, stormCloud:1 }, vfxCol:"#f0e060" },
+    { id:"tempest",       tier:"legendary", name:"Tempest",          desc:"The sky answers twice, then keeps hunting from a short-lived cloud", effect:{ extraBolt:true, stormCloud:1.35 }, vfxCol:"#ffffff" },
+    { id:"static_memory", tier:"epic",      name:"Static Memory",    desc:"Residual charge echoes the cast and seeds a weaker follow-up cloud", effect:{ spellEcho:0.2, chainBonus:1, stormCloud:0.75 }, vfxCol:"#fff6a0" },
+    { id:"thunderhead",   tier:"legendary", name:"Thunderhead",      desc:"A storm crown follows the staff, chaining hard and striking again", effect:{ extraBolt:true, chainBonus:3, spellEcho:0.25, stormCloud:1.6 }, vfxCol:"#f8fbff" },
   ],
   meteor_tome: [
-    { id:"ice_meteor",    tier:"epic",      name:"Ice Meteor",       desc:"The meteor becomes an icy comet that freezes enemies in the explosion", effect:{ meteorIce:true }, vfxCol:"#bfefff" },
-    { id:"double_up",     tier:"epic",      name:"Double Up",        desc:"Casts less often, but calls down two meteors", effect:{ meteorDouble:true }, vfxCol:"#ff8840" },
-    { id:"extinction_event",tier:"legendary",name:"Extinction Event", desc:"A vast crater: +50 px blast radius and the impact leaves burning ground", effect:{ aoeBonus:50, firePool:true }, vfxCol:"#ffd060" },
-    { id:"glass_comet",   tier:"epic",      name:"Glass Comet",      desc:"Comets shed an icy echo that freezes survivors in the crater", effect:{ meteorIce:true, spellEcho:0.2 }, vfxCol:"#d8fbff" },
-    { id:"starfall_covenant",tier:"legendary",name:"Starfall Covenant",desc:"The heavens answer with wider twin impacts and a trailing echo", effect:{ meteorDouble:true, aoeBonus:30, spellEcho:0.35 }, vfxCol:"#fff0a0" },
+    { id:"ice_meteor",    tier:"epic",      name:"Ice Meteor",       desc:"The meteor becomes an icy comet that freezes enemies and sheds shards", effect:{ meteorIce:true, meteorFragments:2 }, vfxCol:"#bfefff" },
+    { id:"double_up",     tier:"epic",      name:"Double Up",        desc:"Casts less often, but calls twin meteors with a small fragment shower", effect:{ meteorDouble:true, meteorFragments:1 }, vfxCol:"#ff8840" },
+    { id:"extinction_event",tier:"legendary",name:"Extinction Event", desc:"A vast crater leaves burning ground and sprays star-fragments outward", effect:{ aoeBonus:50, firePool:true, meteorFragments:3 }, vfxCol:"#ffd060" },
+    { id:"glass_comet",   tier:"epic",      name:"Glass Comet",      desc:"Comets shed icy echoes and splinter into freezing glass", effect:{ meteorIce:true, spellEcho:0.2, meteorFragments:2 }, vfxCol:"#d8fbff" },
+    { id:"starfall_covenant",tier:"legendary",name:"Starfall Covenant",desc:"The heavens answer with wider twin impacts and a fragment storm", effect:{ meteorDouble:true, aoeBonus:30, spellEcho:0.3, meteorFragments:3 }, vfxCol:"#fff0a0" },
   ],
   arcane_tome: [
-    { id:"echo_cast",     tier:"epic",      name:"Echo Cast",        desc:"The weave repeats itself: 30% chance a cast has no cooldown", effect:{ freeCast:0.3 }, vfxCol:"#cc44ff" },
-    { id:"arcane_fission",tier:"legendary", name:"Arcane Fission",   desc:"Impacts split into three arcane orbs that streak into nearby enemies", effect:{ splitOrbs:3 }, vfxCol:"#ff88ff" },
-    { id:"runic_afterimage",tier:"epic",    name:"Runic Afterimage", desc:"A second smaller spell peels off the main cast in a violet afterimage", effect:{ spellEcho:0.35 }, vfxCol:"#f0a0ff" },
-    { id:"infinite_glyph",tier:"legendary", name:"Infinite Glyph",   desc:"Glyphs split wider, echo casts, and sometimes leave no cooldown", effect:{ splitOrbs:4, freeCast:0.2, spellEcho:0.25 }, vfxCol:"#ffffff" },
+    { id:"echo_cast",     tier:"epic",      name:"Echo Cast",        desc:"The weave repeats itself and leaves delayed glyph mines behind", effect:{ freeCast:0.3, runeTrap:0.8 }, vfxCol:"#cc44ff" },
+    { id:"arcane_fission",tier:"legendary", name:"Arcane Fission",   desc:"Impacts split into arcane orbs and prime a detonating rune", effect:{ splitOrbs:3, runeTrap:1.1 }, vfxCol:"#ff88ff" },
+    { id:"runic_afterimage",tier:"epic",    name:"Runic Afterimage", desc:"A violet afterimage follows the cast and sketches a small trap glyph", effect:{ spellEcho:0.35, runeTrap:0.65 }, vfxCol:"#f0a0ff" },
+    { id:"infinite_glyph",tier:"legendary", name:"Infinite Glyph",   desc:"Glyphs split, echo, sometimes refund, and leave stronger rune mines", effect:{ splitOrbs:4, freeCast:0.2, spellEcho:0.25, runeTrap:1.5 }, vfxCol:"#ffffff" },
   ],
   shadow_tome: [
-    { id:"creeping_dark", tier:"epic",      name:"Creeping Dark",    desc:"Shadows cling to the struck, slowing everything in the blast", effect:{ spellFrost:2.5 }, vfxCol:"#660099" },
-    { id:"ravenous_void", tier:"legendary", name:"Ravenous Void",    desc:"The darkness hungers, dragging enemies into the blast", effect:{ singularity:true, aoeBonus:25 }, vfxCol:"#aa44cc" },
-    { id:"hollow_echo",   tier:"epic",      name:"Hollow Echo",      desc:"Shadow casts repeat as a smaller hollow bolt that chills the crowd", effect:{ spellEcho:0.35, spellFrost:1 }, vfxCol:"#2a003a" },
-    { id:"nightfall_grimoire",tier:"legendary",name:"Nightfall Effigy",desc:"Dark impacts split into hungry fragments and drag enemies inward", effect:{ singularity:true, splitOrbs:2, spellEcho:0.35 }, vfxCol:"#cc66ff" },
+    { id:"creeping_dark", tier:"epic",      name:"Creeping Dark",    desc:"Shadows cling to enemies as a curse that ticks while they are slowed", effect:{ spellFrost:2.5, shadowCurse:1 }, vfxCol:"#660099" },
+    { id:"ravenous_void", tier:"legendary", name:"Ravenous Void",    desc:"The darkness drags enemies inward and marks them for hungry shade", effect:{ singularity:true, aoeBonus:25, shadowCurse:1.25 }, vfxCol:"#aa44cc" },
+    { id:"hollow_echo",   tier:"epic",      name:"Hollow Echo",      desc:"Shadow casts repeat as hollow bolts that curse and chill the crowd", effect:{ spellEcho:0.35, spellFrost:1, shadowCurse:0.8 }, vfxCol:"#2a003a" },
+    { id:"nightfall_grimoire",tier:"legendary",name:"Nightfall Effigy",desc:"Dark impacts split, pull inward, and leave a stronger shade curse", effect:{ singularity:true, splitOrbs:2, spellEcho:0.35, shadowCurse:1.6 }, vfxCol:"#cc66ff" },
   ],
   void_tome: [
-    { id:"singularity",   tier:"epic",      name:"Singularity",      desc:"Every impact collapses inward, wrenching enemies to the center", effect:{ singularity:true }, vfxCol:"#9922ff" },
-    { id:"oblivion",      tier:"legendary", name:"Oblivion",         desc:"Reality splinters: impacts burst into void orbs and casts sometimes cost nothing", effect:{ splitOrbs:2, freeCast:0.25 }, vfxCol:"#ddaaff" },
-    { id:"eventide_pages",tier:"epic",      name:"Eventide Sigil",   desc:"The staff carves a second void sigil with a larger blast field", effect:{ spellEcho:0.25, aoeBonus:25 }, vfxCol:"#c080ff" },
-    { id:"total_collapse",tier:"legendary", name:"Total Collapse",   desc:"Reality collapses twice, pulling enemies into splitting void fragments", effect:{ singularity:true, splitOrbs:3, freeCast:0.2, spellEcho:0.35 }, vfxCol:"#ffffff" },
+    { id:"singularity",   tier:"epic",      name:"Singularity",      desc:"Every impact collapses inward and leaves a violet scar on the lane", effect:{ singularity:true, voidScar:1 }, vfxCol:"#9922ff" },
+    { id:"oblivion",      tier:"legendary", name:"Oblivion",         desc:"Reality splinters into orbs, refunds casts, and opens collapse scars", effect:{ splitOrbs:2, freeCast:0.25, voidScar:1.25 }, vfxCol:"#ddaaff" },
+    { id:"eventide_pages",tier:"epic",      name:"Eventide Sigil",   desc:"The staff carves a second void sigil and tears a smaller scar", effect:{ spellEcho:0.25, aoeBonus:25, voidScar:0.8 }, vfxCol:"#c080ff" },
+    { id:"total_collapse",tier:"legendary", name:"Total Collapse",   desc:"Reality collapses twice, pulling enemies into splitting void scars", effect:{ singularity:true, splitOrbs:3, freeCast:0.2, spellEcho:0.35, voidScar:1.6 }, vfxCol:"#ffffff" },
   ],
 };
 
@@ -270,9 +273,10 @@ export const SHORT_BOW_BRANCH = [
 // strings/objects take the last value. Also tracks the strongest tier and the
 // vfx colors, used by the weapon renderer and ambient particles.
 export function mergeUpgradeEffects(upgrades) {
-  const fx = { _tierRank: 0, _vfxCols: [] };
+  const fx = { _tierRank: 0, _vfxCols: [], _ids: [] };
   if (!upgrades || !upgrades.length) return fx;
   for (const u of upgrades) {
+    if (u.id) fx._ids.push(u.id);
     const e = u.effect || {};
     for (const k in e) {
       const v = e[k];

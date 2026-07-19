@@ -55,9 +55,7 @@ export function chooseRenderBudget(load, game) {
     return RENDER_BUDGETS.high;
   }
 
-  if (fpsGap >= 28) return RENDER_BUDGETS.low;
-  if (fpsGap >= 12) return RENDER_BUDGETS.medium;
-  if (load.enemies >= 42 || load.entities >= 90 || load.score >= 170) return RENDER_BUDGETS.low;
-  if (load.enemies >= 26 || load.entities >= 58 || load.score >= 105) return RENDER_BUDGETS.medium;
+  if (fpsGap >= 28 || load.enemies >= 60 || load.score >= 220) return RENDER_BUDGETS.low;
+  if (fpsGap >= 16 || load.enemies >= 40 || load.score >= 150) return RENDER_BUDGETS.medium;
   return RENDER_BUDGETS.high;
 }

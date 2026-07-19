@@ -41,6 +41,12 @@ const ENEMY_DEATH_PROFILES = {
     ash: true,
     mass: 1.08,
   },
+  siegeImp: {
+    blood: ["#3a0a08", "#6a1c12", "#a83a20"],
+    chunks: ["#2a0a08", "#5a2416", "#8a4a2a", "#6b5a45"],
+    ember: true,
+    mass: 3.0,
+  },
   fireDragon: {
     blood: ["#3a0706", "#7a1408", "#b02a18"],
     chunks: ["#351008", "#7a1408", "#d64a20"],
@@ -210,6 +216,7 @@ function chooseDeathKind(e, t, violence, tier) {
   if (t.dragon) return tier >= 2 ? "dragonCrash" : "dragonFall";
   if (e.type === "fireImp") return tier >= 2 ? "wingShear" : "wingFold";
   if (e.type === "emberBrute") return tier >= 2 ? "heavySlam" : "heavyKneel";
+  if (e.type === "siegeImp") return tier >= 2 ? "heavySlam" : "heavyKneel";
   if (e.type === "ashPriest") return tier >= 3 ? "ashBurst" : tier >= 1 ? "ashSpin" : "ashFold";
   if (tier >= 3) return "impBurst";
   if (tier >= 2) return "impLaunch";

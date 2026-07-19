@@ -28,72 +28,290 @@ function rarityHalo(rarity, col, r, extra = 0) {
   ctx.restore();
 }
 
-// ---------- Weapon piece models ----------
-function drawSwordLikeWeapon(weaponId, w, len) {
-  const isLegend = w.rarity >= 3 || weaponId === "sunblade" || weaponId === "kings_sword";
-  const bladeW = weaponId === "dagger" ? 2.5 : weaponId === "longsword" || weaponId === "kings_sword" ? 4.2 : 3.5;
+function upgradeRank(fx) {
+  return fx?._tierRank || 0;
+}
+
+function upgradeColor(fx, fallback = "#ffffff") {
+  return fx?._vfxCols?.length ? fx._vfxCols[fx._vfxCols.length - 1] : (fx?._tierCol || fallback);
+}
+
+function hasUpgrade(fx, id) {
+  return !!fx?._ids?.includes(id);
+}
+
+function drawGlowLine(x1, y1, x2, y2, col, width, alpha) {
   ctx.save();
-  if (isLegend) {
-    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.28;
-    ctx.strokeStyle = w.col; ctx.lineWidth = bladeW + 5; ctx.lineCap = "round";
+  ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = col;
+  ctx.lineWidth = width;
+  ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  ctx.restore();
+}
+
+function drawOrbitingMotes(cx, cy, rx, ry, count, col, t, opts = {}) {
+  const phase = opts.phase || 0;
+  const size = opts.size || 1.4;
+  const alpha = opts.alpha || 0.65;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (let k = 0; k < count; k++) {
+    const a = t * (opts.speed || 1.8) + phase + k * Math.PI * 2 / count;
+    const x = cx + Math.cos(a) * rx;
+    const y = cy + Math.sin(a) * ry;
+    ctx.globalAlpha = alpha * (0.55 + 0.45 * Math.sin(t * 4 + k));
+    ctx.fillStyle = k % 3 === 0 ? "#ffffff" : col;
+    ctx.beginPath(); ctx.arc(x, y, size + (k % 2) * 0.45, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawTinyLeaf(x, y, rot, col = "#9bd05a") {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(0, -2.2);
+  ctx.quadraticCurveTo(3, 0, 0, 2.2);
+  ctx.quadraticCurveTo(-2.5, 0, 0, -2.2);
+  ctx.fill();
+  ctx.restore();
+}
+
+// ---------- Weapon piece models ----------
+function drawSwordLikeWeapon(weaponId, w, len, fx) {
+  const isLegend = w.rarity >= 3 || weaponId === "sunblade" || weaponId === "kings_sword";
+  const rank = upgradeRank(fx);
+  const upgEpic = rank >= 2;
+  const upgLeg = rank >= 3;
+  const vCol = upgradeColor(fx, w.col);
+  let bladeW = weaponId === "dagger" ? 2.5 : weaponId === "longsword" || weaponId === "kings_sword" ? 4.2 : 3.5;
+  if (weaponId === "dagger" && upgEpic) bladeW = upgLeg ? 1.7 : 2.0;
+  if (weaponId === "longsword" && upgEpic) bladeW += upgLeg ? 1.4 : 0.8;
+  const t = performance.now() / 1000;
+  ctx.save();
+  if (weaponId === "longsword" && upgLeg) {
+    ctx.scale(1.24 + 0.03 * Math.sin(t * 2.2), 1.08);
+    len *= 1.1;
+  }
+  if (weaponId === "dagger" && upgLeg) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 3; i++) {
+      ctx.globalAlpha = 0.18 - i * 0.035;
+      ctx.strokeStyle = i === 0 ? "#cc88ff" : "#220033";
+      ctx.lineWidth = 2.2 + i;
+      ctx.beginPath();
+      ctx.moveTo(1 - i * 2.2, (i - 1) * 1.2);
+      ctx.lineTo(len + 4 - i * 1.6, (i - 1) * 2.2 + Math.sin(t * 7 + i) * 0.8);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+  if (isLegend || upgLeg) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = upgLeg ? 0.38 : 0.28;
+    ctx.strokeStyle = vCol || w.col; ctx.lineWidth = bladeW + (upgLeg ? 8 : 5); ctx.lineCap = "round";
     ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(len, 0); ctx.stroke(); ctx.restore();
   }
+  const bladePri = vCol || w.col;
   const bladeGrad = ctx.createLinearGradient(2, -3, len, 3);
-  bladeGrad.addColorStop(0, "#f3f0df");
-  bladeGrad.addColorStop(0.45, w.col);
+  bladeGrad.addColorStop(0, upgLeg ? "#ffffff" : "#f3f0df");
+  bladeGrad.addColorStop(0.45, bladePri);
   bladeGrad.addColorStop(1, "#ffffff");
   ctx.fillStyle = bladeGrad;
   ctx.beginPath();
-  ctx.moveTo(1, -bladeW * 0.45);
-  ctx.lineTo(len - 4, -bladeW * 0.65);
-  ctx.lineTo(len + 3, 0);
-  ctx.lineTo(len - 4, bladeW * 0.65);
-  ctx.lineTo(1, bladeW * 0.45);
+  if (weaponId === "rusty_sword" && upgEpic) {
+    ctx.moveTo(1, -bladeW * 0.55);
+    ctx.lineTo(len * 0.22, -bladeW * 1.05);
+    ctx.lineTo(len * 0.36, -bladeW * 0.52);
+    ctx.lineTo(len * 0.53, -bladeW * 0.92);
+    ctx.lineTo(len * 0.72, -bladeW * 0.45);
+    ctx.lineTo(len + 3, -bladeW * 0.08);
+    ctx.lineTo(len - 2, bladeW * 0.34);
+    ctx.lineTo(len * 0.72, bladeW * 0.83);
+    ctx.lineTo(len * 0.49, bladeW * 0.42);
+    ctx.lineTo(len * 0.28, bladeW * 1.0);
+    ctx.lineTo(1, bladeW * 0.48);
+  } else if (weaponId === "dagger" && upgEpic) {
+    ctx.moveTo(1, -bladeW * 0.35);
+    ctx.lineTo(len - 1, -bladeW * 0.5);
+    ctx.lineTo(len + 6, 0);
+    ctx.lineTo(len - 1, bladeW * 0.5);
+    ctx.lineTo(1, bladeW * 0.35);
+  } else {
+    ctx.moveTo(1, -bladeW * 0.45);
+    ctx.lineTo(len - 4, -bladeW * 0.65);
+    ctx.lineTo(len + 3, 0);
+    ctx.lineTo(len - 4, bladeW * 0.65);
+    ctx.lineTo(1, bladeW * 0.45);
+  }
   ctx.closePath();
   ctx.fill();
   ctx.strokeStyle = "rgba(30,25,20,0.45)"; ctx.lineWidth = 0.7; ctx.stroke();
+  // Fuller (blood groove)
+  ctx.save(); ctx.globalAlpha = upgLeg ? 0.3 : 0.15;
+  ctx.strokeStyle = upgLeg ? bladePri : "#000000"; ctx.lineWidth = 0.6;
+  ctx.beginPath(); ctx.moveTo(5, 0); ctx.lineTo(len - 8, 0); ctx.stroke();
+  ctx.restore();
+  if (weaponId === "rusty_sword" && upgEpic) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.45 + 0.2 * Math.sin(t * 4.7);
+    ctx.strokeStyle = upgLeg ? "#cfa640" : "#7d1410";
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    for (let i = 0; i <= 8; i++) {
+      const p = i / 8;
+      const x = 4 + p * (len - 8);
+      const y = Math.sin(t * 2.8 + p * 12) * bladeW * 0.42;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    for (let k = 0; k < 4; k++) {
+      const p = (t * 0.35 + k * 0.27) % 1;
+      const x = 5 + p * (len - 9);
+      const y = bladeW * (0.6 + 0.2 * Math.sin(t * 3 + k));
+      ctx.globalAlpha = 0.25 + 0.18 * Math.sin(t * 6 + k);
+      ctx.fillStyle = k % 2 ? "#d6d34a" : "#9bd05a";
+      ctx.beginPath(); ctx.ellipse(x, y + p * 4, 0.8, 1.9, 0.1, 0, Math.PI * 2); ctx.fill();
+    }
+    if (upgLeg) {
+      const pieces = [
+        [len * 0.22, -bladeW * 1.25, 5, 2.4],
+        [len * 0.46, bladeW * 1.05, 4.5, 2.2],
+        [len * 0.68, -bladeW * 0.95, 4, 2],
+      ];
+      for (let i = 0; i < pieces.length; i++) {
+        const [px, py, ww, hh] = pieces[i];
+        ctx.globalAlpha = 0.75;
+        ctx.fillStyle = i % 2 ? "#5c4a2a" : "#7b2820";
+        ctx.save(); ctx.translate(px, py + Math.sin(t * 2.1 + i) * 1.4); ctx.rotate(Math.sin(t * 1.5 + i) * 0.25);
+        ctx.fillRect(-ww * 0.5, -hh * 0.5, ww, hh);
+        ctx.restore();
+      }
+      drawOrbitingMotes(len * 0.52, 0, len * 0.42, bladeW * 2.5, 6, "#d7b04a", t, { size: 1, alpha: 0.75, speed: 1.0 });
+    }
+    ctx.restore();
+  } else if (weaponId === "dagger" && upgEpic) {
+    drawGlowLine(3, -bladeW * 0.5, len + 4, -0.25, upgLeg ? "#bb55ff" : "#8a1020", upgLeg ? 4.8 : 3.2, upgLeg ? 0.32 : 0.24);
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = upgLeg ? 0.4 : 0.26;
+    ctx.strokeStyle = upgLeg ? "#220033" : "#7d1018"; ctx.lineWidth = 0.9;
+    for (let k = 0; k < (upgLeg ? 4 : 2); k++) {
+      const ox = -2 - k * 2.5;
+      ctx.beginPath(); ctx.moveTo(ox, -1.4 + k * 0.5); ctx.lineTo(len + 2 - k * 3, Math.sin(t * 8 + k) * 1.4); ctx.stroke();
+    }
+    ctx.restore();
+  } else if (weaponId === "sword" && upgEpic) {
+    drawGlowLine(5, -bladeW * 0.3, len - 4, -bladeW * 0.3, upgLeg ? "#d8f0ff" : "#8fc8ff", upgLeg ? 4.5 : 2.8, upgLeg ? 0.28 : 0.22);
+  } else if (weaponId === "longsword" && upgEpic) {
+    drawGlowLine(4, 0, len - 2, 0, upgLeg ? "#d8c0ff" : "#bfefff", upgLeg ? 8 : 5, upgLeg ? 0.22 : 0.18);
+    if (upgLeg) {
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.15 + 0.08 * Math.sin(t * 2.5);
+      ctx.strokeStyle = "#d8c0ff"; ctx.lineWidth = 1.1;
+      for (let k = 0; k < 3; k++) {
+        ctx.beginPath(); ctx.ellipse(len * 0.55, 0, len * (0.45 + k * 0.08), bladeW * (2.4 + k * 0.4), 0, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+  // Edge gleam — bright highlight traveling along the cutting edge
+  const gleamX = 4 + ((t * 20) % (len + 10));
+  if (gleamX < len) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.45;
+    const eg = ctx.createRadialGradient(gleamX, -bladeW * 0.5, 0, gleamX, -bladeW * 0.5, 3.5);
+    eg.addColorStop(0, upgLeg ? vCol : "#ffffff"); eg.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = eg;
+    ctx.beginPath(); ctx.arc(gleamX, -bladeW * 0.5, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  // Handle + crossguard
   ctx.strokeStyle = "#2c2117"; ctx.lineWidth = 3; ctx.lineCap = "round";
   ctx.beginPath(); ctx.moveTo(-7, 0); ctx.lineTo(2, 0); ctx.stroke();
-  ctx.strokeStyle = "#d4a838"; ctx.lineWidth = 4.5;
+  ctx.strokeStyle = upgLeg ? vCol : "#d4a838"; ctx.lineWidth = 4.5;
   ctx.beginPath(); ctx.moveTo(-3, -5); ctx.lineTo(-3, 5); ctx.stroke();
-  ctx.fillStyle = "#f2c14e";
+  if (upgLeg) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.5 + 0.3 * Math.sin(t * 3.5);
+    ctx.fillStyle = vCol;
+    ctx.beginPath(); ctx.arc(-3, -5, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-3, 5, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  if (weaponId === "sword" && upgEpic) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = upgLeg ? 0.28 + 0.12 * Math.sin(t * 2.8) : 0.18;
+    ctx.strokeStyle = upgLeg ? "#d8f0ff" : "#8fc8ff";
+    ctx.lineWidth = upgLeg ? 1.4 : 0.9;
+    ctx.beginPath(); ctx.ellipse(-3, 0, 7, 9, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  // Pommel
+  ctx.fillStyle = upgLeg ? vCol : "#f2c14e";
   ctx.beginPath(); ctx.arc(-7.5, 0, 2.5, 0, Math.PI * 2); ctx.fill();
+  if (upgLeg) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.5 + 0.25 * Math.sin(t * 3);
+    ctx.fillStyle = vCol;
+    ctx.beginPath(); ctx.arc(-7.5, 0, 3.8, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  ctx.fillStyle = "rgba(255,255,255,0.5)";
+  ctx.beginPath(); ctx.arc(-8, -0.6, 0.65, 0, Math.PI * 2); ctx.fill();
   if (weaponId === "kings_sword") {
-    // ruby set in the pommel
     ctx.fillStyle = "#d03a3a";
     ctx.beginPath(); ctx.arc(-7.5, 0, 1.3, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = "rgba(255,255,255,0.7)";
     ctx.beginPath(); ctx.arc(-8, -0.5, 0.45, 0, Math.PI * 2); ctx.fill();
   }
-  const t = performance.now() / 1000;
+  // Per-weapon elemental effects
   if (weaponId === "flame_sword") {
-    // fire licks dancing off the blade spine
     ctx.save(); ctx.globalCompositeOperation = "lighter";
-    ctx.globalAlpha = 0.4 + 0.2 * Math.sin(t * 9);
-    ctx.strokeStyle = "#ff9a40"; ctx.lineWidth = bladeW + 3; ctx.lineCap = "round";
+    ctx.globalAlpha = (upgEpic ? 0.58 : 0.4) + 0.2 * Math.sin(t * (upgLeg ? 5 : 9));
+    ctx.strokeStyle = upgLeg ? "#ffdd60" : "#ff9a40"; ctx.lineWidth = bladeW + (upgLeg ? 8 : upgEpic ? 5 : 3); ctx.lineCap = "round";
     ctx.beginPath(); ctx.moveTo(3, 0); ctx.lineTo(len - 2, 0); ctx.stroke();
-    ctx.fillStyle = "#ffcc40";
-    for (let k = 0; k < 3; k++) {
-      const fx = 6 + k * (len - 10) / 3 + Math.sin(t * 7 + k * 2) * 2;
-      const fh = 3 + Math.abs(Math.sin(t * 6 + k)) * 3.5;
-      ctx.beginPath(); ctx.moveTo(fx - 2, -bladeW * 0.5);
-      ctx.quadraticCurveTo(fx, -bladeW * 0.5 - fh, fx + 2, -bladeW * 0.5);
+    ctx.fillStyle = upgLeg ? "#ffe080" : "#ffcc40";
+    const flameCount = upgLeg ? 6 : upgEpic ? 4 : 3;
+    for (let k = 0; k < flameCount; k++) {
+      const fkx = 6 + k * (len - 10) / Math.max(1, flameCount - 1) + Math.sin(t * 7 + k * 2) * 2;
+      const fh = (upgLeg ? 7 : upgEpic ? 5 : 3) + Math.abs(Math.sin(t * 6 + k)) * 3.5;
+      ctx.beginPath(); ctx.moveTo(fkx - 2, -bladeW * 0.5);
+      ctx.quadraticCurveTo(fkx, -bladeW * 0.5 - fh, fkx + 2, -bladeW * 0.5);
       ctx.closePath(); ctx.fill();
+    }
+    if (upgLeg) {
+      ctx.globalAlpha = 0.26 + 0.1 * Math.sin(t * 3);
+      ctx.strokeStyle = "#ffefad"; ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(len * 0.25, -bladeW * 3.2);
+      ctx.quadraticCurveTo(len * 0.55, -bladeW * 5.2, len * 0.85, -bladeW * 2.5);
+      ctx.quadraticCurveTo(len * 0.62, -bladeW * 3.2, len * 0.42, -bladeW * 1.6);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(len * 0.25, bladeW * 3.2);
+      ctx.quadraticCurveTo(len * 0.55, bladeW * 5.2, len * 0.85, bladeW * 2.5);
+      ctx.quadraticCurveTo(len * 0.62, bladeW * 3.2, len * 0.42, bladeW * 1.6);
+      ctx.stroke();
     }
     ctx.restore();
   } else if (weaponId === "thunder_blade") {
-    // strobing bolt crawling along the fuller
     ctx.save(); ctx.globalCompositeOperation = "lighter";
-    ctx.globalAlpha = 0.35 + 0.55 * Math.abs(Math.sin(t * 13));
-    ctx.strokeStyle = "#eeccff"; ctx.lineWidth = 1.2; ctx.lineJoin = "round";
+    ctx.globalAlpha = (upgEpic ? 0.55 : 0.35) + 0.55 * Math.abs(Math.sin(t * 13));
+    ctx.strokeStyle = upgLeg ? "#ffffff" : "#eeccff"; ctx.lineWidth = upgLeg ? 2.2 : 1.2; ctx.lineJoin = "round";
     ctx.beginPath(); ctx.moveTo(3, 0);
     for (let k = 1; k <= 4; k++) {
       ctx.lineTo(3 + k * (len - 6) / 4, (k % 2 ? -1 : 1) * (2 + Math.sin(t * 21 + k) * 1.2));
     }
     ctx.stroke();
+    if (upgLeg) {
+      ctx.globalAlpha = 0.32 + 0.16 * Math.sin(t * 8);
+      const eg = ctx.createRadialGradient(len * 0.58, 0, 1, len * 0.58, 0, len * 0.7);
+      eg.addColorStop(0, "rgba(255,255,255,0.85)");
+      eg.addColorStop(0.45, "rgba(170,170,255,0.45)");
+      eg.addColorStop(1, "rgba(150,80,255,0)");
+      ctx.fillStyle = eg;
+      ctx.beginPath(); ctx.arc(len * 0.58, 0, len * 0.7, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.restore();
   } else if (weaponId === "sunblade") {
-    // breathing solar corona around the blade
     ctx.save(); ctx.globalCompositeOperation = "lighter";
     ctx.globalAlpha = 0.25 + 0.15 * Math.sin(t * 3);
     const sg = ctx.createRadialGradient(len * 0.55, 0, 1, len * 0.55, 0, len * 0.7);
@@ -102,26 +320,53 @@ function drawSwordLikeWeapon(weaponId, w, len) {
     ctx.beginPath(); ctx.arc(len * 0.55, 0, len * 0.7, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
+  if (weaponId === "sword" && upgLeg) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = "#d8f0ff"; ctx.lineWidth = 1;
+    for (let r = 0; r < 3; r++) {
+      ctx.globalAlpha = 0.16 + 0.08 * Math.sin(t * 3 + r);
+      ctx.beginPath();
+      for (let i = 0; i <= 12; i++) {
+        const p = i / 12;
+        const x = len * p;
+        const y = (r - 1) * 3 + Math.sin(t * 4 + p * 8 + r) * 2;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    for (let k = 0; k < 4; k++) {
+      const p = (t * 0.22 + k * 0.23) % 1;
+      ctx.globalAlpha = (1 - p) * 0.4;
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath(); ctx.arc(len * (0.2 + k * 0.18), 5 - p * 16, 0.8 + p, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
   ctx.restore();
 }
 
-function drawAxeWeaponModel(weaponId, w, len) {
+function drawAxeWeaponModel(weaponId, w, len, fx) {
   const headX = len - 1;
   const legendary = w.rarity >= 3;
   const isIce = weaponId === "ice_axe";
   const isShadow = weaponId === "shadow_axe";
+  const rank = upgradeRank(fx);
+  const upgEpic = rank >= 2;
+  const upgLeg = rank >= 3;
+  const vCol = upgradeColor(fx, w.col);
   const haft = isShadow ? "#37213f" : "#6a4524";
   const haftHi = isShadow ? "#6f3f83" : "#a7743a";
   const metalDark = isShadow ? "#251530" : isIce ? "#345c7e" : "#4e4d48";
-  const edge = isShadow ? "#e2a7ff" : isIce ? "#e7fbff" : "#fff0c6";
+  const edge = upgLeg ? vCol : (isShadow ? "#e2a7ff" : isIce ? "#e7fbff" : "#fff0c6");
+  const t = performance.now() / 1000;
 
   ctx.save();
-  if (legendary || isIce) {
+  if (legendary || isIce || upgLeg) {
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
-    ctx.globalAlpha = isShadow ? 0.28 : 0.18;
-    ctx.strokeStyle = w.col;
-    ctx.lineWidth = 10;
+    ctx.globalAlpha = upgLeg ? 0.38 : (isShadow ? 0.28 : 0.18);
+    ctx.strokeStyle = vCol || w.col;
+    ctx.lineWidth = upgLeg ? 14 : 10;
     ctx.lineCap = "round";
     ctx.beginPath(); ctx.moveTo(headX - 4, -1); ctx.lineTo(headX + 9, -1); ctx.stroke();
     ctx.restore();
@@ -145,7 +390,7 @@ function drawAxeWeaponModel(weaponId, w, len) {
 
   const bladeGrad = ctx.createLinearGradient(headX - 8, -12, headX + 13, 11);
   bladeGrad.addColorStop(0, edge);
-  bladeGrad.addColorStop(0.38, w.col);
+  bladeGrad.addColorStop(0.38, vCol || w.col);
   bladeGrad.addColorStop(0.76, metalDark);
   bladeGrad.addColorStop(1, edge);
 
@@ -170,6 +415,17 @@ function drawAxeWeaponModel(weaponId, w, len) {
   ctx.moveTo(headX + 10.2, -5.9);
   ctx.quadraticCurveTo(headX + 14.2, -1.1, headX + 10.1, 5.9);
   ctx.stroke();
+  // Edge gleam traveling along the cutting edge
+  const gleamP = (t * 0.8) % 1;
+  const gleamY = -5.9 + gleamP * 11.8;
+  const gleamGx = headX + 12 + Math.sin(gleamP * Math.PI) * 2;
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.5;
+  const axeGleam = ctx.createRadialGradient(gleamGx, gleamY, 0, gleamGx, gleamY, 3);
+  axeGleam.addColorStop(0, upgLeg ? vCol : "#ffffff");
+  axeGleam.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = axeGleam;
+  ctx.beginPath(); ctx.arc(gleamGx, gleamY, 3, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
 
   ctx.fillStyle = metalDark;
   ctx.beginPath();
@@ -180,52 +436,152 @@ function drawAxeWeaponModel(weaponId, w, len) {
   ctx.closePath();
   ctx.fill();
 
-  ctx.strokeStyle = isIce ? "#bff4ff" : isShadow ? "#b86cff" : "#d8b25a";
+  ctx.strokeStyle = upgLeg ? vCol : (isIce ? "#bff4ff" : isShadow ? "#b86cff" : "#d8b25a");
   ctx.lineWidth = 1.25;
   ctx.beginPath(); ctx.moveTo(headX - 4.5, -6.3); ctx.lineTo(headX + 2.8, 0); ctx.lineTo(headX - 4.5, 6.3); ctx.stroke();
+  if (weaponId === "war_axe" && upgEpic) {
+    ctx.fillStyle = upgLeg ? "#8a1020" : "#7a2a24";
+    for (let k = 0; k < 4; k++) {
+      const y = -6 + k * 4;
+      ctx.beginPath();
+      ctx.moveTo(headX + 9.2, y);
+      ctx.lineTo(headX + 13.5 + Math.sin(t * 5 + k) * 0.7, y + 1.5);
+      ctx.lineTo(headX + 9.4, y + 3);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.48 + 0.18 * Math.sin(t * 4.2);
+    ctx.strokeStyle = upgLeg ? "#ff3040" : "#b82028"; ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(headX - 4.5, -5.2);
+    ctx.lineTo(headX + 0.5, -1.4);
+    ctx.lineTo(headX - 2.5, 2.5);
+    ctx.lineTo(headX + 4.2, 5.4);
+    ctx.stroke();
+    for (let k = 0; k < 3; k++) {
+      ctx.globalAlpha = 0.18 + 0.1 * Math.sin(t * 6 + k);
+      ctx.fillStyle = "#a01828";
+      ctx.beginPath(); ctx.arc(headX + 5 + Math.sin(t + k) * 5, -10 + k * 10, 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+    if (upgLeg) {
+      ctx.globalAlpha = 0.25 + 0.12 * Math.sin(t * 2.3);
+      ctx.strokeStyle = "#c02030"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(headX + 2, 0, 17, -1.1, 1.1); ctx.stroke();
+      ctx.beginPath(); ctx.arc(headX + 5, 0, 12, -1.1, 1.1); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  if (isIce && upgEpic) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = upgLeg ? "#ffffff" : "#bfefff";
+    for (let k = 0; k < 5; k++) {
+      const a = -0.9 + k * 0.45;
+      const px = headX + 1 + Math.cos(a) * 8;
+      const py = Math.sin(a) * 9;
+      ctx.globalAlpha = 0.5 + 0.25 * Math.sin(t * 3 + k);
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(px + Math.cos(a) * 5, py + Math.sin(a) * 5);
+      ctx.lineTo(px + Math.cos(a + 0.9) * 2.5, py + Math.sin(a + 0.9) * 2.5);
+      ctx.closePath();
+      ctx.fill();
+    }
+    if (upgLeg) drawOrbitingMotes(headX + 1, 0, 16, 11, 8, "#bfefff", t, { size: 1.1, alpha: 0.72, speed: 2.4 });
+    ctx.restore();
+  }
+  // Legendary energy crackling on the edge
+  if (upgLeg) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.4 + 0.4 * Math.abs(Math.sin(t * 9));
+    ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(headX + 11, -4);
+    ctx.lineTo(headX + 13 + Math.sin(t * 14) * 1.5, -1);
+    ctx.lineTo(headX + 11, 2);
+    ctx.lineTo(headX + 12.5 + Math.cos(t * 11) * 1.5, 4.5);
+    ctx.stroke();
+    ctx.restore();
+  }
 
   ctx.fillStyle = "#25190f";
   ctx.beginPath(); ctx.arc(-8, 0, 2.3, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
 
-export function drawMeleeWeaponModel(weaponId, w, len) {
+export function drawMeleeWeaponModel(weaponId, w, len, fx) {
+  const rank = upgradeRank(fx);
+  const upgEpic = rank >= 2;
+  const upgLeg = rank >= 3;
+  const vCol = upgradeColor(fx, w.col);
   if (weaponId.includes("spear")) {
     const gilded = weaponId === "gilded_spear";
-    if (gilded) {
-      const t = performance.now() / 1000;
+    const t = performance.now() / 1000;
+    if (weaponId === "spear" && upgLeg) len += 8 + Math.sin(t * 2.4) * 2;
+    if (gilded || upgLeg) {
       ctx.save(); ctx.globalCompositeOperation = "lighter";
-      ctx.globalAlpha = 0.3 + 0.12 * Math.sin(t * 3.4);
-      ctx.strokeStyle = w.col; ctx.lineWidth = 7; ctx.lineCap = "round";
+      ctx.globalAlpha = (upgLeg ? 0.4 : 0.3) + 0.12 * Math.sin(t * 3.4);
+      ctx.strokeStyle = vCol || w.col; ctx.lineWidth = upgLeg ? 9 : 7; ctx.lineCap = "round";
       ctx.beginPath(); ctx.moveTo(len + 2, 0); ctx.lineTo(len + 11, 0); ctx.stroke();
       ctx.restore();
     }
-    // shaft with a worn highlight
     ctx.strokeStyle = gilded ? "#8a6a34" : "#7a542c"; ctx.lineWidth = 3; ctx.lineCap = "round";
     ctx.beginPath(); ctx.moveTo(-8, 0); ctx.lineTo(len + 8, 0); ctx.stroke();
     ctx.save(); ctx.globalAlpha = 0.5;
     ctx.strokeStyle = gilded ? "#c9a75a" : "#a97e46"; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(-6, -0.9); ctx.lineTo(len + 5, -0.9); ctx.stroke();
     ctx.restore();
-    // cross-laced leather grip
     ctx.strokeStyle = "#3a281a"; ctx.lineWidth = 3.6;
     ctx.beginPath(); ctx.moveTo(-2, 0); ctx.lineTo(8, 0); ctx.stroke();
     ctx.strokeStyle = "#6a4a2a"; ctx.lineWidth = 0.8;
     for (let k = 0; k < 3; k++) {
       ctx.beginPath(); ctx.moveTo(k * 3.4, -1.8); ctx.lineTo(1.6 + k * 3.4, 1.8); ctx.stroke();
     }
-    // metal collar under the head
-    ctx.fillStyle = gilded ? "#d4a838" : "#8a8f98";
+    ctx.fillStyle = upgLeg ? vCol : (gilded ? "#d4a838" : "#8a8f98");
     ctx.fillRect(len + 1.5, -2.2, 3, 4.4);
-    // leaf blade with edge sheen
+    if (upgLeg) {
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.4 + 0.2 * Math.sin(t * 3);
+      ctx.fillStyle = vCol;
+      ctx.fillRect(len + 0.5, -3.2, 5, 6.4);
+      ctx.restore();
+    }
     const bg = ctx.createLinearGradient(len + 4, -4, len + 13, 4);
-    bg.addColorStop(0, "#ffffff"); bg.addColorStop(0.4, w.col);
+    bg.addColorStop(0, "#ffffff"); bg.addColorStop(0.4, vCol || w.col);
     bg.addColorStop(1, gilded ? "#8a6a1a" : "#6a6f78");
     ctx.fillStyle = bg;
     ctx.beginPath(); ctx.moveTo(len + 14, 0); ctx.lineTo(len + 4, -4.8); ctx.lineTo(len + 6, 0); ctx.lineTo(len + 4, 4.8); ctx.closePath(); ctx.fill();
     ctx.strokeStyle = "rgba(30,25,20,0.4)"; ctx.lineWidth = 0.6; ctx.stroke();
-    // tassel hanging from the collar
-    ctx.strokeStyle = gilded ? "#f2c14e" : "#8f2a24"; ctx.lineWidth = 1.1;
+    if (weaponId === "spear" && upgEpic) {
+      ctx.save();
+      ctx.strokeStyle = upgLeg ? "#ffb060" : "#cfd3d9";
+      ctx.lineWidth = upgLeg ? 1.6 : 1.1;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(len + 6, -1.5); ctx.quadraticCurveTo(len + 1, -8, len + 9, -6.5);
+      ctx.moveTo(len + 6, 1.5); ctx.quadraticCurveTo(len + 1, 8, len + 9, 6.5);
+      ctx.stroke();
+      ctx.restore();
+      drawGlowLine(len - 4, 0, len + 18, 0, upgLeg ? "#ffb060" : "#e8dcb0", upgLeg ? 7 : 4, upgLeg ? 0.28 : 0.18);
+      if (upgLeg) {
+        ctx.save(); ctx.globalCompositeOperation = "lighter";
+        for (let k = 0; k < 5; k++) {
+          ctx.globalAlpha = 0.55 - k * 0.06;
+          ctx.fillStyle = k % 2 ? "#d27a32" : "#7a2a18";
+          ctx.beginPath();
+          ctx.moveTo(len - 12 + k * 3.2, -2.3);
+          ctx.lineTo(len - 8 + k * 3.2, 0);
+          ctx.lineTo(len - 12 + k * 3.2, 2.3);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = "#ffdd60";
+        ctx.beginPath(); ctx.arc(len + 8.2, -2.1, 0.9, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(len + 8.2, 2.1, 0.9, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      }
+    }
+    ctx.strokeStyle = upgLeg ? vCol : (gilded ? "#f2c14e" : "#8f2a24"); ctx.lineWidth = 1.1;
     for (let k = -1; k <= 1; k++) {
       ctx.beginPath(); ctx.moveTo(len + 2.5, 2);
       ctx.quadraticCurveTo(len + 2 + k * 2, 5.5, len + 2.5 + k * 2.6, 7.5); ctx.stroke();
@@ -233,42 +589,87 @@ export function drawMeleeWeaponModel(weaponId, w, len) {
     return;
   }
   if (weaponId.includes("axe")) {
-    drawAxeWeaponModel(weaponId, w, len);
+    drawAxeWeaponModel(weaponId, w, len, fx);
     return;
   }
   if (weaponId.includes("hammer")) {
+    const t = performance.now() / 1000;
+    if (upgEpic) ctx.translate(Math.sin(t * 17) * 0.25, Math.cos(t * 13) * 0.18);
     ctx.strokeStyle = "#5a3920"; ctx.lineWidth = 3.5; ctx.lineCap = "round";
     ctx.beginPath(); ctx.moveTo(-7, 0); ctx.lineTo(len - 6, 0); ctx.stroke();
     ctx.save(); ctx.globalAlpha = 0.5; ctx.strokeStyle = "#8a6034"; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(-5, -1.1); ctx.lineTo(len - 8, -1.1); ctx.stroke();
     ctx.restore();
-    // grip wrap
     ctx.strokeStyle = "#33231a"; ctx.lineWidth = 4;
     ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(2, 0); ctx.stroke();
-    // two-tone iron head with banded strike faces
     const hg = ctx.createLinearGradient(len - 6, -8, len + 7, 8);
-    hg.addColorStop(0, "#9aa0aa"); hg.addColorStop(0.5, w.col); hg.addColorStop(1, "#4e4e58");
+    hg.addColorStop(0, upgLeg ? vCol : "#9aa0aa"); hg.addColorStop(0.5, vCol || w.col); hg.addColorStop(1, "#4e4e58");
     ctx.fillStyle = hg;
     roundedRect(len - 7, -8, 15, 16, 2.4); ctx.fill();
     ctx.strokeStyle = "#26262e"; ctx.lineWidth = 0.9; ctx.stroke();
-    ctx.fillStyle = "#c8ccd4";
+    ctx.fillStyle = upgLeg ? vCol : "#c8ccd4";
     ctx.fillRect(len - 7, -8, 2.6, 16);
     ctx.fillRect(len + 5.4, -8, 2.6, 16);
-    // rivets
     ctx.fillStyle = "#2e2e36";
     ctx.beginPath(); ctx.arc(len + 0.5, -4.6, 0.9, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(len + 0.5, 4.6, 0.9, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = "rgba(255,255,255,0.25)"; ctx.fillRect(len - 4, -6.6, 8.5, 2.6);
-    // top spike
     ctx.fillStyle = "#8a8f98";
     ctx.beginPath(); ctx.moveTo(len - 1.5, -8); ctx.lineTo(len + 0.5, -12.5); ctx.lineTo(len + 2.5, -8); ctx.closePath(); ctx.fill();
+    if (upgEpic) {
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.55 + 0.18 * Math.sin(t * 4);
+      ctx.strokeStyle = upgLeg ? "#b080ff" : "#ff8a30"; ctx.lineWidth = 1.15; ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(len - 4.5, -5.8); ctx.lineTo(len - 0.5, -2.2); ctx.lineTo(len - 3, 0.8); ctx.lineTo(len + 2.4, 4.8);
+      ctx.moveTo(len + 4.5, -5.5); ctx.lineTo(len + 1.6, -1.2); ctx.lineTo(len + 5.2, 2.8);
+      ctx.stroke();
+      for (let k = 0; k < 4; k++) {
+        const p = (t * 0.6 + k * 0.29) % 1;
+        ctx.globalAlpha = (1 - p) * 0.32;
+        ctx.fillStyle = "#8a7058";
+        ctx.beginPath(); ctx.arc(len - 6 + k * 4, 9 + p * 8, 0.8 + p * 0.6, 0, Math.PI * 2); ctx.fill();
+      }
+      if (upgLeg) {
+        const core = ctx.createRadialGradient(len, 0, 1, len, 0, 19);
+        core.addColorStop(0, "rgba(220,170,255,0.7)");
+        core.addColorStop(0.45, "rgba(255,120,40,0.34)");
+        core.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.globalAlpha = 0.8;
+        ctx.fillStyle = core; ctx.beginPath(); ctx.arc(len, 0, 19, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 0.7;
+        for (let k = 0; k < 5; k++) {
+          const a = t * 2.2 + k * Math.PI * 2 / 5;
+          const ox = len + Math.cos(a) * 17;
+          const oy = Math.sin(a) * 10;
+          ctx.fillStyle = k % 2 ? "#4a3f38" : "#756052";
+          ctx.save(); ctx.translate(ox, oy); ctx.rotate(a);
+          ctx.fillRect(-1.8, -1.2, 3.6, 2.4);
+          ctx.restore();
+        }
+      }
+      ctx.restore();
+    }
+    if (upgLeg) {
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.3 + 0.15 * Math.sin(t * 3);
+      const mg = ctx.createRadialGradient(len, 0, 2, len, 0, 16);
+      mg.addColorStop(0, vCol); mg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = mg;
+      ctx.beginPath(); ctx.arc(len, 0, 16, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
     return;
   }
-  drawSwordLikeWeapon(weaponId, w, len);
+  drawSwordLikeWeapon(weaponId, w, len, fx);
 }
 
-function drawHeldCrossbow(hx, hy, aim, pull, recoil, loaded, col) {
+function drawHeldCrossbow(hx, hy, aim, pull, recoil, loaded, col, fx = null) {
   const rot = (1 - aim) * 0.45 - recoil * 0.08;
+  const rank = upgradeRank(fx);
+  const upgEpic = rank >= 2;
+  const upgLeg = rank >= 3;
+  const t = performance.now() / 1000;
   ctx.save();
   ctx.translate(hx - recoil * 4, hy);
   ctx.rotate(rot);
@@ -287,11 +688,45 @@ function drawHeldCrossbow(hx, hy, aim, pull, recoil, loaded, col) {
   ctx.strokeStyle = "#cfd3d9"; ctx.lineWidth = 1.4;
   ctx.beginPath(); ctx.moveTo(-8, -4.5); ctx.lineTo(-8, 4.5); ctx.stroke();
   ctx.beginPath(); ctx.arc(-8, 0, 2.7, 0, Math.PI * 2); ctx.stroke();
+  if (upgEpic) {
+    ctx.save();
+    ctx.strokeStyle = "#9aa2ae"; ctx.lineWidth = 1;
+    ctx.fillStyle = "#34343a";
+    for (let k = 0; k < 2; k++) {
+      const gx = -1 + k * 7;
+      ctx.beginPath(); ctx.arc(gx, k ? 3.2 : -3.2, 2.4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.save(); ctx.translate(gx, k ? 3.2 : -3.2); ctx.rotate(t * (k ? -2.5 : 2.8));
+      ctx.strokeStyle = "#cfd3d9"; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.moveTo(-2, 0); ctx.lineTo(2, 0); ctx.moveTo(0, -2); ctx.lineTo(0, 2); ctx.stroke();
+      ctx.restore();
+    }
+    if (upgLeg) {
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.28 + 0.12 * Math.sin(t * 4);
+      ctx.strokeStyle = col || "#ffe0a0"; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(5, 0, 7.5, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 0.55;
+      for (let k = 0; k < 4; k++) {
+        const a = t * 3 + k * Math.PI / 2;
+        ctx.fillStyle = k % 2 ? "#ffb060" : "#cfd3d9";
+        ctx.beginPath(); ctx.arc(5 + Math.cos(a) * 6, Math.sin(a) * 6, 1.1, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 0.26 + recoil * 0.3;
+      ctx.strokeStyle = "#ffb060"; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(12, -6); ctx.lineTo(18, -8); ctx.moveTo(12, 6); ctx.lineTo(18, 8); ctx.stroke();
+    }
+    ctx.restore();
+  }
   if (loaded) {
     ctx.strokeStyle = "#33200f"; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(nutX - 1, -1.8); ctx.lineTo(18, -1.8); ctx.stroke();
     ctx.fillStyle = "#cfd3d9";
-    ctx.beginPath(); ctx.moveTo(18, -4); ctx.lineTo(23, -1.8); ctx.lineTo(18, 0.4); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(18, upgEpic ? -5 : -4); ctx.lineTo(upgEpic ? 25 : 23, -1.8); ctx.lineTo(18, upgEpic ? 1.4 : 0.4); ctx.closePath(); ctx.fill();
+    if (upgEpic) {
+      ctx.fillStyle = "#8f2a24";
+      ctx.beginPath(); ctx.moveTo(20, -1.8); ctx.lineTo(15.5, -5.2); ctx.lineTo(18.5, -2.2); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(20, -1.8); ctx.lineTo(15.5, 1.6); ctx.lineTo(18.5, -1.4); ctx.closePath(); ctx.fill();
+    }
     ctx.fillStyle = "#8fae4a";
     ctx.beginPath(); ctx.moveTo(nutX - 1, -1.8); ctx.lineTo(nutX - 4, -4); ctx.lineTo(nutX + 1.5, -2.5); ctx.closePath(); ctx.fill();
   }
@@ -303,14 +738,48 @@ function drawHeldCrossbow(hx, hy, aim, pull, recoil, loaded, col) {
   ctx.restore();
 }
 
-function drawBowModel(weaponId, w) {
+function drawBowModel(weaponId, w, fx = null) {
   const r = clamp(w.range * 0.048, 13, 23);
+  const rank = upgradeRank(fx);
+  const upgEpic = rank >= 2;
+  const upgLeg = rank >= 3;
+  const upgCol = upgradeColor(fx, w.col);
+  const t = performance.now() / 1000;
   const woodDark = weaponId === "void_bow" ? "#3a1a5a" : weaponId === "dark_bow" ? "#2a1236" : weaponId === "dragons_bow" ? "#5a1e08" : "#5f3d1c";
+  if (weaponId === "short_bow" && upgLeg) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    for (let k = 0; k < 5; k++) {
+      const a = t * 1.4 + k * Math.PI * 2 / 5;
+      ctx.globalAlpha = 0.28 + 0.12 * Math.sin(t * 3 + k);
+      drawTinyLeaf(Math.cos(a) * (r * 0.85), Math.sin(a) * (r * 1.05), a + Math.PI * 0.5, "#d8ffd0");
+    }
+    ctx.restore();
+  }
   // limbs (double stroke for depth)
   ctx.strokeStyle = woodDark; ctx.lineWidth = 4.2; ctx.lineCap = "round";
   ctx.beginPath(); ctx.arc(0, 0, r, -1.28, 1.28); ctx.stroke();
   ctx.strokeStyle = w.col; ctx.lineWidth = 2.4;
   ctx.beginPath(); ctx.arc(0, 0, r, -1.25, 1.25); ctx.stroke();
+  if (weaponId === "short_bow" && upgEpic) {
+    ctx.save();
+    ctx.strokeStyle = "#3f7f3a"; ctx.lineWidth = 1.2; ctx.lineCap = "round";
+    ctx.beginPath();
+    for (let i = 0; i <= 16; i++) {
+      const a = -1.18 + i * (2.36 / 16);
+      const rr = r + Math.sin(i * 1.7) * 1.2;
+      const x = Math.cos(a) * rr;
+      const y = Math.sin(a) * rr;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.fillStyle = "#7fcf5a";
+    for (let k = 0; k < 4; k++) {
+      const a = -0.9 + k * 0.6;
+      drawTinyLeaf(Math.cos(a) * (r + 1.8), Math.sin(a) * (r + 1.8), a, "#9bd05a");
+      ctx.beginPath(); ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r); ctx.lineTo(Math.cos(a) * (r + 4), Math.sin(a) * (r + 4)); ctx.stroke();
+    }
+    ctx.restore();
+  }
   // recurve tip hooks + caps
   const tx = r * Math.cos(1.25), ty = r * Math.sin(1.25);
   ctx.strokeStyle = woodDark; ctx.lineWidth = 2.6;
@@ -322,10 +791,39 @@ function drawBowModel(weaponId, w) {
   // string + nocked arrow
   ctx.strokeStyle = "#e8d8a8"; ctx.lineWidth = 1.1;
   ctx.beginPath(); ctx.moveTo(tx - 3, -ty - 2.4); ctx.lineTo(tx - 3, ty + 2.4); ctx.stroke();
+  if (weaponId === "short_bow" && upgLeg) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = "#d8ffd0"; ctx.globalAlpha = 0.45 + 0.15 * Math.sin(t * 4); ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.moveTo(tx - 6, -ty - 3.3); ctx.lineTo(tx - 6, ty + 3.3); ctx.stroke();
+    ctx.restore();
+  }
   ctx.strokeStyle = "#c9b48a"; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(tx - 3, 0); ctx.lineTo(r + 5, 0); ctx.stroke();
+  if (weaponId === "short_bow" && (hasUpgrade(fx, "binding_arrows") || hasUpgrade(fx, "ice_explosion"))) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = hasUpgrade(fx, "ice_explosion") ? "#bfefff" : "#8fd8ff";
+    ctx.globalAlpha = 0.65; ctx.lineWidth = 1;
+    for (let k = 0; k < 4; k++) {
+      const x = r - 2 - k * 4;
+      ctx.beginPath(); ctx.ellipse(x, 0, 1.8, 2.3, 0.7, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.restore();
+  }
   ctx.fillStyle = "#b8bcc4";
   ctx.beginPath(); ctx.moveTo(r + 5, -1.9); ctx.lineTo(r + 9, 0); ctx.lineTo(r + 5, 1.9); ctx.closePath(); ctx.fill();
+  if (weaponId === "short_bow" && upgEpic) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.35 + 0.15 * Math.sin(t * 5);
+    ctx.fillStyle = hasUpgrade(fx, "ice_explosion") ? "#ffffff" : upgCol;
+    ctx.beginPath(); ctx.arc(tx - 3, 0, upgLeg ? 5 : 3.5, 0, Math.PI * 2); ctx.fill();
+    if (upgLeg) {
+      ctx.strokeStyle = "#d8ffd0"; ctx.lineWidth = 1;
+      for (let k = -1; k <= 1; k += 2) {
+        ctx.beginPath(); ctx.moveTo(tx - 8, k * 4); ctx.lineTo(r + 9, k * 2); ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
   // leather grip wrap at the belly
   ctx.strokeStyle = "#3a281a"; ctx.lineWidth = 5;
   ctx.beginPath(); ctx.arc(0, 0, r, -0.18, 0.18); ctx.stroke();
@@ -334,12 +832,22 @@ function drawBowModel(weaponId, w) {
     ctx.beginPath(); ctx.arc(0, 0, r, k * 0.11 - 0.035, k * 0.11 + 0.035); ctx.stroke();
   }
   // magic bows shimmer along the limbs
-  if (w.rarity >= 3) {
-    const t = performance.now() / 1000;
+  if (w.rarity >= 3 || upgEpic) {
     ctx.save(); ctx.globalCompositeOperation = "lighter";
-    ctx.globalAlpha = 0.3 + 0.16 * Math.sin(t * 3.2);
-    ctx.strokeStyle = w.col; ctx.lineWidth = 5.5;
+    ctx.globalAlpha = (upgEpic ? 0.36 : 0.3) + 0.16 * Math.sin(t * 3.2);
+    ctx.strokeStyle = upgEpic ? upgCol : w.col; ctx.lineWidth = upgLeg ? 7 : 5.5;
     ctx.beginPath(); ctx.arc(0, 0, r, -1.2, 1.2); ctx.stroke();
+    ctx.restore();
+  }
+  if (weaponId === "short_bow" && upgLeg) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.34;
+    ctx.strokeStyle = "#e8f8ff"; ctx.lineWidth = 1.1;
+    for (let k = 0; k < 2; k++) {
+      ctx.beginPath();
+      ctx.moveTo(tx - 4, -3 + k * 6);
+      ctx.lineTo(r + 12 + Math.sin(t * 4 + k) * 2, -1 + k * 2);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 }
@@ -362,16 +870,16 @@ export function drawWeaponModel(weaponId, s = 1, opts = {}) {
     const len = clamp(w.range * 0.42, 16, 40);
     ctx.rotate(-0.72);
     ctx.translate(-(len - 4) / 2, 0);
-    drawMeleeWeaponModel(weaponId, w, len);
+    drawMeleeWeaponModel(weaponId, w, len, modelFx);
   } else if (weaponId === "crossbow") {
     const crossCol = modelFx?._vfxCols?.length ? modelFx._vfxCols[modelFx._vfxCols.length - 1] : w.col;
-    drawHeldCrossbow(-2, 0, 1, 0, 0, true, crossCol);
+    drawHeldCrossbow(-2, 0, 1, 0, 0, true, crossCol, modelFx);
   } else if (w.type === "ranged") {
     ctx.translate(-4, 0);
-    drawBowModel(weaponId, w);
+    drawBowModel(weaponId, w, modelFx);
   } else {
     ctx.rotate(0.42);
-    drawWandModel(weaponId, w.col, 0.92, { glow: (opts.glow || 0) + (w.rarity >= 3 ? 0.25 : 0.1) });
+    drawWandModel(weaponId, w.col, 0.92, { glow: (opts.glow || 0) + (w.rarity >= 3 ? 0.25 : 0.1), fx: modelFx });
   }
   ctx.restore();
 }
@@ -978,6 +1486,11 @@ function heldBowLook(weaponId, w, fx = null) {
   const upgCol = fx && fx._vfxCols?.length ? fx._vfxCols[fx._vfxCols.length - 1] : null;
   const rank = fx?._tierRank || 0;
   return {
+    weaponId,
+    rank,
+    hasBinding: hasUpgrade(fx, "binding_arrows"),
+    hasIceExplosion: hasUpgrade(fx, "ice_explosion"),
+    upgradeCol: upgCol,
     radius: clamp(w.range * 0.035, 11, 16.5),
     wood: w.col,
     tip: woodDark,
@@ -993,19 +1506,70 @@ function heldBowLook(weaponId, w, fx = null) {
 function drawUpgradeSheen(len, fx) {
   if (!fx || !fx._tierRank || !fx._vfxCols?.length) return;
   const col = fx._vfxCols[fx._vfxCols.length - 1];
+  const rank = fx._tierRank;
   const t = performance.now() / 1000;
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
-  ctx.globalAlpha = Math.min(0.4, 0.08 + fx._tierRank * 0.09) + 0.06 * Math.sin(t * 4);
+  // Base glow along the blade — wider and brighter at higher tiers
+  ctx.globalAlpha = Math.min(0.5, 0.08 + rank * 0.12) + 0.06 * Math.sin(t * 4);
   ctx.strokeStyle = col;
-  ctx.lineWidth = 4.5;
+  ctx.lineWidth = 3.5 + rank * 1.5;
   ctx.lineCap = "round";
   ctx.beginPath(); ctx.moveTo(2, 0); ctx.lineTo(len, 0); ctx.stroke();
-  if (fx._tierRank >= 3) {
-    const sx = len * (0.55 + 0.35 * Math.sin(t * 1.7));
-    ctx.globalAlpha = 0.5 + 0.3 * Math.sin(t * 6);
+  // Energy veins weaving along the blade (epic+)
+  if (rank >= 2) {
+    const veinCount = rank >= 3 ? 3 : 1;
+    ctx.lineWidth = 0.8;
+    for (let v = 0; v < veinCount; v++) {
+      ctx.globalAlpha = 0.3 + rank * 0.06;
+      ctx.beginPath();
+      for (let i = 0; i <= 16; i++) {
+        const p = i / 16;
+        const vx = 3 + p * (len - 5);
+        const vy = Math.sin(t * 5.5 + p * 10 + v * 2.1) * (1.5 + rank * 0.5);
+        if (i === 0) ctx.moveTo(vx, vy); else ctx.lineTo(vx, vy);
+      }
+      ctx.stroke();
+    }
+  }
+  // Tip corona (epic+)
+  if (rank >= 2) {
+    ctx.globalAlpha = 0.2 + 0.12 * Math.sin(t * 3.5) + (rank >= 3 ? 0.15 : 0);
+    const cr = 8 + rank * 3;
+    const cg = ctx.createRadialGradient(len, 0, 1, len, 0, cr);
+    cg.addColorStop(0, col); cg.addColorStop(0.5, col); cg.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = cg;
+    ctx.beginPath(); ctx.arc(len, 0, cr, 0, Math.PI * 2); ctx.fill();
+  }
+  // Legendary: orbiting motes around the blade
+  if (rank >= 3) {
+    for (let m = 0; m < 3; m++) {
+      const a = t * 3.2 + m * Math.PI * 2 / 3;
+      const orR = 5 + Math.sin(t * 1.8 + m) * 2;
+      const ox = len * (0.4 + m * 0.2) + Math.cos(a) * orR;
+      const oy = Math.sin(a) * orR;
+      ctx.globalAlpha = 0.55 + 0.35 * Math.sin(t * 5 + m * 1.5);
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath(); ctx.arc(ox, oy, 1.2, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha *= 0.35;
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.arc(ox - Math.cos(a) * 3, oy - Math.sin(a) * 3, 0.9, 0, Math.PI * 2); ctx.fill();
+    }
+    // Bright dancing spark with cross-hair lines
+    const sx = len * (0.3 + 0.6 * ((Math.sin(t * 1.7) + 1) / 2));
+    const sy = Math.sin(t * 3.4) * 4;
+    ctx.globalAlpha = 0.7 + 0.3 * Math.sin(t * 8);
     ctx.fillStyle = "#ffffff";
-    ctx.beginPath(); ctx.arc(sx, Math.sin(t * 3.4) * 5, 1.3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(sx, sy, 1.6, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 0.6;
+    ctx.globalAlpha = 0.4 + 0.3 * Math.sin(t * 6);
+    for (let s = 0; s < 4; s++) {
+      const sa = s * Math.PI / 2 + t * 2;
+      ctx.beginPath();
+      ctx.moveTo(sx + Math.cos(sa) * 1.5, sy + Math.sin(sa) * 1.5);
+      ctx.lineTo(sx + Math.cos(sa) * 4, sy + Math.sin(sa) * 4);
+      ctx.stroke();
+    }
   }
   ctx.restore();
 }
@@ -1080,7 +1644,7 @@ export function drawHeldWeapon(player, px = 0) {
     ctx.translate(grip.x, grip.y);
     ctx.rotate(angle);
     ctx.translate(slide, 0);
-    drawMeleeWeaponModel(player.weapon, w, len);
+    drawMeleeWeaponModel(player.weapon, w, len, weaponFx);
     drawUpgradeSheen(len, weaponFx);
     ctx.restore();
   } else if (w.type === "ranged") {
@@ -1107,7 +1671,7 @@ export function drawHeldWeapon(player, px = 0) {
       drawPlayerWeaponArm(backSh.x, backSh.y, drawHand.x, drawHand.y, 2.6);
       drawPlayerWeaponArm(frontSh.x, frontSh.y, grip.x + 4 - recoil * 3, grip.y, 2.8);
       const crossCol = weaponFx._vfxCols?.length ? weaponFx._vfxCols[weaponFx._vfxCols.length - 1] : w.col;
-      drawHeldCrossbow(grip.x + 6, grip.y, aim, pull, recoil, true, crossCol);
+      drawHeldCrossbow(grip.x + 6, grip.y, aim, pull, recoil, true, crossCol, weaponFx);
     } else {
       if (shoot) {
         if (shoot.phase === "reach") { const p = ease(shoot.p); drawHand = { x: backSh.x + 2 - p * 6, y: backSh.y + 8 - p * 14 }; }
@@ -1152,8 +1716,24 @@ export function drawHeldWeapon(player, px = 0) {
       }
       ctx.restore();
     }
+    if (fxUpg._tierRank >= 3 && fxUpg._vfxCols?.length) {
+      const vfxC = fxUpg._vfxCols[fxUpg._vfxCols.length - 1];
+      const tl = performance.now() / 1000;
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      for (let m = 0; m < 3; m++) {
+        const oa = tl * 2.5 + m * Math.PI * 2 / 3;
+        const orR = 10 + Math.sin(tl * 1.5 + m) * 3;
+        ctx.globalAlpha = 0.45 + 0.35 * Math.sin(tl * 4 + m);
+        ctx.fillStyle = vfxC;
+        ctx.beginPath(); ctx.arc(tip.x + Math.cos(oa) * orR, tip.y + Math.sin(oa) * orR, 1.5, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha *= 0.3;
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath(); ctx.arc(tip.x + Math.cos(oa - 0.5) * orR, tip.y + Math.sin(oa - 0.5) * orR, 1, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
     ctx.save(); ctx.translate(grip.x, grip.y); ctx.rotate(rot);
-    drawWandModel(player.weapon, w.col, mScale, { cast: pulse, glow: pulse + upgCount * 0.08 });
+    drawWandModel(player.weapon, w.col, mScale, { cast: pulse, glow: pulse + upgCount * 0.08, fx: weaponFx });
     ctx.restore();
   }
   ctx.restore();

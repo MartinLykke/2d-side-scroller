@@ -3,6 +3,7 @@ import { canvas, W, H } from '../../core/canvas.js';
 import { inject, provide } from '../../core/services.js';
 import { UI, DEV, closeSkillTree, openSkillTree } from '../../rendering/HUD.js';
 import { tryOpenShop, handleShopKeys, currentShopList, tryBuyShopItem } from '../economy/ShopSystem.js';
+import { tryOpenCastleUpgrades, closeCastleUpgrades, buyCastleUpgrade } from '../economy/CastleUpgradeSystem.js';
 import { toggleMount } from '../economy/MountSystem.js';
 import { equipFromInventory, unequipWeapon, unequipArmor, ensureInventory } from '../economy/InventorySystem.js';
 import { applyUpgrade, checkUpgrade } from '../economy/UpgradeSystem.js';
@@ -59,7 +60,8 @@ function handleKeydown(e) {
   if (k === "p") DEV.toggle();
   if (k === "escape") {
     if (Game.skillTreeOpen) { closeSkillTree(); return; }
-    Game.inventoryOpen = false; Game.shopOpen = false; Game.upgradeMenuOpen = false;
+    if (Game.castleOpen) { closeCastleUpgrades(); e.preventDefault(); return; }
+    Game.inventoryOpen = false; Game.shopOpen = false; Game.castleOpen = false; Game.upgradeMenuOpen = false;
     if (Game.state === "play" || Game.state === "pause") Game.togglePause();
   }
 
@@ -82,6 +84,17 @@ function handleKeydown(e) {
     if (k === "arrowleft")  { Game.upgradeIdx = Math.max(0, Game.upgradeIdx - 1); e.preventDefault(); return; }
     if (k === "arrowright") { Game.upgradeIdx = Math.min((Game.upgradeOptions?.length || 1) - 1, Game.upgradeIdx + 1); e.preventDefault(); return; }
     if (k === "e" || k === "enter") { applyUpgrade(Game.upgradeIdx); e.preventDefault(); return; }
+    e.preventDefault(); return;
+  }
+
+  if (Game.castleOpen) {
+    const last = 3;
+    if (k === "arrowleft")  { Game.castleIdx = Math.max(0, (Game.castleIdx || 0) - 1); e.preventDefault(); return; }
+    if (k === "arrowright") { Game.castleIdx = Math.min(last, (Game.castleIdx || 0) + 1); e.preventDefault(); return; }
+    if (k === "arrowup")    { Game.castleIdx = Math.max(0, (Game.castleIdx || 0) - 2); e.preventDefault(); return; }
+    if (k === "arrowdown")  { Game.castleIdx = Math.min(last, (Game.castleIdx || 0) + 2); e.preventDefault(); return; }
+    if (k >= "1" && k <= "4") { Game.castleIdx = Number(k) - 1; e.preventDefault(); return; }
+    if (k === "e" || k === "enter") { buyCastleUpgrade(); e.preventDefault(); return; }
     e.preventDefault(); return;
   }
 
@@ -114,8 +127,9 @@ function handleKeydown(e) {
   }
   if (k === "n" && !Game.inventoryOpen && !Game.shopOpen) { UI.skipToDusk(); e.preventDefault(); return; }
   if (k === "h" && !e.repeat && !Game.inventoryOpen && !Game.shopOpen) toggleMount();
-  if (k === "i") { Game.inventoryOpen = !Game.inventoryOpen; Game.shopOpen = false; }
-  if (k === "b" && !Game.inventoryOpen) tryOpenShop();
+  if (k === "c" && !Game.inventoryOpen && !Game.shopOpen) { if (tryOpenCastleUpgrades()) e.preventDefault(); return; }
+  if (k === "i") { Game.inventoryOpen = !Game.inventoryOpen; Game.shopOpen = false; Game.castleOpen = false; }
+  if (k === "b" && !Game.inventoryOpen) { Game.castleOpen = false; tryOpenShop(); }
   if (Game.shopOpen) handleShopKeys(k, e);
   if (k === "+" || k === "=") { Game.zoom = Math.min(2.5, Game.zoom + 0.15); e.preventDefault(); }
   if (k === "-" || k === "_") { Game.zoom = Math.max(0.35, Game.zoom - 0.15); e.preventDefault(); }
@@ -124,7 +138,7 @@ function handleKeydown(e) {
 
 function handleWheel(e) {
   e.preventDefault();
-  if (Game.shopOpen || Game.inventoryOpen) return; // don't zoom the world behind menus
+  if (Game.shopOpen || Game.inventoryOpen || Game.castleOpen) return; // don't zoom the world behind menus
   Game.zoom = Math.max(0.35, Math.min(2.5, Game.zoom - e.deltaY * 0.0012));
 }
 
@@ -136,6 +150,7 @@ function handleCanvasClick(e) {
   const rect = canvas.getBoundingClientRect();
   const mx = (e.clientX - rect.left) * (W / rect.width);
   const my = (e.clientY - rect.top)  * (H / rect.height);
+  if (Game.castleOpen)   { handleCastleClick(mx, my); return; }
   if (Game.inventoryOpen) { handleInventoryClick(mx, my); return; }
   if (Game.shopOpen)      { handleShopClick(mx, my); return; }
 }
@@ -171,5 +186,20 @@ function handleShopClick(mx, my) {
       else Game.shopIdx = cell.idx;
       return;
     }
+  }
+}
+
+function handleCastleClick(mx, my) {
+  const R = inject('castleRects');
+  if (!R) return;
+  if (hitRect(mx, my, R.buy)) {
+    buyCastleUpgrade();
+    return;
+  }
+  for (const card of R.cards || []) {
+    if (!hitRect(mx, my, card)) continue;
+    if (Game.castleIdx === card.idx) buyCastleUpgrade();
+    else Game.castleIdx = card.idx;
+    return;
   }
 }
