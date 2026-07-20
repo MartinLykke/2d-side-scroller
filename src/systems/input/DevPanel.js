@@ -1,4 +1,4 @@
-import { DEV } from '../../rendering/HUD.js?v=biomeactive1';
+import { DEV } from '../../rendering/HUD.js?v=biomevisual1';
 import { inject } from '../../core/services.js';
 
 export function setupDevPanel() {
@@ -9,16 +9,20 @@ export function setupDevPanel() {
     const el = panel.querySelector(selector);
     if (el) el.addEventListener("click", handler);
   };
+  const bindAmountButtons = (prefix, handler) => {
+    panel.querySelectorAll(`[data-dev^="${prefix}"]`).forEach(el => {
+      const amount = Number(el.dataset.dev.slice(prefix.length));
+      if (Number.isFinite(amount) && amount > 0) {
+        el.addEventListener("click", () => handler(amount));
+      }
+    });
+  };
 
   bind("#dev-close", () => DEV.toggle());
 
   // Gold & Embers
-  bind('[data-dev="coins10"]',     () => DEV.addCoins(10));
-  bind('[data-dev="coins50"]',     () => DEV.addCoins(50));
-  bind('[data-dev="coins1000"]',   () => DEV.give1000Gold());
-  bind('[data-dev="embers10"]',    () => DEV.addEmbers(10));
-  bind('[data-dev="embers50"]',    () => DEV.addEmbers(50));
-  bind('[data-dev="embers500"]',   () => DEV.addEmbers(500));
+  bindAmountButtons("coins", n => DEV.addCoins(n));
+  bindAmountButtons("embers", n => DEV.addEmbers(n));
   bind('[data-dev="resetUpgrades"]', () => DEV.resetUpgrades());
   bind('[data-dev="clearLeaderboard"]', () => DEV.clearLeaderboard());
 

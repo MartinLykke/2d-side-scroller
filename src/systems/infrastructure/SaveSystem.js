@@ -1,7 +1,7 @@
 import { Game, state } from '../../core/state.js';
 import { CFG, FOREST } from '../../config/config.js';
 import { makeUnit } from '../../entities/Unit.js';
-import { spawnVagrant, planNight } from '../world/SpawnSystem.js';
+import { spawnVagrant, planNight, populateBiomeAnimals } from '../world/SpawnSystem.js';
 import { addForestCamp, buildForest } from '../world/ForestSystem.js?v=biomeactive1';
 import { initMineVeins } from '../world/MineSystem.js';
 import { buildStations } from './GameInit.js?v=biomeactive1';
@@ -9,7 +9,7 @@ import { permanentForestCampPlans } from './RoguelikeSystem.js';
 import { autoSpendSkillPoints } from '../economy/SkillSystem.js';
 import { ensureCastleUpgrades, baseMaxHpForLevel } from '../../util/DefenseStats.js';
 
-const SAVE_KEY = "kingdom_embers_save_v1";
+const SAVE_KEY = "ashen_reign_save_v1";
 
 export function saveGame() {
   if (Game.state !== "play") return;
@@ -100,6 +100,8 @@ export function loadGame() {
       });
     }
     buildForest();
+    state.animals.length = 0;
+    populateBiomeAnimals(12, { nearX: Number.isFinite(snap.px) ? snap.px : CFG.baseX });
     const { player, base, walls, forestTrees } = state;
     if (snap.forestTrees) snap.forestTrees.forEach((s, i) => {
       if (!forestTrees[i]) return;

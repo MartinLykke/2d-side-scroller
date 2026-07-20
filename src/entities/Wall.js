@@ -43,44 +43,97 @@ export function wallDeckHeight(w) {
   return Math.max(0, wallHeight(w) - 14);
 }
 
-export function wallPlatformRearX(w) {
+// Shared physical/rendering template for every biome wall. Biomes are free to
+// change materials and decoration, but the usable deck and its access route
+// always come from this geometry so characters cannot climb through scenery.
+export function wallLayout(w, renderedHeight = wallHeight(w)) {
   const d = wallBackDir(w);
-  const x0 = w.x + d * (wallRenderWidth(w) / 2 - 2);
-  return x0 + d * wallPlatformDepth(w);
+  const renderWidth = w.level >= 5 ? 96 : wallRenderWidth(w);
+  const deckHeight = Math.max(0, renderedHeight - 14);
+
+  if (w.level >= 5) {
+    const deckHalf = 57; // matches the 114px two-tier castle walkway
+    const accessX = w.x + d * 42;
+    return {
+      backDir: d,
+      renderWidth,
+      deckHeight,
+      deckFrontX: w.x - d * deckHalf,
+      deckRearX: w.x + d * deckHalf,
+      deckMinX: w.x - deckHalf,
+      deckMaxX: w.x + deckHalf,
+      walkMinX: w.x - deckHalf + 4,
+      walkMaxX: w.x + deckHalf - 4,
+      accessType: "ladder",
+      accessTopX: accessX,
+      accessBottomX: accessX,
+      accessHalfWidth: 15,
+    };
+  }
+
+  const depth = wallPlatformDepth(w);
+  const deckFrontX = w.x + d * (renderWidth / 2 - 2);
+  const deckRearX = deckFrontX + d * depth;
+  const stairs = deckHeight <= 56;
+  const accessTopX = stairs ? deckRearX : deckRearX - d * 5;
+  const accessBottomX = stairs ? deckRearX + d * deckHeight : accessTopX;
+  const bodyFrontX = w.x - d * (renderWidth / 2 + 4);
+  return {
+    backDir: d,
+    renderWidth,
+    depth,
+    deckHeight,
+    deckFrontX,
+    deckRearX,
+    deckMinX: Math.min(deckFrontX, deckRearX),
+    deckMaxX: Math.max(deckFrontX, deckRearX),
+    walkMinX: Math.min(bodyFrontX, deckRearX) + 3,
+    walkMaxX: Math.max(bodyFrontX, deckRearX) - 3,
+    accessType: stairs ? "stairs" : "ladder",
+    accessTopX,
+    accessBottomX,
+    accessHalfWidth: stairs ? 14 : 15,
+  };
+}
+
+export function wallPlatformRearX(w) {
+  return wallLayout(w).deckRearX;
 }
 
 export function wallClimbAnchorX(w) {
-  const d = wallBackDir(w);
-  if (w.level >= 5) return w.x + d * 42;
+  return wallLayout(w).accessBottomX;
+}
 
-  const deckH = wallDeckHeight(w);
-  const rearX = wallPlatformRearX(w);
-  if (deckH <= 56) return rearX + d * Math.min(30, deckH * 0.55);
-  return rearX - d * 5;
+export function wallClimbTopX(w) {
+  return wallLayout(w).accessTopX;
+}
+
+// X coordinate along the visible access route. Stairs travel diagonally from
+// their foot to the deck; ladders remain vertical.
+export function wallClimbX(w, t) {
+  const layout = wallLayout(w);
+  const p = Math.max(0, Math.min(1, t || 0));
+  return layout.accessBottomX + (layout.accessTopX - layout.accessBottomX) * p;
+}
+
+export function nearWallClimbBottom(w, x) {
+  if (!wallReady(w)) return false;
+  const layout = wallLayout(w);
+  return Math.abs(x - layout.accessBottomX) <= layout.accessHalfWidth;
+}
+
+export function nearWallClimbTop(w, x) {
+  if (!wallReady(w)) return false;
+  const layout = wallLayout(w);
+  return Math.abs(x - layout.accessTopX) <= layout.accessHalfWidth;
 }
 
 export function nearWallClimbAnchor(w, x) {
-  if (!wallReady(w)) return false;
-  const deckH = wallDeckHeight(w);
-  const range = w.level >= 5 ? 24 : deckH <= 56 ? 30 : 24;
-  return Math.abs(x - wallClimbAnchorX(w)) <= range;
+  return nearWallClimbBottom(w, x) || nearWallClimbTop(w, x);
 }
 
 export function nearWallClimbAccess(w, x) {
-  if (!wallReady(w)) return false;
-  if (nearWallClimbAnchor(w, x)) return true;
-  if (overWallPlatform(w, x)) return true;
-
-  const deckH = wallDeckHeight(w);
-  if (w.level < 5 && deckH <= 56) {
-    const d = wallBackDir(w);
-    const rearX = wallPlatformRearX(w);
-    const stairEnd = rearX + d * deckH;
-    const lo = Math.min(rearX, stairEnd) - 10;
-    const hi = Math.max(rearX, stairEnd) + 10;
-    return x >= lo && x <= hi;
-  }
-  return false;
+  return nearWallClimbAnchor(w, x);
 }
 
 export function entityWallLift(entity) {
@@ -102,8 +155,6 @@ export function wallStandX(w, slot) {
 
 // True when x sits over the wall body or its rear platform.
 export function overWallPlatform(w, x) {
-  if (w.level >= 5) return Math.abs(x - w.x) < 70;
-  const half = wallRenderWidth(w) / 2;
-  const rel = (x - w.x) * wallBackDir(w); // positive = toward base
-  return rel > -half - 6 && rel < half + wallPlatformDepth(w) + 10;
+  const layout = wallLayout(w);
+  return x >= layout.walkMinX && x <= layout.walkMaxX;
 }

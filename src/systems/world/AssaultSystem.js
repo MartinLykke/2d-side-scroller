@@ -3,7 +3,7 @@ import { clamp, clampCameraTarget, dist, rand, randInt } from '../../util/math.j
 import { groundY, W } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnEnemy, spawnParticles, spawnGoldReward, floaty, planNight } from './SpawnSystem.js?v=biomeactive1';
+import { spawnEnemy, spawnParticles, spawnGoldReward, floaty, planNight, biomeWaveEnemyType, populateBiomeAnimals } from './SpawnSystem.js?v=biomeactive1';
 import { shootArrow } from '../combat/Combat.js?v=biomeactive1';
 import { moveToward, nearestEnemy } from '../ai/AIHelpers.js?v=biomeactive1';
 import { buildForest } from './ForestSystem.js?v=biomeactive1';
@@ -18,6 +18,18 @@ import { addXP } from '../economy/UpgradeSystem.js?v=biomeweapons1';
 const GUARD_MELEE_STAND = 46;    // guards hammer the pillars up close
 const ARCHER_SIEGE_STAND = 300;  // archers volley from a stand-off line
 const ARCHER_SIEGE_RANGE = 540;
+const PORTAL_HIT_COLORS = {
+  forest: ["#caa46a", "#ff8a3d"],
+  frozen: ["#d9f4ff", "#82dfff"],
+  desert: ["#e8c080", "#d89a45"],
+  swamp: ["#8ba85a", "#b8ff7a"],
+  volcano: ["#6b5a45", "#ff6a20"],
+  corrupted: ["#a56bff", "#d7a8ff"],
+};
+
+function portalHitColors() {
+  return PORTAL_HIT_COLORS[activeBiomeId()] || PORTAL_HIT_COLORS.forest;
+}
 
 function assaultFighters() {
   return state.units.filter(u =>
@@ -99,6 +111,12 @@ export function startAssault() {
 
 function defenderType() {
   const d = Game.day, r = Math.random();
+  // Portal guardians belong to the land they guard: draw from the active
+  // biome's roster (same pool the night waves use) so a forest portal spews
+  // forest fiends, a frozen portal spews frost-kin, and so on.
+  const biomeType = biomeWaveEnemyType(d, r);
+  if (biomeType) return biomeType;
+  // Fallback for any biome without a defined pool: the legacy ember horde.
   const brute = Math.min(0.3, 0.06 + d * 0.02);
   const priest = d >= 3 ? Math.min(0.22, 0.04 + d * 0.015) : 0;
   const flyer = Math.min(0.35, 0.08 + d * 0.02);
@@ -127,8 +145,9 @@ export function damagePortal(portal, dmg) {
   if (portal.destroyed || portal.hp === undefined) return;
   portal.hp -= dmg;
   portal.flash = 0.15;
-  spawnParticles(portal.x + rand(-40, 40), groundY - rand(20, 120), 3, "#caa46a", 40, 50);
-  spawnParticles(portal.x + rand(-30, 30), groundY - rand(30, 110), 2, "#ff8a3d", 30, 60);
+  const [stone, glow] = portalHitColors();
+  spawnParticles(portal.x + rand(-40, 40), groundY - rand(20, 120), 3, stone, 40, 50);
+  spawnParticles(portal.x + rand(-30, 30), groundY - rand(30, 110), 2, glow, 30, 60);
 }
 
 function destroyPortal(a) {
@@ -322,6 +341,7 @@ export function performPhaseShift() {
     }
 
     buildForest();
+    populateBiomeAnimals(12, { nearX: CFG.baseX });
     clearTreeCache();
     planNight();
 

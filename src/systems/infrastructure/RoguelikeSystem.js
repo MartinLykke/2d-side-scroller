@@ -8,7 +8,7 @@ import { makeUnit } from '../../entities/Unit.js';
 import { addSkillPoints } from '../economy/SkillSystem.js';
 import { baseMaxHpForLevel, wallMaxHpForLevel } from '../../util/DefenseStats.js';
 
-const META_KEY = "kingdom_embers_meta_v1";
+const META_KEY = "ashen_reign_meta_v1";
 const LEADERBOARD_MAX_ENTRIES = 5;
 const HUB = {
   width: 5920,

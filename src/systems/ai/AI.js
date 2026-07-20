@@ -18,7 +18,8 @@ import { archerAI as archerRoleAI } from './ArcherAI.js?v=biomeactive1';
 import { builderAI as builderRoleAI } from './BuilderAI.js?v=biomeactive1';
 import { farmerAI as farmerRoleAI } from './FarmerAI.js?v=biomeactive1';
 import { guardAI as guardRoleAI } from './GuardAI.js?v=biomeactive1';
-import { assaultUnitAI } from '../world/AssaultSystem.js?v=biomeactive1';
+import { assaultUnitAI } from '../world/AssaultSystem.js?v=biomevisual1';
+import { animalDef } from '../../config/animals.js';
 
 function hasSkill(id) { return state.archerSkills.includes(id); }
 
@@ -1290,6 +1291,23 @@ function rallyUnitHome(u, dt) {
   return true;
 }
 
+function finishUnitMotion(u, dt, frameStartX, actionStartX, animRate) {
+  if (u.role === "archer" && u.shootState) {
+    u.x = actionStartX;
+    u.vx = 0;
+    u.moving = false;
+    u.moveSpeed = 0;
+    return;
+  }
+
+  u.moving = Math.abs(u.x - frameStartX) > 0.04;
+  u.moveSpeed = dt > 0 ? Math.abs(u.x - frameStartX) / dt : 0;
+  if (u.moving) {
+    const rate = typeof animRate === "function" ? animRate(u.moveSpeed) : animRate;
+    u.anim += dt * rate;
+  }
+}
+
 export function updateUnits(dt) {
   const { units } = state;
   if (state.arrowRainCd > 0) state.arrowRainCd = Math.max(0, state.arrowRainCd - dt);
@@ -1353,6 +1371,7 @@ export function updateUnits(dt) {
     if (u.hp <= 0) { startUnitDeath(u); continue; }
     if (u.transform > 0) { u.transform -= dt; if (u.transform < 0) u.transform = 0; }
     if (u.knock) { u.x = clamp(u.x + u.knock * dt, 120, CFG.worldWidth - 120); u.knock *= 0.82; if (Math.abs(u.knock) < 6) u.knock = 0; }
+    const actionStartX = u.x;
     if ((u.stunned || 0) > 0 || (u.possessed || 0) > 0) {
       u.vx = 0;
       u.shootState = null;
@@ -1366,25 +1385,19 @@ export function updateUnits(dt) {
       continue;
     }
     if (rallyUnitHome(u, dt)) {
-      u.moving = Math.abs(u.x - px0) > 0.04;
-      u.moveSpeed = dt > 0 ? Math.abs(u.x - px0) / dt : 0;
-      if (u.moving) u.anim += dt * 12;
+      finishUnitMotion(u, dt, px0, actionStartX, 12);
       continue;
     }
     // Portal assault: marching/sieging fighters follow the assault plan; when
     // it returns false a foe is in reach and the normal role AI takes the fight.
     if (state.assault && u.assault && (u.role === "archer" || u.role === "guard")
         && assaultUnitAI(u, dt)) {
-      u.moving = Math.abs(u.x - px0) > 0.04;
-      u.moveSpeed = dt > 0 ? Math.abs(u.x - px0) / dt : 0;
-      if (u.moving) u.anim += dt * (u.moveSpeed > 72 ? 11 : 8);
+      finishUnitMotion(u, dt, px0, actionStartX, speed => speed > 72 ? 11 : 8);
       continue;
     }
     const handler = AI_HANDLERS[u.role];
     if (handler) handler(u, dt);
-    u.moving = Math.abs(u.x - px0) > 0.04;
-    u.moveSpeed = dt > 0 ? Math.abs(u.x - px0) / dt : 0;
-    if (u.moving) u.anim += dt * (u.moveSpeed > 72 ? 11 : 8);
+    finishUnitMotion(u, dt, px0, actionStartX, speed => speed > 72 ? 11 : 8);
   }
 }
 
@@ -1624,6 +1637,243 @@ export function nearestAnimal(x, range) {
     if (d < bd) { bd = d; best = a; }
   }
   return best;
+}
+
+function animalThreat(a, radius = 150) {
+  let threat = null, td = radius;
+  for (const u of state.units) {
+    if (u.role !== "archer") continue;
+    const d = dist(u.x, a.x);
+    if (d < td) { td = d; threat = u; }
+  }
+  if (state.player) {
+    const d = dist(state.player.x, a.x);
+    if (d < td) { td = d; threat = state.player; }
+  }
+  return threat;
+}
+
+function setAnimalFlee(a, threat, seconds = 1.4) {
+  a.state = "flee";
+  a.fleeT = Math.max(a.fleeT || 0, seconds);
+  a.dir = Math.sign(a.x - threat.x) || a.dir || 1;
+  a.eatDown = 0;
+}
+
+function updateForagePose(a, dt, opts = {}) {
+  a.headT -= dt;
+  if (a.headT <= 0) {
+    a.headUp = !a.headUp;
+    a.headT = a.headUp ? rand(0.9, 2.1) : rand(1.8, 4.2);
+    if (opts.scan && a.headUp && Math.random() < 0.6) a.scanT = rand(0.7, 1.5);
+    if (opts.ears && Math.random() < 0.55) a.earFlick = 0.35;
+    if (opts.wing && a.headUp && Math.random() < 0.35) a.wingStretch = 0.9;
+  }
+  const grazing = (a.state === "graze" || a.state === "swim") && !a.headUp;
+  a.eatDown = clamp(a.eatDown + (grazing ? dt * (opts.eatRate || 2.2) : -dt * 3), 0, 1);
+  if (a.scanT > 0) a.scanT -= dt;
+  a.scan = clamp((a.scan || 0) + (a.scanT > 0 ? dt * 5 : -dt * 5), 0, 1);
+  if (a.earFlick > 0) a.earFlick -= dt;
+  if (a.wingStretch > 0) a.wingStretch -= dt;
+}
+
+function animalStepFactor(a, fleeing) {
+  const family = animalDef(a.type).family;
+  const g = a.anim;
+  if (family === "rabbit") return 0.3 + Math.abs(Math.sin(g * 0.7));
+  if (family === "frog") return 0.18 + Math.pow(Math.abs(Math.sin(g * 0.72)), 2) * 1.15;
+  if (family === "snake") return 0.62 + Math.abs(Math.sin(g * 0.95)) * 0.38;
+  if (family === "scorpion") return 0.55 + Math.abs(Math.sin(g * 1.35)) * 0.55;
+  if (family === "lizard") return 0.72 + Math.abs(Math.sin(g * 1.15)) * 0.48;
+  if (family === "crocodile") return fleeing ? 0.35 + Math.abs(Math.sin(g * 0.65)) : 0.5;
+  if (family === "boar") return fleeing ? 0.75 + Math.abs(Math.sin(g * 0.8)) * 0.35 : 1;
+  return 1;
+}
+
+function updateGenericGroundAnimal(a, dt) {
+  const def = animalDef(a.type);
+  const family = def.family;
+  const fleeing = a.state === "flee";
+  const hopFamily = family === "rabbit" || family === "frog" || family === "lizard" || family === "scorpion" || family === "snake";
+  a.anim += dt * (fleeing ? (hopFamily ? 13 : 10) : family === "crocodile" ? 3.2 : hopFamily ? 7.5 : 6);
+
+  const threat = animalThreat(a, family === "crocodile" ? 130 : 150);
+  if (threat) setAnimalFlee(a, threat, family === "crocodile" ? 1.9 : 1.4);
+
+  if (a.state === "swim") {
+    const pond = pondAt(a.x);
+    if (!pond) {
+      a.state = "walk";
+      a.stateT = rand(1.5, 3);
+    } else {
+      const swimSpeed = family === "crocodile" ? 13 : family === "frog" ? 18 : 14;
+      a.x += a.dir * swimSpeed * dt * (0.65 + Math.abs(Math.sin(a.anim * 0.6)) * 0.35);
+      if (Math.abs(a.x - pond.x) > pond.hw - 30) a.dir = Math.sign(pond.x - a.x) || 1;
+      a.stateT -= dt;
+      if (a.stateT <= 0) {
+        a.stateT = rand(5, 12);
+        if (Math.random() < 0.45) a.dir *= -1;
+        if (Math.random() < (family === "frog" ? 0.35 : 0.18)) {
+          a.state = "walk";
+          a.stateT = rand(1.4, 3.2);
+          a.dir = pick([-1, 1]);
+        }
+      }
+      updateForagePose(a, dt, { scan: family === "frog", eatRate: family === "crocodile" ? 1.3 : 2 });
+      a.x = clamp(a.x, 800, CFG.worldWidth - 800);
+      return;
+    }
+  }
+
+  if (a.state === "flee") {
+    a.fleeT -= dt;
+    a.x += a.dir * def.fleeSpeed * dt * animalStepFactor(a, true);
+    if (family === "frog" && Math.random() < dt * 0.8) spawnParticles(a.x - a.dir * 6, groundY - 5, 1, "#7fb45a", 18, 24);
+    if (family === "lizard" && a.type === "lavaLizard" && Math.random() < dt * 2.4) spawnParticles(a.x - a.dir * 9, groundY - 5, 1, "#ff6a24", 18, 18);
+    if (a.fleeT <= 0) { a.state = "graze"; a.stateT = rand(2, 4); }
+  } else if (a.state === "walk") {
+    a.stateT -= dt;
+    a.x += a.dir * def.walkSpeed * dt * animalStepFactor(a, false);
+    if (def.swims && pondAt(a.x) && Math.random() < (family === "crocodile" ? 0.55 : 0.3)) {
+      a.state = "swim";
+      a.stateT = rand(7, 16);
+      spawnParticles(a.x, groundY - 4, 4, family === "crocodile" ? "#6d8a42" : "#8abf60", 35, 40);
+    } else if (a.stateT <= 0) {
+      a.state = "graze";
+      a.stateT = rand(3, 6);
+    }
+  } else {
+    a.stateT -= dt;
+    if (a.stateT <= 0) {
+      const home = def.water ? nearestPond(a.x) : null;
+      if (home && Math.abs(home.x - a.x) < 620 && Math.random() < 0.35) {
+        a.state = "walk";
+        a.stateT = rand(4, 8);
+        a.dir = Math.sign(home.x - a.x) || 1;
+      } else {
+        a.state = "walk";
+        a.stateT = rand(1.5, 3.5);
+        a.dir = pick([-1, 1]);
+      }
+    }
+  }
+
+  updateForagePose(a, dt, {
+    scan: family === "rabbit" || family === "frog" || family === "lizard" || family === "snake",
+    ears: family === "deer" || family === "canine" || family === "boar",
+    eatRate: family === "canine" || family === "snake" || family === "scorpion" ? 1.4 : 2.2,
+  });
+
+  a.x = clamp(a.x, 800, CFG.worldWidth - 800);
+}
+
+function birdTakeOff(a, targetX = null) {
+  const def = animalDef(a.type);
+  const dir = targetX == null ? pick([-1, 1]) : Math.sign(targetX - a.x) || a.dir || 1;
+  a.state = "fly";
+  a.flyTargetX = clamp(targetX ?? a.x + dir * rand(650, 1300), 850, CFG.worldWidth - 850);
+  const high = a.type === "eagle" ? [250, 360] : a.type === "magmaBird" ? [205, 310] : [165, 275];
+  a.cruiseFy = -rand(high[0], high[1]);
+  a.fy = Math.min(a.fy || 0, -24);
+  a.dir = Math.sign(a.flyTargetX - a.x) || dir;
+  a.eatDown = 0;
+  a.wingStretch = 0;
+  spawnParticles(a.x, groundY - 10, def.family === "bird" ? 5 : 4, def.blood || "#c9c2b4", 36, 58);
+}
+
+function birdFlightTarget(a, awayDir = 0) {
+  const def = animalDef(a.type);
+  const ponds = state.ponds || [];
+  if (def.water && ponds.length && Math.random() < 0.62) {
+    const options = ponds.filter(p => Math.abs(p.x - a.x) > 320);
+    if (options.length) {
+      const p = pick(options);
+      return p.x + rand(-p.hw * 0.5, p.hw * 0.5);
+    }
+  }
+  const dir = awayDir || pick([-1, 1]);
+  return a.x + dir * rand(650, 1350);
+}
+
+function updateFlyingAnimal(a, dt) {
+  const def = animalDef(a.type);
+  const flying = a.state === "fly";
+  const swimming = a.state === "swim";
+  a.anim += dt * (flying ? 12.5 : swimming ? 3.5 : 6);
+
+  if (flying) {
+    const remaining = Math.abs(a.flyTargetX - a.x);
+    const targetFy = remaining < 430 ? 0 : a.cruiseFy;
+    a.fy += (targetFy - a.fy) * Math.min(1, dt * 2.15);
+    a.dir = Math.sign(a.flyTargetX - a.x) || a.dir;
+    a.x += a.dir * def.fleeSpeed * dt;
+    if (a.type === "magmaBird" && Math.random() < dt * 2.8) spawnParticles(a.x - a.dir * 10, groundY + a.fy + 4, 1, "#ff6a24", 18, 16);
+    if (a.type === "possessedRaven" && Math.random() < dt * 2.2) spawnParticles(a.x - a.dir * 8, groundY + a.fy + 4, 1, "#8a46d6", 16, 12);
+    if (remaining < 40 && a.fy > -16) {
+      a.fy = 0;
+      if (def.swims && pondAt(a.x)) {
+        a.state = "swim";
+        a.stateT = rand(7, 16);
+        spawnParticles(a.x, groundY - 4, 5, "#bcd8de", 40, 50);
+      } else {
+        a.state = "graze";
+        a.stateT = rand(2, 5);
+      }
+    }
+    a.x = clamp(a.x, 800, CFG.worldWidth - 800);
+    return;
+  }
+
+  const threat = animalThreat(a, 170);
+  if (threat) {
+    if (swimming) spawnParticles(a.x, groundY - 4, 5, "#bcd8de", 50, 60);
+    birdTakeOff(a, birdFlightTarget(a, Math.sign(a.x - threat.x) || 1));
+    return;
+  }
+
+  if (swimming) {
+    const pond = pondAt(a.x);
+    if (!pond) { a.state = "walk"; a.stateT = rand(1.5, 3); return; }
+    a.x += a.dir * 14 * dt * (0.6 + Math.abs(Math.sin(a.anim * 0.7)) * 0.4);
+    if (Math.abs(a.x - pond.x) > pond.hw - 30) a.dir = Math.sign(pond.x - a.x) || 1;
+    a.stateT -= dt;
+    if (a.stateT <= 0) {
+      if (Math.random() < 0.18) { birdTakeOff(a, birdFlightTarget(a)); return; }
+      a.stateT = rand(6, 14);
+      if (Math.random() < 0.5) a.dir *= -1;
+    }
+  } else if (a.state === "walk") {
+    a.stateT -= dt;
+    a.x += a.dir * (def.walkSpeed || 12) * dt * (0.55 + Math.abs(Math.sin(a.anim * 0.55)) * 0.45);
+    if (def.swims && pondAt(a.x)) {
+      a.state = "swim";
+      a.stateT = rand(7, 16);
+      spawnParticles(a.x, groundY - 4, 4, "#bcd8de", 35, 40);
+    } else if (a.stateT <= 0) {
+      a.state = "graze";
+      a.stateT = rand(2.5, 5.5);
+    }
+  } else {
+    a.stateT -= dt;
+    if (a.stateT <= 0) {
+      const home = def.water ? nearestPond(a.x) : null;
+      if (home && Math.abs(home.x - a.x) < 540 && Math.random() < 0.55) {
+        a.state = "walk";
+        a.stateT = rand(4, 8);
+        a.dir = Math.sign(home.x - a.x) || 1;
+      } else if (Math.random() < 0.45) {
+        birdTakeOff(a, birdFlightTarget(a));
+        return;
+      } else {
+        a.state = "walk";
+        a.stateT = rand(1.4, 3.2);
+        a.dir = pick([-1, 1]);
+      }
+    }
+  }
+
+  updateForagePose(a, dt, { wing: true, eatRate: def.family === "moorhen" ? 2.1 : 1.35 });
+  a.x = clamp(a.x, 800, CFG.worldWidth - 800);
 }
 
 // Bear: territorial predator. Chases and mauls any friendly character
@@ -2000,6 +2250,10 @@ export function updateAnimals(dt) {
 
     if (a.type === "bear") { updateBear(a, dt); continue; }
     if (a.type === "duck") { updateDuck(a, dt); continue; }
+    const def = animalDef(a.type);
+    const family = def.family;
+    if (def.canFly) { updateFlyingAnimal(a, dt); continue; }
+    if (family !== "deer" && family !== "rabbit") { updateGenericGroundAnimal(a, dt); continue; }
 
     const fleeing = a.state === "flee";
     a.anim += dt * (fleeing ? 10 : 6);
@@ -2019,17 +2273,17 @@ export function updateAnimals(dt) {
     if (a.state === "flee") {
       a.fleeT -= dt;
       // Deliberately slow enough that archers can pick them off
-      if (a.type === "deer") {
-        a.x += a.dir * 82 * dt;
+      if (family === "deer") {
+        a.x += a.dir * def.fleeSpeed * dt;
       } else {
         // rabbit: erratic hopping — surges and near-stops
-        a.x += a.dir * 68 * dt * (0.35 + Math.abs(Math.sin(a.anim * 0.9)));
+        a.x += a.dir * def.fleeSpeed * dt * (0.35 + Math.abs(Math.sin(a.anim * 0.9)));
       }
       if (a.fleeT <= 0) { a.state = "graze"; a.stateT = rand(2, 4); }
     } else if (a.state === "walk") {
       a.stateT -= dt;
-      const hopPace = a.type === "rabbit" ? (0.3 + Math.abs(Math.sin(a.anim * 0.7))) : 1;
-      a.x += a.dir * (a.type === "deer" ? 22 : 17) * dt * hopPace;
+      const hopPace = family === "rabbit" ? (0.3 + Math.abs(Math.sin(a.anim * 0.7))) : 1;
+      a.x += a.dir * def.walkSpeed * dt * hopPace;
       if (a.stateT <= 0) { a.state = "graze"; a.stateT = rand(3, 6); }
     } else { // graze
       a.stateT -= dt;
@@ -2041,8 +2295,8 @@ export function updateAnimals(dt) {
     if (a.headT <= 0) {
       a.headUp = !a.headUp;
       a.headT = a.headUp ? rand(1, 2.2) : rand(2, 4.5);
-      if (a.type === "rabbit" && a.headUp && Math.random() < 0.6) a.scanT = rand(0.8, 1.6); // stand up and scan
-      if (a.type === "deer" && Math.random() < 0.5) a.earFlick = 0.35;
+      if (family === "rabbit" && a.headUp && Math.random() < 0.6) a.scanT = rand(0.8, 1.6); // stand up and scan
+      if (family === "deer" && Math.random() < 0.5) a.earFlick = 0.35;
     }
     const grazing = a.state === "graze" && !a.headUp;
     a.eatDown = clamp(a.eatDown + (grazing ? dt * 2.2 : -dt * 3), 0, 1);

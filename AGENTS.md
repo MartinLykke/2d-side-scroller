@@ -30,7 +30,7 @@ The `DEV` object is defined in `src/rendering/HUD.js` and exposed on `window`.
 
 ## Game overview
 
-**Kingdom: Crown of Embers** — a roguelike tower defense where the player defends a base from nightly enemy waves, recruits units, explores locations, and earns permanent meta-progression (embers) across runs.
+**Ashen Reign** — a roguelike tower defense where the player defends a base from nightly enemy waves, recruits units, explores locations, and earns permanent meta-progression (embers) across runs.
 
 ### Core loop
 
@@ -178,11 +178,11 @@ On death, the player enters a hub and earns **embers** based on run performance 
 - Starter bonuses: +vagrants, +free bow, +skill points, +starting gold burst
 - Run reward scaling: +ember multiplier
 
-Meta data persisted in localStorage (`kingdom_embers_meta_v1`). Applied at game start via `applyPermanentUpgrades()`.
+Meta data persisted in localStorage (`ashen_reign_meta_v1`). Applied at game start via `applyPermanentUpgrades()`.
 
 ## Save system
 
-Auto-saves every 5 seconds to localStorage (`kingdom_embers_save_v1`). Saves full game state: clock, player, base, walls, buildings, units, vagrants, locations, forest trees, farm, skill points. Continue button on start screen if save exists.
+Auto-saves every 5 seconds to localStorage (`ashen_reign_save_v1`). Saves full game state: clock, player, base, walls, buildings, units, vagrants, locations, forest trees, farm, skill points. Continue button on start screen if save exists.
 
 ## Controls
 

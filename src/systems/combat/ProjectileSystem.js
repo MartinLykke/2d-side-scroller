@@ -15,6 +15,7 @@ import { damagePlayer } from './PlayerCombat.js?v=biomeactive1';
 import { chainLightning } from './SpellSystem.js?v=biomeactive1';
 import { addSkillPoints } from '../economy/SkillSystem.js';
 import { playerMountLift } from '../economy/MountSystem.js';
+import { animalDef } from '../../config/animals.js';
 
 function arrowTrail(ar) {
   if (ar.enemyFireball) {
@@ -129,12 +130,13 @@ function stickArrowInEnemy(e, ar, enemyDrawY) {
 function stickArrowInAnimal(a, ar) {
   if (!a.stuckArrows) a.stuckArrows = [];
   if (a.stuckArrows.length >= 5) a.stuckArrows.shift();
+  const def = animalDef(a.type);
   const airborne = (a.fy || 0) < -10; // duck hit mid-flight: arrow rides the body down
-  const stickSpan = a.type === "bear" ? 24 : 12;
+  const stickSpan = def.stuckSpan || (a.type === "bear" ? 24 : 12);
   a.stuckArrows.push({
     x: clamp(ar.x - a.x, -stickSpan, stickSpan),
     rel: airborne,
-    y: airborne ? -10 : groundY - (a.type === "bear" ? 36 : 14),
+    y: airborne ? -10 : groundY - Math.max(12, (def.hitHeight || 36) * 0.58),
     a: Math.atan2(ar.vy, ar.vx),
     weaponId: ar.weaponId || null,
     upgradeCol: ar.upgradeCol || null,
@@ -667,9 +669,11 @@ export function updateArrows(dt) {
 
     if (!hit && ar.hitKind === "enemy") {
       for (const a of animals) {
+        const def = animalDef(a.type);
         const airborne = (a.fy || 0) < -10;
-        const inY = airborne ? Math.abs(ar.y - (groundY + a.fy)) < 24 : ar.y > groundY - (a.type === "bear" ? 62 : 36);
-        if (a.alive && !a.dying && dist(ar.x, a.x) < (a.type === "bear" ? 34 : 16) && inY) {
+        const hitHeight = def.hitHeight || (a.type === "bear" ? 62 : 36);
+        const inY = airborne ? Math.abs(ar.y - (groundY + a.fy)) < Math.max(22, hitHeight * 0.82) : ar.y > groundY - hitHeight;
+        if (a.alive && !a.dying && dist(ar.x, a.x) < (def.hitRadius || (a.type === "bear" ? 34 : 16)) && inY) {
           stickArrowInAnimal(a, ar);
           if (a.type === "bear") {
             // Bears are tough: they take arrow damage instead of dying outright
@@ -678,8 +682,8 @@ export function updateArrows(dt) {
             if (a.hp > 0) { hit = true; break; }
           }
           a.dying = true; a.deathT = 0;
-          spawnParticles(a.x, groundY + (a.fy || 0) - 20, 8, airborne ? "#c9c2b4" : "#7a4a2a");
-          const reward = a.type === "bear" ? 8 : a.type === "deer" ? 3 : a.type === "duck" ? 2 : 1;
+          spawnParticles(a.x, groundY + (a.fy || 0) - 20, 8, airborne ? "#c9c2b4" : (def.blood || "#7a4a2a"));
+          const reward = def.reward || 1;
           const actual = spawnGoldReward(a.x, reward, "hunt", { spreadX: 15, fromY: groundY - 20, vx: 50, vyMin: 120, vyMax: 220 });
           if (actual > 0) floaty(a.x, "+" + actual + "🪙", "#f2c14e");
           hit = true; break;

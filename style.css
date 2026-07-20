@@ -240,17 +240,17 @@ kbd {
 /* ---------- Dev Tools Panel ---------- */
 #dev-panel {
   position: fixed;
-  top: 56px;
-  right: 12px;
-  width: min(380px, calc(100vw - 24px));
-  max-height: calc(100vh - 72px);
+  top: 44px;
+  right: 8px;
+  width: min(340px, calc(100vw - 16px));
+  max-height: calc(100vh - 56px);
   overflow-y: auto;
   background: rgba(10, 8, 20, 0.94);
   border: 1px solid rgba(155, 208, 90, 0.4);
   border-radius: 8px;
-  padding: 0 0 10px;
+  padding: 0 0 6px;
   z-index: 20;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--parchment);
   box-shadow: 0 16px 44px rgba(0,0,0,0.58);
   backdrop-filter: blur(8px);
@@ -265,43 +265,43 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 6px;
+  padding: 6px 8px;
   background: linear-gradient(180deg, rgba(18, 24, 24, 0.98), rgba(10, 8, 20, 0.94));
   border-bottom: 1px solid rgba(155,208,90,0.25);
 }
 .dev-title {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
+  align-items: baseline;
+  gap: 6px;
   min-width: 0;
 }
 .dev-title strong {
   color: #dff5b0;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.05;
   letter-spacing: 0;
 }
 .dev-eyebrow {
   color: #8f8470;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
-  letter-spacing: 1.6px;
+  letter-spacing: 1px;
   text-transform: uppercase;
 }
 .dev-header-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 .dev-header-actions kbd {
-  padding: 2px 7px;
-  font-size: 11px;
+  padding: 1px 6px;
+  font-size: 10px;
   border-bottom-width: 1px;
 }
 .dev-fps {
   flex: 0 0 auto;
-  padding: 4px 7px;
+  padding: 3px 6px;
   border: 1px solid rgba(155,208,90,0.35);
   border-radius: 6px;
   background: rgba(155,208,90,0.12);
@@ -311,14 +311,14 @@ kbd {
   white-space: nowrap;
 }
 .dev-close {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border: 1px solid rgba(255,255,255,0.14);
-  border-radius: 6px;
+  border-radius: 5px;
   background: rgba(255,255,255,0.06);
   color: #cdbfa3;
   cursor: pointer;
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1;
 }
 .dev-close:hover {
@@ -327,56 +327,57 @@ kbd {
 }
 .dev-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-  margin: 10px 10px 8px;
-  padding: 8px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  margin: 6px 6px 5px;
+  padding: 5px;
   background: rgba(0,0,0,0.32);
   border: 1px solid rgba(155,208,90,0.16);
-  border-radius: 8px;
+  border-radius: 6px;
 }
 .dev-stat {
   min-width: 0;
-  padding: 5px 6px;
-  border-radius: 6px;
+  padding: 3px 4px;
+  border-radius: 5px;
   background: rgba(255,255,255,0.045);
 }
 .dev-stat dt {
   color: #8f8470;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
-  letter-spacing: 0.7px;
+  letter-spacing: 0.5px;
   line-height: 1;
   text-transform: uppercase;
 }
 .dev-stat dd {
-  margin-top: 4px;
+  margin-top: 2px;
   overflow: hidden;
   color: #dff5b0;
-  font: 700 12px/1.15 "Courier New", monospace;
+  font: 700 10px/1.15 "Courier New", monospace;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .dev-quickbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
   align-items: stretch;
-  margin: 0 10px 10px;
+  margin: 0 6px 6px;
 }
 .dev-speed {
   grid-column: 1 / -1;
   display: flex;
-  gap: 4px;
+  gap: 3px;
 }
 .dev-speed .dev-btn {
-  min-width: 42px;
+  min-width: 0;
+  flex: 1 1 0;
 }
 .dev-section {
-  margin: 0 10px 8px;
+  margin: 0 6px 5px;
   overflow: hidden;
   border: 1px solid rgba(255,255,255,0.09);
-  border-radius: 8px;
+  border-radius: 6px;
   background: rgba(255,255,255,0.035);
 }
 .dev-section[open] {
@@ -386,9 +387,9 @@ kbd {
 .dev-section > summary {
   display: flex;
   align-items: center;
-  gap: 9px;
-  min-height: 40px;
-  padding: 8px 10px;
+  gap: 6px;
+  min-height: 28px;
+  padding: 5px 7px;
   cursor: pointer;
   list-style: none;
 }
@@ -396,15 +397,15 @@ kbd {
 .dev-section > summary::before {
   content: "+";
   flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(155,208,90,0.24);
-  border-radius: 5px;
+  border-radius: 4px;
   color: #9bd05a;
-  font: 700 14px/1 "Courier New", monospace;
+  font: 700 12px/1 "Courier New", monospace;
 }
 .dev-section[open] > summary::before { content: "-"; }
 .dev-section > summary span {
@@ -415,12 +416,12 @@ kbd {
 .dev-section > summary small {
   margin-left: auto;
   color: #8f8470;
-  font-size: 10px;
+  font-size: 9px;
   line-height: 1.2;
   text-align: right;
 }
 .dev-section-body {
-  padding: 0 10px 10px;
+  padding: 6px;
   border-top: 1px solid rgba(255,255,255,0.07);
 }
 .dev-group {
@@ -431,18 +432,40 @@ kbd {
   border-top: 1px solid rgba(255,255,255,0.06);
 }
 .dev-label {
-  font-size: 10px;
+  font-size: 9px;
   text-transform: uppercase;
-  letter-spacing: 1.2px;
+  letter-spacing: 1px;
   color: #8f8470;
-  margin-bottom: 5px;
+  margin: 5px 0 4px;
+}
+.dev-button-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(62px, 1fr));
+  gap: 4px;
+  align-items: stretch;
+}
+.dev-button-grid .dev-subsection {
+  grid-column: 1 / -1;
+}
+.dev-divider {
+  grid-column: 1 / -1;
+  height: 1px;
+  margin: 1px 0;
+  background: rgba(255,255,255,0.08);
+}
+.dev-quickbar.dev-button-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+.dev-speed.dev-button-grid {
+  display: flex;
 }
 .dev-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
+  gap: 4px;
 }
-.dev-row + .dev-row { margin-top: 5px; }
+.dev-row + .dev-row { margin-top: 4px; }
 .dev-row.dev-equal .dev-btn {
   flex: 1 1 86px;
   justify-content: center;
@@ -456,25 +479,25 @@ kbd {
 .dev-subsection {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 .dev-mini-label {
   color: #a6bf84;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.7px;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
 }
 .dev-btn {
   font-family: inherit;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
-  min-height: 28px;
+  min-height: 23px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 5px 8px;
-  border-radius: 6px;
+  padding: 3px 6px;
+  border-radius: 5px;
   border: 1px solid rgba(242,193,78,0.3);
   background: rgba(36,29,49,0.9);
   color: #f0e6cf;

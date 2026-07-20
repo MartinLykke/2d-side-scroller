@@ -298,4 +298,4 @@ export function drawUnits() {
   }
 }
 
-export { drawAnimals } from '../sprites/Animals.js';
+export { drawAnimals } from '../sprites/Animals.js?v=biomevisual1';

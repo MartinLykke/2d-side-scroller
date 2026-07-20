@@ -6,7 +6,7 @@ import { Audio } from '../infrastructure/Audio.js';
 import { spawnParticles } from '../world/SpawnSystem.js?v=biomeactive1';
 import { killEnemy } from '../combat/Combat.js?v=biomeactive1';
 import { killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive1';
-import { wallHeight, wallStandX, wallBackDir } from '../../entities/Wall.js';
+import { wallHeight, wallStandX, wallLayout, wallClimbX } from '../../entities/Wall.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { addSkillPoints } from '../economy/SkillSystem.js';
 import { floaty, nearestEnemy, moveToward, sunsetApproaching } from './AIHelpers.js?v=biomeactive1';
@@ -114,14 +114,13 @@ function guardHasWallSlot(u, w) {
 function guardWallTopX(u, w) {
   const cap = guardWallCapacity(w);
   const slot = Math.max(0, Math.min(cap - 1, guardWallSlot(u, w)));
-  const spacing = Math.min(16, Math.max(10, 58 / cap));
-  return w.x + (slot - (cap - 1) / 2) * spacing;
+  return wallStandX(w, slot);
 }
 
 function guardWallStandX(u, w) {
   const cap = guardWallCapacity(w);
   const slot = Math.max(0, Math.min(cap - 1, guardWallSlot(u, w)));
-  return wallStandX(w, slot) + wallBackDir(w) * 6;
+  return wallStandX(w, slot);
 }
 
 function guardDuelPositions(u, w) {
@@ -139,18 +138,41 @@ function clearGuardDuel(u) {
   if (u.combatTarget && u.combatTarget.combatTarget === u) u.combatTarget.combatTarget = null;
 }
 
-function updateGuardWallClimb(u, w, wantsTop, dt) {
+function routeGuardOntoWall(u, w, postX, dt, approachSpeed) {
   u.guardWall = w;
   u.wall = w;
-  const target = wantsTop ? 1 : 0;
-  const speed = wantsTop ? 0.58 : 0.72;
-  const climbBefore = u.wallClimbT || 0;
-  u.wallClimbT = clamp((u.wallClimbT || 0) + Math.sign(target - (u.wallClimbT || 0)) * speed * dt, 0, 1);
-  if (Math.abs((u.wallClimbT || 0) - target) < 0.04) u.wallClimbT = target;
-  u.onWall = u.wallClimbT >= 0.98;
-  u.climbingWall = Math.abs((u.wallClimbT || 0) - climbBefore) > 0.001 && !u.onWall;
-  if ((u.wallClimbT || 0) <= 0.02 || u.onWall) u.climbingWall = false;
-  if (u.climbingWall) u.climbAnim = (u.climbAnim || 0) + dt * 8;
+  const layout = wallLayout(w);
+  const before = u.wallClimbT || 0;
+
+  if (before <= 0.02 && Math.abs(u.x - layout.accessBottomX) > 5) {
+    u.wallClimbT = 0;
+    u.onWall = false;
+    u.climbingWall = false;
+    u.wallApproach = true;
+    moveToward(u, layout.accessBottomX, approachSpeed, dt);
+    return false;
+  }
+
+  if (before < 0.98) {
+    u.wallApproach = false;
+    u.wallClimbT = clamp(before + 0.58 * dt, 0, 1);
+    if (u.wallClimbT > 0.96) u.wallClimbT = 1;
+    u.onWall = u.wallClimbT >= 0.98;
+    u.climbingWall = !u.onWall;
+    u.x = wallClimbX(w, u.wallClimbT);
+    if (u.climbingWall) u.climbAnim = (u.climbAnim || 0) + dt * 8;
+    return false;
+  }
+
+  u.wallClimbT = 1;
+  u.onWall = true;
+  u.climbingWall = false;
+  u.wallApproach = false;
+  if (dist(u.x, postX) > 3) {
+    moveToward(u, postX, 46, dt);
+    return false;
+  }
+  return true;
 }
 
 function clearGuardWall(u, dt) {
@@ -161,15 +183,35 @@ function clearGuardWall(u, dt) {
       u.onWall = false;
       u.guardWall = null;
       u.climbingWall = false;
+      u.wallApproach = false;
       return true;
     }
-    updateGuardWallClimb(u, u.wall, false, dt);
-    return false;
+    const w = u.wall;
+    const layout = wallLayout(w);
+    const before = u.wallClimbT || 0;
+    if (before >= 0.98 && Math.abs(u.x - layout.accessTopX) > 5) {
+      u.onWall = true;
+      u.climbingWall = false;
+      u.wallApproach = true;
+      moveToward(u, layout.accessTopX, 54, dt);
+      return false;
+    }
+    u.wallApproach = false;
+    u.wallClimbT = clamp(before - 0.72 * dt, 0, 1);
+    if (u.wallClimbT < 0.04) u.wallClimbT = 0;
+    u.x = wallClimbX(w, u.wallClimbT);
+    u.onWall = false;
+    u.climbingWall = u.wallClimbT > 0.02;
+    if (u.climbingWall) {
+      u.climbAnim = (u.climbAnim || 0) + dt * 8;
+      return false;
+    }
   }
   u.onWall = false;
   u.wall = null;
   u.guardWall = null;
   u.climbingWall = false;
+  u.wallApproach = false;
   return true;
 }
 
@@ -258,21 +300,23 @@ export function guardAI(u, dt) {
   if (u.wall && u.onWall && guardHasWallSlot(u, u.wall)) {
     const wall = u.wall;
     const postX = guardWallStandX(u, wall);
-    u.aiState = "guardWall";
-    updateGuardWallClimb(u, wall, true, dt);
     const topThreat = nearestTopImpForWall(wall, u);
-    if (topThreat) {
-      holdWallDuel(u, topThreat, wall, dt);
-      if (dist(u.x, topThreat.x) < 28) {
-        if (guardImpaleWallImp(u, topThreat, wall)) return;
-        guardDamageEnemy(u, topThreat, topThreat.aiState === "climbOver" ? 2 : 1, 0.85);
+    if (Game.isNight || sunsetApproaching() || topThreat) {
+      u.aiState = "guardWall";
+      if (topThreat) {
+        holdWallDuel(u, topThreat, wall, dt);
+        if (dist(u.x, topThreat.x) < 28) {
+          if (guardImpaleWallImp(u, topThreat, wall)) return;
+          guardDamageEnemy(u, topThreat, topThreat.aiState === "climbOver" ? 2 : 1, 0.85);
+        }
+      } else {
+        clearGuardDuel(u);
+        if (dist(u.x, postX) > 3) moveToward(u, postX, 46, dt);
+        u.combatTarget = null;
       }
-    } else {
-      clearGuardDuel(u);
-      if (dist(u.x, postX) > 3) moveToward(u, postX, 46, dt);
-      u.combatTarget = null;
+      return;
     }
-    return;
+    if (!clearGuardWall(u, dt)) return;
   }
 
   const target = chooseGuardTarget(u);
@@ -295,14 +339,8 @@ export function guardAI(u, dt) {
         return;
       }
       const postX = guardWallTopX(u, targetWall);
-      if (dist(u.x, postX) > 8) {
-        u.aiState = "defendWall";
-        updateGuardWallClimb(u, targetWall, false, dt);
-        moveToward(u, postX, 112, dt);
-        return;
-      }
       u.aiState = "defendWall";
-      updateGuardWallClimb(u, targetWall, true, dt);
+      if (!routeGuardOntoWall(u, targetWall, postX, dt, 112)) return;
       if (u.onWall && dist(u.x, target.x) < 24 && (target.aiState === "climbOver" || target.wallTopWall || dist(target.x, targetWall.x) < 38)) {
         holdWallDuel(u, target, targetWall, dt);
         if (guardImpaleWallImp(u, target, targetWall)) return;
@@ -366,14 +404,8 @@ export function guardAI(u, dt) {
       return;
     }
     const postX = topThreat ? guardWallTopX(u, wall) : guardWallStandX(u, wall);
-    if (dist(u.x, postX) > 8) {
-      u.aiState = "moveToWall";
-      updateGuardWallClimb(u, wall, false, dt);
-      moveToward(u, postX, 86, dt);
-      return;
-    }
     u.aiState = "guardWall";
-    updateGuardWallClimb(u, wall, true, dt);
+    if (!routeGuardOntoWall(u, wall, postX, dt, 86)) return;
     if (u.onWall && topThreat && dist(u.x, topThreat.x) < 24) {
       holdWallDuel(u, topThreat, wall, dt);
       guardDamageEnemy(u, topThreat, topThreat.aiState === "climbOver" ? 2 : 1, 0.85);

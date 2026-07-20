@@ -1,7 +1,7 @@
 import { state, Game } from '../../core/state.js';
 import { canvas, W, H } from '../../core/canvas.js';
 import { inject, provide } from '../../core/services.js';
-import { UI, DEV, closeSkillTree, openSkillTree } from '../../rendering/HUD.js?v=biomeactive1';
+import { UI, DEV, closeSkillTree, openSkillTree } from '../../rendering/HUD.js?v=biomevisual1';
 import { tryOpenShop, handleShopKeys, currentShopList, tryBuyShopItem } from '../economy/ShopSystem.js?v=biomeweapons1';
 import { tryOpenCastleUpgrades, closeCastleUpgrades, buyCastleUpgrade } from '../economy/CastleUpgradeSystem.js?v=biomeweapons1';
 import { toggleMount } from '../economy/MountSystem.js';
@@ -9,7 +9,7 @@ import { equipFromInventory, unequipWeapon, unequipArmor, ensureInventory } from
 import { applyUpgrade, checkUpgrade } from '../economy/UpgradeSystem.js?v=biomeweapons1';
 import { triggerBarrage, triggerRoyalRally } from '../ai/AI.js?v=biomeactive1';
 import { tryToggleMine } from '../world/MineSystem.js';
-import { startAssault } from '../world/AssaultSystem.js?v=biomeactive1';
+import { startAssault } from '../world/AssaultSystem.js?v=biomevisual1';
 import { setupDevPanel } from './DevPanel.js?v=biomeactive1';
 import { warpToHubPortal, snapHubToPlaza } from '../infrastructure/RoguelikeSystem.js';
 

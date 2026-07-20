@@ -154,6 +154,44 @@ function initEnemyAI(e) {
 function changeState(e, newState, duration = 0) {
   e.aiState = newState;
   e.stateTimer = duration;
+  // Remember how long the pre-strike telegraph lasts so the renderer (via
+  // attackPose) can play a real wind-up coil during "attacking", instead of
+  // only ever seeing the follow-through once the blow has already landed.
+  if (newState === "attacking") e.windupDur = duration;
+}
+
+// Framerate-independent gait signal, written here and read by EnemyRig.gait().
+// This replaces the old render-side motion() that mutated _bPX/_bMv/_bLean while
+// drawing — which made a culled or slow-framerate enemy's walk cycle stutter,
+// since it depended on how often (and how) the entity happened to be painted.
+function updateEnemyGait(e, dt) {
+  const prevX = e._gx;
+  e._gx = e.x;
+  const moved = prevX === undefined ? 0 : e.x - prevX;
+  const inst = Math.abs(moved) / Math.max(dt, 1e-4);
+  const s = Math.min(1, dt * 12);
+  e.moveSpeed = (e.moveSpeed || 0) + (inst - (e.moveSpeed || 0)) * s;
+  e.moving = e.moveSpeed > 10;
+  const fwd = clamp(moved * (e.dir || 1) / Math.max(dt, 1e-4) / 220, -1, 1);
+  e.gaitLean = (e.gaitLean || 0) + (fwd - (e.gaitLean || 0)) * Math.min(1, dt * 8);
+  // Safety net: capture a freshly-triggered attack's full duration even if the
+  // site that set attackAnim didn't declare one, so attackPose's progress is
+  // always measured against the real length (never a per-renderer guess).
+  if ((e.attackAnim || 0) > (e.attackDur || 0) + 1e-4) e.attackDur = e.attackAnim;
+}
+
+// Begin an attack: sets the countdown AND records its full duration + shape so
+// the renderer can drive a normalized wind-up → impact → recovery pose.
+//   dur     total strike time (seconds)
+//   kind    optional pose label ("bash" | "swipe" | "spit" | "lob" | "slam" | …)
+//   impact  0..1 point in the strike where the blow lands (default in EnemyRig)
+//   max     when true, don't shorten an already-longer strike in progress
+function startEnemyAttack(e, dur, { kind = "swipe", impact, max = false } = {}) {
+  e.attackAnim = max ? Math.max(e.attackAnim || 0, dur) : dur;
+  e.attackDur = dur;
+  e.attackKind = kind;
+  if (impact !== undefined) e.attackImpact = impact;
+  else if (e.attackImpact !== undefined) delete e.attackImpact;
 }
 
 function breakImpStack(e) {
@@ -207,10 +245,17 @@ function impStackDropBypassesWall(e, wall) {
   return true;
 }
 
-// Heavier enemies (ember brute, hollow brute) get a slower, more telegraphed
-// swing so their bulk reads clearly instead of flashing through the generic pose.
+// Heavier enemies get a slower, more telegraphed swing so their bulk reads
+// clearly instead of flashing through the generic pose. This only stretches the
+// *visual* strike window (attackDur); attack cadence (attackCd) is unchanged.
+const SWING_MULT = {
+  emberBrute: 2.6, voidBrute: 2.6,
+  amalgam: 2.4, obsidianJuggernaut: 2.4, murkAbomination: 2.3,
+  iceGolem: 2.2, behemothScorpion: 2.2, breeder: 2.1,
+  maskedGreed: 1.5,
+};
 function swingMult(e) {
-  return e.type === "emberBrute" || e.type === "voidBrute" ? 2.6 : 1;
+  return SWING_MULT[e.type] || 1;
 }
 
 function setImpState(e, next) {
@@ -1623,7 +1668,7 @@ function updateBiomeCommon(e, t, dt) {
         child.fy = 0;
         child.spawnedByBiomeEnemy = true;
       }
-      e.attackAnim = 0.4;
+      startEnemyAttack(e, 0.4, { kind: "spawn", impact: 0.45 });
       spawnParticles(e.x, groundY - 28 + (e.fy || 0), 18, t.eye || "#f2c14e", 72, 80);
       Audio.portalSpawn();
     }
@@ -1636,7 +1681,7 @@ function updateBiomeCommon(e, t, dt) {
       e.dir = Math.sign(target.x - e.x) || e.dir;
       if (e.siegeShootCd <= 0) {
         e.siegeShootCd = (t.shootInterval || 4) + rand(-0.35, 0.6);
-        e.attackAnim = 0.26;
+        startEnemyAttack(e, 0.34, { kind: "lob", impact: 0.4 });
         if (target.kind === "wall") {
           damageWall(target.obj, Math.max(2, (t.dmg || 6) * 0.65), 7, e);
           target.obj.sporeT = Math.max(target.obj.sporeT || 0, t.biome === "swamp" ? 5.5 : 0);
@@ -1650,7 +1695,16 @@ function updateBiomeCommon(e, t, dt) {
         spawnParticles(e.x, groundY - t.w * 0.7 + (e.fy || 0), 8, t.eye || "#caff7a", 56, 46);
         Audio.bow();
       }
-      if (dist(e.x, target.x) < (t.shootRange || 480) * 0.72) return true;
+      // Holding the firing line: bail out of the melee/march logic, but keep the
+      // idle gait and attack countdown ticking. Without this the enemy froze its
+      // walk cycle and stayed locked in the just-fired pose (attackAnim never
+      // decayed), because the early return skipped the per-branch anim tick.
+      if (dist(e.x, target.x) < (t.shootRange || 480) * 0.72) {
+        e.anim += dt * 2.6;
+        if (e.flash > 0) e.flash -= dt;
+        if (e.attackAnim > 0) e.attackAnim -= dt;
+        return true;
+      }
     }
   }
 
@@ -1680,6 +1734,7 @@ export function updateEnemies(dt) {
     const t = scaledEnemyType(e, baseType);
     if (e.dying) continue;
     initEnemyAI(e);
+    updateEnemyGait(e, dt);
     if (e.emberWard > 0) e.emberWard = Math.max(0, e.emberWard - dt);
     if (e.emberFrenzy > 0) e.emberFrenzy = Math.max(0, e.emberFrenzy - dt);
     if (updateBiomeCommon(e, t, dt)) continue;
@@ -1958,7 +2013,7 @@ export function updateEnemies(dt) {
       e.dir = Math.sign(wall.x - e.x) || e.dir;
       if (e.attackCd <= 0 && e.aiState !== "recovery") {
         changeState(e, "attacking", 0.5);
-        e.attackCd = 0.7; e.attackAnim = 0.22 * swingMult(e);
+        e.attackCd = 0.7; startEnemyAttack(e, 0.22 * swingMult(e), { kind: "bash", impact: 0.22 });
         damageWall(wall, t.dmg, 3, e);
       }
       continue;
@@ -1998,7 +2053,7 @@ export function updateEnemies(dt) {
             if (meleeHitPlayer(e, t, 230) && hadCoins) e.carry++;
             changeState(e, "recovery", 0.4);
             e.attackCd = 1;
-            e.attackAnim = 0.25 * swingMult(e);
+            startEnemyAttack(e, 0.25 * swingMult(e), { kind: "swipe" });
           } else {
             changeState(e, "chasing", 0);
           }
@@ -2034,7 +2089,7 @@ export function updateEnemies(dt) {
       } else if (e.aiState === "attacking") {
         if (e.stateTimer <= 0) {
           changeState(e, "recovery", 0.4);
-          e.attackCd = 0.8; e.attackAnim = 0.22 * swingMult(e);
+          e.attackCd = 0.8; startEnemyAttack(e, 0.22 * swingMult(e), { kind: "swipe" });
           const crit = applyCrit(2, CFG.critChance, CFG.critMultiplier);
           e.aggroUnit.hp -= crit.damage; e.aggroUnit.panic = 1;
           spawnParticles(e.aggroUnit.x, groundY - 30, 3, "#7a1f1f");
@@ -2056,7 +2111,7 @@ export function updateEnemies(dt) {
       e.dir = Math.sign(base.x - e.x) || e.dir;
       if (e.attackCd <= 0 && e.aiState !== "recovery") {
         changeState(e, "attacking", 0.4);
-        e.attackCd = 0.9; e.attackAnim = 0.22 * swingMult(e);
+        e.attackCd = 0.9; startEnemyAttack(e, 0.22 * swingMult(e), { kind: "bash", impact: 0.22 });
         const crit = applyCrit(t.baseDmg ?? t.dmg, CFG.critChance, CFG.critMultiplier);
         base.hp -= crit.damage; base.flash = 0.2;
         spawnParticles(base.x + rand(-30, 30), groundY - 30, 4, "#ff6a4a");
@@ -2076,7 +2131,7 @@ export function updateEnemies(dt) {
       const vy = ((groundY - 40) - launchY - 0.5 * 500 * flightT * flightT) / flightT;
       state.poisonShots.push({ x: e.x, y: launchY, vx, vy, life: flightT + 0.4, landX: player.x, dmg: t.meleeDmg, sourceEnemy: e });
       e.poisonCd = t.shootInterval;
-      e.attackAnim = 0.18;
+      startEnemyAttack(e, 0.3, { kind: "spit", impact: 0.42 });
       spawnParticles(e.x, launchY, 6, "#9944cc", 40, 30);
       Audio.bow();
     }

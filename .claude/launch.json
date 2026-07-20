@@ -204,6 +204,24 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8499"],
       "port": 8499
+    },
+    {
+      "name": "game-server-30",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8527"],
+      "port": 8527
+    },
+    {
+      "name": "game-server-31",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8541"],
+      "port": 8541
+    },
+    {
+      "name": "boss-refactor-server",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8569"],
+      "port": 8569
     }
   ]
 }

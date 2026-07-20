@@ -1,13 +1,19 @@
 import { CFG } from '../../config/config.js';
 import { ENEMY_TYPES, BOSS_SCHEDULE, BIOME_BOSS_TYPES, BIOME_ENEMY_POOLS } from '../../config/enemies.js?v=biomeactive1';
 import { clamp, rand, pick } from '../../util/math.js';
-import { groundY } from '../../core/canvas.js';
+import { groundY, W } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { goldCoinChunks, goldRewardAmount } from '../economy/EconomyBalance.js';
 import { bountyRaiderCount, eliteChanceBonus, enemyVitalityMultiplier, nightQuotaMetaMultiplier, portalSpawnIntervalMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { currentDifficulty } from '../infrastructure/DifficultySystem.js';
 import { currentPopCap } from '../../util/DefenseStats.js';
 import { activeBiomeId } from '../../rendering/Effects.js?v=biomeactive1';
+import { BIOME_ANIMAL_POOLS, animalDef } from '../../config/animals.js';
+
+const ANIMAL_SOFT_CAP = 18;
+const BIOME_REPOPULATE_COUNT = 12;
+const NEAR_ANIMAL_RADIUS = 1800;
+const NEAR_ANIMAL_TARGET = 7;
 
 function dayThreatProgress() {
   return Math.max(0, (Game.day || 1) - 2);
@@ -146,42 +152,148 @@ export function spawnVagrant() {
   vagrants.push({ x, vx: 0, targetX: CFG.baseX + rand(-260, 260), state: "wander", anim: rand(0, 6) });
 }
 
-export function spawnAnimal() {
-  if (state.animals.length > 16) return;
-  const bears = state.animals.filter(a => a.type === "bear").length;
-  if (bears < 2 && Math.random() < 0.15) return spawnBear();
-  // Deer and rabbits spawn across the forest; ducks hatch at the ponds
-  const type = pick(["rabbit","rabbit","deer","deer","duck","duck"]);
-  let x = rand(0, CFG.worldWidth), spawnState = "graze";
-  const ponds = state.ponds || [];
-  if (type === "duck" && ponds.length && Math.random() < 0.8) {
-    const p = pick(ponds);
-    x = p.x + rand(-p.hw * 0.5, p.hw * 0.5);
-    spawnState = "swim";
-  }
-  state.animals.push({
+function setAnimalFlight(a, targetX = null) {
+  const dir = targetX == null ? pick([-1, 1]) : Math.sign(targetX - a.x) || 1;
+  a.state = "fly";
+  a.flyTargetX = clamp(targetX ?? a.x + dir * rand(650, 1300), 850, CFG.worldWidth - 850);
+  a.cruiseFy = -rand(a.type === "eagle" ? 250 : 170, a.type === "eagle" ? 360 : 285);
+  a.fy = a.cruiseFy * rand(0.55, 0.95);
+  a.dir = Math.sign(a.flyTargetX - a.x) || dir;
+}
+
+export function makeAnimal(type, x, spawnState = null) {
+  const def = animalDef(type);
+  const stateName = spawnState || "graze";
+  const a = {
     x, vx: 0, dir: pick([-1, 1]),
-    state: spawnState, stateT: spawnState === "swim" ? rand(8, 18) : rand(2, 5), alive: true, anim: rand(0, 6),
-    flee: 0, fleeT: 0, type,
+    state: stateName, stateT: stateName === "swim" ? rand(7, 16) : rand(2, 5),
+    alive: true, anim: rand(0, 6), flee: 0, fleeT: 0, type,
+    biome: def.biome, family: def.family,
     eatDown: 0, headT: rand(1, 3), scan: 0, earFlick: 0,
-    fy: 0, flyTargetX: null, cruiseFy: 0, wingStretch: 0,
+    fy: 0, flyTargetX: null, cruiseFy: 0, wingStretch: 0, diveT: 0,
     dying: false, deathT: 0,
-  });
+  };
+  if (def.family === "snake") a.slitherPhase = rand(0, 6);
+  if (def.family === "scorpion") a.tailLift = rand(0.4, 1);
+  if (def.family === "bird" && stateName === "fly") setAnimalFlight(a);
+  return a;
+}
+
+function animalFocusX(opts = {}) {
+  const x = Number.isFinite(opts.nearX)
+    ? opts.nearX
+    : (state.player && Number.isFinite(state.player.x) ? state.player.x : CFG.baseX);
+  return clamp(x, 450, CFG.worldWidth - 450);
+}
+
+function animalNearRadius(opts = {}) {
+  const visibleSpan = W > 0 ? W / Math.max(0.6, Game.zoom || 1) : 1300;
+  return opts.radius || Math.max(NEAR_ANIMAL_RADIUS, visibleSpan * 1.25);
+}
+
+function nearbyAnimalCount(x, radius = NEAR_ANIMAL_RADIUS) {
+  let n = 0;
+  for (const a of state.animals) {
+    if (!a.alive || a.dying) continue;
+    if (Math.abs(a.x - x) <= radius) n++;
+  }
+  return n;
+}
+
+function trimDistantAnimalForSpawn(anchor, keepRadius) {
+  if (state.animals.length < ANIMAL_SOFT_CAP) return true;
+  for (let i = 0; i < state.animals.length; i++) {
+    const a = state.animals[i];
+    if (!a.alive || a.dying || Math.abs(a.x - anchor) > keepRadius) {
+      state.animals.splice(i, 1);
+      return true;
+    }
+  }
+  return false;
+}
+
+function chooseAnimalSpawnX(opts = {}) {
+  if (opts.near === false) return rand(800, CFG.worldWidth - 800);
+  const anchor = animalFocusX(opts);
+  const radius = animalNearRadius(opts);
+  const minDistance = opts.minDistance || 260;
+
+  for (let i = 0; i < 8; i++) {
+    const dir = pick([-1, 1]);
+    const x = clamp(anchor + dir * rand(minDistance, radius), 800, CFG.worldWidth - 800);
+    if (Math.abs(x - anchor) >= minDistance * 0.75) return x;
+  }
+  return clamp(anchor + pick([-1, 1]) * minDistance, 800, CFG.worldWidth - 800);
+}
+
+function pickAnimalPond(opts = {}) {
+  const ponds = state.ponds || [];
+  if (!ponds.length) return null;
+  if (opts.near === false) return pick(ponds);
+
+  const anchor = animalFocusX(opts);
+  const radius = animalNearRadius(opts);
+  const nearby = ponds.filter(p => Math.abs(p.x - anchor) <= radius + p.hw);
+  return nearby.length ? pick(nearby) : null;
+}
+
+export function spawnAnimal(opts = {}) {
+  const near = opts.near ?? (Math.random() < 0.75);
+  const focusX = animalFocusX(opts);
+  const keepRadius = animalNearRadius(opts) * 1.35;
+  if (state.animals.length >= ANIMAL_SOFT_CAP && (!near || !trimDistantAnimalForSpawn(focusX, keepRadius))) return null;
+
+  const biomeId = activeBiomeId();
+  const bears = state.animals.filter(a => a.type === "bear").length;
+  if (biomeId === "forest" && bears < 2 && Math.random() < 0.12) return spawnBear();
+
+  const pool = BIOME_ANIMAL_POOLS[biomeId] || BIOME_ANIMAL_POOLS.forest;
+  const type = pick(pool);
+  const def = animalDef(type);
+  let x = chooseAnimalSpawnX({ ...opts, near }), spawnState = "graze";
+  const p = def.water ? pickAnimalPond({ ...opts, near }) : null;
+  if (p && Math.random() < (type === "duck" ? 0.8 : 0.55)) {
+    x = p.x + rand(-p.hw * 0.5, p.hw * 0.5);
+    spawnState = def.swims && !(def.canFly && Math.random() < 0.25) ? "swim" : "graze";
+  }
+  if (def.family === "bird" && type !== "duck" && Math.random() < 0.65) spawnState = "fly";
+  const animal = makeAnimal(type, x, spawnState);
+  state.animals.push(animal);
+  return animal;
+}
+
+export function populateBiomeAnimals(count = BIOME_REPOPULATE_COUNT, opts = {}) {
+  const target = Math.min(ANIMAL_SOFT_CAP, Math.max(0, count));
+  const focusX = animalFocusX(opts);
+  let tries = 0;
+  while (state.animals.length < target && tries < target * 4) {
+    tries++;
+    spawnAnimal({
+      ...opts,
+      near: tries <= Math.ceil(target * 0.8),
+      nearX: focusX,
+      radius: opts.radius || 2200,
+      minDistance: opts.minDistance || 180,
+    });
+  }
+  state.animalTimer = rand(3, 6);
 }
 
 // Bears keep to the deep forest, well past the trees nearest the base
 export function spawnBear() {
   const side = pick([-1, 1]);
   const x = clamp(CFG.baseX + side * rand(2600, CFG.baseX - 900), 900, CFG.worldWidth - 900);
-  state.animals.push({
+  const bear = {
     x, vx: 0, dir: pick([-1, 1]),
     state: "graze", stateT: rand(2, 5), alive: true, anim: rand(0, 6),
-    flee: 0, fleeT: 0, type: "bear",
+    flee: 0, fleeT: 0, type: "bear", biome: activeBiomeId(), family: "bear",
     hp: 12, maxHp: 12, attackCd: 0, attackAnim: 0, flash: 0,
     chargeCd: 0, charging: 0,
     eatDown: 0, headT: rand(1, 3), scan: 0, earFlick: 0,
     dying: false, deathT: 0,
-  });
+  };
+  state.animals.push(bear);
+  return bear;
 }
 
 export function spawnEnemy(type, portal) {
@@ -228,13 +340,26 @@ function bountyRaiderType() {
     if (d >= 3 && Math.random() < 0.55) return "voidWraith";
     return "shade";
   }
+  if (activeBiomeId() !== "volcano") {
+    return biomeWaveEnemyType(d, Math.random()) || portalGuardianType();
+  }
   if (d >= 5 && Math.random() < 0.28) return "siegeImp";
   if (d >= 4 && Math.random() < 0.34) return "ashPriest";
   if (d >= 3 && Math.random() < 0.45) return "emberBrute";
   return "fireImp";
 }
 
-function biomeWaveEnemyType(d, r) {
+function poolEntryTypes(entry) {
+  if (!entry) return [];
+  return Array.isArray(entry) ? entry.filter(Boolean) : [entry];
+}
+
+function pickPoolEnemy(entry, fallback = null) {
+  const choices = poolEntryTypes(entry).filter(type => ENEMY_TYPES[type]);
+  return choices.length ? pick(choices) : fallback;
+}
+
+export function biomeWaveEnemyType(d, r) {
   const pool = BIOME_ENEMY_POOLS[activeBiomeId()];
   if (!pool) return null;
 
@@ -242,10 +367,19 @@ function biomeWaveEnemyType(d, r) {
   const specialChance = d >= 3 ? Math.min(0.3, 0.1 + (d - 3) * 0.018) : 0;
   const standardChance = d >= 2 ? Math.min(0.42, 0.2 + (d - 2) * 0.02) : 0.12;
 
-  if (pool.heavy && r < heavyChance) return pool.heavy;
-  if (pool.special && r < heavyChance + specialChance) return pool.special;
-  if (pool.standard && r < heavyChance + specialChance + standardChance) return pool.standard;
-  return pool.basic || pool.standard || "imp";
+  if (pool.heavy && r < heavyChance) return pickPoolEnemy(pool.heavy);
+  if (pool.special && r < heavyChance + specialChance) return pickPoolEnemy(pool.special);
+  if (pool.standard && r < heavyChance + specialChance + standardChance) return pickPoolEnemy(pool.standard);
+  return pickPoolEnemy(pool.basic) || pickPoolEnemy(pool.standard) || "imp";
+}
+
+// Daytime portal watchers: the basic denizen of the land the portal guards
+// (a shade once the Hollow takes hold). Held to the pool's basic tier so
+// wandering near a portal by day stays a light skirmish, not a heavy ambush.
+export function portalGuardianType() {
+  if ((Game.worldPhase || 1) >= 2) return "shade";
+  const pool = BIOME_ENEMY_POOLS[activeBiomeId()];
+  return (pool && pickPoolEnemy(pool.basic)) || "imp";
 }
 
 function spawnBountyRaider(portal) {
@@ -445,7 +579,16 @@ function nightEnemyType() {
 
 export function updateSpawning(dt) {
   state.animalTimer -= dt;
-  if (state.animalTimer <= 0) { state.animalTimer = rand(3, 6); if (!Game.isNight) spawnAnimal(); }
+  if (state.animalTimer <= 0) {
+    state.animalTimer = rand(3, 6);
+    if (!Game.isNight && !Game.inMine) {
+      const focusX = animalFocusX();
+      spawnAnimal({
+        near: nearbyAnimalCount(focusX, NEAR_ANIMAL_RADIUS) < NEAR_ANIMAL_TARGET || Math.random() < 0.75,
+        nearX: focusX,
+      });
+    }
+  }
 
   if (Game.isNight && Game.nightSpawned < Game.nightQuota) {
     Game.spawnTimer -= dt;

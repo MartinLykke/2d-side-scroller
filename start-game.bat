@@ -6,7 +6,7 @@ REM ============================================================
 cd /d "%~dp0"
 set PY="C:\Users\marti\AppData\Local\Programs\Python\Python311\python.exe"
 echo Starting local server at http://localhost:8000 ...
-start "Kingdom server" /min %PY% serve.py
+start "Ashen Reign server" /min %PY% serve.py
 REM give the server a moment, then open the browser
 timeout /t 1 >nul
 start "" "http://localhost:8000/"

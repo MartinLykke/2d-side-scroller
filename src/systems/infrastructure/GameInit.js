@@ -6,12 +6,12 @@ import { makePlayer } from '../../entities/Player.js';
 import { makeWall } from '../../entities/Wall.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { Audio } from './Audio.js';
-import { spawnParticles, spawnAnimal, planNight, purchaseFloaty } from '../world/SpawnSystem.js';
+import { spawnParticles, populateBiomeAnimals, planNight, purchaseFloaty } from '../world/SpawnSystem.js';
 import { addForestCamp, buildForest } from '../world/ForestSystem.js?v=biomeactive1';
 import { makeBuildings, buildingCost, buildingLabel, payBuilding } from '../world/OutpostSystem.js?v=biomeactive1';
 import { upgradeBase } from '../../util/GameStateHelpers.js?v=biomeweapons1';
 import { addXP } from '../economy/UpgradeSystem.js?v=biomeweapons1';
-import { baseName } from '../../rendering/HUD.js?v=biomeactive1';
+import { baseName } from '../../rendering/HUD.js?v=biomevisual1';
 import { applyPermanentUpgrades, applyPermanentWorldUpgrades, permanentForestCampPlans } from './RoguelikeSystem.js';
 import { initMineVeins } from '../world/MineSystem.js';
 import { fortNext, purchaseFortUpgrade } from '../world/FortificationSystem.js?v=biomeactive1';
@@ -359,6 +359,6 @@ export function newGame() {
     peasant.transform = 0.55;
     state.pendingFarmers--;
   }
-  for (let i = 0; i < 10; i++) spawnAnimal();
+  populateBiomeAnimals(12, { nearX: CFG.baseX });
   planNight();
 }

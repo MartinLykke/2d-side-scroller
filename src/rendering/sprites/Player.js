@@ -3,6 +3,7 @@ import { drawBoot } from '../DrawHelpers.js';
 import { drawClimbPose, isClimbingEntity } from './FriendlyClimb.js';
 import { drawTorsoArmor } from '../ItemRender.js';
 import { armorOutfit, drawHelmet, drawArmorAura, drawArmorShoulders } from '../ArmorOutfits.js';
+import { biomeHumanoidSkin } from '../BiomeHumanoidSkins.js';
 
 const C = {
   skin: "#d3ac82",
@@ -115,11 +116,11 @@ function drawCape(shX, shY, hipY, moveB, runB, airB, gallop, O, longCloak) {
   ctx.globalAlpha = 1;
 }
 
-function drawHead(headX, headY, hurt, armorId = null) {
+function drawHead(headX, headY, hurt, armorId = null, P = C) {
   const x = headX, y = headY;
 
   // Skull with a small nose bump on the leading edge for a real profile.
-  ctx.fillStyle = C.skin;
+  ctx.fillStyle = P.skin;
   ctx.beginPath(); ctx.arc(x, y, 4.8, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath();
   ctx.moveTo(x + 4.3, y - 0.6);
@@ -130,7 +131,7 @@ function drawHead(headX, headY, hurt, armorId = null) {
   ctx.beginPath(); ctx.arc(x + 0.5, y + 1.6, 3.3, Math.PI * 0.12, Math.PI * 0.85); ctx.fill();
 
   // Swept-back hair: clean hairline at the brow, mass over crown and nape.
-  ctx.fillStyle = C.hair;
+  ctx.fillStyle = P.hair;
   ctx.beginPath();
   ctx.moveTo(x + 3.2, y - 3.5);
   ctx.quadraticCurveTo(x + 1.4, y - 5.8, x - 1, y - 5.4);
@@ -146,7 +147,7 @@ function drawHead(headX, headY, hurt, armorId = null) {
   ctx.beginPath(); ctx.arc(x - 0.9, y - 2.3, 3.3, Math.PI * 1.05, Math.PI * 1.62); ctx.stroke();
 
   // Ear
-  ctx.fillStyle = C.skin;
+  ctx.fillStyle = P.skin;
   ctx.beginPath(); ctx.ellipse(x - 1.7, y + 0.7, 1.0, 1.35, 0.1, 0, Math.PI * 2); ctx.fill();
   ctx.strokeStyle = "rgba(90,55,30,0.4)";
   ctx.lineWidth = 0.6;
@@ -160,7 +161,7 @@ function drawHead(headX, headY, hurt, armorId = null) {
   ctx.lineCap = "butt";
 
   // Eye with a brow line, small mouth, nose shading
-  ctx.strokeStyle = C.hair;
+  ctx.strokeStyle = P.hair;
   ctx.lineWidth = 0.85;
   ctx.beginPath(); ctx.moveTo(x + 1.1, y - 1.9); ctx.lineTo(x + 3.3, y - 1.6); ctx.stroke();
   ctx.fillStyle = "#2d2116";
@@ -175,11 +176,11 @@ function drawHead(headX, headY, hurt, armorId = null) {
 
   // Tiny ember-crown mark: enough to find the player, not enough to break the vagrant silhouette.
   const crownY = headY - 6 - crownLift;
-  ctx.fillStyle = C.gold;
+  ctx.fillStyle = P.gold;
   ctx.fillRect(headX - 3.4, crownY, 6.8, 1.5);
   ctx.beginPath(); ctx.moveTo(headX - 2.4, crownY); ctx.lineTo(headX - 1.2, crownY - 3); ctx.lineTo(headX, crownY); ctx.closePath(); ctx.fill();
   ctx.beginPath(); ctx.moveTo(headX, crownY); ctx.lineTo(headX + 1.2, crownY - 4); ctx.lineTo(headX + 2.4, crownY); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = C.jewel;
+  ctx.fillStyle = P.jewel;
   ctx.beginPath(); ctx.arc(headX + 0.7, crownY + 0.6, 0.55, 0, Math.PI * 2); ctx.fill();
 
   if (hurt > 0) {
@@ -192,16 +193,116 @@ function drawHead(headX, headY, hurt, armorId = null) {
   }
 }
 
+function drawBiomeRegalia(P, shX, shY, hipY, headX, headY, armorId) {
+  const detail = P.detail;
+  ctx.save();
+  ctx.lineCap = "round";
+
+  if (detail === "forest") {
+    // A small living-leaf badge keeps the default woodland model distinct.
+    ctx.fillStyle = P.trim;
+    ctx.beginPath();
+    ctx.ellipse(shX + 2.6, shY + 7, 1.8, 3.5, -0.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = P.goldDk;
+    ctx.lineWidth = 0.65;
+    ctx.beginPath(); ctx.moveTo(shX + 1.4, shY + 9.3); ctx.lineTo(shX + 4, shY + 4.7); ctx.stroke();
+  } else if (detail === "frozen") {
+    // Fur collar and an ice-edged crown silhouette.
+    ctx.strokeStyle = P.trim;
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(shX - 5.5, shY + 0.2);
+    ctx.quadraticCurveTo(shX, shY + 5.2, shX + 5.5, shY + 0.2);
+    ctx.stroke();
+    ctx.fillStyle = P.accent;
+    for (const ox of [-4, 4]) {
+      ctx.beginPath();
+      ctx.moveTo(shX + ox - 1.2, hipY + 4);
+      ctx.lineTo(shX + ox, hipY + 8);
+      ctx.lineTo(shX + ox + 1.2, hipY + 4);
+      ctx.closePath();
+      ctx.fill();
+    }
+  } else if (detail === "desert") {
+    // Turquoise sash and sun-disc brooch.
+    ctx.strokeStyle = P.accent;
+    ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.moveTo(shX - 4.5, shY + 4); ctx.lineTo(shX + 3.5, hipY + 3.5); ctx.stroke();
+    ctx.fillStyle = P.gold;
+    ctx.beginPath(); ctx.arc(shX + 4.2, shY + 3.2, 1.7, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = P.trim;
+    ctx.lineWidth = 0.8;
+    for (let i = 0; i < 6; i++) {
+      const a = i * Math.PI / 3;
+      ctx.beginPath();
+      ctx.moveTo(shX + 4.2 + Math.cos(a) * 2.2, shY + 3.2 + Math.sin(a) * 2.2);
+      ctx.lineTo(shX + 4.2 + Math.cos(a) * 3.3, shY + 3.2 + Math.sin(a) * 3.3);
+      ctx.stroke();
+    }
+  } else if (detail === "swamp") {
+    // A vine winds around the cuirass and sprouts a bright marsh leaf.
+    ctx.strokeStyle = P.trim;
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.moveTo(shX - 4.5, shY + 3);
+    ctx.bezierCurveTo(shX + 5, shY + 5, shX - 4, hipY, shX + 4.5, hipY + 5);
+    ctx.stroke();
+    ctx.fillStyle = P.accent;
+    ctx.beginPath(); ctx.ellipse(shX - 2.5, shY + 8, 1.4, 2.8, 0.7, 0, Math.PI * 2); ctx.fill();
+  } else if (detail === "volcano") {
+    // Ember cracks remain visible even when an equipped armor supplies colors.
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = P.glow;
+    ctx.lineWidth = 1.05;
+    ctx.beginPath();
+    ctx.moveTo(shX - 1, shY + 2);
+    ctx.lineTo(shX + 1.5, shY + 6);
+    ctx.lineTo(shX - 0.2, shY + 9);
+    ctx.lineTo(shX + 2.8, shY + 13);
+    ctx.stroke();
+    ctx.fillStyle = P.accent;
+    ctx.beginPath(); ctx.arc(shX + 6.5, shY - 1.5, 1.15, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  } else if (detail === "corrupted") {
+    // The corrupted king wears a luminous broken-circle rune.
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = P.rune;
+    ctx.lineWidth = 1.15;
+    ctx.beginPath(); ctx.arc(shX, shY + 8, 3.2, 0.25, Math.PI * 1.72); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(shX - 2.5, shY + 5.8); ctx.lineTo(shX + 2.6, shY + 10.4); ctx.stroke();
+    if (!armorId) {
+      ctx.fillStyle = P.glow;
+      ctx.beginPath(); ctx.arc(headX + 2.2, headY - 0.5, 1, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  if (P.hollow) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = P.rune;
+    ctx.globalAlpha = 0.65;
+    ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.ellipse(headX, headY - 9.5, 7.5, 2.2, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 // `riding` is the mount def (from MOUNTS) when the player sits a steed, else
 // null — it swaps the walking legs for a seated pose reaching the stirrup.
 export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop || 0, riding = null) {
   // Equipped armor reskins the entire model: cape, cuirass, tabard, legs,
   // boots, trims and (via `gloves`) the bare arms.
+  const P = biomeHumanoidSkin("player", p.x, C);
   const outfit = armorOutfit(p.armor);
-  const O = outfit ? { ...C, ...outfit } : C;
+  const O = outfit ? { ...P, ...outfit } : P;
   if (isClimbingEntity(p)) {
     drawClimbPose(p, {
-      skin: C.skin,
+      skin: P.skin,
       tunic: O.tabard,
       tunicLt: O.capeLt,
       pants: O.pants,
@@ -210,11 +311,11 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
       steel: O.armor,
       steelDk: O.armorDk,
       buckle: O.gold,
-      hair: C.hair,
+      hair: P.hair,
       cloak: O.cape,
       cloakDk: O.capeDk,
       accent: O.capeLt,
-      gold: C.gold,
+      gold: P.gold,
     }, {
       armor: true, cape: true, crown: true, scale: 1.06,
       helm: outfit?.headgear === "helm",
@@ -337,7 +438,7 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
   ctx.restore();
 
   // Neck connecting head to torso (drawn first so the cuirass overlaps it).
-  limb(shX + 0.3, shY + 1.5, headX + 0.2, headY + 3.6, C.skin, 3.2);
+  limb(shX + 0.3, shY + 1.5, headX + 0.2, headY + 3.6, P.skin, 3.2);
 
   // Torso: cuirass with side shadow, chest highlight and a center ridge.
   plate(shX, shY, 14, 20, O.armor, O.armorDk);
@@ -411,7 +512,7 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
   // but these base arms give idle/run/jump poses weight.
   const strideSwing = stride * (2.6 + 1.4 * runB);
   const armSwing = (breathe * 0.7 + (strideSwing - breathe * 0.7) * moveB) * (1 - airB) - 3 * airB;
-  const armCol = outfit?.gloves || C.skin;
+  const armCol = outfit?.gloves || P.skin;
   ctx.fillStyle = O.armor;
   ctx.beginPath(); ctx.ellipse(shX - 6.8, shY + 1.6, 3.0, 3.7, -0.3, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.ellipse(shX + 6.8, shY + 1.6, 3.0, 3.7, 0.3, 0, Math.PI * 2); ctx.fill();
@@ -451,6 +552,7 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
   ctx.lineWidth = 0.7;
   ctx.stroke();
 
-  drawHead(headX, headY, hurt, p.armor);
+  drawHead(headX, headY, hurt, p.armor, P);
+  drawBiomeRegalia(P, shX, shY, hipY, headX, headY, p.armor);
   ctx.restore();
 }

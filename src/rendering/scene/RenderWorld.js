@@ -4,7 +4,7 @@ import { ctx, W, H, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { FX, biomeAt, getGroundTex, getDeco, windGust, windSway, drawTree, makeTree } from '../Effects.js?v=biomeactive1';
 import { visibleWorldBounds } from '../Viewport.js';
-import { wallHeight, wallRenderWidth, wallBackDir, wallPlatformDepth } from '../../entities/Wall.js';
+import { wallHeight, wallRenderWidth, wallLayout } from '../../entities/Wall.js';
 import { groundShadow, roundedRect, stoneCol, stoneLt, woodCol, litWindow, drawHpBar } from '../DrawHelpers.js?v=biomeweapons1';
 import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive1';
 import { fortHas, fortLevel, fortNext } from '../../systems/world/FortificationSystem.js?v=biomeactive1';
@@ -794,6 +794,174 @@ export function drawEntityShadows() {
   for (const a of animals)  if (a.alive && seen(a.x)) groundShadow(a.x,10,0.18);
 }
 
+const PORTAL_SKINS = {
+  forest: {
+    kind: "forest",
+    ground0: [80,10,0], ground1: [40,4,0], glow0: [255,80,20], glow1: [200,30,0],
+    stoneBase: "#2a1a12", stoneMid: "#3d2518", stoneHi: "#55301c",
+    ornament: "#3a2a1e", socket: "#1a0a04", mouth: "#0e0604",
+    rune: [255,90,20], apex: [255,60,10], apexGlow: [255,120,30],
+    inner0: [200,50,10], inner1: [140,20,5], inner2: [60,5,0], inner3: [10,0,0],
+    swirlHot: [255,200,60], swirlMid: [255,80,10], swirlEnd: [120,10,0],
+    flameHot: [255,190,48], flameCool: [255,55,12], sideHot: [255,140,24], sideCool: [180,40,8],
+    shimmer: [255,100,20], hpBg: "#3a1208", hpGood: "#ff7a24", hpMid: "#ffb040", hpLow: "#ffe08a",
+    hitA: "#caa46a", hitB: "#ff8a3d",
+  },
+  frozen: {
+    kind: "frozen",
+    ground0: [145,220,246], ground1: [64,118,158], glow0: [135,230,255], glow1: [60,150,230],
+    stoneBase: "#3c5a70", stoneMid: "#9fc2d3", stoneHi: "#e6f7ff",
+    ornament: "#d9f4ff", socket: "#45708a", mouth: "#2a4e66",
+    rune: [155,236,255], apex: [190,246,255], apexGlow: [105,210,255],
+    inner0: [138,232,255], inner1: [66,162,226], inner2: [18,58,104], inner3: [5,20,42],
+    swirlHot: [235,255,255], swirlMid: [115,222,255], swirlEnd: [40,110,170],
+    flameHot: [225,252,255], flameCool: [80,186,255], sideHot: [210,248,255], sideCool: [70,150,225],
+    shimmer: [150,230,255], hpBg: "#18384f", hpGood: "#82dfff", hpMid: "#c5f4ff", hpLow: "#ffffff",
+    hitA: "#d9f4ff", hitB: "#82dfff",
+  },
+  desert: {
+    kind: "desert",
+    ground0: [128,84,35], ground1: [95,58,24], glow0: [255,202,94], glow1: [214,132,46],
+    stoneBase: "#6e4a28", stoneMid: "#b9874f", stoneHi: "#edc982",
+    ornament: "#a56d37", socket: "#4a2c18", mouth: "#3a2112",
+    rune: [255,222,128], apex: [255,205,86], apexGlow: [255,235,155],
+    inner0: [226,142,42], inner1: [157,84,30], inner2: [68,36,20], inner3: [20,10,6],
+    swirlHot: [255,234,142], swirlMid: [230,146,54], swirlEnd: [120,58,24],
+    flameHot: [255,224,124], flameCool: [213,104,32], sideHot: [255,190,76], sideCool: [166,74,26],
+    shimmer: [255,196,96], hpBg: "#5a3218", hpGood: "#f1b24f", hpMid: "#ffd27a", hpLow: "#fff0ba",
+    hitA: "#e8c080", hitB: "#d89a45",
+  },
+  swamp: {
+    kind: "swamp",
+    ground0: [42,76,46], ground1: [16,42,30], glow0: [142,210,76], glow1: [48,126,76],
+    stoneBase: "#17231e", stoneMid: "#314638", stoneHi: "#6f8b55",
+    ornament: "#536b3f", socket: "#0b160f", mouth: "#06100a",
+    rune: [178,255,106], apex: [168,238,88], apexGlow: [90,210,96],
+    inner0: [118,180,70], inner1: [48,102,56], inner2: [14,44,34], inner3: [4,14,12],
+    swirlHot: [210,255,122], swirlMid: [112,206,88], swirlEnd: [34,94,48],
+    flameHot: [188,246,96], flameCool: [54,150,86], sideHot: [156,226,82], sideCool: [36,104,56],
+    shimmer: [136,220,88], hpBg: "#173016", hpGood: "#9bd85a", hpMid: "#c8f082", hpLow: "#edffba",
+    hitA: "#8ba85a", hitB: "#b8ff7a",
+  },
+  volcano: {
+    kind: "volcano",
+    ground0: [120,32,18], ground1: [42,16,14], glow0: [255,66,22], glow1: [190,24,0],
+    stoneBase: "#151313", stoneMid: "#2f2b29", stoneHi: "#6f4030",
+    ornament: "#3a302a", socket: "#080505", mouth: "#1a0804",
+    rune: [255,92,28], apex: [255,80,20], apexGlow: [255,184,64],
+    inner0: [255,92,24], inner1: [178,32,10], inner2: [70,10,6], inner3: [8,2,1],
+    swirlHot: [255,226,90], swirlMid: [255,74,18], swirlEnd: [126,8,0],
+    flameHot: [255,210,68], flameCool: [255,42,8], sideHot: [255,116,24], sideCool: [190,16,4],
+    shimmer: [255,86,18], hpBg: "#421008", hpGood: "#ff6a24", hpMid: "#ffb13d", hpLow: "#ffe36a",
+    hitA: "#6b5a45", hitB: "#ff6a20",
+  },
+  corrupted: {
+    kind: "corrupted",
+    ground0: [86,36,126], ground1: [30,14,54], glow0: [165,88,255], glow1: [86,36,180],
+    stoneBase: "#171020", stoneMid: "#322244", stoneHi: "#6c4aa0",
+    ornament: "#4a3268", socket: "#09040f", mouth: "#06020a",
+    rune: [204,128,255], apex: [188,96,255], apexGlow: [224,172,255],
+    inner0: [150,78,224], inner1: [82,34,145], inner2: [28,12,58], inner3: [5,2,12],
+    swirlHot: [232,188,255], swirlMid: [166,78,255], swirlEnd: [70,20,142],
+    flameHot: [218,162,255], flameCool: [118,54,220], sideHot: [190,112,255], sideCool: [76,26,170],
+    shimmer: [174,96,255], hpBg: "#251036", hpGood: "#b66bff", hpMid: "#dca8ff", hpLow: "#f2dcff",
+    hitA: "#a56bff", hitB: "#d7a8ff",
+  },
+};
+
+function portalSkinAt(x) {
+  const b = biomeAt(x);
+  return PORTAL_SKINS[b.id] || PORTAL_SKINS.forest;
+}
+
+function drawPortalBiomeAccents(skin, x, baseY, gateW, gateH, archH, pillarW, T, glow) {
+  ctx.save();
+  if (skin.kind === "frozen") {
+    ctx.fillStyle = "rgba(230,250,255,0.9)";
+    ctx.beginPath();
+    ctx.moveTo(x - gateW - pillarW / 2, baseY - gateH + 4);
+    ctx.lineTo(x - gateW * 0.35, baseY - gateH - archH * 0.9);
+    ctx.lineTo(x, baseY - gateH - archH - 6);
+    ctx.lineTo(x + gateW * 0.35, baseY - gateH - archH * 0.9);
+    ctx.lineTo(x + gateW + pillarW / 2, baseY - gateH + 4);
+    ctx.lineTo(x + gateW - 8, baseY - gateH - 4);
+    ctx.lineTo(x, baseY - gateH - archH + 4);
+    ctx.lineTo(x - gateW + 8, baseY - gateH - 4);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "rgba(160,226,255,0.82)";
+    for (const ox of [-42, -18, 14, 38]) {
+      ctx.beginPath();
+      ctx.moveTo(x + ox, baseY - gateH - 3);
+      ctx.lineTo(x + ox + 4, baseY - gateH - 22 - Math.abs(ox % 3) * 3);
+      ctx.lineTo(x + ox + 9, baseY - gateH - 3);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = `rgba(190,245,255,${0.12 * glow})`;
+    ctx.beginPath(); ctx.ellipse(x, baseY - 16, 72, 10, 0, 0, Math.PI * 2); ctx.fill();
+  } else if (skin.kind === "desert") {
+    ctx.fillStyle = "rgba(194,142,70,0.78)";
+    ctx.beginPath(); ctx.ellipse(x, baseY + 3, 84, 13, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(255,222,138,0.55)";
+    ctx.lineWidth = 1.2;
+    for (const side of [-1, 1]) {
+      const px = x + side * gateW;
+      for (let k = 0; k < 4; k++) {
+        const y = baseY - gateH + 28 + k * 24;
+        ctx.beginPath(); ctx.moveTo(px - pillarW / 2 + 2, y); ctx.lineTo(px + pillarW / 2 - 2, y + side * 3); ctx.stroke();
+      }
+    }
+  } else if (skin.kind === "swamp") {
+    ctx.strokeStyle = "rgba(138,170,76,0.72)";
+    ctx.lineWidth = 2; ctx.lineCap = "round";
+    for (const ox of [-42, -20, 0, 22, 43]) {
+      const sway = Math.sin(T * 1.4 + ox) * 3;
+      ctx.beginPath();
+      ctx.moveTo(x + ox, baseY - gateH - 8);
+      ctx.quadraticCurveTo(x + ox + sway, baseY - gateH + 26, x + ox - sway * 0.3, baseY - gateH + 58);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(88,126,48,0.55)";
+    ctx.beginPath(); ctx.ellipse(x, baseY + 2, 78, 12, 0, 0, Math.PI * 2); ctx.fill();
+  } else if (skin.kind === "volcano") {
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = `rgba(255,86,20,${0.55 + 0.18 * Math.sin(T * 3)})`;
+    ctx.lineWidth = 2; ctx.lineCap = "round";
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(x + side * 13, baseY);
+      ctx.lineTo(x + side * 38, baseY + 3);
+      ctx.lineTo(x + side * 68, baseY - 1);
+      ctx.stroke();
+    }
+  } else if (skin.kind === "corrupted") {
+    ctx.fillStyle = "#09040f";
+    for (const side of [-1, 1]) {
+      const px = x + side * (gateW + 8);
+      ctx.beginPath();
+      ctx.moveTo(px, baseY - gateH + 12);
+      ctx.lineTo(px + side * 14, baseY - gateH + 44);
+      ctx.lineTo(px, baseY - gateH + 76);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = `rgba(190,112,255,${0.55 * glow})`;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(x, baseY - gateH * 0.5, 50 + Math.sin(T * 1.5) * 4, -0.8, 4.0); ctx.stroke();
+  } else {
+    ctx.strokeStyle = "rgba(90,50,24,0.65)";
+    ctx.lineWidth = 2.4; ctx.lineCap = "round";
+    for (const side of [-1, 1]) {
+      const px = x + side * gateW;
+      ctx.beginPath();
+      ctx.moveTo(px - side * 8, baseY + 2);
+      ctx.quadraticCurveTo(px - side * 16, baseY - 14, px - side * 4, baseY - 28);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
 export function drawPortals(dark) {
   const T = performance.now() / 1000;
   const view = visibleWorldBounds(190);
@@ -803,6 +971,7 @@ export function drawPortals(dark) {
     if (p.voidRift) { drawVoidRift(p, x, T, dark); continue; }
     if (p.destroyed) { drawRuinedPortal(x, T); continue; }
     const glow = Game.isNight ? 1 : 0.4;
+    const skin = portalSkinAt(x);
     const gateW = 52, gateH = 140, archH = 34;
     const pillarW = 14;
     const baseY = groundY;
@@ -811,8 +980,8 @@ export function drawPortals(dark) {
 
     // --- ground scorch mark ---
     const sg = ctx.createRadialGradient(x, baseY, 8, x, baseY, 90);
-    sg.addColorStop(0, `rgba(80,10,0,${0.7 * glow})`);
-    sg.addColorStop(0.5, `rgba(40,4,0,${0.3 * glow})`);
+    sg.addColorStop(0, withA(skin.ground0, 0.7 * glow));
+    sg.addColorStop(0.5, withA(skin.ground1, 0.3 * glow));
     sg.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = sg;
     ctx.beginPath(); ctx.ellipse(x, baseY + 4, 90, 14, 0, 0, Math.PI * 2); ctx.fill();
@@ -820,15 +989,15 @@ export function drawPortals(dark) {
     // --- outer hellfire glow ---
     ctx.globalCompositeOperation = "lighter";
     const og = ctx.createRadialGradient(x, baseY - gateH * 0.45, 10, x, baseY - gateH * 0.45, gateW + 60);
-    og.addColorStop(0, `rgba(255,80,20,${0.25 * glow})`);
-    og.addColorStop(0.6, `rgba(200,30,0,${0.1 * glow})`);
+    og.addColorStop(0, withA(skin.glow0, 0.25 * glow));
+    og.addColorStop(0.6, withA(skin.glow1, 0.1 * glow));
     og.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = og;
     ctx.beginPath(); ctx.ellipse(x, baseY - gateH * 0.45, gateW + 60, gateH * 0.8, 0, 0, Math.PI * 2); ctx.fill();
     ctx.globalCompositeOperation = "source-over";
 
     // --- stone pillars ---
-    const stoneBase = "#2a1a12", stoneMid = "#3d2518", stoneHi = "#55301c";
+    const { stoneBase, stoneMid, stoneHi } = skin;
     for (const side of [-1, 1]) {
       const px = x + side * gateW;
       // main pillar body
@@ -843,16 +1012,16 @@ export function drawPortals(dark) {
 
       // skull ornament at top of each pillar
       const sy = baseY - gateH - 6;
-      ctx.fillStyle = "#3a2a1e";
+      ctx.fillStyle = skin.ornament;
       ctx.beginPath(); ctx.arc(px, sy, 9, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#1a0a04";
+      ctx.fillStyle = skin.socket;
       ctx.beginPath(); ctx.arc(px - 3, sy - 1, 2, 0, Math.PI * 2); ctx.fill();
       ctx.beginPath(); ctx.arc(px + 3, sy - 1, 2, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#0e0604";
+      ctx.fillStyle = skin.mouth;
       ctx.fillRect(px - 2, sy + 2, 4, 3);
 
       // cracks / runes glowing on pillar
-      ctx.strokeStyle = `rgba(255,90,20,${0.4 + 0.3 * Math.sin(T * 2 + side)})`;
+      ctx.strokeStyle = withA(skin.rune, 0.4 + 0.3 * Math.sin(T * 2 + side));
       ctx.lineWidth = 1.2;
       ctx.beginPath();
       ctx.moveTo(px - 2, baseY - gateH + 20);
@@ -870,7 +1039,7 @@ export function drawPortals(dark) {
         const et = (T * 0.8 + k * 1.3 + side * 2) % 3;
         const ey = sy - et * 26;
         const ea = (1 - et / 3) * 0.8 * glow;
-        ctx.fillStyle = `rgba(255,${140 + k * 30},20,${ea})`;
+        ctx.fillStyle = withA(lerpColor(skin.flameHot, skin.flameCool, k / 3), ea);
         ctx.beginPath();
         ctx.arc(px + Math.sin(T * 3 + k * 4 + side) * 6, ey, 1.5 + (1 - et / 3), 0, Math.PI * 2);
         ctx.fill();
@@ -891,12 +1060,13 @@ export function drawPortals(dark) {
     ctx.fill();
 
     // glowing rune at arch apex
-    ctx.fillStyle = `rgba(255,60,10,${0.6 + 0.4 * Math.sin(T * 3)})`;
+    ctx.fillStyle = withA(skin.apex, 0.6 + 0.4 * Math.sin(T * 3));
     ctx.beginPath(); ctx.arc(x, baseY - gateH - archH + 2, 4, 0, Math.PI * 2); ctx.fill();
     ctx.globalCompositeOperation = "lighter";
-    ctx.fillStyle = `rgba(255,120,30,${0.3 + 0.2 * Math.sin(T * 3)})`;
+    ctx.fillStyle = withA(skin.apexGlow, 0.3 + 0.2 * Math.sin(T * 3));
     ctx.beginPath(); ctx.arc(x, baseY - gateH - archH + 2, 10, 0, Math.PI * 2); ctx.fill();
     ctx.globalCompositeOperation = "source-over";
+    drawPortalBiomeAccents(skin, x, baseY, gateW, gateH, archH, pillarW, T, glow);
 
     // --- inner void (the portal opening) ---
     ctx.beginPath();
@@ -909,10 +1079,10 @@ export function drawPortals(dark) {
 
     // deep hellish interior gradient
     const ig = ctx.createLinearGradient(x, baseY, x, baseY - gateH - archH);
-    ig.addColorStop(0, `rgba(200,50,10,${0.85 * glow})`);
-    ig.addColorStop(0.3, `rgba(140,20,5,${0.7 * glow})`);
-    ig.addColorStop(0.6, `rgba(60,5,0,${0.9 * glow})`);
-    ig.addColorStop(1, "rgba(10,0,0,1)");
+    ig.addColorStop(0, withA(skin.inner0, 0.85 * glow));
+    ig.addColorStop(0.3, withA(skin.inner1, 0.7 * glow));
+    ig.addColorStop(0.6, withA(skin.inner2, 0.9 * glow));
+    ig.addColorStop(1, withA(skin.inner3, 1));
     ctx.fillStyle = ig; ctx.fill();
 
     // swirling inner fire
@@ -925,9 +1095,9 @@ export function drawPortals(dark) {
       const fr = 12 + Math.sin(phase * 3) * 6;
       const fa = (0.25 + 0.15 * Math.sin(phase * 4)) * glow;
       const fg = ctx.createRadialGradient(fx, fy, 0, fx, fy, fr);
-      fg.addColorStop(0, `rgba(255,200,60,${fa})`);
-      fg.addColorStop(0.4, `rgba(255,80,10,${fa * 0.6})`);
-      fg.addColorStop(1, "rgba(120,10,0,0)");
+      fg.addColorStop(0, withA(skin.swirlHot, fa));
+      fg.addColorStop(0.4, withA(skin.swirlMid, fa * 0.6));
+      fg.addColorStop(1, withA(skin.swirlEnd, 0));
       ctx.fillStyle = fg;
       ctx.beginPath(); ctx.arc(fx, fy, fr, 0, Math.PI * 2); ctx.fill();
     }
@@ -945,7 +1115,7 @@ export function drawPortals(dark) {
       const fa = (1 - t) * 0.55 * glow;
       const fw = 5 + Math.sin(phase * 3.7) * 2;
 
-      ctx.fillStyle = `rgba(255,${180 - t * 120},${40 - t * 30},${fa})`;
+      ctx.fillStyle = withA(lerpColor(skin.flameHot, skin.flameCool, t), fa);
       ctx.beginPath();
       ctx.moveTo(fx - fw, baseY);
       ctx.quadraticCurveTo(fx - fw * 0.5, fy + flameH * 0.3, fx + Math.sin(phase) * 3, fy);
@@ -962,7 +1132,7 @@ export function drawPortals(dark) {
         const flameH = 40 + Math.sin(phase * 4.2) * 18;
         const fy = baseY - gateH * 0.15 - t * flameH;
         const fa = (1 - t) * 0.4 * glow;
-        ctx.fillStyle = `rgba(255,${100 + k * 30},10,${fa})`;
+        ctx.fillStyle = withA(lerpColor(skin.sideHot, skin.sideCool, Math.min(1, t + k * 0.08)), fa);
         ctx.beginPath();
         ctx.moveTo(fx, baseY - gateH * 0.1);
         ctx.quadraticCurveTo(fx + side * 8, fy + flameH * 0.4, fx + side * 3 + Math.sin(phase) * 4, fy);
@@ -980,7 +1150,7 @@ export function drawPortals(dark) {
       const hy = baseY - gateH - archH - ht * 40;
       const ha = (1 - ht / 2.5) * 0.18 * glow;
       const hx = x + Math.sin(T * 2 + k * 1.8) * 16;
-      ctx.fillStyle = `rgba(255,100,20,${ha})`;
+      ctx.fillStyle = withA(skin.shimmer, ha);
       ctx.beginPath(); ctx.ellipse(hx, hy, 8 + k * 2, 3, 0, 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
@@ -997,9 +1167,9 @@ export function drawPortals(dark) {
       const frac = Math.max(0, p.hp / p.maxHp);
       ctx.fillStyle = "rgba(10,6,4,0.75)";
       ctx.fillRect(x - bw / 2 - 1, by - 1, bw + 2, bh + 2);
-      ctx.fillStyle = "#3a1208";
+      ctx.fillStyle = skin.hpBg;
       ctx.fillRect(x - bw / 2, by, bw, bh);
-      ctx.fillStyle = frac > 0.5 ? "#ff7a24" : frac > 0.25 ? "#ffb040" : "#ffe08a";
+      ctx.fillStyle = frac > 0.5 ? skin.hpGood : frac > 0.25 ? skin.hpMid : skin.hpLow;
       ctx.fillRect(x - bw / 2, by, bw * frac, bh);
       ctx.strokeStyle = "rgba(0,0,0,0.5)"; ctx.lineWidth = 1;
       ctx.strokeRect(x - bw / 2 - 0.5, by - 0.5, bw + 1, bh + 1);
@@ -1012,18 +1182,19 @@ export function drawPortals(dark) {
 // Collapsed hell gate: broken pillar stumps, cooling rubble, drifting smoke.
 function drawRuinedPortal(x, T) {
   const baseY = groundY, gateW = 52, pillarW = 14;
+  const skin = portalSkinAt(x);
   ctx.save();
 
   // scorched ground, cooling from the old burn
   const sg = ctx.createRadialGradient(x, baseY, 8, x, baseY, 95);
-  sg.addColorStop(0, "rgba(30,16,12,0.8)");
-  sg.addColorStop(0.6, "rgba(24,12,8,0.35)");
+  sg.addColorStop(0, withA(skin.ground1, 0.65));
+  sg.addColorStop(0.6, withA(skin.ground0, 0.22));
   sg.addColorStop(1, "rgba(0,0,0,0)");
   ctx.fillStyle = sg;
   ctx.beginPath(); ctx.ellipse(x, baseY + 4, 95, 15, 0, 0, Math.PI * 2); ctx.fill();
 
   // shattered pillar stumps
-  const stoneBase = "#2a1a12", stoneMid = "#3d2518";
+  const { stoneBase, stoneMid } = skin;
   for (const side of [-1, 1]) {
     const px = x + side * gateW;
     const stumpH = side < 0 ? 44 : 26;
@@ -1055,7 +1226,7 @@ function drawRuinedPortal(x, T) {
   ctx.globalCompositeOperation = "lighter";
   for (let k = 0; k < 3; k++) {
     const ea = 0.25 + 0.2 * Math.sin(T * 2.4 + k * 2.2);
-    ctx.fillStyle = `rgba(255,110,40,${ea * 0.5})`;
+    ctx.fillStyle = withA(skin.flameHot, ea * 0.5);
     ctx.beginPath(); ctx.arc(x + (k - 1) * 26, baseY - 4, 2.2, 0, Math.PI * 2); ctx.fill();
   }
   for (let k = 0; k < 4; k++) {
@@ -1365,31 +1536,44 @@ export function drawForestCamps(dark) {
 // posts at unit stand height, with stairs (low walls) or a ladder (tall
 // walls) down to the ground on the base side. The level-5 castle wall draws
 // its own two-tier walkway.
-function drawWallPlatform(w, h, flash) {
-  const deckH = Math.max(0, h - 14);
+function drawWallPlatform(w, h, flash, skin = null) {
+  const layout = wallLayout(w, h);
+  const deckH = layout.deckHeight;
   if (deckH < 12) return;
-  const d = wallBackDir(w);
-  const depth = wallPlatformDepth(w);
-  const x0 = w.x + d * (wallRenderWidth(w) / 2 - 2); // tucked slightly into the wall
-  const x1 = x0 + d * depth;
+  const d = layout.backDir;
+  const depth = layout.depth;
+  const x0 = layout.deckFrontX;
+  const x1 = layout.deckRearX;
   const deckY = groundY - deckH;
-  const wood  = flash ? "#e8d8a8" : "#6b4a26";
-  const woodD = flash ? "#d8c090" : "#4c3216";
+  const wood  = flash ? "#e8d8a8" : (skin?.id === "frozen" ? "#8fb2c8" : skin?.id === "desert" ? "#9a6330" : skin?.id === "volcano" ? "#5a2c1d" : skin?.id === "corrupted" ? "#3a2138" : skin?.wood || "#6b4a26");
+  const woodD = flash ? "#d8c090" : (skin?.id === "frozen" ? "#476c84" : skin?.id === "desert" ? "#6a3f1d" : skin?.id === "volcano" ? "#2a1510" : skin?.id === "corrupted" ? "#170b20" : skin?.gate || "#4c3216");
 
   ctx.save();
 
-  // support posts + diagonal brace
+  // Support posts, cross-bracing and iron feet. These are shared by every
+  // biome so the platform reads as one believable structure at a glance.
   ctx.fillStyle = woodD;
   const nPosts = Math.max(2, Math.round(depth / 32) + 1);
   for (let i = 0; i < nPosts; i++) {
     const px = x0 + d * (5 + i * (depth - 10) / (nPosts - 1));
     ctx.fillRect(px - 2, deckY + 5, 4, deckH - 5);
+    ctx.fillStyle = "rgba(20,16,14,0.5)";
+    ctx.fillRect(px - 3, groundY - 4, 6, 4);
+    ctx.fillStyle = woodD;
   }
   ctx.strokeStyle = woodD; ctx.lineWidth = 3; ctx.lineCap = "round";
   ctx.beginPath();
   ctx.moveTo(x0 + d * 5, groundY - 2);
   ctx.lineTo(x1 - d * 5, deckY + 7);
   ctx.stroke();
+  if (depth >= 48) {
+    ctx.globalAlpha = 0.78;
+    ctx.beginPath();
+    ctx.moveTo(x0 + d * 10, deckY + 7);
+    ctx.lineTo(x1 - d * 9, groundY - 2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
 
   // plank deck
   const left = Math.min(x0, x1), wDeck = Math.abs(x1 - x0);
@@ -1400,44 +1584,63 @@ function drawWallPlatform(w, h, flash) {
   for (let s = 10; s < depth - 4; s += 12) {
     const px = x0 + d * s;
     ctx.beginPath(); ctx.moveTo(px, deckY + 1); ctx.lineTo(px, deckY + 6); ctx.stroke();
+    ctx.fillStyle = "rgba(220,205,170,0.38)";
+    ctx.beginPath(); ctx.arc(px - d * 3, deckY + 3.2, 0.8, 0, Math.PI * 2); ctx.fill();
   }
 
-  // low railing along the rear (base-side) edge of the deck
+  // Low railing with a deliberate gap at the stair/ladder landing.
+  const railRearX = x1 - d * 15;
+  const railInnerX = x1 - d * Math.max(24, depth * 0.62);
   ctx.fillStyle = woodD;
-  ctx.fillRect(x1 - d * 3 - 1.5, deckY - 13, 3, 13);
-  ctx.fillRect(x1 - d * depth * 0.55 - 1.5, deckY - 13, 3, 13);
+  ctx.fillRect(railRearX - 1.5, deckY - 15, 3, 15);
+  ctx.fillRect(railInnerX - 1.5, deckY - 15, 3, 15);
   ctx.strokeStyle = woodD; ctx.lineWidth = 2.5;
   ctx.beginPath();
-  ctx.moveTo(x1 - d * 2, deckY - 11);
-  ctx.lineTo(x1 - d * depth * 0.58, deckY - 11);
+  ctx.moveTo(railRearX, deckY - 12);
+  ctx.lineTo(railInnerX, deckY - 12);
   ctx.stroke();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(235,220,185,0.22)";
+  ctx.beginPath(); ctx.moveTo(railRearX, deckY - 13); ctx.lineTo(railInnerX, deckY - 13); ctx.stroke();
 
-  if (deckH <= 56) {
+  if (layout.accessType === "stairs") {
     // staircase running from the rear deck edge down toward the base
-    const run = deckH;
+    const run = Math.abs(layout.accessBottomX - layout.accessTopX);
     const steps = Math.max(3, Math.round(deckH / 9));
     ctx.strokeStyle = woodD; ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.moveTo(x1 + d * run, groundY - 1);
-    ctx.lineTo(x1, deckY + 4);
+    ctx.moveTo(layout.accessBottomX, groundY - 1);
+    ctx.lineTo(layout.accessTopX, deckY + 4);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,0.09)"; ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(layout.accessBottomX - d * 2, groundY - 4);
+    ctx.lineTo(layout.accessTopX - d * 2, deckY + 2);
     ctx.stroke();
     ctx.fillStyle = wood;
     for (let i = 1; i <= steps; i++) {
       const t = i / steps;
-      const px = x1 + d * run * (1 - t);
+      const px = layout.accessBottomX + (layout.accessTopX - layout.accessBottomX) * t;
       const py = groundY - deckH * t + 2;
-      ctx.fillRect(px - 5, py, 10, 3.5);
+      ctx.fillRect(px - 7, py, 14, 3.5);
+      ctx.fillStyle = "rgba(255,255,255,0.12)"; ctx.fillRect(px - 6, py, 12, 1);
+      ctx.fillStyle = wood;
     }
   } else {
     // tall wall: ladder against the rear deck edge
-    const ladX = x1 - d * 5;
+    const ladX = layout.accessTopX;
     ctx.strokeStyle = woodD; ctx.lineWidth = 3; ctx.lineCap = "round";
-    ctx.beginPath(); ctx.moveTo(ladX - 4, groundY); ctx.lineTo(ladX - 4, deckY + 4); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(ladX + 4, groundY); ctx.lineTo(ladX + 4, deckY + 4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ladX - 5, groundY); ctx.lineTo(ladX - 5, deckY - 10); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ladX + 5, groundY); ctx.lineTo(ladX + 5, deckY - 10); ctx.stroke();
     ctx.lineWidth = 2;
     for (let ry = groundY - 7; ry > deckY + 8; ry -= 10) {
-      ctx.beginPath(); ctx.moveTo(ladX - 4, ry); ctx.lineTo(ladX + 4, ry); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(ladX - 5, ry); ctx.lineTo(ladX + 5, ry); ctx.stroke();
+      ctx.strokeStyle = "rgba(255,255,255,0.12)";
+      ctx.beginPath(); ctx.moveTo(ladX - 4, ry - 1); ctx.lineTo(ladX + 4, ry - 1); ctx.stroke();
+      ctx.strokeStyle = woodD;
     }
+    ctx.fillStyle = "rgba(35,30,28,0.72)";
+    for (const sx of [-5, 5]) for (const sy of [groundY - 22, deckY + 16]) ctx.fillRect(ladX + sx - 2, sy - 1.5, 4, 3);
   }
 
   ctx.lineCap = "butt";
@@ -1546,136 +1749,466 @@ function drawWallWards(w, h, WW) {
   }
 }
 
+function drawWallBlockLines(x, top, WW, h, skin, step = 10) {
+  ctx.strokeStyle = skin.line || "rgba(0,0,0,0.22)";
+  ctx.lineWidth = 1;
+  for (let yy = top + step; yy < groundY - 4; yy += step) {
+    ctx.beginPath(); ctx.moveTo(x - WW / 2 + 3, yy); ctx.lineTo(x + WW / 2 - 3, yy); ctx.stroke();
+  }
+  for (let yy = top + step, row = 0; yy < groundY - 8; yy += step, row++) {
+    for (let xx = x - WW / 2 + ((row % 2) ? step * 1.25 : step * 0.55); xx < x + WW / 2 - 4; xx += step * 1.35) {
+      ctx.beginPath(); ctx.moveTo(xx, yy); ctx.lineTo(xx, Math.min(yy + step, groundY - 4)); ctx.stroke();
+    }
+  }
+}
+
+function drawWallCrenels(x, y, WW, count, skin, flash, jagged = false) {
+  const col = flash ? "#e8d8a8" : skin.wall;
+  const mW = WW / (count * 2 + 1);
+  ctx.fillStyle = col;
+  for (let i = 0; i < count; i++) {
+    const px = x - WW / 2 + mW + i * mW * 2;
+    if (jagged) {
+      ctx.beginPath(); ctx.moveTo(px, y + 1); ctx.lineTo(px + mW * 0.5, y - 10 - (i % 2) * 5); ctx.lineTo(px + mW, y + 1); ctx.closePath(); ctx.fill();
+    } else {
+      ctx.fillRect(px, y - 9, mW, 10);
+    }
+  }
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  if (!jagged) for (let i = 0; i < count; i++) ctx.fillRect(x - WW / 2 + mW + i * mW * 2, y - 9, mW, 2);
+}
+
+function drawWallSlots(x, top, WW, h, n) {
+  ctx.fillStyle = "rgba(0,0,0,0.52)";
+  for (let k = 0; k < n; k++) {
+    const sx = x - WW * 0.34 + (n === 1 ? WW * 0.34 : k * (WW * 0.68) / (n - 1));
+    ctx.fillRect(sx - 2, top + h * 0.42, 4, Math.max(9, h * 0.16));
+  }
+}
+
+function drawForestWall(w, h, WW, skin, flash, night) {
+  const x = w.x, lvl = w.level, top = groundY - h;
+  const col = flash ? "#e8d8a8" : (lvl === 1 ? skin.wood : skin.wall);
+  if (lvl === 1) {
+    const xs = [-18, -9, 0, 9, 18];
+    ctx.fillStyle = "rgba(0,0,0,0.24)"; roundedRect(x - WW / 2 - 2, groundY - 7, WW + 4, 8, 3); ctx.fill();
+    for (let i = 0; i < xs.length; i++) {
+      const px = x + xs[i], wobble = i % 2 ? 3 : 0, pTop = top + wobble;
+      ctx.fillStyle = i % 2 ? "#744c2a" : col;
+      ctx.beginPath(); ctx.moveTo(px - 4.5, groundY - 2); ctx.lineTo(px - 4.5, pTop + 6); ctx.lineTo(px, pTop); ctx.lineTo(px + 4.5, pTop + 6); ctx.lineTo(px + 4.5, groundY - 2); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.09)"; ctx.fillRect(px - 3.4, pTop + 8, 2, groundY - pTop - 12);
+    }
+    ctx.strokeStyle = skin.gate; ctx.lineWidth = 3; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x - WW / 2 + 2, groundY - h * 0.56); ctx.lineTo(x + WW / 2 - 2, groundY - h * 0.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x - WW / 2 + 3, groundY - h * 0.28); ctx.lineTo(x + WW / 2 - 3, groundY - h * 0.31); ctx.stroke();
+    ctx.lineCap = "butt";
+  } else if (lvl < 5) {
+    roundedRect(x - WW / 2, top, WW, h, 4); ctx.fillStyle = col; ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.08)"; roundedRect(x - WW / 2, top, WW * 0.3, h, 4); ctx.fill();
+    ctx.fillStyle = "rgba(0,0,0,0.18)"; ctx.fillRect(x + WW * 0.28, top, WW * 0.22, h);
+    drawWallBlockLines(x, top, WW, h, skin, 10);
+    drawWallCrenels(x, top, WW, lvl + 2, skin, flash);
+    if (lvl >= 3) drawWallSlots(x, top, WW, h, lvl - 1);
+  } else {
+    drawClassicTieredWall(w, h, WW, skin, flash, night);
+  }
+}
+
+function drawIceShard(x, baseY, h, w, skin, flash) {
+  ctx.fillStyle = flash ? "#e8d8a8" : skin.wallD;
+  ctx.beginPath(); ctx.moveTo(x - w, baseY); ctx.lineTo(x - w * 0.22, baseY - h * 0.72); ctx.lineTo(x + w * 0.12, baseY - h); ctx.lineTo(x + w, baseY); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = flash ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.24)";
+  ctx.beginPath(); ctx.moveTo(x - w, baseY); ctx.lineTo(x + w * 0.12, baseY - h); ctx.lineTo(x - w * 0.08, baseY); ctx.closePath(); ctx.fill();
+}
+
+function drawFrozenWall(w, h, WW, skin, flash, night) {
+  const x = w.x, lvl = w.level, top = groundY - h;
+  if (lvl === 1) {
+    const n = 5;
+    for (let i = 0; i < n; i++) {
+      const px = x - WW * 0.42 + i * (WW * 0.84) / (n - 1);
+      drawIceShard(px, groundY, h * (0.78 + (i % 2) * 0.18), WW * 0.13, skin, flash);
+    }
+  } else if (lvl < 5) {
+    const bodyCol = flash ? "#e8d8a8" : skin.wall;
+    roundedRect(x - WW / 2, top, WW, h, 5); ctx.fillStyle = bodyCol; ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.20)"; ctx.beginPath(); ctx.moveTo(x - WW / 2, top); ctx.lineTo(x - WW * 0.12, top); ctx.lineTo(x - WW * 0.3, groundY); ctx.lineTo(x - WW / 2, groundY); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = skin.line; ctx.lineWidth = 1.1;
+    for (let i = 0; i < lvl + 2; i++) {
+      const px = x - WW * 0.4 + i * (WW * 0.8) / (lvl + 1);
+      ctx.beginPath(); ctx.moveTo(px, top + 4); ctx.lineTo(px + ((i % 2) ? 9 : -7), groundY - 4); ctx.stroke();
+    }
+    for (let i = 0; i < lvl + 1; i++) drawIceShard(x - WW * 0.42 + i * (WW * 0.84) / lvl, top + 2, 16 + lvl * 3, 5, skin, flash);
+    if (lvl >= 3) drawWallSlots(x, top, WW, h, lvl - 1);
+  } else {
+    ctx.fillStyle = flash ? "#e8d8a8" : skin.wallD;
+    roundedRect(x - WW / 2, top, WW, h, 4); ctx.fill();
+    for (const [ox, sh, sw] of [[-30, h * 0.96, 15], [0, h * 1.18, 20], [30, h * 0.88, 14]]) drawIceShard(x + ox, groundY, sh, sw, skin, flash);
+    ctx.fillStyle = skin.wallL; ctx.fillRect(x - WW / 2 - 8, groundY - h * 0.55, WW + 16, 8);
+    ctx.fillRect(x - WW / 2 - 12, top, WW + 24, 9);
+    drawWallCrenels(x, top, WW + 18, 5, skin, flash, true);
+    if (night) { drawSkinLamp(x - 34, groundY - h * 0.55, skin, 0.55); drawSkinLamp(x + 34, top + 4, skin, 0.55); }
+  }
+}
+
+function drawDesertWall(w, h, WW, skin, flash, night) {
+  const x = w.x, lvl = w.level, top = groundY - h;
+  const col = flash ? "#e8d8a8" : skin.wall;
+  if (lvl === 1) {
+    ctx.fillStyle = col; roundedRect(x - WW / 2, top + h * 0.18, WW, h * 0.82, 5); ctx.fill();
+    ctx.fillStyle = skin.wallL; ctx.fillRect(x - WW / 2 - 4, top + h * 0.18 - 4, WW + 8, 7);
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = i % 2 ? skin.wallD : skin.wallL;
+      ctx.fillRect(x - WW / 2 + 6 + i * (WW - 18) / 3, top + h * 0.05, 9, h * 0.2);
+    }
+  } else if (lvl < 5) {
+    roundedRect(x - WW / 2, top, WW, h, 6); ctx.fillStyle = col; ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.10)"; ctx.fillRect(x - WW / 2, top, WW * 0.32, h);
+    drawWallBlockLines(x, top, WW, h, skin, 13);
+    ctx.fillStyle = skin.wallL; ctx.fillRect(x - WW / 2 - 4, top - 5, WW + 8, 8);
+    for (let i = 0; i < lvl + 1; i++) {
+      const px = x - WW * 0.38 + i * (WW * 0.76) / lvl;
+      drawBiomeRoof(px, top - 6, 7 + lvl, 12 + lvl, skin);
+    }
+    if (lvl >= 3) drawWallSlots(x, top, WW, h, lvl - 1);
+  } else {
+    roundedRect(x - WW / 2 - 4, top, WW + 8, h, 6); ctx.fillStyle = col; ctx.fill();
+    drawWallBlockLines(x, top, WW + 8, h, skin, 13);
+    ctx.fillStyle = skin.wallL; ctx.fillRect(x - WW / 2 - 10, groundY - h * 0.52, WW + 20, 9);
+    ctx.fillRect(x - WW / 2 - 14, top - 6, WW + 28, 10);
+    for (const ox of [-38, 38]) {
+      drawMasonryRect(x + ox, top - 20, 18, h + 20, skin, 0, 8);
+      drawBiomeRoof(x + ox, top - 23, 12, 18, skin);
+    }
+    drawBiomeRoof(x, top - 8, 21, 25, skin);
+  }
+}
+
+function drawSwampWall(w, h, WW, skin, flash, night) {
+  const x = w.x, lvl = w.level, top = groundY - h;
+  const deckY = lvl >= 5 ? groundY - h * 0.56 : top + Math.max(6, h * 0.16);
+  ctx.strokeStyle = flash ? "#e8d8a8" : skin.wood; ctx.lineWidth = lvl >= 5 ? 6 : 4; ctx.lineCap = "round";
+  const posts = lvl >= 5 ? [-42, -20, 0, 20, 42] : lvl === 1 ? [-18, 0, 18] : [-30, -10, 10, 30];
+  for (const ox of posts) {
+    ctx.beginPath(); ctx.moveTo(x + ox, groundY); ctx.lineTo(x + ox + windSway(x + ox, 2), top + 2); ctx.stroke();
+  }
+  ctx.lineCap = "butt";
+  if (lvl === 1) {
+    ctx.strokeStyle = skin.roofC; ctx.lineWidth = 3;
+    for (const y of [groundY - h * 0.34, groundY - h * 0.62]) { ctx.beginPath(); ctx.moveTo(x - WW / 2 + 3, y); ctx.lineTo(x + WW / 2 - 3, y + windSway(y, 1)); ctx.stroke(); }
+  } else {
+    ctx.fillStyle = flash ? "#e8d8a8" : skin.wall;
+    roundedRect(x - WW / 2, top + h * 0.16, WW, h * 0.84, 3); ctx.fill();
+    ctx.fillStyle = skin.wood; ctx.fillRect(x - WW / 2 - 8, deckY, WW + 16, 8);
+    ctx.fillStyle = skin.roofC; ctx.beginPath(); ctx.moveTo(x - WW / 2 - 10, top + h * 0.15); ctx.quadraticCurveTo(x, top - 10 - lvl * 2, x + WW / 2 + 10, top + h * 0.15); ctx.lineTo(x + WW / 2 + 3, top + h * 0.27); ctx.quadraticCurveTo(x, top + h * 0.2, x - WW / 2 - 3, top + h * 0.27); ctx.closePath(); ctx.fill();
+    if (lvl >= 3) drawWallSlots(x, top + h * 0.16, WW, h * 0.84, lvl - 1);
+    if (lvl >= 5) ctx.fillRect(x - WW / 2 - 12, top - 4, WW + 24, 8);
+  }
+  if (night && lvl >= 3) drawSkinLamp(x, top + h * 0.32, skin, 0.55);
+}
+
+function drawVolcanoWall(w, h, WW, skin, flash, night) {
+  const x = w.x, lvl = w.level, top = groundY - h;
+  const col = flash ? "#e8d8a8" : skin.wallD;
+  if (lvl === 1) {
+    for (let i = 0; i < 5; i++) {
+      const px = x - WW * 0.42 + i * (WW * 0.84) / 4;
+      ctx.fillStyle = i % 2 ? skin.wall : col;
+      ctx.beginPath(); ctx.moveTo(px - 6, groundY); ctx.lineTo(px - 2, top + (i % 2) * 8); ctx.lineTo(px + 8, groundY); ctx.closePath(); ctx.fill();
+    }
+  } else if (lvl < 5) {
+    roundedRect(x - WW / 2, top, WW, h, 2); ctx.fillStyle = col; ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.06)"; ctx.fillRect(x - WW / 2, top, WW * 0.22, h);
+    ctx.strokeStyle = skin.line; ctx.lineWidth = 1; for (let yy = top + 11; yy < groundY - 4; yy += 12) { ctx.beginPath(); ctx.moveTo(x - WW / 2 + 2, yy); ctx.lineTo(x + WW / 2 - 2, yy + ((yy / 12) % 2 ? 2 : -1)); ctx.stroke(); }
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = withA([255, 94, 24], 0.48); ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(x - WW * 0.35, top + h * 0.35); ctx.lineTo(x - WW * 0.06, top + h * 0.56); ctx.lineTo(x + WW * 0.33, top + h * 0.4); ctx.stroke();
+    ctx.restore();
+    drawWallCrenels(x, top, WW, lvl + 2, skin, flash, true);
+  } else {
+    roundedRect(x - WW / 2 - 2, top, WW + 4, h, 2); ctx.fillStyle = col; ctx.fill();
+    for (let i = 0; i < 4; i++) {
+      const y = groundY - h * (0.24 + i * 0.18);
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = withA([255, 86, 20], 0.45); ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.moveTo(x - WW * 0.42, y); ctx.lineTo(x - WW * 0.12, y - 6); ctx.lineTo(x + WW * 0.4, y + 3); ctx.stroke();
+      ctx.restore();
+    }
+    ctx.fillStyle = skin.wall; ctx.fillRect(x - WW / 2 - 10, groundY - h * 0.52, WW + 20, 9);
+    ctx.fillRect(x - WW / 2 - 12, top, WW + 24, 10);
+    drawWallCrenels(x, top, WW + 18, 5, skin, flash, true);
+    if (night) drawSkinLamp(x, top + 15, skin, 0.6);
+  }
+}
+
+function drawCorruptedWall(w, h, WW, skin, flash, night) {
+  const x = w.x, lvl = w.level, top = groundY - h;
+  const col = flash ? "#e8d8a8" : skin.wallD;
+  if (lvl === 1) {
+    ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.lineCap = "round";
+    for (let i = 0; i < 5; i++) {
+      const px = x - WW * 0.42 + i * (WW * 0.84) / 4;
+      ctx.beginPath(); ctx.moveTo(px, groundY); ctx.quadraticCurveTo(px + (i % 2 ? 10 : -9), top + h * 0.42, px + (i % 2 ? 2 : -2), top); ctx.stroke();
+    }
+    ctx.lineCap = "butt";
+    ctx.strokeStyle = withA([190, 112, 255], 0.42); ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.moveTo(x - WW * 0.43, groundY - h * 0.48); ctx.lineTo(x + WW * 0.42, groundY - h * 0.54); ctx.stroke();
+  } else if (lvl < 5) {
+    for (let i = 0; i < lvl + 2; i++) {
+      const px = x - WW * 0.45 + i * (WW * 0.9) / (lvl + 1);
+      const lean = (i % 2 ? 1 : -1) * 0.08;
+      ctx.save(); ctx.translate(px, groundY); ctx.rotate(lean);
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.moveTo(-8, 0); ctx.lineTo(-5, -h * 0.82); ctx.lineTo(1, -h - (i % 2) * 8); ctx.lineTo(8, -h * 0.7); ctx.lineTo(8, 0); ctx.closePath(); ctx.fill();
+      if (lvl >= 3) drawRuneGlyph(0, -h * 0.52, 3.5, skin.accent2);
+      ctx.restore();
+    }
+    ctx.fillStyle = withA([26, 8, 38], 0.86); roundedRect(x - WW / 2, groundY - 8, WW, 8, 3); ctx.fill();
+  } else {
+    roundedRect(x - WW / 2, top, WW, h, 3); ctx.fillStyle = col; ctx.fill();
+    for (const ox of [-34, 0, 34]) {
+      ctx.save(); ctx.translate(x + ox, groundY); ctx.rotate(ox * 0.002);
+      ctx.fillStyle = ox === 0 ? skin.wall : skin.wallD;
+      ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(-6, -h * 0.78); ctx.lineTo(0, -h - (ox === 0 ? 26 : 10)); ctx.lineTo(12, -h * 0.72); ctx.lineTo(15, 0); ctx.closePath(); ctx.fill();
+      drawRuneGlyph(0, -h * 0.58, 4.6, skin.accent2);
+      ctx.restore();
+    }
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = withA([190, 112, 255], 0.42); ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.ellipse(x, top + h * 0.38, WW * 0.48, 10, performance.now() / 4000, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawClassicTieredWall(w, h, WW, skin, flash, night) {
+  const x = w.x;
+  const col = flash ? "#e8d8a8" : skin.wall;
+  const tw = 96, th = h;
+  const platY1 = groundY - th * 0.52;
+  const parapetY = groundY - th;
+  const platW = tw + 18;
+  const platH = 9;
+  ctx.fillStyle = col; ctx.fillRect(x - tw / 2, groundY - th, tw, th);
+  ctx.fillStyle = "rgba(255,255,255,0.07)"; ctx.fillRect(x - tw / 2, groundY - th, tw * 0.22, th);
+  ctx.fillStyle = "rgba(0,0,0,0.16)"; ctx.fillRect(x + tw * 0.3, groundY - th, tw * 0.22, th);
+  drawWallBlockLines(x, groundY - th, tw, th, skin, 11);
+  drawWallSlots(x, groundY - th, tw, th, 2);
+  ctx.fillStyle = col; ctx.fillRect(x - platW / 2, platY1, platW, platH);
+  ctx.fillStyle = "rgba(255,255,255,0.09)"; ctx.fillRect(x - platW / 2, platY1, platW, 3);
+  ctx.fillStyle = "rgba(0,0,0,0.22)"; ctx.fillRect(x - platW / 2, platY1 + platH - 2, platW, 2);
+  drawWallCrenels(x, platY1, platW, 4, skin, flash);
+  // The top crenels are the parapet above the usable deck, rather than a
+  // second invisible standing height.
+  drawWallCrenels(x, parapetY, platW, 5, skin, flash);
+  if (night) {
+    drawSkinLamp(x - platW / 2 + 6, platY1 + 2, skin, 0.55);
+    drawSkinLamp(x + platW / 2 - 6, platY1 + 2, skin, 0.55);
+    drawSkinLamp(x, parapetY + 2, skin, 0.55);
+  }
+}
+
+// Level-five walls vary dramatically by biome, but all use this same visible
+// top deck and base-side ladder. This is the physical template used by player
+// and unit movement in Wall.js.
+function drawCastleWalkwayAccess(w, h, skin, flash, night) {
+  const layout = wallLayout(w, h);
+  const x = w.x;
+  const deckY = groundY - layout.deckHeight;
+  const deckW = layout.deckMaxX - layout.deckMinX;
+  const col = flash ? "#e8d8a8" : skin.wall;
+  const trim = flash ? "#f4e3b8" : skin.wallL;
+  const rail = flash ? "#d8c090" : skin.gate;
+
+  ctx.fillStyle = "rgba(0,0,0,0.34)";
+  ctx.fillRect(layout.deckMinX - 2, deckY + 7, deckW + 4, 4);
+  ctx.fillStyle = col;
+  ctx.fillRect(layout.deckMinX - 3, deckY, deckW + 6, 8);
+  ctx.fillStyle = trim;
+  ctx.fillRect(layout.deckMinX - 3, deckY, deckW + 6, 2);
+  ctx.fillStyle = "rgba(0,0,0,0.28)";
+  for (const ox of [-43, -15, 15, 43]) {
+    ctx.beginPath();
+    ctx.moveTo(x + ox - 4, deckY + 8);
+    ctx.lineTo(x + ox + 4, deckY + 8);
+    ctx.lineTo(x + ox, deckY + 18);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.fillStyle = "rgba(238,221,182,0.42)";
+  for (let px = layout.deckMinX + 10; px < layout.deckMaxX - 5; px += 18) {
+    ctx.beginPath(); ctx.arc(px, deckY + 4, 0.9, 0, Math.PI * 2); ctx.fill();
+  }
+
+  const ladX = layout.accessTopX;
+  ctx.strokeStyle = rail; ctx.lineWidth = 3.2; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(ladX - 5, groundY); ctx.lineTo(ladX - 5, deckY - 11); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(ladX + 5, groundY); ctx.lineTo(ladX + 5, deckY - 11); ctx.stroke();
+  ctx.lineWidth = 2;
+  for (let ry = groundY - 7; ry > deckY + 4; ry -= 11) {
+    ctx.beginPath(); ctx.moveTo(ladX - 5, ry); ctx.lineTo(ladX + 5, ry); ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,0.12)";
+    ctx.beginPath(); ctx.moveTo(ladX - 4, ry - 1); ctx.lineTo(ladX + 4, ry - 1); ctx.stroke();
+    ctx.strokeStyle = rail;
+  }
+  ctx.lineCap = "butt";
+  ctx.fillStyle = skin.wallD;
+  for (const sx of [-5, 5]) for (const sy of [groundY - 24, deckY + 18, deckY + 52]) {
+    ctx.fillRect(ladX + sx - 2, sy - 1.5, 4, 3);
+  }
+  if (night) drawSkinLamp(x - layout.backDir * 28, deckY + 2, skin, 0.52);
+}
+
+function drawBiomeWall(w, h, WW, skin, flash, dark, night) {
+  if (skin.id === "frozen") { drawFrozenWall(w, h, WW, skin, flash, night); return; }
+  if (skin.id === "desert") { drawDesertWall(w, h, WW, skin, flash, night); return; }
+  if (skin.id === "swamp") { drawSwampWall(w, h, WW, skin, flash, night); return; }
+  if (skin.id === "volcano") { drawVolcanoWall(w, h, WW, skin, flash, night); return; }
+  if (skin.id === "corrupted") { drawCorruptedWall(w, h, WW, skin, flash, night); return; }
+  drawForestWall(w, h, WW, skin, flash, night);
+}
+
+// A loose detail template shared by all biome variants. Structural cues stay
+// consistent (footing, edge braces, damage cracks), while the inner motifs are
+// deliberately biome-specific.
+function drawBiomeWallDetails(w, h, WW, skin, flash, night) {
+  const x = w.x, top = groundY - h, lvl = w.level;
+  const built = clamp(w.buildProgress, 0, 1);
+  const edge = flash ? "#f3dfb0" : skin.wallD;
+  const hi = flash ? "#fff0c8" : skin.wallL;
+  ctx.save();
+  ctx.globalAlpha = 0.35 + built * 0.65;
+
+  // Footing and edge anchors make even organic level-one walls feel planted.
+  ctx.fillStyle = edge;
+  ctx.fillRect(x - WW / 2 - 3, groundY - 5, WW + 6, 5);
+  ctx.fillStyle = "rgba(255,255,255,0.09)";
+  ctx.fillRect(x - WW / 2 - 2, groundY - 5, WW + 4, 1.4);
+  for (const side of [-1, 1]) {
+    const ex = x + side * (WW / 2 + (lvl >= 4 ? 5 : 2));
+    ctx.fillStyle = edge;
+    ctx.beginPath();
+    ctx.moveTo(ex - side * 3, groundY - 3);
+    ctx.lineTo(ex + side * (6 + lvl), groundY - 3);
+    ctx.lineTo(ex - side * 1, groundY - Math.min(h * 0.48, 38 + lvl * 3));
+    ctx.closePath(); ctx.fill();
+  }
+
+  if (skin.id === "forest") {
+    // Iron straps, hand-forged bolts and a little ivy between the courses.
+    ctx.strokeStyle = skin.gate; ctx.lineWidth = 2.2;
+    for (const ox of [-WW * 0.28, WW * 0.28]) {
+      ctx.beginPath(); ctx.moveTo(x + ox, top + 8); ctx.lineTo(x + ox, groundY - 8); ctx.stroke();
+      ctx.fillStyle = hi;
+      for (const yy of [top + h * 0.3, top + h * 0.68]) {
+        ctx.beginPath(); ctx.arc(x + ox, yy, 1.4, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    if (lvl >= 2) {
+      ctx.strokeStyle = withA([72, 116, 54], 0.75); ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(x - WW * 0.46, top + h * 0.2);
+      ctx.bezierCurveTo(x - WW * 0.18, top + h * 0.38, x - WW * 0.38, top + h * 0.67, x - WW * 0.08, groundY - 9); ctx.stroke();
+      ctx.fillStyle = skin.accent;
+      for (const [ox, oy] of [[-0.31,0.43],[-0.22,0.58],[-0.14,0.78]]) {
+        ctx.beginPath(); ctx.ellipse(x + WW * ox, top + h * oy, 3, 1.5, -0.5, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  } else if (skin.id === "frozen") {
+    // Layered frost, trapped air and small icicles under the coping.
+    ctx.strokeStyle = hi; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(x - WW * 0.42, top + h * 0.32);
+    ctx.lineTo(x - WW * 0.12, top + h * 0.28); ctx.lineTo(x + WW * 0.08, top + h * 0.42);
+    ctx.lineTo(x + WW * 0.4, top + h * 0.35); ctx.stroke();
+    ctx.fillStyle = withA([225, 249, 255], 0.78);
+    for (const ox of [-0.36, -0.12, 0.18, 0.39]) {
+      const iy = top + 5 + Math.abs(ox) * 8;
+      ctx.beginPath(); ctx.moveTo(x + WW * ox - 2, iy); ctx.lineTo(x + WW * ox + 1, iy + 9 + lvl * 2); ctx.lineTo(x + WW * ox + 3, iy); ctx.closePath(); ctx.fill();
+    }
+  } else if (skin.id === "desert") {
+    // Sandstone relief band and glazed geometric inlays.
+    const bandY = top + h * 0.56;
+    ctx.fillStyle = edge; ctx.fillRect(x - WW * 0.48, bandY - 3, WW * 0.96, 7);
+    ctx.fillStyle = hi;
+    for (let i = -2; i <= 2; i++) {
+      const px = x + i * Math.max(8, WW * 0.17);
+      ctx.beginPath(); ctx.moveTo(px, bandY - 2.5); ctx.lineTo(px + 4, bandY + 0.5);
+      ctx.lineTo(px, bandY + 3.5); ctx.lineTo(px - 4, bandY + 0.5); ctx.closePath(); ctx.fill();
+    }
+    ctx.strokeStyle = "rgba(78,50,26,0.42)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(x, top + h * 0.28, 7 + lvl, Math.PI, 0); ctx.stroke();
+  } else if (skin.id === "swamp") {
+    // Rope lashings, moss fringe and drainage pegs.
+    ctx.strokeStyle = skin.roofD; ctx.lineWidth = 2;
+    for (const ox of [-WW * 0.3, WW * 0.3]) {
+      const cy = top + h * 0.44;
+      ctx.beginPath(); ctx.moveTo(x + ox - 5, cy - 6); ctx.lineTo(x + ox + 5, cy + 6);
+      ctx.moveTo(x + ox + 5, cy - 6); ctx.lineTo(x + ox - 5, cy + 6); ctx.stroke();
+      ctx.fillStyle = skin.accent;
+      ctx.beginPath(); ctx.arc(x + ox, cy, 2.2, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.strokeStyle = withA([92, 128, 67], 0.8); ctx.lineWidth = 2.4;
+    for (let ox = -WW * 0.42; ox <= WW * 0.42; ox += Math.max(10, WW / 5)) {
+      ctx.beginPath(); ctx.moveTo(x + ox, top + 7); ctx.quadraticCurveTo(x + ox + 3, top + 14, x + ox - 1, top + 20 + Math.abs(ox % 7)); ctx.stroke();
+    }
+  } else if (skin.id === "volcano") {
+    // Riveted obsidian plates over a restrained ember seam.
+    ctx.strokeStyle = skin.wallL; ctx.lineWidth = 2;
+    ctx.strokeRect(x - WW * 0.34, top + h * 0.26, WW * 0.68, h * 0.42);
+    ctx.fillStyle = hi;
+    for (const ox of [-0.31, 0.31]) for (const oy of [0.3, 0.64]) {
+      ctx.beginPath(); ctx.arc(x + WW * ox, top + h * oy, 1.5, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = withA([255, 98, 28], night ? 0.8 : 0.55); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x - WW * 0.3, groundY - 12);
+    ctx.lineTo(x - WW * 0.08, groundY - 20); ctx.lineTo(x + WW * 0.06, groundY - 14); ctx.lineTo(x + WW * 0.3, groundY - 23); ctx.stroke();
+    ctx.restore();
+  } else if (skin.id === "corrupted") {
+    // Asymmetric binding ribs and a pulsing ward at their meeting point.
+    ctx.strokeStyle = skin.wallL; ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.moveTo(x - WW * 0.42, groundY - 8);
+    ctx.quadraticCurveTo(x - WW * 0.2, top + h * 0.42, x, top + h * 0.5);
+    ctx.quadraticCurveTo(x + WW * 0.26, top + h * 0.36, x + WW * 0.43, top + 9); ctx.stroke();
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha *= 0.55 + Math.sin(performance.now() / 420 + x) * 0.16;
+    drawRuneGlyph(x, top + h * 0.5, 4 + lvl * 0.45, skin.accent2);
+    ctx.restore();
+  }
+
+  // Damage adds readable cracks without changing collision geometry.
+  const damage = w.maxHp > 0 ? clamp(1 - w.hp / w.maxHp, 0, 1) : 0;
+  if (damage > 0.2) {
+    ctx.strokeStyle = skin.id === "frozen" ? "rgba(235,252,255,0.72)" : "rgba(12,8,10,0.55)";
+    ctx.lineWidth = 1.2 + damage;
+    const cracks = damage > 0.62 ? 3 : damage > 0.38 ? 2 : 1;
+    for (let i = 0; i < cracks; i++) {
+      const cx = x + (i - (cracks - 1) / 2) * WW * 0.24;
+      const cy = top + h * (0.28 + i * 0.16);
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx - 5, cy + 9); ctx.lineTo(cx + 2, cy + 15); ctx.lineTo(cx - 3, cy + 24); ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
 export function drawWalls(dark) {
   const night=dark>0.25;
   const view = visibleWorldBounds(170);
   for (const w of state.walls) {
     const x=w.x;
     if (x < view.left || x > view.right) continue;
-    if (!w.commissioned) { drawBuildMarker(x,"#6fb3d6"); continue; }
+    const markerSkin = baseSkinAt(x, false);
+    if (!w.commissioned) { drawBuildMarker(x, markerSkin.accent || "#6fb3d6"); continue; }
     const h=wallHeight(w)*(0.3+0.7*clamp(w.buildProgress,0,1));
     const WW=w.level>=5?96:wallRenderWidth(w);
     if (w.flash>0) w.flash-=0.016;
     if (w.golemImpact>0) w.golemImpact=Math.max(0,w.golemImpact-0.016);
     const flash=w.flash>0;
     const golemImpact=w.golemImpact||0;
-    const stoneColors=["","#7a5a36","#6b6b78","#555568","#484458","#3a3448"];
-    const col=flash?"#e8d8a8":(stoneColors[w.level]||"#7a5a36");
+    const skin = baseSkinAt(x, flash);
     groundShadow(x,WW*0.7,0.26);
-    if (w.level<5) drawWallPlatform(w,h,flash);
-
-    if (w.level === 1) {
-      const palH = h + 5 * clamp(w.buildProgress,0,1);
-      const topY = groundY - palH;
-      const plankW = 8.5;
-      const xs = [-16, -8, 0, 8, 16];
-      ctx.fillStyle="rgba(0,0,0,0.24)";
-      roundedRect(x-WW/2-2,groundY-7,WW+4,8,3); ctx.fill();
-      for (let i=0;i<xs.length;i++) {
-        const px=x+xs[i];
-        const wobble=(i%2===0?0:3);
-        const pTop=topY+wobble;
-        const pBot=groundY-2;
-        const left=px-plankW/2, right=px+plankW/2;
-        ctx.fillStyle=flash?"#e8d8a8":(i%2===0?"#8a6036":"#744c2a");
-        ctx.beginPath();
-        ctx.moveTo(left,pBot);
-        ctx.lineTo(left,pTop+6);
-        ctx.lineTo(px,pTop);
-        ctx.lineTo(right,pTop+6);
-        ctx.lineTo(right,pBot);
-        ctx.closePath(); ctx.fill();
-        ctx.fillStyle="rgba(255,255,255,0.09)";
-        ctx.fillRect(left+1,pTop+8,2.2,pBot-pTop-11);
-        ctx.fillStyle="rgba(0,0,0,0.18)";
-        ctx.fillRect(right-2.4,pTop+9,2,pBot-pTop-12);
-      }
-      ctx.strokeStyle="rgba(45,28,14,0.72)"; ctx.lineWidth=3; ctx.lineCap="round";
-      ctx.beginPath(); ctx.moveTo(x-WW/2+2,groundY-palH*0.56); ctx.lineTo(x+WW/2-2,groundY-palH*0.49); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(x-WW/2+3,groundY-palH*0.28); ctx.lineTo(x+WW/2-3,groundY-palH*0.31); ctx.stroke();
-      ctx.lineCap="butt";
-      ctx.fillStyle="rgba(0,0,0,0.22)";
-      roundedRect(x-WW/2+2,groundY-5,WW-4,5,2); ctx.fill();
-      if (night&&w.buildProgress>0.6) drawTorch(x+WW/2-3,groundY-palH*0.72);
-    } else if (w.level < 5) {
-      roundedRect(x-WW/2,groundY-h,WW,h,4); ctx.fillStyle=col; ctx.fill();
-      ctx.fillStyle="rgba(255,255,255,0.08)"; roundedRect(x-WW/2,groundY-h,WW*0.3,h,4); ctx.fill();
-      ctx.fillStyle="rgba(0,0,0,0.18)"; ctx.fillRect(x+WW*0.28,groundY-h,WW*0.22,h);
-      if (w.level >= 2) {
-        ctx.strokeStyle="rgba(0,0,0,0.22)"; ctx.lineWidth=1;
-        for (let yy=groundY-h+8;yy<groundY-4;yy+=9) { ctx.beginPath(); ctx.moveTo(x-WW/2+2,yy); ctx.lineTo(x+WW/2-2,yy); ctx.stroke(); }
-      }
-      ctx.fillStyle=col;
-      const nM=w.level+2, mW=WW/(nM*2+1);
-      for (let i=0;i<nM;i++) ctx.fillRect(x-WW/2+i*(mW*2),groundY-h-8,mW,9);
-      if (w.level >= 3) {
-        ctx.fillStyle="rgba(0,0,0,0.55)";
-        for (let k=0;k<w.level-1;k++) {
-          const sx=x-WW/2+8+k*(WW-16)/(w.level-1);
-          ctx.fillRect(sx,groundY-h*0.6,5,12);
-        }
-      }
-      if (night&&w.buildProgress>0.6) drawTorch(x,groundY-h-4);
-    } else {
-      const tw = 96, th = h;
-      const platY1 = groundY - th * 0.52;
-      const platY2 = groundY - th;
-      const platW  = tw + 18;
-      const platH  = 9;
-
-      ctx.fillStyle=col; ctx.fillRect(x-tw/2, groundY-th, tw, th);
-      ctx.fillStyle="rgba(255,255,255,0.07)"; ctx.fillRect(x-tw/2, groundY-th, tw*0.22, th);
-      ctx.fillStyle="rgba(0,0,0,0.16)"; ctx.fillRect(x+tw*0.3, groundY-th, tw*0.22, th);
-
-      ctx.strokeStyle="rgba(0,0,0,0.20)"; ctx.lineWidth=1;
-      for (let yy=groundY-th+10; yy<groundY-4; yy+=11) {
-        ctx.beginPath(); ctx.moveTo(x-tw/2+2,yy); ctx.lineTo(x+tw/2-2,yy); ctx.stroke();
-      }
-
-      ctx.fillStyle="rgba(0,0,0,0.55)";
-      ctx.fillRect(x-tw*0.28-2, groundY-th*0.28, 5, 13);
-      ctx.fillRect(x+tw*0.18,   groundY-th*0.28, 5, 13);
-
-      ctx.fillStyle=col; ctx.fillRect(x-platW/2, platY1, platW, platH);
-      ctx.fillStyle="rgba(255,255,255,0.09)"; ctx.fillRect(x-platW/2, platY1, platW, 3);
-      ctx.fillStyle="rgba(0,0,0,0.22)"; ctx.fillRect(x-platW/2, platY1+platH-2, platW, 2);
-      ctx.fillStyle=col;
-      for (let i=0;i<4;i++) ctx.fillRect(x-platW/2+i*(platW/8*2), platY1-8, platW/8, 9);
-
-      ctx.fillStyle=col; ctx.fillRect(x-platW/2, platY2, platW, platH);
-      ctx.fillStyle="rgba(255,255,255,0.09)"; ctx.fillRect(x-platW/2, platY2, platW, 3);
-      ctx.fillStyle="rgba(0,0,0,0.22)"; ctx.fillRect(x-platW/2, platY2+platH-2, platW, 2);
-      const mW2=platW/10;
-      ctx.fillStyle=col;
-      for (let i=0;i<5;i++) ctx.fillRect(x-platW/2+i*(mW2*2), platY2-11, mW2, 12);
-
-      const ladX = x + (w.side > 0 ? -tw/2 + 6 : tw/2 - 6);
-      const ladTop = platY2 + platH;
-      const ladBot = groundY;
-      ctx.strokeStyle="#5a3a1a"; ctx.lineWidth=3; ctx.lineCap="round";
-      ctx.beginPath(); ctx.moveTo(ladX-5, ladBot); ctx.lineTo(ladX-5, ladTop); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(ladX+5, ladBot); ctx.lineTo(ladX+5, ladTop); ctx.stroke();
-      ctx.lineWidth=2;
-      for (let ry=ladBot-6; ry>ladTop+4; ry-=11) {
-        ctx.beginPath(); ctx.moveTo(ladX-5,ry); ctx.lineTo(ladX+5,ry); ctx.stroke();
-      }
-      const lad2Top = platY1;
-      const lad2Bot = platY2 + platH;
-      const lad2X   = x + (w.side > 0 ? -tw/2 + 6 : tw/2 - 6);
-      ctx.lineWidth=3;
-      ctx.beginPath(); ctx.moveTo(lad2X-5,lad2Bot); ctx.lineTo(lad2X-5,lad2Top); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(lad2X+5,lad2Bot); ctx.lineTo(lad2X+5,lad2Top); ctx.stroke();
-      ctx.lineWidth=2;
-      for (let ry=lad2Bot-6; ry>lad2Top+4; ry-=11) {
-        ctx.beginPath(); ctx.moveTo(lad2X-5,ry); ctx.lineTo(lad2X+5,ry); ctx.stroke();
-      }
-
-      if (night) {
-        drawTorch(x-platW/2+6, platY1-2);
-        drawTorch(x+platW/2-6, platY1-2);
-        drawTorch(x, platY2-2);
-      }
-    }
+    if (w.level<5) drawWallPlatform(w,h,flash,skin);
+    drawBiomeWall(w, h, WW, skin, flash, dark, night);
+    drawBiomeWallDetails(w,h,WW,skin,flash,night);
+    if (w.level>=5) drawCastleWalkwayAccess(w,h,skin,flash,night);
     // Siege hits leave a brief molten fracture at the enemy-facing edge. It
     // makes the Colossus's ram and double-fist crush read as wall impacts,
     // rather than as a generic damage flash somewhere in the world.
@@ -1710,35 +2243,926 @@ export function drawWalls(dark) {
   }
 }
 
+const BASE_BIOME_SKINS = {
+  forest: {
+    id: "forest", roof: "cone", wall: "#5a5260", wallD: "#403a48", wallL: "#766f7a",
+    roofC: "#25406a", roofD: "#162b48", wood: "#5a3a1e", trim: "#cdbfa3",
+    accent: "#9bd05a", accent2: "#f2c14e", banner: "#c1453b", gate: "#4e3820",
+    window: [255, 186, 86], flame0: "#ff8a30", flame1: "#ffd060",
+    aura: "rgba(155,208,90,0.13)", line: "rgba(0,0,0,0.20)",
+  },
+  frozen: {
+    id: "frozen", roof: "ice", wall: "#a9c7d8", wallD: "#4c7086", wallL: "#e8f8ff",
+    roofC: "#dff7ff", roofD: "#7bb8d8", wood: "#6c7d88", trim: "#f5fdff",
+    accent: "#82dfff", accent2: "#ffffff", banner: "#65bde8", gate: "#466978",
+    window: [170, 235, 255], flame0: "#75dcff", flame1: "#f0fdff",
+    aura: "rgba(150,230,255,0.18)", line: "rgba(36,78,104,0.25)",
+  },
+  desert: {
+    id: "desert", roof: "dome", wall: "#b9874f", wallD: "#6e4a28", wallL: "#edc982",
+    roofC: "#d8a85c", roofD: "#8e5d2e", wood: "#6a3f1d", trim: "#ffe0a0",
+    accent: "#f1b24f", accent2: "#ffd27a", banner: "#b95f34", gate: "#5a3218",
+    window: [255, 216, 128], flame0: "#ffb24a", flame1: "#fff0ba",
+    aura: "rgba(255,198,96,0.15)", line: "rgba(84,52,24,0.22)",
+  },
+  swamp: {
+    id: "swamp", roof: "thatch", wall: "#314638", wallD: "#17231e", wallL: "#6f8b55",
+    roofC: "#61713f", roofD: "#2a3a2a", wood: "#4d3821", trim: "#93a960",
+    accent: "#9bd85a", accent2: "#d6f08a", banner: "#4f8d62", gate: "#2e2418",
+    window: [190, 246, 104], flame0: "#7ad65a", flame1: "#edffba",
+    aura: "rgba(120,180,74,0.17)", line: "rgba(6,18,12,0.28)",
+  },
+  volcano: {
+    id: "volcano", roof: "jagged", wall: "#2f2b29", wallD: "#151313", wallL: "#6f4030",
+    roofC: "#171317", roofD: "#080608", wood: "#4a2417", trim: "#aa5940",
+    accent: "#ff6a24", accent2: "#ffb13d", banner: "#c74224", gate: "#28110c",
+    window: [255, 106, 32], flame0: "#ff4a12", flame1: "#ffe36a",
+    aura: "rgba(255,88,24,0.18)", line: "rgba(0,0,0,0.34)",
+  },
+  corrupted: {
+    id: "corrupted", roof: "spire", wall: "#322244", wallD: "#171020", wallL: "#6c4aa0",
+    roofC: "#241236", roofD: "#09040f", wood: "#3a2138", trim: "#a56bff",
+    accent: "#b66bff", accent2: "#dca8ff", banner: "#7f4dbe", gate: "#130817",
+    window: [210, 142, 255], flame0: "#9b56ff", flame1: "#f2dcff",
+    aura: "rgba(178,96,255,0.18)", line: "rgba(0,0,0,0.36)",
+  },
+};
+
+function baseSkinAt(x, flash) {
+  const biome = biomeAt(x);
+  const skin = BASE_BIOME_SKINS[biome?.id] || BASE_BIOME_SKINS.forest;
+  if (!flash) return skin;
+  return {
+    ...skin,
+    wall: "#ffd0b0",
+    wallD: "#e0b090",
+    wallL: "#fff0d0",
+    roofC: "#ffd0b0",
+    roofD: "#d09070",
+    trim: "#fff1cf",
+  };
+}
+
+function drawBaseGroundSeal(x, lvl, skin, dark) {
+  const w = lvl >= 4 ? 265 : lvl >= 2 ? 178 : 105;
+  ctx.save();
+  ctx.fillStyle = skin.aura;
+  ctx.beginPath(); ctx.ellipse(x, groundY + 3, w, 16 + lvl * 1.2, 0, 0, Math.PI * 2); ctx.fill();
+
+  if (skin.id === "frozen") {
+    ctx.fillStyle = withA(lerpColor([238,248,255], [95,130,160], dark), 0.72);
+    for (const ox of [-84, -28, 44, 96]) {
+      ctx.beginPath(); ctx.ellipse(x + ox, groundY - 2, 24, 6, 0, 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (skin.id === "desert") {
+    ctx.strokeStyle = withA(lerpColor([255,220,150], [88,58,34], dark), 0.42);
+    ctx.lineWidth = 1.5;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath(); ctx.moveTo(x - w * 0.72 + i * 48, groundY + 2 + i % 2);
+      ctx.quadraticCurveTo(x - w * 0.32 + i * 38, groundY - 5, x + w * 0.18 + i * 32, groundY + 3); ctx.stroke();
+    }
+  } else if (skin.id === "swamp") {
+    ctx.fillStyle = withA(lerpColor([58,92,58], [6,16,14], dark), 0.46);
+    for (const ox of [-96, -38, 52, 116]) {
+      ctx.beginPath(); ctx.ellipse(x + ox, groundY + 2, 28, 8, 0, 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (skin.id === "volcano") {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = withA([255, 94, 26], 0.48); ctx.lineWidth = 2;
+    for (const ox of [-90, -18, 62]) {
+      ctx.beginPath(); ctx.moveTo(x + ox - 18, groundY);
+      ctx.lineTo(x + ox - 4, groundY - 5); ctx.lineTo(x + ox + 22, groundY - 1); ctx.stroke();
+    }
+    ctx.restore();
+  } else if (skin.id === "corrupted") {
+    const t = performance.now() / 1000;
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = withA([196, 118, 255], 0.22 + 0.08 * Math.sin(t * 2.2));
+    ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.ellipse(x, groundY - 4, w * 0.58, 12, t * 0.08, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  } else {
+    ctx.strokeStyle = withA([155, 208, 90], 0.28); ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.ellipse(x, groundY - 1, w * 0.62, 9, 0, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawSkinLamp(x, y, skin, scale = 1) {
+  const t = performance.now() / 1000;
+  const r = 15 * scale + Math.sin(t * 8 + x) * 1.4;
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  const g = ctx.createRadialGradient(x, y - 11 * scale, 1, x, y - 11 * scale, r * 2.1);
+  g.addColorStop(0, withA(skin.window, 0.45));
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y - 11 * scale, r * 2.1, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = skin.flame0;
+  ctx.beginPath(); ctx.ellipse(x, y - 10 * scale, 3.2 * scale, 7 * scale, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = skin.flame1;
+  ctx.beginPath(); ctx.ellipse(x, y - 11 * scale, 1.5 * scale, 4 * scale, 0, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawBiomeHearth(x, skin, dark, scale = 1) {
+  const t = performance.now() / 1000;
+  if (skin.id === "frozen") {
+    ctx.fillStyle = withA([220, 248, 255], 0.75);
+    for (let i = -1; i <= 1; i++) {
+      ctx.beginPath(); ctx.moveTo(x + i * 6 * scale - 4 * scale, groundY);
+      ctx.lineTo(x + i * 6 * scale, groundY - (15 + Math.abs(i) * 4) * scale);
+      ctx.lineTo(x + i * 6 * scale + 5 * scale, groundY); ctx.closePath(); ctx.fill();
+    }
+  } else if (skin.id === "swamp") {
+    ctx.fillStyle = "#233522";
+    ctx.beginPath(); ctx.ellipse(x, groundY - 2, 12 * scale, 4 * scale, 0, 0, Math.PI * 2); ctx.fill();
+  } else if (skin.id === "volcano") {
+    ctx.fillStyle = "#1b1412";
+    ctx.beginPath(); ctx.ellipse(x, groundY - 2, 16 * scale, 5 * scale, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = withA([255, 96, 24], 0.7); ctx.lineWidth = 2 * scale;
+    ctx.beginPath(); ctx.moveTo(x - 11 * scale, groundY - 2); ctx.lineTo(x + 9 * scale, groundY - 5); ctx.stroke();
+  } else if (skin.id === "corrupted") {
+    ctx.fillStyle = "#100716";
+    ctx.beginPath(); ctx.ellipse(x, groundY - 2, 15 * scale, 5 * scale, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = withA([190, 110, 255], 0.38 + 0.14 * Math.sin(t * 3));
+    ctx.beginPath(); ctx.arc(x, groundY - 13 * scale, 11 * scale, -0.7, 4.0); ctx.stroke();
+    ctx.restore();
+  } else {
+    ctx.strokeStyle = skin.wood; ctx.lineWidth = 4 * scale; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x - 12 * scale, groundY - 2); ctx.lineTo(x + 10 * scale, groundY - 7 * scale); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 12 * scale, groundY - 2); ctx.lineTo(x - 10 * scale, groundY - 7 * scale); ctx.stroke();
+    ctx.lineCap = "butt";
+  }
+  drawSkinLamp(x, groundY, skin, scale);
+}
+
+function drawBiomeShelter(x, skin, dark, scale = 1, flip = 1) {
+  ctx.save();
+  ctx.translate(x, groundY);
+  ctx.scale(flip * scale, scale);
+  if (skin.id === "frozen") {
+    ctx.fillStyle = skin.wall;
+    ctx.beginPath(); ctx.moveTo(-30, 0); ctx.quadraticCurveTo(-26, -32, 0, -43);
+    ctx.quadraticCurveTo(27, -31, 31, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.26)";
+    ctx.beginPath(); ctx.moveTo(-25, -2); ctx.quadraticCurveTo(-18, -25, 0, -39); ctx.lineTo(-2, -2); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = skin.line; ctx.lineWidth = 1.2;
+    for (let y = -31; y < -6; y += 8) { ctx.beginPath(); ctx.moveTo(-20, y); ctx.lineTo(20, y + 3); ctx.stroke(); }
+    ctx.fillStyle = skin.gate;
+    ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(-9, -15); ctx.quadraticCurveTo(0, -23, 9, -15); ctx.lineTo(9, 0); ctx.closePath(); ctx.fill();
+  } else if (skin.id === "desert") {
+    ctx.fillStyle = skin.wallD; ctx.fillRect(-24, -34, 48, 34);
+    ctx.fillStyle = skin.wall; ctx.beginPath(); ctx.moveTo(-30, -34); ctx.lineTo(0, -52); ctx.lineTo(30, -34); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.beginPath(); ctx.moveTo(-30, -34); ctx.lineTo(0, -52); ctx.lineTo(-4, -34); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = skin.accent; ctx.fillRect(-25, -35, 50, 3);
+    ctx.fillStyle = skin.gate; ctx.fillRect(-6, -18, 12, 18);
+  } else if (skin.id === "swamp") {
+    ctx.strokeStyle = skin.wood; ctx.lineWidth = 3; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-18, 0); ctx.lineTo(-14, -28); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(14, -28); ctx.stroke();
+    ctx.lineCap = "butt";
+    ctx.fillStyle = skin.wood; ctx.fillRect(-27, -30, 54, 5);
+    ctx.fillStyle = skin.wall; ctx.fillRect(-21, -57, 42, 29);
+    ctx.fillStyle = skin.roofC;
+    ctx.beginPath(); ctx.moveTo(-28, -57); ctx.lineTo(0, -73); ctx.lineTo(29, -57); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = skin.accent; ctx.lineWidth = 1.3;
+    for (const ox of [-13, 0, 12]) { ctx.beginPath(); ctx.moveTo(ox, -57); ctx.quadraticCurveTo(ox + 3, -45, ox - 2, -35); ctx.stroke(); }
+  } else if (skin.id === "volcano") {
+    ctx.fillStyle = skin.wallD;
+    ctx.beginPath(); ctx.moveTo(-30, 0); ctx.lineTo(-25, -38); ctx.lineTo(-5, -50); ctx.lineTo(24, -36); ctx.lineTo(30, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = skin.wall;
+    ctx.beginPath(); ctx.moveTo(-25, -38); ctx.lineTo(-5, -50); ctx.lineTo(3, 0); ctx.lineTo(-30, 0); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = skin.accent; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(-4, -42); ctx.lineTo(5, -23); ctx.lineTo(1, -4); ctx.stroke();
+    ctx.fillStyle = skin.gate; ctx.fillRect(-7, -18, 14, 18);
+  } else if (skin.id === "corrupted") {
+    ctx.fillStyle = skin.wallD;
+    ctx.beginPath(); ctx.moveTo(-28, 0); ctx.lineTo(-20, -40); ctx.lineTo(-2, -58); ctx.lineTo(23, -35); ctx.lineTo(28, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = skin.wall;
+    ctx.beginPath(); ctx.moveTo(-20, -40); ctx.lineTo(-2, -58); ctx.lineTo(5, -3); ctx.lineTo(-28, 0); ctx.closePath(); ctx.fill();
+    drawRuneGlyph(4, -27, 4, skin.accent2);
+    ctx.fillStyle = skin.gate; ctx.fillRect(-6, -18, 12, 18);
+  } else {
+    ctx.fillStyle = skin.wallD; ctx.beginPath(); ctx.moveTo(0, -46); ctx.lineTo(-28, 0); ctx.lineTo(28, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = skin.wall; ctx.beginPath(); ctx.moveTo(0, -46); ctx.lineTo(-28, 0); ctx.lineTo(-8, 0); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = skin.trim; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(0, -46); ctx.lineTo(0, -58); ctx.stroke();
+    ctx.fillStyle = skin.banner; ctx.beginPath(); ctx.moveTo(0, -58); ctx.lineTo(12 + windSway(x, 2), -54); ctx.lineTo(0, -50); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawSkinWindow(x, y, w, h, skin, dark) {
+  const glow = litWindow(dark);
+  ctx.fillStyle = "#17131a";
+  ctx.beginPath(); ctx.moveTo(x - w / 2 - 1, y + h); ctx.lineTo(x - w / 2 - 1, y + w * 0.45);
+  ctx.arc(x, y + w * 0.45, w / 2 + 1, Math.PI, 0); ctx.lineTo(x + w / 2 + 1, y + h); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = withA(skin.window, glow);
+  ctx.beginPath(); ctx.moveTo(x - w / 2, y + h); ctx.lineTo(x - w / 2, y + w * 0.45);
+  ctx.arc(x, y + w * 0.45, w / 2, Math.PI, 0); ctx.lineTo(x + w / 2, y + h); ctx.closePath(); ctx.fill();
+}
+
+function drawMasonryRect(x, y, w, h, skin, dark, rounded = 0) {
+  const base = dark > 0.68 ? skin.wallD : skin.wall;
+  ctx.fillStyle = base;
+  if (rounded) { roundedRect(x - w / 2, y, w, h, rounded); ctx.fill(); }
+  else ctx.fillRect(x - w / 2, y, w, h);
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  ctx.fillRect(x - w / 2, y, w * 0.28, h);
+  ctx.fillStyle = "rgba(0,0,0,0.16)";
+  ctx.fillRect(x + w * 0.22, y, w * 0.28, h);
+  ctx.strokeStyle = skin.line; ctx.lineWidth = 1;
+  const step = skin.id === "desert" ? 13 : skin.id === "frozen" ? 14 : 11;
+  for (let yy = y + step; yy < y + h - 4; yy += step) {
+    ctx.beginPath(); ctx.moveTo(x - w / 2 + 3, yy); ctx.lineTo(x + w / 2 - 3, yy); ctx.stroke();
+  }
+  for (let yy = y + step, row = 0; yy < y + h - 4; yy += step, row++) {
+    for (let xx = x - w / 2 + ((row % 2) ? step * 1.4 : step * 0.7); xx < x + w / 2 - 4; xx += step * 1.5) {
+      ctx.beginPath(); ctx.moveTo(xx, yy); ctx.lineTo(xx, Math.min(yy + step, y + h - 2)); ctx.stroke();
+    }
+  }
+}
+
+function drawBiomeBattlements(cx, cw, cy, n, skin, mh = 9) {
+  const mW = cw / (n * 2 - 1);
+  ctx.fillStyle = skin.wall;
+  if (skin.roof === "ice") {
+    for (let i = 0; i < n; i++) {
+      const x0 = cx - cw / 2 + i * mW * 2 + mW * 0.5;
+      ctx.beginPath(); ctx.moveTo(x0 - mW * 0.62, cy); ctx.lineTo(x0, cy - mh - 5); ctx.lineTo(x0 + mW * 0.62, cy); ctx.closePath(); ctx.fill();
+    }
+    return;
+  }
+  if (skin.roof === "jagged" || skin.roof === "spire") {
+    for (let i = 0; i < n; i++) {
+      const x0 = cx - cw / 2 + i * mW * 2;
+      ctx.beginPath(); ctx.moveTo(x0, cy); ctx.lineTo(x0 + mW * 0.45, cy - mh - (i % 2) * 5); ctx.lineTo(x0 + mW, cy); ctx.closePath(); ctx.fill();
+    }
+    return;
+  }
+  for (let i = 0; i < n; i++) ctx.fillRect(cx - cw / 2 + i * mW * 2, cy - mh, mW, mh + 1);
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  for (let i = 0; i < n; i++) ctx.fillRect(cx - cw / 2 + i * mW * 2, cy - mh, mW, 2);
+}
+
+function drawBiomeRoof(cx, cy, r, hh, skin) {
+  ctx.fillStyle = skin.roofC;
+  if (skin.roof === "dome") {
+    ctx.beginPath(); ctx.ellipse(cx, cy, r, hh * 0.62, Math.PI, 0, Math.PI); ctx.lineTo(cx + r, cy); ctx.lineTo(cx - r, cy); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.beginPath(); ctx.ellipse(cx - r * 0.25, cy - 2, r * 0.38, hh * 0.42, Math.PI, 0, Math.PI); ctx.lineTo(cx, cy); ctx.lineTo(cx - r * 0.65, cy); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = skin.accent2; ctx.beginPath(); ctx.arc(cx, cy - hh * 0.62 - 2, 3, 0, Math.PI * 2); ctx.fill();
+  } else if (skin.roof === "thatch") {
+    ctx.beginPath(); ctx.moveTo(cx - r, cy); ctx.quadraticCurveTo(cx, cy - hh, cx + r, cy); ctx.lineTo(cx + r * 0.84, cy + 8); ctx.quadraticCurveTo(cx, cy + 2, cx - r * 0.84, cy + 8); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = skin.roofD; ctx.lineWidth = 1.2;
+    for (let i = -3; i <= 3; i++) { ctx.beginPath(); ctx.moveTo(cx + i * r / 4, cy + 5); ctx.lineTo(cx + i * r / 7, cy - hh * 0.75); ctx.stroke(); }
+  } else if (skin.roof === "ice") {
+    ctx.beginPath(); ctx.moveTo(cx - r, cy); ctx.lineTo(cx, cy - hh - 7); ctx.lineTo(cx + r, cy); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.28)";
+    ctx.beginPath(); ctx.moveTo(cx - r, cy); ctx.lineTo(cx, cy - hh - 7); ctx.lineTo(cx - r * 0.08, cy); ctx.closePath(); ctx.fill();
+  } else if (skin.roof === "jagged") {
+    ctx.fillStyle = skin.roofD;
+    ctx.beginPath(); ctx.moveTo(cx - r, cy); ctx.lineTo(cx - r * 0.42, cy - hh * 0.74); ctx.lineTo(cx - r * 0.1, cy - hh * 0.45);
+    ctx.lineTo(cx + r * 0.15, cy - hh); ctx.lineTo(cx + r * 0.55, cy - hh * 0.55); ctx.lineTo(cx + r, cy); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = skin.accent; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(cx + r * 0.12, cy - hh * 0.8); ctx.lineTo(cx + r * 0.03, cy - 3); ctx.stroke();
+  } else if (skin.roof === "spire") {
+    ctx.fillStyle = skin.roofD;
+    ctx.beginPath(); ctx.moveTo(cx - r, cy); ctx.lineTo(cx - r * 0.18, cy - hh * 0.6); ctx.lineTo(cx, cy - hh - 18); ctx.lineTo(cx + r * 0.24, cy - hh * 0.46); ctx.lineTo(cx + r, cy); ctx.closePath(); ctx.fill();
+    drawRuneGlyph(cx, cy - hh * 0.55, 3.4, skin.accent2);
+  } else {
+    ctx.beginPath(); ctx.moveTo(cx - r, cy); ctx.lineTo(cx, cy - hh); ctx.lineTo(cx + r, cy); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.12)";
+    ctx.beginPath(); ctx.moveTo(cx - r, cy); ctx.lineTo(cx, cy - hh); ctx.lineTo(cx - r * 0.18, cy); ctx.closePath(); ctx.fill();
+  }
+}
+
+function drawBiomePennant(px, py, skin, col = skin.banner, size = 1) {
+  const sway = windSway(px, 3) * size;
+  ctx.strokeStyle = skin.trim; ctx.lineWidth = 1.5 * size;
+  ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py - 18 * size); ctx.stroke();
+  ctx.fillStyle = col;
+  ctx.beginPath(); ctx.moveTo(px, py - 18 * size);
+  ctx.quadraticCurveTo(px + (10 + sway) * size, py - 16 * size, px + (17 + sway) * size, py - 12 * size);
+  ctx.quadraticCurveTo(px + (10 + sway) * size, py - 8 * size, px, py - 6 * size); ctx.closePath(); ctx.fill();
+}
+
+function drawBiomeHouse(x, h, skin, dark, scale = 1) {
+  const w = h * 0.9 * scale;
+  h *= scale;
+  if (skin.id === "swamp") {
+    const top = groundY - h - 14;
+    ctx.strokeStyle = skin.wood; ctx.lineWidth = 3;
+    for (const ox of [-w * 0.35, w * 0.35]) { ctx.beginPath(); ctx.moveTo(x + ox, groundY); ctx.lineTo(x + ox * 0.86, top + h); ctx.stroke(); }
+    ctx.fillStyle = skin.wood; ctx.fillRect(x - w / 2 - 6, top + h - 3, w + 12, 5);
+    drawMasonryRect(x, top, w, h, skin, dark, 2);
+    drawBiomeRoof(x, top, w * 0.58, 22 * scale, skin);
+  } else if (skin.id === "desert") {
+    drawMasonryRect(x, groundY - h, w, h, skin, dark, 5);
+    ctx.fillStyle = skin.wallL; ctx.fillRect(x - w / 2 - 4, groundY - h - 5, w + 8, 8);
+    drawBiomeRoof(x, groundY - h - 5, w * 0.32, 22 * scale, skin);
+  } else if (skin.id === "corrupted") {
+    ctx.save(); ctx.translate(x, groundY); ctx.rotate((x % 2 ? -0.035 : 0.035));
+    drawMasonryRect(0, -h, w * 0.86, h, skin, dark, 3);
+    drawBiomeRoof(0, -h, w * 0.5, 28 * scale, skin);
+    drawSkinWindow(0, -h * 0.62, 10 * scale, 14 * scale, skin, dark);
+    ctx.restore(); return;
+  } else {
+    drawMasonryRect(x, groundY - h, w, h, skin, dark, 3);
+    drawBiomeRoof(x, groundY - h, w * 0.56, 28 * scale, skin);
+  }
+  drawSkinWindow(x, groundY - h * 0.58, 11 * scale, 14 * scale, skin, dark);
+  ctx.fillStyle = skin.gate; ctx.fillRect(x - w * 0.14, groundY - h * 0.36, w * 0.2, h * 0.36);
+}
+
+function drawBiomeTower(x, h, skin, dark, narrow = false) {
+  const w = narrow ? 30 : 38;
+  drawMasonryRect(x, groundY - h, w, h, skin, dark, 2);
+  ctx.fillStyle = skin.wallL; ctx.fillRect(x - w / 2 - 4, groundY - h - 6, w + 8, 7);
+  if (skin.roof === "dome") {
+    drawBiomeBattlements(x, w + 8, groundY - h - 6, 3, skin, 8);
+    drawBiomeRoof(x, groundY - h - 10, w * 0.42, 20, skin);
+  } else {
+    drawBiomeRoof(x, groundY - h - 6, w / 2 + 8, skin.roof === "spire" ? 42 : 32, skin);
+  }
+  drawSkinWindow(x, groundY - h * 0.72, 8, 12, skin, dark);
+  if (!narrow) drawSkinWindow(x, groundY - h * 0.43, 8, 12, skin, dark);
+}
+
+function drawForestVillage(x, lvl, skin, dark, night) {
+  const fortified = lvl >= 3;
+  if (fortified) {
+    ctx.fillStyle = skin.wallD;
+    roundedRect(x - 124, groundY - 36, 248, 36, 3); ctx.fill();
+    drawBiomeBattlements(x, 220, groundY - 36, 8, skin, 7);
+  }
+  drawBiomeHouse(x - (fortified ? 92 : 60), fortified ? 60 : 54, skin, dark, 1);
+  drawBiomeHouse(x + (fortified ? 88 : 58), fortified ? 56 : 48, skin, dark, 1);
+  if (fortified) {
+    drawBiomeTower(x - 30, 120, skin, dark);
+    drawBiomeTower(x + 34, 110, skin, dark);
+    drawBiomePennant(x - 122, groundY - 122, skin, skin.accent);
+    drawBiomePennant(x + 122, groundY - 116, skin, skin.banner);
+  } else {
+    drawBiomeTower(x, 100, skin, dark);
+  }
+  drawBiomeHearth(x - (fortified ? 0 : 6), skin, dark, 0.9);
+  if (night) {
+    drawSkinLamp(x - (fortified ? 122 : 92), groundY, skin, 0.75);
+    drawSkinLamp(x + (fortified ? 122 : 92), groundY, skin, 0.75);
+  }
+}
+
+function drawFrozenVillage(x, lvl, skin, dark, night) {
+  const ice = lerpColor([214, 238, 248], [70, 104, 136], dark);
+  const deep = lerpColor([92, 142, 170], [22, 42, 66], dark);
+  ctx.fillStyle = withA(ice, 0.72);
+  ctx.beginPath(); ctx.ellipse(x, groundY - 2, lvl >= 3 ? 148 : 108, 14, 0, 0, Math.PI * 2); ctx.fill();
+  for (const [ox, h, w] of (lvl >= 3 ? [[-86, 86, 24], [-36, 118, 30], [18, 98, 25], [70, 74, 19]] : [[-48, 82, 25], [28, 66, 22], [76, 48, 17]])) {
+    ctx.fillStyle = rgb(deep);
+    ctx.beginPath(); ctx.moveTo(x + ox - w, groundY); ctx.lineTo(x + ox - w * 0.22, groundY - h * 0.72); ctx.lineTo(x + ox + w * 0.2, groundY - h); ctx.lineTo(x + ox + w, groundY); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.24)";
+    ctx.beginPath(); ctx.moveTo(x + ox - w, groundY); ctx.lineTo(x + ox + w * 0.2, groundY - h); ctx.lineTo(x + ox - w * 0.08, groundY); ctx.closePath(); ctx.fill();
+    drawSkinWindow(x + ox + w * 0.05, groundY - h * 0.48, 8, 13, skin, dark);
+  }
+  if (lvl >= 3) {
+    ctx.strokeStyle = withA(skin.window, 0.48); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x - 118, groundY - 30); ctx.quadraticCurveTo(x, groundY - 72, x + 116, groundY - 30); ctx.stroke();
+    for (const ox of [-122, 122]) drawBiomeRoof(x + ox, groundY - 36, 14, 30, skin);
+  }
+  drawBiomeHearth(x, skin, dark, 0.85);
+  if (night) { drawSkinLamp(x - 96, groundY - 12, skin, 0.72); drawSkinLamp(x + 96, groundY - 12, skin, 0.72); }
+}
+
+function drawDesertVillage(x, lvl, skin, dark, night) {
+  const palaceW = lvl >= 3 ? 238 : 156;
+  const baseY = groundY - (lvl >= 3 ? 58 : 48);
+  drawMasonryRect(x, baseY, palaceW, groundY - baseY, skin, dark, 6);
+  ctx.fillStyle = skin.wallL; ctx.fillRect(x - palaceW / 2 - 5, baseY - 5, palaceW + 10, 8);
+  drawBiomeRoof(x, baseY - 5, lvl >= 3 ? 44 : 34, lvl >= 3 ? 44 : 34, skin);
+  for (const ox of (lvl >= 3 ? [-100, 100] : [-62, 62])) {
+    drawMasonryRect(x + ox, groundY - 88, 28, 88, skin, dark, 9);
+    drawBiomeRoof(x + ox, groundY - 90, 17, 23, skin);
+  }
+  if (lvl >= 3) {
+    for (let i = -2; i <= 2; i++) {
+      const px = x + i * 28;
+      ctx.fillStyle = skin.wallL; ctx.fillRect(px - 4, baseY + 12, 8, groundY - baseY - 12);
+      ctx.fillStyle = skin.wallD; ctx.beginPath(); ctx.arc(px, baseY + 12, 6, Math.PI, 0); ctx.fill();
+    }
+    drawBiomePennant(x - 122, groundY - 96, skin, skin.accent2);
+    drawBiomePennant(x + 122, groundY - 96, skin, skin.banner);
+  }
+  drawBiomeHearth(x - palaceW * 0.38, skin, dark, 0.78);
+  if (night) { drawSkinLamp(x - palaceW * 0.48, groundY - 10, skin, 0.7); drawSkinLamp(x + palaceW * 0.48, groundY - 10, skin, 0.7); }
+}
+
+function drawSwampVillage(x, lvl, skin, dark, night) {
+  const deckY = groundY - (lvl >= 3 ? 48 : 34);
+  const deckW = lvl >= 3 ? 250 : 160;
+  ctx.strokeStyle = skin.wood; ctx.lineWidth = 5; ctx.lineCap = "round";
+  for (const ox of (lvl >= 3 ? [-108, -54, 0, 54, 108] : [-58, 0, 58])) {
+    ctx.beginPath(); ctx.moveTo(x + ox, groundY); ctx.lineTo(x + ox + windSway(x + ox, 2), deckY); ctx.stroke();
+  }
+  ctx.lineCap = "butt";
+  ctx.fillStyle = skin.wood; ctx.fillRect(x - deckW / 2, deckY, deckW, 8);
+  ctx.fillStyle = "rgba(255,255,255,0.08)"; ctx.fillRect(x - deckW / 2, deckY, deckW, 2);
+  for (const [ox, h, w] of (lvl >= 3 ? [[-78, 50, 48], [0, 66, 58], [78, 46, 44]] : [[-44, 42, 42], [44, 48, 44]])) {
+    ctx.fillStyle = skin.wall; ctx.fillRect(x + ox - w / 2, deckY - h, w, h);
+    drawBiomeRoof(x + ox, deckY - h, w * 0.68, 25, skin);
+    drawSkinWindow(x + ox, deckY - h * 0.54, 9, 12, skin, dark);
+  }
+  if (lvl >= 3) {
+    ctx.strokeStyle = skin.accent; ctx.lineWidth = 1.6;
+    for (const ox of [-120, -35, 44, 118]) {
+      ctx.beginPath(); ctx.moveTo(x + ox, deckY - 5); ctx.quadraticCurveTo(x + ox + windSway(ox, 6), deckY + 28, x + ox - 8, groundY - 4); ctx.stroke();
+    }
+  }
+  drawBiomeHearth(x, skin, dark, 0.75);
+  if (night) { drawSkinLamp(x - deckW * 0.45, deckY + 8, skin, 0.65); drawSkinLamp(x + deckW * 0.45, deckY + 8, skin, 0.65); }
+}
+
+function drawVolcanoVillage(x, lvl, skin, dark, night) {
+  const w = lvl >= 3 ? 244 : 162;
+  const h = lvl >= 3 ? 74 : 54;
+  for (let i = 0; i < (lvl >= 3 ? 3 : 2); i++) {
+    const sw = w - i * 48, sy = groundY - (i + 1) * h * 0.42;
+    drawMasonryRect(x, sy, sw, h * 0.42, skin, dark, 1);
+  }
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  ctx.strokeStyle = withA([255, 94, 24], 0.62); ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x - 46, groundY - h * 0.82); ctx.lineTo(x - 8, groundY - h * 1.08); ctx.lineTo(x + 44, groundY - h * 0.78); ctx.stroke();
+  ctx.restore();
+  for (const ox of (lvl >= 3 ? [-92, 92] : [-58, 58])) {
+    ctx.fillStyle = skin.wallD;
+    ctx.beginPath(); ctx.moveTo(x + ox - 16, groundY); ctx.lineTo(x + ox - 10, groundY - 90); ctx.lineTo(x + ox + 14, groundY - 106); ctx.lineTo(x + ox + 18, groundY); ctx.closePath(); ctx.fill();
+    if (night || lvl >= 3) drawSkinLamp(x + ox + 2, groundY - 68, skin, 0.65);
+  }
+  drawBiomeHearth(x, skin, dark, 0.92);
+}
+
+function drawCorruptedVillage(x, lvl, skin, dark, night) {
+  const t = performance.now() / 1000;
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  ctx.strokeStyle = withA([190, 110, 255], 0.23); ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.ellipse(x, groundY - 18, lvl >= 3 ? 132 : 90, 22, t * 0.1, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+  for (const [ox, h, w, lean] of (lvl >= 3 ? [[-86, 92, 28, -0.08], [-30, 132, 34, 0.04], [32, 112, 30, -0.03], [88, 76, 22, 0.08]] : [[-42, 92, 30, -0.06], [34, 72, 26, 0.06]])) {
+    ctx.save(); ctx.translate(x + ox, groundY); ctx.rotate(lean);
+    ctx.fillStyle = skin.wallD;
+    ctx.beginPath(); ctx.moveTo(-w, 0); ctx.lineTo(-w * 0.42, -h * 0.72); ctx.lineTo(0, -h); ctx.lineTo(w * 0.52, -h * 0.62); ctx.lineTo(w, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = skin.wall;
+    ctx.beginPath(); ctx.moveTo(-w, 0); ctx.lineTo(0, -h); ctx.lineTo(0, 0); ctx.closePath(); ctx.fill();
+    drawRuneGlyph(0, -h * 0.55, 4.2, skin.accent2);
+    ctx.restore();
+  }
+  if (lvl >= 3) {
+    for (const ox of [-116, 118]) {
+      ctx.fillStyle = withA([178, 96, 255], 0.72);
+      ctx.beginPath(); ctx.moveTo(x + ox, groundY - 58); ctx.lineTo(x + ox + 8, groundY - 44); ctx.lineTo(x + ox, groundY - 30); ctx.lineTo(x + ox - 8, groundY - 44); ctx.closePath(); ctx.fill();
+    }
+  }
+  drawBiomeHearth(x, skin, dark, 0.82);
+  if (night) { drawSkinLamp(x - 94, groundY - 18, skin, 0.65); drawSkinLamp(x + 94, groundY - 18, skin, 0.65); }
+}
+
+function drawBiomeVillage(x, lvl, skin, dark, night) {
+  if (skin.id === "frozen") { drawFrozenVillage(x, lvl, skin, dark, night); return; }
+  if (skin.id === "desert") { drawDesertVillage(x, lvl, skin, dark, night); return; }
+  if (skin.id === "swamp") { drawSwampVillage(x, lvl, skin, dark, night); return; }
+  if (skin.id === "volcano") { drawVolcanoVillage(x, lvl, skin, dark, night); return; }
+  if (skin.id === "corrupted") { drawCorruptedVillage(x, lvl, skin, dark, night); return; }
+  drawForestVillage(x, lvl, skin, dark, night);
+}
+
+function drawBiomeCamp(x, skin, dark, night) {
+  drawBiomeShelter(x - 36, skin, dark, 0.95, 1);
+  drawBiomeShelter(x + 38, skin, dark, 0.86, -1);
+  if (skin.id === "forest") {
+    ctx.fillStyle = skin.wallD;
+    roundedRect(x - 54, groundY - 15, 108, 15, 3); ctx.fill();
+    drawBiomeBattlements(x, 98, groundY - 15, 5, skin, 5);
+  }
+  drawBiomeHearth(x, skin, dark, 1);
+  if (night) {
+    drawSkinLamp(x - 58, groundY, skin, 0.72);
+    drawSkinLamp(x + 58, groundY, skin, 0.72);
+  }
+}
+
+function drawBiomeGate(x, ground, skin, dark) {
+  const gw = 44, gh = 58;
+  ctx.fillStyle = skin.wallL;
+  ctx.beginPath(); ctx.moveTo(x - gw / 2 - 7, ground); ctx.lineTo(x - gw / 2 - 7, ground - gh + 4);
+  ctx.arc(x, ground - gh + 4, gw / 2 + 7, Math.PI, 0); ctx.lineTo(x + gw / 2 + 7, ground); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#171118";
+  ctx.beginPath(); ctx.moveTo(x - gw / 2, ground); ctx.lineTo(x - gw / 2, ground - gh + 7);
+  ctx.arc(x, ground - gh + 7, gw / 2, Math.PI, 0); ctx.lineTo(x + gw / 2, ground); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = skin.gate;
+  ctx.beginPath(); ctx.moveTo(x - gw / 2 + 3, ground); ctx.lineTo(x - gw / 2 + 3, ground - gh + 11);
+  ctx.arc(x, ground - gh + 11, gw / 2 - 3, Math.PI, 0); ctx.lineTo(x + gw / 2 - 3, ground); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.32)"; ctx.lineWidth = 1.2;
+  for (const dxx of [-12, -4, 4, 12]) { ctx.beginPath(); ctx.moveTo(x + dxx, ground); ctx.lineTo(x + dxx, ground - gh + 17); ctx.stroke(); }
+  ctx.fillStyle = withA(skin.window, litWindow(dark) * 0.65);
+  ctx.fillRect(x - 1, ground - gh + 17, 2, gh - 17);
+  ctx.fillStyle = skin.accent2;
+  ctx.beginPath(); ctx.moveTo(x, ground - gh - 15); ctx.lineTo(x + 7, ground - gh - 4);
+  ctx.lineTo(x, ground + 3 - gh); ctx.lineTo(x - 7, ground - gh - 4); ctx.closePath(); ctx.fill();
+}
+
+function drawStrongholdDressing(x, lvl, skin, dark, dims) {
+  const t = performance.now() / 1000;
+  if (skin.id === "forest") {
+    ctx.strokeStyle = withA([112, 170, 82], 0.72); ctx.lineWidth = 1.8; ctx.lineCap = "round";
+    for (const ox of [-142, -95, 96, 143]) {
+      ctx.beginPath(); ctx.moveTo(x + ox, groundY - 8);
+      ctx.quadraticCurveTo(x + ox + windSway(ox, 5), groundY - 42, x + ox * 0.86, groundY - 84); ctx.stroke();
+    }
+    ctx.lineCap = "butt";
+  } else if (skin.id === "frozen") {
+    ctx.fillStyle = "rgba(245,253,255,0.86)";
+    for (const ox of [-146, -112, -44, 44, 112, 146]) {
+      ctx.beginPath(); ctx.moveTo(x + ox - 4, groundY - dims.wallH - 2);
+      ctx.lineTo(x + ox, groundY - dims.wallH - 18 - Math.abs(ox % 3));
+      ctx.lineTo(x + ox + 4, groundY - dims.wallH - 2); ctx.closePath(); ctx.fill();
+    }
+  } else if (skin.id === "desert") {
+    ctx.fillStyle = skin.accent2;
+    ctx.beginPath(); ctx.arc(x, groundY - dims.keepH - 30, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = withA([255, 222, 128], 0.62); ctx.lineWidth = 1.4;
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * 14, groundY - dims.keepH - 30 + Math.sin(a) * 14);
+      ctx.lineTo(x + Math.cos(a) * 22, groundY - dims.keepH - 30 + Math.sin(a) * 22); ctx.stroke();
+    }
+  } else if (skin.id === "swamp") {
+    ctx.strokeStyle = withA([155, 208, 90], 0.7); ctx.lineWidth = 1.6; ctx.lineCap = "round";
+    for (const ox of [-128, -72, 52, 130]) {
+      ctx.beginPath(); ctx.moveTo(x + ox, groundY - dims.wallH);
+      ctx.quadraticCurveTo(x + ox + windSway(ox, 4), groundY - dims.wallH * 0.52, x + ox - 4, groundY - 12); ctx.stroke();
+    }
+    ctx.lineCap = "butt";
+  } else if (skin.id === "volcano") {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = withA([255, 94, 24], 0.5 + 0.12 * Math.sin(t * 3));
+    ctx.lineWidth = 1.8;
+    for (const ox of [-110, -24, 36, 112]) {
+      ctx.beginPath(); ctx.moveTo(x + ox, groundY - dims.wallH + 8);
+      ctx.lineTo(x + ox + 9, groundY - dims.wallH * 0.55); ctx.lineTo(x + ox + 2, groundY - 9); ctx.stroke();
+    }
+    ctx.restore();
+  } else if (skin.id === "corrupted") {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    for (const ox of [-136, -74, 74, 136]) {
+      const y = groundY - dims.wallH - 36 + Math.sin(t * 2 + ox) * 4;
+      ctx.fillStyle = withA([178, 96, 255], 0.62);
+      ctx.beginPath(); ctx.moveTo(x + ox, y - 11); ctx.lineTo(x + ox + 6, y); ctx.lineTo(x + ox, y + 11); ctx.lineTo(x + ox - 6, y); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  if (lvl >= 5) {
+    drawBiomePennant(x - dims.wallW / 2 + 10, groundY - dims.wallH - 2, skin, skin.accent);
+    drawBiomePennant(x + dims.wallW / 2 - 10, groundY - dims.wallH - 2, skin, skin.banner);
+  }
+  if (lvl >= 6) {
+    drawBiomePennant(x - dims.keepW * 0.48, groundY - dims.keepH - 44, skin, skin.accent2, 0.9);
+    drawBiomePennant(x + dims.keepW * 0.48, groundY - dims.keepH - 44, skin, skin.accent2, 0.9);
+  }
+}
+
+function drawRoyalBiomeBeacon(x, skin) {
+  const t = performance.now() / 1000;
+  const flare = state.base?.aegisFlashUntil ? Math.max(0, Math.min(1, (state.base.aegisFlashUntil - t) / 0.35)) : 0;
+  const y = groundY - 266 + Math.sin(t * 2.2) * 2.5;
+  const r = 25 + Math.sin(t * 7) * 2 + flare * 22;
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  const g = ctx.createRadialGradient(x, y, 2, x, y, r);
+  g.addColorStop(0, withA(skin.window, 0.8));
+  g.addColorStop(0.55, withA(skin.window, 0.28));
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = skin.accent2;
+  ctx.beginPath();
+  ctx.moveTo(x - 8, y + 15); ctx.lineTo(x - 8, y + 9); ctx.lineTo(x - 3.5, y + 12);
+  ctx.lineTo(x, y + 7); ctx.lineTo(x + 3.5, y + 12); ctx.lineTo(x + 8, y + 9);
+  ctx.lineTo(x + 8, y + 15); ctx.closePath(); ctx.fill();
+  drawSkinLamp(x, y + 9, skin, 1.1);
+}
+
+function drawCrystalBody(cx, baseY, h, w, skin, dark) {
+  const ice = lerpColor([188, 232, 248], [54, 90, 124], dark);
+  const deep = lerpColor([100, 166, 202], [16, 38, 68], dark);
+  ctx.fillStyle = rgb(deep);
+  ctx.beginPath();
+  ctx.moveTo(cx - w, baseY);
+  ctx.lineTo(cx - w * 0.38, baseY - h * 0.74);
+  ctx.lineTo(cx + w * 0.08, baseY - h);
+  ctx.lineTo(cx + w * 0.62, baseY - h * 0.62);
+  ctx.lineTo(cx + w, baseY);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = withA(ice, 0.48);
+  ctx.beginPath();
+  ctx.moveTo(cx - w, baseY);
+  ctx.lineTo(cx + w * 0.08, baseY - h);
+  ctx.lineTo(cx - w * 0.08, baseY);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = withA(skin.window, 0.35); ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(cx + w * 0.08, baseY - h); ctx.lineTo(cx + w * 0.28, baseY - 5); ctx.stroke();
+}
+
+function drawFrozenCitadel(x, lvl, skin, dark, night) {
+  const tier = lvl - 4;
+  const baseW = 282 + tier * 22;
+  const shelfY = groundY - 48 - tier * 5;
+  ctx.fillStyle = withA(lerpColor([232, 246, 255], [74, 108, 138], dark), 0.74);
+  ctx.beginPath(); ctx.ellipse(x, groundY - 4, baseW * 0.56, 18, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = skin.wallD;
+  ctx.beginPath();
+  ctx.moveTo(x - baseW / 2, groundY);
+  ctx.lineTo(x - baseW * 0.43, shelfY);
+  ctx.lineTo(x + baseW * 0.42, shelfY - 2);
+  ctx.lineTo(x + baseW / 2, groundY);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = withA([255,255,255], 0.16);
+  ctx.beginPath(); ctx.moveTo(x - baseW * 0.43, shelfY); ctx.lineTo(x - baseW * 0.12, groundY); ctx.lineTo(x - baseW / 2, groundY); ctx.closePath(); ctx.fill();
+
+  const shards = [
+    [-112, 142 + tier * 8, 31],
+    [-54, 192 + tier * 13, 38],
+    [10, 226 + tier * 17, 46],
+    [72, 166 + tier * 13, 34],
+    [128, 118 + tier * 10, 25],
+  ];
+  for (const [ox, h, w] of shards) drawCrystalBody(x + ox, groundY, h, w, skin, dark);
+  for (const [ox, h, w] of shards.slice(1, 4)) drawSkinWindow(x + ox + w * 0.05, groundY - h * 0.48, 9, 15, skin, dark);
+  if (lvl >= 5) {
+    ctx.strokeStyle = withA(skin.window, 0.5); ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.moveTo(x - 148, shelfY - 10); ctx.quadraticCurveTo(x, shelfY - 64, x + 148, shelfY - 10); ctx.stroke();
+  }
+  if (lvl >= 6) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    for (const ox of [-92, -28, 38, 98]) {
+      const y = shelfY - 86 + Math.sin(performance.now() / 650 + ox) * 4;
+      ctx.fillStyle = withA(skin.window, 0.58);
+      ctx.beginPath(); ctx.moveTo(x + ox, y - 12); ctx.lineTo(x + ox + 7, y); ctx.lineTo(x + ox, y + 12); ctx.lineTo(x + ox - 7, y); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+  if (lvl >= 7) drawRoyalBiomeBeacon(x, skin);
+  if (night) { drawSkinLamp(x - 132, shelfY + 8, skin, 0.75); drawSkinLamp(x + 132, shelfY + 8, skin, 0.75); }
+}
+
+function drawDesertPalace(x, lvl, skin, dark, night) {
+  const tier = lvl - 4;
+  const baseW = 330 + tier * 22;
+  const bodyH = 82 + tier * 5;
+  const y = groundY - bodyH;
+  drawMasonryRect(x, y, baseW, bodyH, skin, dark, 8);
+  ctx.fillStyle = skin.wallL; ctx.fillRect(x - baseW / 2 - 6, y - 7, baseW + 12, 9);
+  for (let i = -4; i <= 4; i++) {
+    const px = x + i * (baseW / 10);
+    ctx.fillStyle = skin.wallL; roundedRect(px - 5, y + 18, 10, bodyH - 18, 3); ctx.fill();
+    ctx.fillStyle = skin.wallD; ctx.beginPath(); ctx.arc(px, y + 19, 7, Math.PI, 0); ctx.fill();
+  }
+  drawBiomeRoof(x, y - 7, 58 + tier * 5, 58 + tier * 4, skin);
+  for (const side of [-1, 1]) {
+    const mx = x + side * (126 + tier * 7);
+    drawMasonryRect(mx, groundY - 154 - tier * 12, 34, 154 + tier * 12, skin, dark, 12);
+    drawBiomeRoof(mx, groundY - 158 - tier * 12, 22, 32, skin);
+    drawSkinWindow(mx, groundY - 120 - tier * 7, 8, 13, skin, dark);
+  }
+  if (lvl >= 5) {
+    for (const ox of [-72, 72]) drawBiomeRoof(x + ox, y - 6, 30, 34, skin);
+  }
+  if (lvl >= 6) {
+    ctx.strokeStyle = withA([255, 228, 138], 0.58); ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(x, y - 66, 23, 0, Math.PI * 2); ctx.stroke();
+    for (let i = 0; i < 10; i++) {
+      const a = i * Math.PI / 5;
+      ctx.beginPath(); ctx.moveTo(x + Math.cos(a) * 28, y - 66 + Math.sin(a) * 28);
+      ctx.lineTo(x + Math.cos(a) * 40, y - 66 + Math.sin(a) * 40); ctx.stroke();
+    }
+  }
+  if (lvl >= 7) drawRoyalBiomeBeacon(x, skin);
+  if (night) { drawSkinLamp(x - baseW * 0.42, groundY - 18, skin, 0.72); drawSkinLamp(x + baseW * 0.42, groundY - 18, skin, 0.72); }
+}
+
+function drawSwampGroveFort(x, lvl, skin, dark, night) {
+  const tier = lvl - 4;
+  const mainY = groundY - 78 - tier * 6;
+  const deckW = 302 + tier * 22;
+  ctx.strokeStyle = skin.wood; ctx.lineWidth = 10; ctx.lineCap = "round";
+  for (const ox of [-126, -64, 0, 64, 126]) {
+    ctx.beginPath(); ctx.moveTo(x + ox + windSway(ox, 4), groundY + 2); ctx.lineTo(x + ox * 0.72, mainY - 14 - Math.abs(ox) * 0.16); ctx.stroke();
+  }
+  ctx.lineCap = "butt";
+  ctx.fillStyle = skin.wood; roundedRect(x - deckW / 2, mainY, deckW, 12, 5); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.08)"; ctx.fillRect(x - deckW / 2, mainY, deckW, 3);
+  const huts = [
+    [-104, 54, 56, mainY],
+    [-24, 74 + tier * 8, 68, mainY - 24],
+    [72, 58 + tier * 5, 58, mainY - 8],
+  ];
+  if (lvl >= 6) huts.push([132, 44, 44, mainY + 10]);
+  for (const [ox, h, w, deckY] of huts) {
+    ctx.fillStyle = skin.wall; roundedRect(x + ox - w / 2, deckY - h, w, h, 4); ctx.fill();
+    ctx.fillStyle = "rgba(0,0,0,0.15)"; ctx.fillRect(x + ox + w * 0.18, deckY - h, w * 0.28, h);
+    drawBiomeRoof(x + ox, deckY - h, w * 0.7, 30, skin);
+    drawSkinWindow(x + ox, deckY - h * 0.56, 9, 13, skin, dark);
+  }
+  ctx.strokeStyle = withA(skin.accent, 0.76); ctx.lineWidth = 2; ctx.lineCap = "round";
+  for (const ox of [-148, -86, -18, 46, 116, 154]) {
+    ctx.beginPath(); ctx.moveTo(x + ox, mainY + 3); ctx.quadraticCurveTo(x + ox + windSway(ox, 8), mainY + 48, x + ox - 10, groundY - 3); ctx.stroke();
+  }
+  ctx.lineCap = "butt";
+  if (lvl >= 7) drawRoyalBiomeBeacon(x, skin);
+  if (night) { drawSkinLamp(x - 146, mainY + 13, skin, 0.68); drawSkinLamp(x + 146, mainY + 13, skin, 0.68); }
+}
+
+function drawVolcanoForgeCitadel(x, lvl, skin, dark, night) {
+  const tier = lvl - 4;
+  const layers = 4 + tier;
+  for (let i = 0; i < layers; i++) {
+    const w = 318 - i * 42;
+    const h = 32 + i * 4;
+    const y = groundY - (i + 1) * 28 - h * 0.18;
+    drawMasonryRect(x, y, w, h, skin, dark, 1);
+    if (i > 0) {
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = withA([255, 86, 22], 0.42 + 0.06 * Math.sin(performance.now() / 420 + i));
+      ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.moveTo(x - w * 0.36, y + h * 0.55); ctx.lineTo(x - w * 0.08, y + h * 0.36); ctx.lineTo(x + w * 0.34, y + h * 0.6); ctx.stroke();
+      ctx.restore();
+    }
+  }
+  const topY = groundY - layers * 28 - 42;
+  ctx.fillStyle = skin.wallD;
+  ctx.beginPath(); ctx.moveTo(x - 54, topY + 44); ctx.lineTo(x - 22, topY - 26 - tier * 8); ctx.lineTo(x + 18, topY - 10); ctx.lineTo(x + 54, topY + 44); ctx.closePath(); ctx.fill();
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  const g = ctx.createRadialGradient(x, topY + 24, 4, x, topY + 24, 62 + tier * 8);
+  g.addColorStop(0, withA([255, 204, 74], 0.55)); g.addColorStop(0.45, withA([255, 70, 18], 0.28)); g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, topY + 24, 62 + tier * 8, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  for (const side of [-1, 1]) {
+    const sx = x + side * (124 + tier * 8);
+    ctx.fillStyle = skin.wallD;
+    ctx.beginPath(); ctx.moveTo(sx - 16, groundY); ctx.lineTo(sx - 10, groundY - 168 - tier * 12); ctx.lineTo(sx + 18, groundY - 188 - tier * 14); ctx.lineTo(sx + 22, groundY); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "rgba(210,196,180,0.16)";
+    for (let k = 0; k < 3; k++) {
+      const ph = (performance.now() / 2600 + k / 3) % 1;
+      ctx.beginPath(); ctx.arc(sx + side * ph * 18, groundY - 190 - tier * 14 - ph * 38, 5 + ph * 8, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  if (lvl >= 7) drawRoyalBiomeBeacon(x, skin);
+  if (night) { drawSkinLamp(x - 116, groundY - 48, skin, 0.68); drawSkinLamp(x + 116, groundY - 48, skin, 0.68); }
+}
+
+function drawCorruptedNexus(x, lvl, skin, dark, night) {
+  const tier = lvl - 4;
+  const t = performance.now() / 1000;
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  ctx.strokeStyle = withA([174, 96, 255], 0.2 + 0.04 * Math.sin(t * 2));
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.ellipse(x, groundY - 28, 150 + tier * 18, 26 + tier * 3, t * 0.08, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(x, groundY - 88, 76 + tier * 8, 18, -t * 0.12, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+  const spires = [
+    [-118, 126 + tier * 7, 28, -0.08],
+    [-48, 188 + tier * 14, 38, 0.04],
+    [20, 226 + tier * 18, 46, -0.02],
+    [90, 158 + tier * 10, 30, 0.08],
+  ];
+  for (const [ox, h, w, rot] of spires) {
+    ctx.save(); ctx.translate(x + ox, groundY); ctx.rotate(rot);
+    ctx.fillStyle = skin.wallD;
+    ctx.beginPath(); ctx.moveTo(-w, 0); ctx.lineTo(-w * 0.38, -h * 0.62); ctx.lineTo(0, -h); ctx.lineTo(w * 0.55, -h * 0.54); ctx.lineTo(w, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = skin.wall;
+    ctx.beginPath(); ctx.moveTo(-w, 0); ctx.lineTo(0, -h); ctx.lineTo(0, 0); ctx.closePath(); ctx.fill();
+    drawRuneGlyph(0, -h * 0.52, 4.5 + tier, skin.accent2);
+    ctx.restore();
+  }
+  ctx.strokeStyle = withA([95, 52, 132], 0.8); ctx.lineWidth = 2.6; ctx.lineCap = "round";
+  for (const ox of [-150, -92, 78, 144]) {
+    ctx.beginPath(); ctx.moveTo(x + ox, groundY - 2); ctx.quadraticCurveTo(x + ox * 0.68, groundY - 70, x + ox * 0.34, groundY - 116 - tier * 8); ctx.stroke();
+  }
+  ctx.lineCap = "butt";
+  if (lvl >= 6) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    for (const ox of [-92, -20, 54, 124]) {
+      const y = groundY - 150 - tier * 6 + Math.sin(t * 2 + ox) * 5;
+      ctx.fillStyle = withA([202, 128, 255], 0.58);
+      ctx.beginPath(); ctx.moveTo(x + ox, y - 13); ctx.lineTo(x + ox + 8, y); ctx.lineTo(x + ox, y + 13); ctx.lineTo(x + ox - 8, y); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+  if (lvl >= 7) drawRoyalBiomeBeacon(x, skin);
+  if (night) { drawSkinLamp(x - 130, groundY - 38, skin, 0.7); drawSkinLamp(x + 130, groundY - 38, skin, 0.7); }
+}
+
+function drawBiomeStronghold(x, lvl, skin, dark, night) {
+  if (skin.id === "frozen") { drawFrozenCitadel(x, lvl, skin, dark, night); return; }
+  if (skin.id === "desert") { drawDesertPalace(x, lvl, skin, dark, night); return; }
+  if (skin.id === "swamp") { drawSwampGroveFort(x, lvl, skin, dark, night); return; }
+  if (skin.id === "volcano") { drawVolcanoForgeCitadel(x, lvl, skin, dark, night); return; }
+  if (skin.id === "corrupted") { drawCorruptedNexus(x, lvl, skin, dark, night); return; }
+
+  const tier = Math.max(0, lvl - 4);
+  const dims = {
+    wallW: 318 + tier * 18,
+    wallH: 62 + tier * 5,
+    keepW: 98 + tier * 7,
+    keepH: 196 + tier * 16,
+    towerW: 50 + tier * 2,
+    towerH: 158 + tier * 10,
+  };
+
+  drawMasonryRect(x, groundY - dims.wallH, dims.wallW, dims.wallH, skin, dark, 2);
+  ctx.fillStyle = "rgba(0,0,0,0.15)"; ctx.fillRect(x - dims.wallW / 2, groundY - dims.wallH, dims.wallW, 6);
+  drawBiomeBattlements(x - dims.wallW / 2 + 54, 92, groundY - dims.wallH, 5, skin, 9);
+  drawBiomeBattlements(x + dims.wallW / 2 - 54, 92, groundY - dims.wallH, 5, skin, 9);
+  ctx.fillStyle = "rgba(0,0,0,0.48)";
+  for (const sx of [-140, -110, 110, 140]) ctx.fillRect(x + sx - 2, groundY - dims.wallH * 0.62, 4, 13);
+
+  if (lvl >= 5) {
+    for (const side of [-1, 1]) {
+      const bx = x + side * (dims.wallW / 2 - 16);
+      drawMasonryRect(bx, groundY - dims.wallH - 34, 34, dims.wallH + 34, skin, dark, 2);
+      drawBiomeBattlements(bx, 42, groundY - dims.wallH - 34, 3, skin, 8);
+    }
+  }
+
+  for (const side of [-1, 1]) {
+    const tx = x + side * 112;
+    drawMasonryRect(tx, groundY - dims.towerH, dims.towerW, dims.towerH, skin, dark, 2);
+    ctx.fillStyle = skin.wallL; ctx.fillRect(tx - dims.towerW / 2 - 5, groundY - dims.towerH - 6, dims.towerW + 10, 7);
+    drawBiomeRoof(tx, groundY - dims.towerH - 6, dims.towerW / 2 + 7, skin.roof === "spire" ? 48 : 34, skin);
+    drawSkinWindow(tx, groundY - dims.towerH * 0.72, 9, 14, skin, dark);
+    drawSkinWindow(tx, groundY - dims.towerH * 0.42, 9, 14, skin, dark);
+  }
+
+  const ky = groundY - dims.keepH;
+  drawMasonryRect(x, ky, dims.keepW, dims.keepH, skin, dark, 2);
+  ctx.fillStyle = skin.wallL;
+  ctx.fillRect(x - dims.keepW / 2 - 3, ky + dims.keepH * 0.33, dims.keepW + 6, 4);
+  ctx.fillRect(x - dims.keepW / 2 - 3, ky + dims.keepH * 0.62, dims.keepW + 6, 4);
+  ctx.fillRect(x - dims.keepW / 2 - 6, ky - 7, dims.keepW + 12, 8);
+  drawBiomeBattlements(x, dims.keepW - 16, ky - 7, 5, skin, 10);
+
+  for (const side of [-1, 1]) {
+    const ttx = x + side * (dims.keepW / 2 - 2);
+    drawMasonryRect(ttx, ky - 30, 18, 30, skin, dark, 1);
+    drawBiomeRoof(ttx, ky - 30, 12, skin.roof === "spire" ? 30 : 20, skin);
+  }
+
+  if (lvl >= 6) {
+    drawMasonryRect(x - 42, ky - 38, 24, 42, skin, dark, 1);
+    drawMasonryRect(x + 42, ky - 38, 24, 42, skin, dark, 1);
+    drawBiomeRoof(x - 42, ky - 38, 17, 34, skin);
+    drawBiomeRoof(x + 42, ky - 38, 17, 34, skin);
+  }
+
+  drawBiomePennant(x, ky - 34, skin, skin.banner, 1.1);
+  drawSkinWindow(x, ky + dims.keepH * 0.14, 13, 20, skin, dark);
+  drawSkinWindow(x - 24, ky + dims.keepH * 0.42, 10, 15, skin, dark);
+  drawSkinWindow(x + 24, ky + dims.keepH * 0.42, 10, 15, skin, dark);
+  drawBiomeGate(x, groundY, skin, dark);
+  drawStrongholdDressing(x, lvl, skin, dark, dims);
+
+  if (night) {
+    drawSkinLamp(x - 36, groundY - 26, skin, 0.8);
+    drawSkinLamp(x + 36, groundY - 26, skin, 0.8);
+    drawSkinLamp(x - 146, groundY - 1, skin, 0.72);
+    drawSkinLamp(x + 146, groundY - 1, skin, 0.72);
+  }
+  if (lvl >= 7) drawRoyalBiomeBeacon(x, skin);
+}
+
 export function drawBase(dark) {
   const { base } = state;
   const x=base.x, lvl=base.level;
   if (base.flash>0) base.flash-=0.016;
   if (base.castleUpgradePulse>0) base.castleUpgradePulse-=0.016;
   const flash=base.flash>0&&Math.floor(base.flash*20)%2===0;
-  ctx.save(); groundShadow(x,lvl>=4?112:lvl>=2?82:48,0.3);
-  const stoneL=flash?"#ffd0b0":"#5a5260", stoneD=flash?"#e0b090":"#403a48", night=dark>0.25;
+  const skin = baseSkinAt(x, flash);
+  const night=dark>0.25;
+  ctx.save(); groundShadow(x,lvl>=4?122:lvl>=2?88:52,0.3);
+  drawBaseGroundSeal(x, lvl, skin, dark);
   if (lvl===1) {
-    drawTent(x-36,"#6a4a32"); drawTent(x+36,"#5a3f2a");
-    if (night) { drawTorch(x-58,groundY); drawTorch(x+58,groundY); } drawCampfire(x,dark);
-  } else if (lvl===2) {
-    drawHouse(x-60,54,stoneL,stoneD,dark); drawHouse(x+58,48,stoneL,stoneD,dark); drawTower(x,100,stoneL,stoneD,dark);
-    if (night) { drawTorch(x-92,groundY); drawTorch(x+92,groundY); } drawCampfire(x-6,dark);
-  } else if (lvl===3) {
-    drawHouse(x-90,60,stoneL,stoneD,dark); drawHouse(x+86,56,stoneL,stoneD,dark);
-    drawTower(x-30,120,stoneL,stoneD,dark); drawTower(x+34,110,stoneL,stoneD,dark);
-    if (night) { drawTorch(x-122,groundY); drawTorch(x+122,groundY); } drawCampfire(x,dark);
+    drawBiomeCamp(x, skin, dark, night);
+  } else if (lvl===2 || lvl===3) {
+    drawBiomeVillage(x, lvl, skin, dark, night);
   } else {
-    drawGrandCastle(x,stoneL,stoneD,dark,night);
-    if (lvl>=5) drawCastleRegalia(x,lvl,dark);
-    drawCastleUpgradeDressing(x,lvl,dark);
+    drawBiomeStronghold(x, lvl, skin, dark, night);
+    drawCastleUpgradeDressing(x,lvl,dark,skin);
   }
   if (fortHas("sigil")) drawCrownSigil(x, lvl);
   drawHpBar(x,groundY-(lvl>=7?292:lvl>=4?250:lvl>=2?130:70),70,base.hp/base.maxHp,"#f2c14e");
   ctx.restore();
 }
 
-function drawCastleUpgradeDressing(x, lvl, dark) {
+function drawCastleUpgradeDressing(x, lvl, dark, skin = BASE_BIOME_SKINS.forest) {
   const masonry = castleUpgradeLevel("masonry");
   const garrison = castleUpgradeLevel("garrison");
   const treasury = castleUpgradeLevel("treasury");
@@ -1747,8 +3171,8 @@ function drawCastleUpgradeDressing(x, lvl, dark) {
   const t = performance.now() / 1000;
 
   if (masonry > 0) {
-    const stone = masonry >= 3 ? "#746f78" : "#665f6d";
-    const hi = masonry >= 3 ? "#9a929c" : "#817987";
+    const stone = masonry >= 3 ? skin.wallL : skin.wall;
+    const hi = masonry >= 3 ? skin.trim : skin.wallL;
     for (const side of [-1, 1]) {
       for (let i = 0; i < masonry; i++) {
         const bx = x + side * (154 - i * 42);
@@ -1780,7 +3204,7 @@ function drawCastleUpgradeDressing(x, lvl, dark) {
     }
     if (masonry >= 3) {
       ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.12 + pulse * 0.2;
-      ctx.strokeStyle = "#d8d0c0"; ctx.lineWidth = 3;
+      ctx.strokeStyle = skin.trim; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.ellipse(x, groundY - 12, 194, 24, 0, 0, Math.PI * 2); ctx.stroke();
       ctx.restore();
     }
@@ -1789,7 +3213,7 @@ function drawCastleUpgradeDressing(x, lvl, dark) {
   if (garrison > 0) {
     const banner = (bx, by, col) => {
       const sway = windSway(bx, 3);
-      ctx.strokeStyle = "#cdbfa3"; ctx.lineWidth = 1.5;
+      ctx.strokeStyle = skin.trim; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx, by - 20); ctx.stroke();
       ctx.fillStyle = col;
       ctx.beginPath(); ctx.moveTo(bx, by - 20);
@@ -1799,14 +3223,14 @@ function drawCastleUpgradeDressing(x, lvl, dark) {
     const posts = [-132, 132, -82, 82, -34, 34].slice(0, 2 + garrison * 2);
     for (const off of posts) {
       const py = Math.abs(off) > 100 ? groundY - 178 : groundY - 218;
-      banner(x + off, py, garrison >= 3 ? "#9bd05a" : "#4f8d62");
+      banner(x + off, py, garrison >= 3 ? skin.accent : skin.banner);
       ctx.fillStyle = "#202632";
       ctx.fillRect(x + off - 3, py + 2, 6, 12);
       ctx.fillStyle = "#c89468";
       ctx.beginPath(); ctx.arc(x + off, py - 2, 3.3, 0, Math.PI * 2); ctx.fill();
     }
     if (garrison >= 2) {
-      ctx.strokeStyle = "#c9b898"; ctx.lineWidth = 1.4;
+      ctx.strokeStyle = skin.trim; ctx.lineWidth = 1.4;
       for (const sx of [x - 196, x + 196]) {
         for (let i = 0; i < 3; i++) {
           ctx.beginPath(); ctx.moveTo(sx + i * 5, groundY - 2); ctx.lineTo(sx + i * 5 + 6, groundY - 34); ctx.stroke();
@@ -1816,17 +3240,17 @@ function drawCastleUpgradeDressing(x, lvl, dark) {
   }
 
   if (treasury > 0) {
-    ctx.fillStyle = treasury >= 3 ? "#f2c14e" : "#c9a24a";
+    ctx.fillStyle = treasury >= 3 ? skin.accent2 : skin.accent;
     const trimY = groundY - 69;
     ctx.fillRect(x - 26, trimY, 52, 3);
     ctx.fillRect(x - 24, groundY - 5, 48, 3);
     for (let i = 0; i < treasury; i++) {
       const cx = x - 72 + i * 72;
       ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.35 + 0.08 * Math.sin(t * 2 + i);
-      ctx.fillStyle = "#f2c14e";
+      ctx.fillStyle = skin.accent2;
       ctx.beginPath(); ctx.arc(cx, groundY - 82, 7, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
-      ctx.fillStyle = "#f2c14e";
+      ctx.fillStyle = skin.accent2;
       ctx.beginPath(); ctx.arc(cx, groundY - 82, 3.8, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = "#5a3a20";
       ctx.beginPath(); ctx.arc(cx, groundY - 82, 1.8, 0, Math.PI * 2); ctx.fill();
@@ -1835,7 +3259,7 @@ function drawCastleUpgradeDressing(x, lvl, dark) {
       for (const sx of [x - 128, x + 128]) {
         ctx.fillStyle = "#5a3a20"; roundedRect(sx - 16, groundY - 18, 32, 18, 3); ctx.fill();
         ctx.fillStyle = "#8a5a24"; ctx.fillRect(sx - 16, groundY - 18, 32, 5);
-        ctx.fillStyle = "#f2c14e"; ctx.fillRect(sx - 2, groundY - 14, 4, 9);
+        ctx.fillStyle = skin.accent2; ctx.fillRect(sx - 2, groundY - 14, 4, 9);
       }
     }
   }
@@ -1846,16 +3270,16 @@ function drawCastleUpgradeDressing(x, lvl, dark) {
     const r = 18 + aegis * 5 + flare * 16 + pulse * 8;
     ctx.save(); ctx.globalCompositeOperation = "lighter";
     const g = ctx.createRadialGradient(x, fy, 2, x, fy, r * 2.1);
-    g.addColorStop(0, "rgba(255,220,120,0.75)");
-    g.addColorStop(0.45, "rgba(255,130,45,0.28)");
-    g.addColorStop(1, "rgba(255,100,20,0)");
+    g.addColorStop(0, withA(skin.window, 0.75));
+    g.addColorStop(0.45, withA(skin.window, 0.28));
+    g.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = g;
     ctx.beginPath(); ctx.arc(x, fy, r * 2.1, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = "#ffb04a"; ctx.lineWidth = 1.5 + aegis * 0.4;
+    ctx.strokeStyle = skin.accent; ctx.lineWidth = 1.5 + aegis * 0.4;
     ctx.beginPath(); ctx.ellipse(x, fy, r, r * 0.32, t * 0.35, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.ellipse(x, fy, r * 0.72, r * 0.24, -t * 0.5, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
-    ctx.fillStyle = "#ffd060";
+    ctx.fillStyle = skin.accent2;
     ctx.beginPath();
     ctx.moveTo(x, fy - 8 - aegis * 2);
     ctx.lineTo(x + 6 + aegis, fy);
@@ -1863,7 +3287,7 @@ function drawCastleUpgradeDressing(x, lvl, dark) {
     ctx.lineTo(x - 6 - aegis, fy);
     ctx.closePath(); ctx.fill();
     if (aegis >= 2) {
-      ctx.strokeStyle = "rgba(255,176,74,0.75)"; ctx.lineWidth = 1.4;
+      ctx.strokeStyle = withA(skin.window, 0.75); ctx.lineWidth = 1.4;
       for (const off of [-52, 52]) {
         ctx.beginPath(); ctx.moveTo(x, fy + 10); ctx.quadraticCurveTo(x + off * 0.45, fy + 44, x + off, groundY - 204); ctx.stroke();
       }
@@ -2021,118 +3445,75 @@ function drawStallEmblem(ex, ey, emblem) {
 // Market stall that grows with the base: a rough plank hut at lvl 1, a
 // striped wooden booth at lvl 2-3, and at lvl 4 a stone annex matching the
 // castle masonry with crenellations, lit window and a cloth guild banner.
+function drawBiomeWallStall(x, canopy, canopyD, emblem, skin) {
+  const lvl = state.base ? state.base.level : 1;
+  const built = lvl >= 4;
+  const w = built ? 74 : lvl >= 2 ? 66 : 58;
+  const h = built ? 62 : lvl >= 2 ? 52 : 44;
+  const top = groundY - h;
+  groundShadow(x, built ? 42 : 34, 0.22);
+
+  if (skin.id === "frozen") {
+    ctx.fillStyle = skin.wallD; roundedRect(x - w / 2, top + 8, w, h - 8, 4); ctx.fill();
+    ctx.fillStyle = withA([235, 250, 255], 0.72);
+    ctx.beginPath(); ctx.moveTo(x - w / 2 - 8, top + 10); ctx.lineTo(x - w * 0.22, top - 18); ctx.lineTo(x + w * 0.18, top - 7); ctx.lineTo(x + w / 2 + 8, top + 10); ctx.closePath(); ctx.fill();
+    for (const ox of [-w * 0.38, w * 0.34]) {
+      ctx.fillStyle = withA([220,248,255], 0.85);
+      ctx.beginPath(); ctx.moveTo(x + ox - 5, groundY); ctx.lineTo(x + ox, top + 2); ctx.lineTo(x + ox + 6, groundY); ctx.closePath(); ctx.fill();
+    }
+  } else if (skin.id === "desert") {
+    ctx.fillStyle = skin.wall; roundedRect(x - w / 2, top + 12, w, h - 12, 5); ctx.fill();
+    ctx.fillStyle = canopyD;
+    ctx.beginPath(); ctx.moveTo(x - w / 2 - 10, top + 14); ctx.quadraticCurveTo(x, top - 30, x + w / 2 + 10, top + 14); ctx.lineTo(x + w / 2 + 4, top + 22); ctx.quadraticCurveTo(x, top + 4, x - w / 2 - 4, top + 22); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = canopy;
+    ctx.beginPath(); ctx.moveTo(x - 10, top - 11); ctx.quadraticCurveTo(x, top - 29, x + 12, top - 10); ctx.lineTo(x + 3, top + 15); ctx.lineTo(x - 5, top + 14); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = skin.accent2; ctx.fillRect(x - w / 2 - 4, top + 20, w + 8, 3);
+  } else if (skin.id === "swamp") {
+    ctx.strokeStyle = skin.wood; ctx.lineWidth = 4; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x - w * 0.38, groundY); ctx.lineTo(x - w * 0.28, top + 13); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + w * 0.38, groundY); ctx.lineTo(x + w * 0.26, top + 13); ctx.stroke();
+    ctx.lineCap = "butt";
+    ctx.fillStyle = skin.wood; ctx.fillRect(x - w / 2, top + 20, w, 7);
+    ctx.fillStyle = skin.wall; roundedRect(x - w * 0.38, top + 2, w * 0.76, 24, 3); ctx.fill();
+    ctx.fillStyle = skin.roofC;
+    ctx.beginPath(); ctx.moveTo(x - w / 2 - 8, top + 2); ctx.quadraticCurveTo(x, top - 21, x + w / 2 + 8, top + 2); ctx.lineTo(x + w / 2 + 2, top + 12); ctx.quadraticCurveTo(x, top + 6, x - w / 2 - 2, top + 12); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = skin.accent; ctx.lineWidth = 1.2;
+    for (const ox of [-22, 0, 20]) { ctx.beginPath(); ctx.moveTo(x + ox, top + 8); ctx.quadraticCurveTo(x + ox + windSway(ox, 3), top + 28, x + ox - 2, groundY - 4); ctx.stroke(); }
+  } else if (skin.id === "volcano") {
+    ctx.fillStyle = skin.wallD;
+    ctx.beginPath(); ctx.moveTo(x - w / 2, groundY); ctx.lineTo(x - w * 0.44, top + 12); ctx.lineTo(x - w * 0.08, top - 16); ctx.lineTo(x + w * 0.42, top + 10); ctx.lineTo(x + w / 2, groundY); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = skin.wall; ctx.beginPath(); ctx.moveTo(x - w * 0.44, top + 12); ctx.lineTo(x - w * 0.08, top - 16); ctx.lineTo(x, groundY); ctx.lineTo(x - w / 2, groundY); ctx.closePath(); ctx.fill();
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = withA([255, 94, 24], 0.52); ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(x - 20, top + 12); ctx.lineTo(x - 4, top + 34); ctx.lineTo(x + 22, top + 20); ctx.stroke();
+    ctx.restore();
+  } else if (skin.id === "corrupted") {
+    ctx.fillStyle = skin.wallD;
+    ctx.beginPath(); ctx.moveTo(x - w / 2, groundY); ctx.lineTo(x - w * 0.36, top + 8); ctx.lineTo(x - 2, top - 24); ctx.lineTo(x + w * 0.38, top + 10); ctx.lineTo(x + w / 2, groundY); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = skin.wall; ctx.beginPath(); ctx.moveTo(x - w * 0.36, top + 8); ctx.lineTo(x - 2, top - 24); ctx.lineTo(x + 3, groundY); ctx.lineTo(x - w / 2, groundY); ctx.closePath(); ctx.fill();
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    drawRuneGlyph(x + 3, top + 20, 4.6, skin.accent2);
+    ctx.restore();
+  } else {
+    ctx.strokeStyle = skin.wood; ctx.lineWidth = 4; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x - w / 2 + 7, groundY); ctx.lineTo(x - w / 2 + 5, top + 10); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + w / 2 - 7, groundY); ctx.lineTo(x + w / 2 - 5, top + 10); ctx.stroke();
+    ctx.lineCap = "butt";
+    ctx.fillStyle = built ? skin.wallD : skin.wood; roundedRect(x - w / 2, top + 12, w, h - 12, 3); ctx.fill();
+    drawBiomeRoof(x, top + 12, w * 0.56, built ? 32 : 24, skin);
+  }
+
+  const sway = windSway(x, 2) * 0.4;
+  ctx.fillStyle = canopyD;
+  ctx.beginPath(); ctx.moveTo(x - 9, top + 12); ctx.lineTo(x + 9, top + 12); ctx.lineTo(x + 8 + sway, top + 40); ctx.lineTo(x + sway, top + 46); ctx.lineTo(x - 8 + sway, top + 40); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = skin.accent2; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(x - 9, top + 14); ctx.lineTo(x + 9, top + 14); ctx.stroke();
+  drawStallEmblem(x + sway * 0.6, top + 29, emblem);
+  if (Game.isNight) drawSkinLamp(x + w / 2 - 5, top + 32, skin, 0.55);
+}
+
 function drawWallStall(x, canopy, canopyD, emblem) {
-  const lvl=state.base?state.base.level:1;
-
-  if (lvl===1) {
-    // makeshift stall: crooked posts, plain weathered cloth
-    groundShadow(x, 32, 0.2);
-    ctx.strokeStyle="#4a3520"; ctx.lineWidth=4; ctx.lineCap="round";
-    ctx.beginPath(); ctx.moveTo(x-24,groundY); ctx.lineTo(x-26,groundY-40); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x+24,groundY); ctx.lineTo(x+25,groundY-38); ctx.stroke();
-    ctx.lineCap="butt";
-    ctx.fillStyle=canopyD;
-    ctx.beginPath(); ctx.moveTo(x-31,groundY-38); ctx.lineTo(x+30,groundY-36); ctx.lineTo(x+26,groundY-48); ctx.lineTo(x-26,groundY-50); ctx.closePath(); ctx.fill();
-    ctx.fillStyle="rgba(255,255,255,0.08)";
-    ctx.beginPath(); ctx.moveTo(x-31,groundY-38); ctx.lineTo(x-26,groundY-50); ctx.lineTo(x-12,groundY-49.5); ctx.lineTo(x-18,groundY-37.5); ctx.closePath(); ctx.fill();
-    // frayed hanging corner
-    const sway=windSway(x,3);
-    ctx.fillStyle=canopyD;
-    ctx.beginPath(); ctx.moveTo(x+30,groundY-36); ctx.lineTo(x+26,groundY-48); ctx.lineTo(x+31+sway*0.5,groundY-28); ctx.closePath(); ctx.fill();
-    // patch on the cloth
-    ctx.fillStyle="rgba(232,216,184,0.5)"; ctx.fillRect(x-6,groundY-46,9,6);
-    return;
-  }
-
-  if (lvl<4) {
-    // timber booth: plank back wall, striped canopy; banner arrives at lvl 3
-    const w=56, h=46, top=groundY-h;
-    groundShadow(x, 36, 0.22);
-    ctx.fillStyle="#6a4a2a"; ctx.fillRect(x-w/2,top,w,h);
-    ctx.fillStyle="rgba(255,255,255,0.07)"; ctx.fillRect(x-w/2,top,w*0.3,h);
-    ctx.fillStyle="rgba(0,0,0,0.16)"; ctx.fillRect(x+w*0.2,top,w*0.3,h);
-    ctx.strokeStyle="rgba(0,0,0,0.22)"; ctx.lineWidth=1;
-    for (let xx=x-w/2+9; xx<x+w/2-3; xx+=9) { ctx.beginPath(); ctx.moveTo(xx,top+2); ctx.lineTo(xx,groundY-2); ctx.stroke(); }
-    // corner posts + plank roof ridge
-    ctx.fillStyle="#4a3520"; ctx.fillRect(x-w/2-2,top-2,4,h+2); ctx.fillRect(x+w/2-2,top-2,4,h+2);
-    ctx.fillStyle="#4a3520"; ctx.fillRect(x-w/2-4,top-5,w+8,5);
-    if (lvl>=3) {
-      // small cloth banner with gold emblem
-      const sway=windSway(x,2)*0.4, by0=top-2;
-      ctx.fillStyle=canopyD;
-      ctx.beginPath(); ctx.moveTo(x-7,by0); ctx.lineTo(x+7,by0); ctx.lineTo(x+7+sway,by0+20); ctx.lineTo(x+sway,by0+24); ctx.lineTo(x-7+sway,by0+20); ctx.closePath(); ctx.fill();
-      ctx.strokeStyle="#f2c14e"; ctx.lineWidth=1.1;
-      ctx.beginPath(); ctx.moveTo(x-7,by0+1.5); ctx.lineTo(x+7,by0+1.5); ctx.stroke();
-      drawStallEmblem(x+sway*0.6,by0+13,emblem);
-    }
-    // striped canopy sloping out from the wall
-    const cy=top+12, cOut=13, cw=w+18;
-    ctx.strokeStyle="#4a3520"; ctx.lineWidth=3; ctx.lineCap="round";
-    ctx.beginPath(); ctx.moveTo(x-cw/2+2,groundY); ctx.lineTo(x-cw/2+2,cy+cOut-2); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(x+cw/2-2,groundY); ctx.lineTo(x+cw/2-2,cy+cOut-2); ctx.stroke();
-    ctx.lineCap="butt";
-    for (let i=0;i<7;i++) {
-      ctx.fillStyle=i%2?canopy:"#e8d8b8";
-      const s0=x-cw/2+i*cw/7, s1=s0+cw/7;
-      ctx.beginPath(); ctx.moveTo(s0+2,cy); ctx.lineTo(s1+2,cy); ctx.lineTo(s1,cy+cOut); ctx.lineTo(s0,cy+cOut); ctx.closePath(); ctx.fill();
-    }
-    ctx.fillStyle="rgba(0,0,0,0.14)"; ctx.fillRect(x-cw/2,cy+cOut-1.5,cw,2.5);
-    if (lvl>=3) {
-      ctx.fillStyle=canopyD;
-      for (let i=0;i<9;i++) { ctx.beginPath(); ctx.arc(x-cw/2+cw/18+i*cw/9,cy+cOut+0.5,cw/18,0,Math.PI); ctx.fill(); }
-    }
-    return;
-  }
-
-  const stoneL="#5a5260", stoneD="#403a48";
-  const w=62, h=52, top=groundY-h;
-  groundShadow(x, 40, 0.24);
-  // masonry back wall with joints
-  ctx.fillStyle=stoneD; ctx.fillRect(x-w/2,top,w,h);
-  ctx.fillStyle="rgba(255,255,255,0.07)"; ctx.fillRect(x-w/2,top,w*0.3,h);
-  ctx.fillStyle="rgba(0,0,0,0.16)"; ctx.fillRect(x+w*0.2,top,w*0.3,h);
-  ctx.strokeStyle="rgba(0,0,0,0.20)"; ctx.lineWidth=1;
-  for (let yy=top+10; yy<groundY-4; yy+=10) { ctx.beginPath(); ctx.moveTo(x-w/2+2,yy); ctx.lineTo(x+w/2-2,yy); ctx.stroke(); }
-  for (let yy=top+10,r=0; yy<groundY-8; yy+=10,r++)
-    for (let xx=x-w/2+(r%2?7:14); xx<x+w/2-4; xx+=14)
-      { ctx.beginPath(); ctx.moveTo(xx,yy); ctx.lineTo(xx,yy+10); ctx.stroke(); }
-  // stone ledge + battlement teeth echoing the curtain wall
-  ctx.fillStyle=stoneL; ctx.fillRect(x-w/2-3,top-6,w+6,7);
-  ctx.fillStyle="rgba(0,0,0,0.22)"; ctx.fillRect(x-w/2-3,top-1,w+6,2);
-  ctx.fillStyle=stoneD;
-  for (let i=0;i<4;i++) ctx.fillRect(x-w/2-3+i*(w-2)/3,top-13,8,8);
-  ctx.fillStyle="rgba(255,255,255,0.08)";
-  for (let i=0;i<4;i++) ctx.fillRect(x-w/2-3+i*(w-2)/3,top-13,8,2);
-  // lit arched window high on the wall
-  const wy=top+8, ww=9;
-  ctx.fillStyle="#2a2530";
-  ctx.beginPath(); ctx.moveTo(x-ww/2-1,wy+13); ctx.lineTo(x-ww/2-1,wy+ww*0.5); ctx.arc(x,wy+ww*0.5,ww/2+1,Math.PI,0); ctx.lineTo(x+ww/2+1,wy+13); ctx.closePath(); ctx.fill();
-  ctx.fillStyle=`rgba(255,186,86,${litWindow(Game.isNight?0.8:0)})`;
-  ctx.beginPath(); ctx.moveTo(x-ww/2,wy+13); ctx.lineTo(x-ww/2,wy+ww*0.5); ctx.arc(x,wy+ww*0.5,ww/2,Math.PI,0); ctx.lineTo(x+ww/2,wy+13); ctx.closePath(); ctx.fill();
-  // hanging guild banner with emblem (cloth, not a floating icon)
-  const sway=windSway(x,2)*0.4;
-  ctx.fillStyle=canopyD;
-  ctx.beginPath(); ctx.moveTo(x-8,top-4); ctx.lineTo(x+8,top-4); ctx.lineTo(x+8+sway,wy+24); ctx.lineTo(x+sway,wy+29); ctx.lineTo(x-8+sway,wy+24); ctx.closePath(); ctx.fill();
-  ctx.fillStyle="rgba(0,0,0,0.18)";
-  ctx.beginPath(); ctx.moveTo(x+2,top-4); ctx.lineTo(x+8,top-4); ctx.lineTo(x+8+sway,wy+24); ctx.lineTo(x+2+sway,wy+26); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle="#f2c14e"; ctx.lineWidth=1.2;
-  ctx.beginPath(); ctx.moveTo(x-8,top-2.5); ctx.lineTo(x+8,top-2.5); ctx.stroke();
-  drawStallEmblem(x+sway*0.6,wy+16,emblem);
-  // striped lean-to canopy slanting out from the stone ledge
-  const cy=top+16, cOut=14;
-  ctx.strokeStyle="#4a3520"; ctx.lineWidth=3; ctx.lineCap="round";
-  ctx.beginPath(); ctx.moveTo(x-w/2-8,groundY); ctx.lineTo(x-w/2-8,cy+cOut-2); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x+w/2+8,groundY); ctx.lineTo(x+w/2+8,cy+cOut-2); ctx.stroke();
-  ctx.lineCap="butt";
-  const cw=w+22;
-  for (let i=0;i<7;i++) {
-    ctx.fillStyle=i%2?canopy:"#e8d8b8";
-    const s0=x-cw/2+i*cw/7, s1=s0+cw/7;
-    ctx.beginPath(); ctx.moveTo(s0+2,cy); ctx.lineTo(s1+2,cy); ctx.lineTo(s1,cy+cOut); ctx.lineTo(s0,cy+cOut); ctx.closePath(); ctx.fill();
-  }
-  ctx.fillStyle="rgba(0,0,0,0.14)"; ctx.fillRect(x-cw/2,cy+cOut-1.5,cw,2.5);
-  ctx.fillStyle=canopyD;
-  for (let i=0;i<9;i++) { ctx.beginPath(); ctx.arc(x-cw/2+cw/18+i*cw/9,cy+cOut+0.5,cw/18,0,Math.PI); ctx.fill(); }
+  drawBiomeWallStall(x, canopy, canopyD, emblem, baseSkinAt(CFG.baseX, false));
 }
 
 function drawBoothCounter(x) {
@@ -2264,114 +3645,372 @@ function drawGuardStation(x) {
   }
 }
 
-// Timber-framed general store: plastered walls with dark beams, striped
-// awning over a goods counter, hanging sign, barrels, crates and a lantern.
-function drawShopBuilding(x) {
-  const t=performance.now()/1000, fl=(FX&&FX.flicker)||1;
-  const bw=76, bh=44, by=groundY-bh;
-  groundShadow(x, 50, 0.26);
-  // stone footing
-  ctx.fillStyle="#565662"; ctx.fillRect(x-bw/2-2,groundY-6,bw+4,6);
-  ctx.fillStyle="rgba(255,255,255,0.10)"; ctx.fillRect(x-bw/2-2,groundY-6,bw+4,1.6);
-  // plastered wall
-  ctx.fillStyle="#c9b795"; ctx.fillRect(x-bw/2,by,bw,bh-6);
-  ctx.fillStyle="rgba(255,255,255,0.14)"; ctx.fillRect(x-bw/2,by,bw*0.3,bh-6);
-  ctx.fillStyle="rgba(0,0,0,0.10)"; ctx.fillRect(x+bw*0.2,by,bw*0.3,bh-6);
-  // dark timber frame
-  ctx.fillStyle="#4a3623";
-  ctx.fillRect(x-bw/2,by,4,bh-6); ctx.fillRect(x+bw/2-4,by,4,bh-6);
-  ctx.fillRect(x-bw/2,by,bw,4); ctx.fillRect(x-3,by,6,bh-6);
-  ctx.strokeStyle="#4a3623"; ctx.lineWidth=3.4; ctx.lineCap="round";
-  ctx.beginPath(); ctx.moveTo(x-bw/2+4,by+5); ctx.lineTo(x-5,by+bh*0.55); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x+bw/2-4,by+5); ctx.lineTo(x+5,by+bh*0.55); ctx.stroke();
-  ctx.lineCap="butt";
-  // steep shingled roof with overhang and chimney
-  const peak=by-26;
-  ctx.fillStyle="#8a3a2a";
-  ctx.beginPath(); ctx.moveTo(x-bw/2-10,by+1); ctx.lineTo(x,peak); ctx.lineTo(x+bw/2+10,by+1); ctx.lineTo(x+bw/2+6,by+5); ctx.lineTo(x-bw/2-6,by+5); ctx.closePath(); ctx.fill();
-  ctx.fillStyle="rgba(255,255,255,0.10)";
-  ctx.beginPath(); ctx.moveTo(x-bw/2-10,by+1); ctx.lineTo(x,peak); ctx.lineTo(x-bw*0.1,by+1); ctx.closePath(); ctx.fill();
-  ctx.fillStyle="rgba(0,0,0,0.20)";
-  ctx.beginPath(); ctx.moveTo(x,peak); ctx.lineTo(x+bw/2+10,by+1); ctx.lineTo(x+bw*0.16,by+1); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle="rgba(0,0,0,0.18)"; ctx.lineWidth=1;
-  for (let i=1;i<4;i++) { const fy=peak+(by+1-peak)*i/4, half=(bw/2+10)*i/4; ctx.beginPath(); ctx.moveTo(x-half,fy); ctx.lineTo(x+half,fy); ctx.stroke(); }
-  ctx.fillStyle="#6a6a76"; ctx.fillRect(x+bw*0.22,peak+8,9,14);
-  ctx.fillStyle="#4e4e5a"; ctx.fillRect(x+bw*0.22-1.5,peak+6,12,3);
-  // curl of chimney smoke
-  ctx.save(); ctx.globalAlpha=0.16;
-  ctx.fillStyle="#d8d4cc";
-  for (let i=0;i<3;i++) { const ph=(t*0.3+i/3)%1; ctx.beginPath(); ctx.arc(x+bw*0.28+Math.sin(t+i*2)*3+ph*6,peak+2-ph*20,2.5+ph*4,0,Math.PI*2); ctx.fill(); }
+function drawShopGoods(x, skin) {
+  ctx.fillStyle = skin.gate; ctx.fillRect(x - 28, groundY - 17, 56, 17);
+  ctx.fillStyle = skin.wood; ctx.fillRect(x - 28, groundY - 17, 56, 4);
+  ctx.strokeStyle = "rgba(0,0,0,0.24)"; ctx.lineWidth = 1;
+  for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(x + i * 9, groundY - 13); ctx.lineTo(x + i * 9, groundY); ctx.stroke(); }
+  ctx.fillStyle = skin.id === "frozen" ? "#dff7ff" : skin.id === "volcano" ? "#ff6a24" : skin.id === "corrupted" ? "#b66bff" : "#c0392b";
+  for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(x - 18 + i * 5, groundY - 19, 2.5, 0, Math.PI * 2); ctx.fill(); }
+  ctx.fillStyle = skin.accent2; ctx.beginPath(); ctx.moveTo(x - 3, groundY - 16.5); ctx.lineTo(x + 8, groundY - 16.5); ctx.lineTo(x + 8, groundY - 22); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = skin.id === "swamp" ? "#8fb35a" : "#3a6a4a"; ctx.fillRect(x + 13, groundY - 25, 4, 9); ctx.fillRect(x + 14, groundY - 27.5, 2, 3);
+  ctx.fillStyle = skin.accent2;
+  for (let i = 0; i < 3; i++) ctx.fillRect(x + 21, groundY - 18.5 - i * 2.6, 6, 2);
+  drawBoothPerson(x - 8, "#d8a878", skin.banner, skin.gate);
+}
+
+function drawShopSign(x, y, skin) {
+  const swy = Math.sin(performance.now() / 620 + x) * 0.07;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(swy);
+  ctx.strokeStyle = skin.trim; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(-5, 0); ctx.lineTo(-5, 6); ctx.moveTo(5, 0); ctx.lineTo(5, 6); ctx.stroke();
+  ctx.fillStyle = skin.wallD; roundedRect(-11, 6, 22, 16, 2.4); ctx.fill();
+  ctx.strokeStyle = skin.accent2; ctx.lineWidth = 1; roundedRect(-8, 8, 16, 12, 1.8); ctx.stroke();
+  ctx.fillStyle = skin.accent2; ctx.beginPath(); ctx.arc(0, 14, 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = skin.wallD; ctx.beginPath(); ctx.arc(0, 14, 1.6, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
-  // upper window with shutters
-  ctx.fillStyle=`rgba(255,186,86,${litWindow(Game.isNight?0.8:0)})`; ctx.fillRect(x-6,by+8,12,11);
-  ctx.strokeStyle="#4a3623"; ctx.lineWidth=1.4; ctx.strokeRect(x-6,by+8,12,11);
-  ctx.beginPath(); ctx.moveTo(x,by+8); ctx.lineTo(x,by+19); ctx.stroke();
-  ctx.fillStyle="#5f4326"; ctx.fillRect(x-11,by+8,4,11); ctx.fillRect(x+7,by+8,4,11);
-  // striped awning over the counter
-  const awY=by+bh*0.42, awW=bw+16;
-  ctx.strokeStyle="#4a3520"; ctx.lineWidth=3; ctx.lineCap="round";
-  ctx.beginPath(); ctx.moveTo(x-awW/2+3,groundY); ctx.lineTo(x-awW/2+3,awY+10); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x+awW/2-3,groundY); ctx.lineTo(x+awW/2-3,awY+10); ctx.stroke();
-  ctx.lineCap="butt";
-  for (let i=0;i<7;i++) {
-    ctx.fillStyle=i%2?"#b8452f":"#e8d8b8";
-    const sx=x-awW/2+i*awW/7;
-    ctx.beginPath(); ctx.moveTo(sx,awY+10); ctx.lineTo(sx+awW/7,awY+10); ctx.lineTo(sx+awW/7-3,awY-2); ctx.lineTo(sx-3+3,awY-2); ctx.closePath(); ctx.fill();
-  }
-  ctx.fillStyle="rgba(0,0,0,0.14)"; ctx.fillRect(x-awW/2-3,awY+9,awW+6,2.4);
-  // scalloped edge
-  ctx.fillStyle="#a03a28";
-  for (let i=0;i<9;i++) { ctx.beginPath(); ctx.arc(x-awW/2+awW/18+i*awW/9,awY+11,awW/18,0,Math.PI); ctx.fill(); }
-  // goods counter with wares
-  ctx.fillStyle="#5f4326"; ctx.fillRect(x-26,groundY-16,52,16);
-  ctx.fillStyle="#8a6338"; ctx.fillRect(x-26,groundY-16,52,4);
-  ctx.strokeStyle="rgba(0,0,0,0.22)"; ctx.lineWidth=1;
-  for (let i=-2;i<=2;i++) { ctx.beginPath(); ctx.moveTo(x+i*9,groundY-12); ctx.lineTo(x+i*9,groundY); ctx.stroke(); }
-  // wares: apples, cheese, bottle, coin stack
-  ctx.fillStyle="#c0392b";
-  for (let i=0;i<3;i++) { ctx.beginPath(); ctx.arc(x-17+i*5,groundY-18.5,2.4,0,Math.PI*2); ctx.fill(); }
-  ctx.fillStyle="#e8c14e"; ctx.beginPath(); ctx.moveTo(x-2,groundY-16.5); ctx.lineTo(x+8,groundY-16.5); ctx.lineTo(x+8,groundY-22); ctx.closePath(); ctx.fill();
-  ctx.fillStyle="#3a6a4a"; ctx.fillRect(x+13,groundY-25,4,9); ctx.fillRect(x+14,groundY-27.5,2,3);
-  ctx.fillStyle="#f2c14e";
-  for (let i=0;i<3;i++) ctx.fillRect(x+21,groundY-18.5-i*2.6,6,2);
-  // shopkeeper behind the counter
-  drawBoothPerson(x-8,"#d8a878","#6a3a5a","#4a2840");
-  // hanging sign on a bracket
-  const swy=Math.sin(t*1.6+x)*0.06;
-  ctx.strokeStyle="#3a2e20"; ctx.lineWidth=2.6;
-  ctx.beginPath(); ctx.moveTo(x-bw/2,by+9); ctx.lineTo(x-bw/2-18,by+9); ctx.stroke();
-  ctx.save(); ctx.translate(x-bw/2-12,by+9); ctx.rotate(swy);
-  ctx.strokeStyle="#8a7a5a"; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(-4,0); ctx.lineTo(-4,5); ctx.moveTo(4,0); ctx.lineTo(4,5); ctx.stroke();
-  ctx.fillStyle="#6a4a2a"; roundedRect(-9,5,18,14,2); ctx.fill();
-  ctx.strokeStyle="#f2c14e"; ctx.lineWidth=1; roundedRect(-7,7,14,10,1.6); ctx.stroke();
-  ctx.fillStyle="#f2c14e"; ctx.beginPath(); ctx.arc(0,12,3.4,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle="#6a4a2a"; ctx.beginPath(); ctx.arc(0,12,1.6,0,Math.PI*2); ctx.fill();
-  ctx.restore();
-  // barrel + crates flanking the shop
-  const brX=x+bw/2+12;
-  ctx.fillStyle="#7a5a34"; ctx.beginPath(); ctx.ellipse(brX,groundY-9,7,9.5,0,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle="rgba(255,255,255,0.10)"; ctx.beginPath(); ctx.ellipse(brX-2,groundY-9,3,9,0,0,Math.PI*2); ctx.fill();
-  ctx.strokeStyle="#3c3c46"; ctx.lineWidth=1.4;
-  ctx.beginPath(); ctx.ellipse(brX,groundY-13,6.6,3,0,0,Math.PI*2); ctx.stroke();
-  ctx.beginPath(); ctx.ellipse(brX,groundY-5,6.9,3,0,0,Math.PI*2); ctx.stroke();
-  const crX=x-bw/2-16;
-  ctx.fillStyle="#8a6338"; ctx.fillRect(crX-8,groundY-11,16,11);
-  ctx.strokeStyle="#5f4326"; ctx.lineWidth=1.4; ctx.strokeRect(crX-8,groundY-11,16,11);
-  ctx.beginPath(); ctx.moveTo(crX-8,groundY-11); ctx.lineTo(crX+8,groundY); ctx.moveTo(crX+8,groundY-11); ctx.lineTo(crX-8,groundY); ctx.stroke();
-  ctx.fillStyle="#9bd05a"; ctx.beginPath(); ctx.arc(crX-3,groundY-13,2.6,0,Math.PI*2); ctx.arc(crX+3,groundY-13.6,2.8,0,Math.PI*2); ctx.fill();
-  // lantern glowing at the corner post at night
-  if (Game.isNight) {
-    const lx=x+awW/2-3, ly=awY+14;
-    ctx.strokeStyle="#3a3a44"; ctx.lineWidth=1.4;
-    ctx.beginPath(); ctx.moveTo(lx,ly); ctx.lineTo(lx,ly+4); ctx.stroke();
-    ctx.fillStyle="#3a3a44"; ctx.fillRect(lx-3,ly+4,6,8);
-    ctx.save(); ctx.globalCompositeOperation="lighter";
-    const rg=ctx.createRadialGradient(lx,ly+8,1,lx,ly+8,22*fl);
-    rg.addColorStop(0,"rgba(255,210,120,0.5)"); rg.addColorStop(1,"rgba(255,150,60,0)");
-    ctx.fillStyle=rg; ctx.beginPath(); ctx.arc(lx,ly+8,22*fl,0,Math.PI*2); ctx.fill();
+}
+
+function drawShopCrates(x, skin) {
+  const brX = x + 52;
+  ctx.fillStyle = skin.wood; ctx.beginPath(); ctx.ellipse(brX, groundY - 9, 7, 9.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = skin.line; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.ellipse(brX, groundY - 13, 6.6, 3, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(brX, groundY - 5, 6.9, 3, 0, 0, Math.PI * 2); ctx.stroke();
+  const crX = x - 54;
+  ctx.fillStyle = skin.id === "frozen" ? skin.wall : skin.wood; ctx.fillRect(crX - 8, groundY - 11, 16, 11);
+  ctx.strokeStyle = skin.line; ctx.lineWidth = 1.4; ctx.strokeRect(crX - 8, groundY - 11, 16, 11);
+  ctx.beginPath(); ctx.moveTo(crX - 8, groundY - 11); ctx.lineTo(crX + 8, groundY); ctx.moveTo(crX + 8, groundY - 11); ctx.lineTo(crX - 8, groundY); ctx.stroke();
+}
+
+function drawBiomeShopBuilding(x, skin) {
+  const t = performance.now() / 1000;
+  const fl = (FX && FX.flicker) || 1;
+  groundShadow(x, 58, 0.26);
+
+  if (skin.id === "frozen") {
+    const bw = 92, by = groundY - 48;
+    ctx.fillStyle = skin.wallD; roundedRect(x - bw / 2, by + 8, bw, 40, 6); ctx.fill();
+    ctx.fillStyle = withA([235, 250, 255], 0.76);
+    ctx.beginPath(); ctx.moveTo(x - bw / 2 - 10, by + 10); ctx.lineTo(x - 20, by - 28); ctx.lineTo(x + 8, by - 16); ctx.lineTo(x + bw / 2 + 10, by + 10); ctx.closePath(); ctx.fill();
+    drawSkinWindow(x + 5, by + 16, 12, 12, skin, 0.7);
+    drawShopSign(x - 50, by + 10, skin);
+  } else if (skin.id === "desert") {
+    const bw = 104, by = groundY - 54;
+    ctx.fillStyle = skin.wall; roundedRect(x - bw / 2, by + 10, bw, 44, 7); ctx.fill();
+    for (const ox of [-38, 38]) { ctx.fillStyle = skin.wallL; roundedRect(x + ox - 5, by + 13, 10, 41, 4); ctx.fill(); }
+    ctx.fillStyle = skin.banner;
+    ctx.beginPath(); ctx.moveTo(x - bw / 2 - 12, by + 12); ctx.quadraticCurveTo(x, by - 42, x + bw / 2 + 12, by + 12); ctx.lineTo(x + bw / 2 + 4, by + 24); ctx.quadraticCurveTo(x, by + 5, x - bw / 2 - 4, by + 24); ctx.closePath(); ctx.fill();
+    drawBiomeRoof(x, by + 2, 34, 34, skin);
+    drawShopSign(x - 58, by + 18, skin);
+  } else if (skin.id === "swamp") {
+    const deckY = groundY - 28, bw = 98;
+    ctx.strokeStyle = skin.wood; ctx.lineWidth = 4; ctx.lineCap = "round";
+    for (const ox of [-42, 0, 42]) { ctx.beginPath(); ctx.moveTo(x + ox, groundY); ctx.lineTo(x + ox + windSway(ox, 2), deckY); ctx.stroke(); }
+    ctx.lineCap = "butt";
+    ctx.fillStyle = skin.wood; ctx.fillRect(x - bw / 2, deckY, bw, 7);
+    ctx.fillStyle = skin.wall; roundedRect(x - 40, deckY - 42, 80, 42, 4); ctx.fill();
+    drawBiomeRoof(x, deckY - 42, 54, 28, skin);
+    ctx.strokeStyle = skin.accent; ctx.lineWidth = 1.2;
+    for (const ox of [-34, -4, 28]) { ctx.beginPath(); ctx.moveTo(x + ox, deckY - 38); ctx.quadraticCurveTo(x + ox + windSway(ox, 4), deckY - 12, x + ox - 2, groundY - 5); ctx.stroke(); }
+    drawShopSign(x - 50, deckY - 34, skin);
+  } else if (skin.id === "volcano") {
+    const bw = 96, by = groundY - 58;
+    ctx.fillStyle = skin.wallD;
+    ctx.beginPath(); ctx.moveTo(x - bw / 2, groundY); ctx.lineTo(x - 42, by + 8); ctx.lineTo(x - 8, by - 26); ctx.lineTo(x + 44, by + 6); ctx.lineTo(x + bw / 2, groundY); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = skin.wall; ctx.beginPath(); ctx.moveTo(x - 42, by + 8); ctx.lineTo(x - 8, by - 26); ctx.lineTo(x + 4, groundY); ctx.lineTo(x - bw / 2, groundY); ctx.closePath(); ctx.fill();
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = withA([255, 94, 24], 0.58); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x - 28, by + 15); ctx.lineTo(x - 2, by + 38); ctx.lineTo(x + 30, by + 18); ctx.stroke();
     ctx.restore();
-    ctx.fillStyle="rgba(255,230,150,0.95)"; ctx.fillRect(lx-1.8,ly+5.5,3.6,5);
+    drawShopSign(x - 52, by + 18, skin);
+  } else if (skin.id === "corrupted") {
+    const bw = 92, by = groundY - 62;
+    ctx.fillStyle = skin.wallD;
+    ctx.beginPath(); ctx.moveTo(x - bw / 2, groundY); ctx.lineTo(x - 35, by + 8); ctx.lineTo(x - 2, by - 34); ctx.lineTo(x + 38, by + 12); ctx.lineTo(x + bw / 2, groundY); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = skin.wall; ctx.beginPath(); ctx.moveTo(x - 35, by + 8); ctx.lineTo(x - 2, by - 34); ctx.lineTo(x + 3, groundY); ctx.lineTo(x - bw / 2, groundY); ctx.closePath(); ctx.fill();
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = withA([190, 112, 255], 0.32 + Math.sin(t * 2) * 0.06); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.ellipse(x + 5, by + 28, 40, 10, t * 0.2, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+    drawShopSign(x - 52, by + 14, skin);
+  } else {
+    const bw = 94, by = groundY - 50;
+    ctx.fillStyle = skin.wood; roundedRect(x - bw / 2, by + 12, bw, 38, 4); ctx.fill();
+    ctx.fillStyle = skin.wallD; roundedRect(x - bw / 2 + 9, by + 18, bw - 18, 32, 3); ctx.fill();
+    drawBiomeRoof(x, by + 14, bw * 0.62, 34, skin);
+    ctx.strokeStyle = withA([112, 170, 82], 0.7); ctx.lineWidth = 2; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x - 45, groundY); ctx.quadraticCurveTo(x - 34, by - 4, x - 6, by - 20); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 46, groundY); ctx.quadraticCurveTo(x + 38, by, x + 8, by - 22); ctx.stroke();
+    ctx.lineCap = "butt";
+    drawShopSign(x - 54, by + 16, skin);
+  }
+
+  drawShopGoods(x, skin);
+  drawShopCrates(x, skin);
+  if (Game.isNight) drawSkinLamp(x + 43, groundY - 33, skin, 0.72 * fl);
+}
+
+function drawShopBuilding(x) {
+  drawBiomeShopBuilding(x, baseSkinAt(CFG.baseX, false));
+}
+
+const FARM_BIOME_SKINS = {
+  forest: {
+    id: "forest", wall: "#5a5260", wallD: "#403a48", wallL: "#766f7a", roofC: "#25406a", roofD: "#162b48",
+    wood: "#5a3a1e", trim: "#cdbfa3", accent: "#9bd05a", accent2: "#f2c14e", banner: "#c1453b", gate: "#4e3820",
+    lamp: [255, 186, 86],
+  },
+  frozen: {
+    id: "frozen", wall: "#a9c7d8", wallD: "#4c7086", wallL: "#e8f8ff", roofC: "#dff7ff", roofD: "#7bb8d8",
+    wood: "#6c7d88", trim: "#f5fdff", accent: "#82dfff", accent2: "#ffffff", banner: "#65bde8", gate: "#466978",
+    lamp: [170, 235, 255],
+  },
+  desert: {
+    id: "desert", wall: "#b9874f", wallD: "#6e4a28", wallL: "#edc982", roofC: "#d8a85c", roofD: "#8e5d2e",
+    wood: "#6a3f1d", trim: "#ffe0a0", accent: "#f1b24f", accent2: "#ffd27a", banner: "#b95f34", gate: "#5a3218",
+    lamp: [255, 216, 128],
+  },
+  swamp: {
+    id: "swamp", wall: "#314638", wallD: "#17231e", wallL: "#6f8b55", roofC: "#61713f", roofD: "#2a3a2a",
+    wood: "#4d3821", trim: "#93a960", accent: "#9bd85a", accent2: "#d6f08a", banner: "#4f8d62", gate: "#2e2418",
+    lamp: [190, 246, 104],
+  },
+  volcano: {
+    id: "volcano", wall: "#2f2b29", wallD: "#151313", wallL: "#6f4030", roofC: "#171317", roofD: "#080608",
+    wood: "#4a2417", trim: "#aa5940", accent: "#ff6a24", accent2: "#ffb13d", banner: "#c74224", gate: "#28110c",
+    lamp: [255, 106, 32],
+  },
+  corrupted: {
+    id: "corrupted", wall: "#322244", wallD: "#171020", wallL: "#6c4aa0", roofC: "#241236", roofD: "#09040f",
+    wood: "#3a2138", trim: "#a56bff", accent: "#b66bff", accent2: "#dca8ff", banner: "#7f4dbe", gate: "#130817",
+    lamp: [210, 142, 255],
+  },
+};
+
+function farmSkinAt(x) {
+  return FARM_BIOME_SKINS[biomeAt(x)?.id] || FARM_BIOME_SKINS.forest;
+}
+
+function drawFarmRoof(x, y, skin) {
+  ctx.fillStyle = skin.roofD;
+  if (skin.id === "desert") {
+    ctx.beginPath(); ctx.arc(x, y + 2, 25, Math.PI, 0); ctx.lineTo(x + 25, y + 5); ctx.lineTo(x - 25, y + 5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = skin.roofC;
+    ctx.beginPath(); ctx.arc(x - 2, y + 1, 21, Math.PI, 0); ctx.lineTo(x + 19, y + 4); ctx.lineTo(x - 23, y + 4); ctx.closePath(); ctx.fill();
+  } else if (skin.id === "corrupted" || skin.id === "volcano") {
+    ctx.beginPath(); ctx.moveTo(x - 28, y + 5); ctx.lineTo(x - 7, y - 13); ctx.lineTo(x, y - 28); ctx.lineTo(x + 10, y - 11); ctx.lineTo(x + 28, y + 5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = skin.roofC;
+    ctx.beginPath(); ctx.moveTo(x - 25, y + 2); ctx.lineTo(x, y - 24); ctx.lineTo(x + 5, y + 2); ctx.closePath(); ctx.fill();
+  } else {
+    ctx.beginPath(); ctx.moveTo(x - 29, y + 5); ctx.lineTo(x, y - 24); ctx.lineTo(x + 29, y + 5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = skin.roofC;
+    ctx.beginPath(); ctx.moveTo(x - 25, y + 2); ctx.lineTo(x, y - 20); ctx.lineTo(x + 4, y + 2); ctx.closePath(); ctx.fill();
+    if (skin.id === "frozen") {
+      ctx.fillStyle = skin.trim;
+      ctx.beginPath(); ctx.moveTo(x - 29, y + 5); ctx.lineTo(x, y - 24); ctx.lineTo(x - 4, y + 5); ctx.closePath(); ctx.fill();
+    }
+  }
+}
+
+function drawFarmLamp(x, y, skin, scale = 1) {
+  const [r, g, b] = skin.lamp;
+  const flicker = (FX && FX.flicker) || 1;
+  ctx.strokeStyle = skin.wood; ctx.lineWidth = 1.4 * scale;
+  ctx.beginPath(); ctx.moveTo(x, y - 5 * scale); ctx.lineTo(x, y); ctx.stroke();
+  ctx.fillStyle = skin.wallD; roundedRect(x - 3 * scale, y, 6 * scale, 9 * scale, 1.4 * scale); ctx.fill();
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  const glow = ctx.createRadialGradient(x, y + 4 * scale, 1, x, y + 4 * scale, 20 * scale * flicker);
+  glow.addColorStop(0, `rgba(${r},${g},${b},0.52)`); glow.addColorStop(1, `rgba(${r},${g},${b},0)`);
+  ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(x, y + 4 * scale, 20 * scale * flicker, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = `rgb(${r},${g},${b})`; ctx.fillRect(x - 1.3 * scale, y + 1.5 * scale, 2.6 * scale, 5 * scale);
+}
+
+function drawFarmCrop(x, y, skin, phase, mature) {
+  const sway = Math.sin(performance.now() / 650 + phase) * (mature ? 1.3 : 0.7);
+  ctx.save();
+  ctx.translate(x, y);
+  if (skin.id === "frozen") {
+    ctx.fillStyle = skin.accent;
+    ctx.beginPath(); ctx.moveTo(sway, -4 - mature * 4); ctx.lineTo(-3, 0); ctx.lineTo(0, -11 - mature * 4); ctx.lineTo(3, 0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = skin.trim;
+    ctx.beginPath(); ctx.moveTo(0, -10 - mature * 4); ctx.lineTo(1.2, -4); ctx.lineTo(-0.8, -3); ctx.closePath(); ctx.fill();
+  } else if (skin.id === "desert") {
+    ctx.strokeStyle = "#588b43"; ctx.lineWidth = 2.2; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(sway * 0.4, -8 - mature * 3); ctx.stroke();
+    if (mature) {
+      ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(-4, -8); ctx.moveTo(0, -7); ctx.lineTo(4, -11); ctx.stroke();
+    }
+    ctx.fillStyle = skin.accent2;
+    ctx.beginPath(); ctx.arc(sway * 0.4, -9 - mature * 3, 1.7, 0, Math.PI * 2); ctx.fill();
+  } else if (skin.id === "swamp") {
+    ctx.strokeStyle = skin.accent; ctx.lineWidth = 1.8; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(sway, -7, sway * 0.6, -12 - mature * 3); ctx.stroke();
+    ctx.fillStyle = skin.accent2;
+    ctx.beginPath(); ctx.ellipse(-2.5, -7, 3.2, 1.5, -0.55, 0, Math.PI * 2); ctx.fill();
+    if (mature) { ctx.beginPath(); ctx.ellipse(3, -11, 3.4, 1.6, 0.55, 0, Math.PI * 2); ctx.fill(); }
+  } else if (skin.id === "volcano") {
+    ctx.strokeStyle = skin.wallL; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(sway * 0.4, -8 - mature * 3); ctx.stroke();
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = skin.accent;
+    ctx.beginPath(); ctx.arc(sway * 0.4, -10 - mature * 3, mature ? 2.8 : 1.8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = skin.accent2;
+    ctx.beginPath(); ctx.arc(sway * 0.4 - 0.5, -11 - mature * 3, 0.8, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  } else if (skin.id === "corrupted") {
+    ctx.strokeStyle = skin.accent; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.bezierCurveTo(-3, -4, 4 + sway, -8, sway, -12 - mature * 2); ctx.stroke();
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = skin.accent2;
+    ctx.beginPath(); ctx.ellipse(sway, -13 - mature * 2, mature ? 3.2 : 2.2, mature ? 4.5 : 3, 0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  } else {
+    ctx.strokeStyle = "#769b42"; ctx.lineWidth = 1.7; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(sway, -8, sway * 0.6, -12 - mature * 3); ctx.stroke();
+    ctx.strokeStyle = skin.accent2; ctx.lineWidth = 1.2;
+    for (let k = 0; k < (mature ? 4 : 2); k++) {
+      const yy = -7 - k * 2;
+      ctx.beginPath(); ctx.moveTo(sway * 0.4, yy); ctx.lineTo(-3, yy - 2); ctx.moveTo(sway * 0.4, yy - 0.5); ctx.lineTo(3, yy - 2.5); ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function drawFarmPlot(x, lvl, skin) {
+  const fieldCol = skin.id === "frozen" ? "#718da0"
+    : skin.id === "desert" ? "#8d5e31"
+    : skin.id === "swamp" ? "#26382d"
+    : skin.id === "volcano" ? "#211918"
+    : skin.id === "corrupted" ? "#24172e"
+    : "#49351f";
+  const furrowCol = skin.id === "frozen" ? withA([220, 245, 255], 0.36)
+    : skin.id === "volcano" ? withA([255, 92, 28], 0.22)
+    : skin.id === "corrupted" ? withA([190, 112, 255], 0.3)
+    : "rgba(15,10,7,0.28)";
+
+  ctx.fillStyle = skin.wood;
+  roundedRect(x - 62, groundY - 13, 124, 13, 3); ctx.fill();
+  ctx.fillStyle = fieldCol;
+  roundedRect(x - 57, groundY - 11, 114, 9, 2); ctx.fill();
+  ctx.strokeStyle = furrowCol; ctx.lineWidth = 1;
+  for (let row = 0; row < 3; row++) {
+    const yy = groundY - 9 + row * 3;
+    ctx.beginPath(); ctx.moveTo(x - 53, yy); ctx.lineTo(x + 53, yy); ctx.stroke();
+  }
+
+  const cropCount = 5 + Math.min(3, lvl);
+  for (let i = 0; i < cropCount; i++) {
+    const cx = x - 48 + i * (96 / Math.max(1, cropCount - 1));
+    drawFarmCrop(cx, groundY - 10, skin, i * 1.7, lvl >= 3);
+  }
+
+  // Low split-rail fence, recolored to the settlement material.
+  ctx.fillStyle = skin.wood;
+  ctx.fillRect(x - 66, groundY - 21, 4, 21);
+  ctx.fillRect(x + 62, groundY - 21, 4, 21);
+  ctx.fillRect(x - 66, groundY - 19, 132, 3);
+  ctx.fillStyle = skin.trim;
+  ctx.fillRect(x - 65, groundY - 19, 130, 0.8);
+}
+
+function drawFarmStorehouse(x, skin) {
+  const bx = x + 43;
+  const floorY = groundY - (skin.id === "swamp" ? 5 : 0);
+  if (skin.id === "swamp") {
+    ctx.strokeStyle = skin.wood; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(bx - 13, groundY); ctx.lineTo(bx - 11, floorY - 30); ctx.moveTo(bx + 13, groundY); ctx.lineTo(bx + 11, floorY - 30); ctx.stroke();
+  }
+  ctx.fillStyle = skin.wallD;
+  roundedRect(bx - 22, floorY - 35, 44, 35, 3); ctx.fill();
+  ctx.fillStyle = skin.wall;
+  roundedRect(bx - 18, floorY - 32, 31, 32, 2); ctx.fill();
+  ctx.fillStyle = skin.gate;
+  roundedRect(bx - 5, floorY - 20, 12, 20, 2); ctx.fill();
+  ctx.strokeStyle = skin.trim; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(bx + 1, floorY - 19); ctx.lineTo(bx + 1, floorY - 1); ctx.stroke();
+  drawFarmRoof(bx, floorY - 34, skin);
+
+  ctx.fillStyle = skin.accent;
+  ctx.beginPath(); ctx.arc(bx - 12, floorY - 20, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = skin.wallD;
+  ctx.beginPath(); ctx.arc(bx - 12, floorY - 20, 2, 0, Math.PI * 2); ctx.fill();
+  if (Game.isNight) drawFarmLamp(bx + 17, floorY - 17, skin, 0.55);
+}
+
+function drawFarmHarvest(x, skin) {
+  const hx = x - 39;
+  if (skin.id === "frozen") {
+    ctx.fillStyle = skin.wallD; roundedRect(hx - 12, groundY - 12, 24, 12, 3); ctx.fill();
+    ctx.fillStyle = skin.roofC;
+    for (const ox of [-7, 0, 7]) { ctx.beginPath(); ctx.moveTo(hx + ox - 4, groundY - 12); ctx.lineTo(hx + ox, groundY - 23); ctx.lineTo(hx + ox + 4, groundY - 12); ctx.closePath(); ctx.fill(); }
+  } else if (skin.id === "desert") {
+    ctx.fillStyle = skin.wall; ctx.beginPath(); ctx.ellipse(hx - 6, groundY - 8, 8, 8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(hx + 6, groundY - 7, 7, 7, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = skin.trim; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(hx - 6, groundY - 8, 6, 0.4, 2.7); ctx.stroke();
+  } else if (skin.id === "swamp") {
+    ctx.fillStyle = skin.wood; roundedRect(hx - 14, groundY - 11, 28, 11, 3); ctx.fill();
+    ctx.fillStyle = skin.accent;
+    for (const ox of [-8, -2, 5, 10]) { ctx.beginPath(); ctx.arc(hx + ox, groundY - 13 - Math.abs(ox % 3), 3.2, 0, Math.PI * 2); ctx.fill(); }
+  } else if (skin.id === "volcano" || skin.id === "corrupted") {
+    ctx.fillStyle = skin.wallD; roundedRect(hx - 14, groundY - 10, 28, 10, 3); ctx.fill();
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = skin.accent;
+    for (const ox of [-8, 0, 8]) { ctx.beginPath(); ctx.arc(hx + ox, groundY - 13 - Math.abs(ox) * 0.12, 3.6, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+  } else {
+    ctx.fillStyle = "#b88b32"; roundedRect(hx - 15, groundY - 14, 30, 14, 5); ctx.fill();
+    ctx.strokeStyle = "#e2bd58"; ctx.lineWidth = 1;
+    for (const yy of [groundY - 11, groundY - 6]) { ctx.beginPath(); ctx.moveTo(hx - 13, yy); ctx.lineTo(hx + 13, yy); ctx.stroke(); }
+    ctx.strokeStyle = skin.wood; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(hx, groundY - 14); ctx.lineTo(hx, groundY); ctx.stroke();
+  }
+}
+
+function drawFarmMill(x, lvl, skin) {
+  const mx = x - 5, hubY = groundY - 58;
+  ctx.fillStyle = skin.wallD;
+  ctx.beginPath(); ctx.moveTo(mx - 13, groundY); ctx.lineTo(mx - 8, hubY + 4); ctx.lineTo(mx + 8, hubY + 4); ctx.lineTo(mx + 13, groundY); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = skin.wall;
+  ctx.beginPath(); ctx.moveTo(mx - 7, groundY - 3); ctx.lineTo(mx - 4, hubY + 8); ctx.lineTo(mx + 3, hubY + 8); ctx.lineTo(mx + 5, groundY - 3); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = skin.roofD;
+  ctx.beginPath(); ctx.moveTo(mx - 10, hubY + 5); ctx.lineTo(mx, hubY - 8); ctx.lineTo(mx + 10, hubY + 5); ctx.closePath(); ctx.fill();
+
+  const spin = lvl >= 5 ? performance.now() / 850 : -0.35;
+  ctx.save(); ctx.translate(mx, hubY);
+  for (let b = 0; b < 4; b++) {
+    ctx.save(); ctx.rotate(spin + b * Math.PI / 2);
+    ctx.strokeStyle = skin.wood; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -25); ctx.stroke();
+    ctx.fillStyle = skin.id === "frozen" ? skin.roofC : skin.id === "volcano" ? skin.wallL : skin.trim;
+    ctx.globalAlpha = skin.id === "corrupted" ? 0.75 : 0.9;
+    ctx.beginPath(); ctx.moveTo(-3, -8); ctx.lineTo(-5, -25); ctx.lineTo(3, -31); ctx.lineTo(4, -10); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = skin.accent2;
+  ctx.beginPath(); ctx.arc(0, 0, 4.2, 0, Math.PI * 2); ctx.fill();
+  if (skin.id === "volcano" || skin.id === "corrupted") {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.35;
+    ctx.fillStyle = skin.accent; ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawBiomeFarm(x, lvl) {
+  const skin = farmSkinAt(x);
+  groundShadow(x, 78, 0.24);
+  if (lvl >= 4) drawFarmMill(x, lvl, skin);
+  if (lvl >= 2) drawFarmStorehouse(x, skin);
+  drawFarmPlot(x, lvl, skin);
+  if (lvl >= 3) drawFarmHarvest(x, skin);
+  if (lvl >= 5) {
+    ctx.strokeStyle = skin.wood; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(x - 68, groundY - 20); ctx.lineTo(x - 68, groundY - 47); ctx.stroke();
+    ctx.fillStyle = skin.banner;
+    ctx.beginPath(); ctx.moveTo(x - 67, groundY - 46); ctx.lineTo(x - 49, groundY - 41); ctx.lineTo(x - 67, groundY - 35); ctx.closePath(); ctx.fill();
+    if (Game.isNight) drawFarmLamp(x - 58, groundY - 20, skin, 0.58);
   }
 }
 
@@ -2383,37 +4022,7 @@ export function drawStations() {
   const farmLvl = state.farmLevel || 0;
   if (state.base.level >= 2 && farmLvl === 0 && seen(STATIONS_X.farm)) drawBuildMarker(STATIONS_X.farm, "#9bd05a");
   if (farmLvl >= 1 && seen(STATIONS_X.farm)) {
-    const fx = STATIONS_X.farm;
-    ctx.fillStyle="#6a4a28"; ctx.fillRect(fx-34,groundY-6,68,6);
-    ctx.fillStyle="#9bd05a"; for (let i=0;i<6;i++) ctx.fillRect(fx-30+i*11,groundY-16,4,11);
-    if (farmLvl >= 2) {
-      ctx.fillStyle="#7a5030"; ctx.fillRect(fx+14,groundY-28,22,22);
-      ctx.fillStyle="#8a3a18"; ctx.beginPath(); ctx.moveTo(fx+12,groundY-28); ctx.lineTo(fx+25,groundY-42); ctx.lineTo(fx+38,groundY-28); ctx.closePath(); ctx.fill();
-      ctx.fillStyle="#5a3820"; ctx.fillRect(fx+20,groundY-21,8,15);
-    }
-    if (farmLvl >= 3) {
-      ctx.fillStyle="#c8a030"; ctx.beginPath(); ctx.ellipse(fx-22,groundY-10,12,10,0,0,Math.PI*2); ctx.fill();
-      ctx.fillStyle="#e0b840"; ctx.beginPath(); ctx.ellipse(fx-22,groundY-14,12,6,0,0,Math.PI); ctx.fill();
-    }
-    if (farmLvl >= 4) {
-      ctx.fillStyle="#9a8060";
-      ctx.beginPath(); ctx.moveTo(fx-14,groundY); ctx.lineTo(fx-8,groundY-52); ctx.lineTo(fx+8,groundY-52); ctx.lineTo(fx+14,groundY); ctx.closePath(); ctx.fill();
-      ctx.fillStyle="#7a6050"; ctx.fillRect(fx-4,groundY-55,8,8);
-      ctx.save(); ctx.translate(fx, groundY-58); ctx.strokeStyle="#6a5040"; ctx.lineWidth=3;
-      for (let b=0;b<4;b++) { ctx.save(); ctx.rotate(b*Math.PI/2); ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-20); ctx.stroke(); ctx.fillStyle="#9a8060"; ctx.fillRect(-3,-20,6,8); ctx.restore(); }
-      ctx.restore();
-    }
-    if (farmLvl >= 5) {
-      const spin = performance.now() / 800;
-      ctx.save(); ctx.translate(fx, groundY-58);
-      for (let b=0;b<4;b++) {
-        ctx.save(); ctx.rotate(spin + b*Math.PI/2); ctx.strokeStyle="#7a6040"; ctx.lineWidth=3;
-        ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-22); ctx.stroke();
-        ctx.fillStyle="#c09060"; ctx.beginPath(); ctx.moveTo(-4,-22); ctx.lineTo(4,-22); ctx.lineTo(2,-32); ctx.lineTo(-2,-32); ctx.closePath(); ctx.fill();
-        ctx.restore();
-      }
-      ctx.restore();
-    }
+    drawBiomeFarm(STATIONS_X.farm, farmLvl);
   }
   if (state.base && state.base.level >= 2 && seen(STATIONS_X.shop)) drawShopBuilding(STATIONS_X.shop);
   if (state.base && state.base.level >= 3 && seen(STATIONS_X.guard)) drawGuardStation(STATIONS_X.guard);

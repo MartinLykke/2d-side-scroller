@@ -2,6 +2,7 @@ import { ctx, groundY } from '../../core/canvas.js';
 import { state } from '../../core/state.js';
 import { Audio } from '../../systems/infrastructure/Audio.js';
 import { drawBoot } from '../DrawHelpers.js';
+import { biomeHumanoidSkin, unitSkinVariant } from '../BiomeHumanoidSkins.js';
 import { drawClimbPose, isClimbingEntity } from './FriendlyClimb.js';
 
 // ---------------------------------------------------------------------------
@@ -191,6 +192,59 @@ export function drawBow(hx, hy, aim, pull, pullPt, look = {}) {
   ctx.strokeStyle = grip; ctx.lineWidth = look.gripWidth || 3.2;
   ctx.beginPath(); ctx.moveTo(bellyX, -2.5); ctx.lineTo(bellyX, 2.5); ctx.stroke();
   ctx.lineCap = "butt";
+  if (look.detail === "frozen") {
+    ctx.save();
+    ctx.strokeStyle = look.trim || "#e8fbff";
+    ctx.fillStyle = look.trim || "#e8fbff";
+    ctx.lineWidth = 1.1;
+    for (const y of [-R * 0.72, R * 0.72]) {
+      ctx.beginPath(); ctx.moveTo(tipX - 1, y); ctx.lineTo(tipX + 6, y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(tipX + 2.4, y - 3); ctx.lineTo(tipX + 2.4, y + 3); ctx.stroke();
+      ctx.beginPath(); ctx.arc(tipX + 2.4, y, 1.2, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  } else if (look.detail === "desert") {
+    ctx.fillStyle = look.accent || "#47a8a0";
+    ctx.fillRect(bellyX - 2, -5.6, 4, 11.2);
+    ctx.fillStyle = look.trim || "#f1d58a";
+    ctx.beginPath(); ctx.arc(bellyX + 2.8, -4.8, 1.25, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(bellyX + 2.8, 4.8, 1.25, 0, Math.PI * 2); ctx.fill();
+  } else if (look.detail === "swamp") {
+    ctx.save();
+    ctx.strokeStyle = look.trim || "#a9ba58";
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    for (let i = 0; i <= 10; i++) {
+      const p = i / 10;
+      const y = -R + p * R * 2;
+      const x = tipX + Math.sin(p * Math.PI * 5) * 1.8;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.fillStyle = look.accent || "#c8d760";
+    for (const y of [-R * 0.42, R * 0.15, R * 0.55]) {
+      ctx.beginPath(); ctx.moveTo(tipX + 1, y); ctx.lineTo(tipX + 5, y - 2.2); ctx.lineTo(tipX + 3, y + 2); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  } else if (look.detail === "volcano") {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = look.glow || "#ff7a36";
+    ctx.lineWidth = 1.35;
+    ctx.beginPath(); ctx.moveTo(tipX + 1, -R + 2); ctx.quadraticCurveTo(tipX + 4, -R * 0.35, bellyX + 1, -1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(tipX + 1, R - 2); ctx.quadraticCurveTo(tipX + 4, R * 0.35, bellyX + 1, 1); ctx.stroke();
+    ctx.fillStyle = look.glow || "#ff7a36";
+    ctx.beginPath(); ctx.arc(tipX + 2, -R + 2, 1.2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(tipX + 2, R - 2, 1.2, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  } else if (look.detail === "corrupted") {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = look.rune || "#d1a1ff";
+    ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.moveTo(tipX - 3, -R - 2); ctx.quadraticCurveTo(-R * 0.32, 0, tipX - 3, R + 2); ctx.stroke();
+    ctx.fillStyle = look.glow || "#9f68ff";
+    ctx.beginPath(); ctx.arc(bellyX + 3.5, 0, 2.4, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
   // String: tip-to-tip, mid vertex pulled back while drawing
   ctx.strokeStyle = string; ctx.lineWidth = look.stringWidth || 1;
   ctx.beginPath();
@@ -275,24 +329,24 @@ function drawDagger(hx, hy, p = 0) {
 // Heavy siege crossbow held level. `aim` raises it from carry to firing line,
 // `pull` winds the string back along the stock, `recoil` kicks the whole
 // weapon back on release. A bolt sits on the rail while loaded.
-function drawBallistaWeapon(hx, hy, aim, pull, recoil, loaded) {
+function drawBallistaWeapon(hx, hy, aim, pull, recoil, loaded, P = CB) {
   const rot = (1 - aim) * 0.55;
   ctx.save();
   ctx.translate(hx - recoil * 3.5, hy);
   ctx.rotate(rot + recoil * 0.1);
 
   // Wooden stock with a steel rail on top
-  ctx.fillStyle = CB.bowWood;
+  ctx.fillStyle = P.bowWood;
   ctx.fillRect(-11, -1.5, 24, 4);
-  ctx.fillStyle = CB.steelDk;
+  ctx.fillStyle = P.steelDk;
   ctx.fillRect(-11, -2.6, 24, 1.4);
   // Shoulder butt
-  ctx.fillStyle = CB.bowWood;
+  ctx.fillStyle = P.bowWood;
   ctx.beginPath(); ctx.moveTo(-11, -1.5); ctx.lineTo(-15, 4.5); ctx.lineTo(-11, 3.5); ctx.closePath(); ctx.fill();
 
   // Steel bow arms mounted at the muzzle, flexing as the string winds back
   const R = 9.5, flex = pull * 2.4;
-  ctx.strokeStyle = CB.steel; ctx.lineWidth = 2.2; ctx.lineCap = "round";
+  ctx.strokeStyle = P.steel; ctx.lineWidth = 2.2; ctx.lineCap = "round";
   ctx.beginPath();
   ctx.moveTo(13 - flex, -R);
   ctx.quadraticCurveTo(16.5, -R * 0.45, 13, -1);
@@ -301,14 +355,14 @@ function drawBallistaWeapon(hx, hy, aim, pull, recoil, loaded) {
   ctx.moveTo(13 - flex, R);
   ctx.quadraticCurveTo(16.5, R * 0.45, 13, 1);
   ctx.stroke();
-  ctx.strokeStyle = CB.steelLt; ctx.lineWidth = 1;
+  ctx.strokeStyle = P.steelLt; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(13 - flex, -R); ctx.lineTo(14.5 - flex, -R - 1.8); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(13 - flex, R); ctx.lineTo(14.5 - flex, R + 1.8); ctx.stroke();
   ctx.lineCap = "butt";
 
   // String: tips to the nut, wound back along the rail while loading
   const nutX = 12 - pull * 15;
-  ctx.strokeStyle = CB.string; ctx.lineWidth = 1;
+  ctx.strokeStyle = P.string; ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(13 - flex, -R);
   ctx.lineTo(nutX, -1.2);
@@ -317,19 +371,52 @@ function drawBallistaWeapon(hx, hy, aim, pull, recoil, loaded) {
   ctx.stroke();
 
   // Crank wheel at the rear of the stock
-  ctx.strokeStyle = CB.steelDk; ctx.lineWidth = 1.6;
+  ctx.strokeStyle = P.steelDk; ctx.lineWidth = 1.6;
   ctx.beginPath(); ctx.arc(-7, -0.5, 2.6, 0, Math.PI * 2); ctx.stroke();
-  ctx.fillStyle = CB.steel;
+  ctx.fillStyle = P.steel;
   ctx.beginPath(); ctx.arc(-7, -0.5, 1.1, 0, Math.PI * 2); ctx.fill();
 
   // Loaded bolt riding the rail, head poking past the muzzle
   if (loaded) {
     ctx.strokeStyle = "#3a2c1c"; ctx.lineWidth = 2.4;
     ctx.beginPath(); ctx.moveTo(nutX, -2.8); ctx.lineTo(16, -2.8); ctx.stroke();
-    ctx.fillStyle = CB.steelLt;
+    ctx.fillStyle = P.steelLt;
     ctx.beginPath(); ctx.moveTo(16, -4.4); ctx.lineTo(20.5, -2.8); ctx.lineTo(16, -1.2); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = CB.fletch;
+    ctx.fillStyle = P.fletch;
     ctx.beginPath(); ctx.moveTo(nutX, -2.8); ctx.lineTo(nutX - 2.6, -5); ctx.lineTo(nutX + 1.6, -3.4); ctx.closePath(); ctx.fill();
+  }
+  if (P.detail === "frozen") {
+    ctx.strokeStyle = P.trim || "#e8fbff";
+    ctx.lineWidth = 1;
+    for (const y of [-R, R]) {
+      ctx.beginPath(); ctx.moveTo(13 - flex, y); ctx.lineTo(18 - flex, y + (y < 0 ? -4 : 4)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(13 - flex, y); ctx.lineTo(8 - flex, y + (y < 0 ? -3 : 3)); ctx.stroke();
+    }
+  } else if (P.detail === "desert") {
+    ctx.fillStyle = P.accent || "#47a8a0";
+    ctx.fillRect(-1, -4.6, 4, 8.4);
+    ctx.fillStyle = P.trim || "#f1d58a";
+    ctx.fillRect(-8, 2.8, 17, 1.6);
+  } else if (P.detail === "swamp") {
+    ctx.strokeStyle = P.trim || "#a9ba58";
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(-9, 3.6); ctx.quadraticCurveTo(-2, -5, 9, 3.4); ctx.stroke();
+    ctx.fillStyle = P.accent || "#c8d760";
+    ctx.beginPath(); ctx.arc(2, -4.2, 1, 0, Math.PI * 2); ctx.fill();
+  } else if (P.detail === "volcano") {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = P.glow || "#ff7a36";
+    ctx.fillRect(-8, -1.1, 19, 1.6);
+    ctx.beginPath(); ctx.arc(14, -2, 2.2, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  } else if (P.detail === "corrupted") {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = P.rune || "#d1a1ff";
+    ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.arc(-7, -0.5, 5.2, 0.2, Math.PI * 1.8); ctx.stroke();
+    ctx.fillStyle = P.glow || "#9f68ff";
+    ctx.beginPath(); ctx.arc(12, 0, 2.4, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
   }
   ctx.restore();
 }
@@ -342,7 +429,11 @@ export function drawArcher(u) {
   const shoot = shootPose(u);
   const anim = u.anim || 0;
   const ball = isBallista();
-  const P = ball ? CB : C;
+  const P = biomeHumanoidSkin("archer", u.x, ball ? CB : C, unitSkinVariant(u));
+  const bowLook = {
+    wood: P.bowWood, tip: P.bowTip, string: P.string, grip: P.belt,
+    detail: P.detail, trim: P.trim, accent: P.accent, glow: P.glow, rune: P.rune,
+  };
   const grap = u.grapple;
   const grapPull = grap && grap.phase === "pull";
   const melee = !grap && !shoot && (u.meleeMode > 0 || (u.aiState === "combat" && u.combatTarget && u.combatTarget.type === "imp"));
@@ -423,10 +514,10 @@ export function drawArcher(u) {
   if (ball) {
     // Wide iron-bound bolt case with two heavy bolts
     ctx.fillRect(-3.5, -9, 7, 13);
-    ctx.fillStyle = CB.steelDk; ctx.fillRect(-3.5, -4, 7, 2);
+    ctx.fillStyle = P.steelDk; ctx.fillRect(-3.5, -4, 7, 2);
     ctx.strokeStyle = "#3a2c1c"; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(-1.5, -9); ctx.lineTo(-2.2, -14); ctx.moveTo(1.5, -9); ctx.lineTo(1.8, -13.5); ctx.stroke();
-    ctx.fillStyle = CB.fletch;
+    ctx.fillStyle = P.fletch;
     ctx.beginPath(); ctx.moveTo(-2.2, -14); ctx.lineTo(-4.6, -16.5); ctx.lineTo(-1, -15.5); ctx.closePath(); ctx.fill();
     ctx.beginPath(); ctx.moveTo(1.8, -13.5); ctx.lineTo(3.6, -16); ctx.lineTo(3.9, -13.5); ctx.closePath(); ctx.fill();
   } else {
@@ -438,6 +529,34 @@ export function drawArcher(u) {
     ctx.fillStyle = P.fletch;
     ctx.beginPath(); ctx.moveTo(-1.5, -13); ctx.lineTo(-3.5, -15.5); ctx.lineTo(-0.5, -14.5); ctx.closePath(); ctx.fill();
     ctx.beginPath(); ctx.moveTo(1.2, -12.5); ctx.lineTo(2.8, -15); ctx.lineTo(3, -12.5); ctx.closePath(); ctx.fill();
+  }
+  if (P.detail === "frozen") {
+    ctx.fillStyle = P.trim;
+    ctx.fillRect(-3.3, -10, 6.6, 1.8);
+    ctx.beginPath(); ctx.moveTo(-2.8, 3.5); ctx.lineTo(0, 8); ctx.lineTo(2.8, 3.5); ctx.closePath(); ctx.fill();
+  } else if (P.detail === "desert") {
+    ctx.fillStyle = P.accent;
+    ctx.fillRect(-3.4, -5, 6.8, 2);
+    ctx.strokeStyle = P.trim;
+    ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.moveTo(3.2, -5); ctx.quadraticCurveTo(7, -2, 4, 1.5); ctx.stroke();
+  } else if (P.detail === "swamp") {
+    ctx.strokeStyle = P.trim;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(-3.4, -9); ctx.quadraticCurveTo(2, -5, -2, 5); ctx.stroke();
+    ctx.fillStyle = P.accent;
+    ctx.beginPath(); ctx.arc(2.8, -2, 0.9, 0, Math.PI * 2); ctx.fill();
+  } else if (P.detail === "volcano") {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = P.glow;
+    ctx.beginPath(); ctx.arc(-2, -4, 0.9, 0, Math.PI * 2); ctx.arc(2, 1, 0.9, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  } else if (P.detail === "corrupted") {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = P.rune;
+    ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.arc(0, -2, 3.7, 0.3, Math.PI * 1.8); ctx.stroke();
+    ctx.restore();
   }
   ctx.restore();
 
@@ -469,15 +588,15 @@ export function drawArcher(u) {
   ctx.fillStyle = P.tunicLt; ctx.fillRect(shX - 4, shY + 1, 3, 6); // highlight
   if (ball) {
     // Steel breastplate with rivets strapped over the tunic
-    ctx.fillStyle = CB.steel;
+    ctx.fillStyle = P.steel;
     ctx.beginPath();
     ctx.moveTo(shX - 4.5, shY + 1);
     ctx.lineTo(shX + 4.5, shY + 1);
     ctx.lineTo(3.2, hipY - 1);
     ctx.lineTo(-3.2, hipY - 1);
     ctx.closePath(); ctx.fill();
-    ctx.fillStyle = CB.steelLt; ctx.fillRect(shX - 3.5, shY + 2, 2, 5);
-    ctx.fillStyle = CB.steelDk;
+    ctx.fillStyle = P.steelLt; ctx.fillRect(shX - 3.5, shY + 2, 2, 5);
+    ctx.fillStyle = P.steelDk;
     ctx.beginPath(); ctx.arc(shX - 2.5, shY + 3, 0.7, 0, Math.PI * 2); ctx.arc(shX + 2.5, shY + 3, 0.7, 0, Math.PI * 2); ctx.fill();
   }
   // belt + buckle
@@ -497,11 +616,38 @@ export function drawArcher(u) {
   ctx.quadraticCurveTo(shX, shY + 7.5, shX + 6.5, shY + 0.5);
   ctx.quadraticCurveTo(shX, shY - 4, shX - 6.5, shY + 0.5);
   ctx.closePath(); ctx.fill();
+  if (P.detail === "frozen") {
+    ctx.strokeStyle = P.trim; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(shX - 6.2, shY + 1); ctx.quadraticCurveTo(shX, shY + 6.2, shX + 6.2, shY + 1); ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,0.45)";
+    ctx.fillRect(-4.3, hipY + 2.4, 8.6, 2);
+  } else if (P.detail === "desert") {
+    ctx.fillStyle = P.accent;
+    ctx.fillRect(-5.2, hipY + 0.6, 10.4, 1.8);
+    ctx.fillStyle = "rgba(255,230,150,0.35)";
+    ctx.fillRect(shX - 5.4, shY + 4.2, 10.8, 2);
+  } else if (P.detail === "swamp") {
+    ctx.fillStyle = P.trim;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath(); ctx.arc(shX - 4 + i * 4, shY + 6 + (i % 2), 1, 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (P.detail === "volcano") {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = P.glow;
+    ctx.beginPath(); ctx.arc(shX + 3.8, shY + 5.5, 1.3, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  } else if (P.detail === "corrupted") {
+    ctx.strokeStyle = P.rune; ctx.lineWidth = 1.1;
+    ctx.beginPath(); ctx.moveTo(shX + 2, shY + 4); ctx.lineTo(shX + 4, shY + 7); ctx.lineTo(shX + 2.5, shY + 10); ctx.stroke();
+  } else {
+    ctx.fillStyle = P.trim;
+    ctx.beginPath(); ctx.arc(shX - 4.6, shY + 3.8, 1.2, 0, Math.PI * 2); ctx.fill();
+  }
   if (ball) {
     // Plated pauldron capping the front shoulder
-    ctx.fillStyle = CB.steel;
+    ctx.fillStyle = P.steel;
     ctx.beginPath(); ctx.arc(shX + 4.5, shY + 1.5, 3.4, Math.PI * 0.9, Math.PI * 2.1); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = CB.steelDk; ctx.lineWidth = 0.8;
+    ctx.strokeStyle = P.steelDk; ctx.lineWidth = 0.8;
     ctx.beginPath(); ctx.arc(shX + 4.5, shY + 1.5, 2.2, Math.PI, Math.PI * 2); ctx.stroke();
   }
 
@@ -510,21 +656,21 @@ export function drawArcher(u) {
   ctx.beginPath(); ctx.arc(headX, headY, 4.6, 0, Math.PI * 2); ctx.fill();
   if (ball) {
     // Kettle helm: rounded steel cap with a wide brim and a crimson plume
-    ctx.fillStyle = CB.steel;
+    ctx.fillStyle = P.steel;
     ctx.beginPath(); ctx.arc(headX, headY - 1.2, 4.9, Math.PI, Math.PI * 2); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = CB.steelLt;
+    ctx.fillStyle = P.steelLt;
     ctx.beginPath(); ctx.arc(headX - 1.4, headY - 2.4, 1.7, Math.PI, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = CB.steelDk;
+    ctx.fillStyle = P.steelDk;
     ctx.fillRect(headX - 6.4, headY - 1.8, 12.4, 1.6); // brim
     // neck guard trailing behind
-    ctx.fillStyle = CB.steel;
+    ctx.fillStyle = P.steel;
     ctx.beginPath();
     ctx.moveTo(headX - 5.2, headY - 0.5);
     ctx.quadraticCurveTo(headX - 6.8, headY + 2.5, headX - 4.6, headY + 4.5);
     ctx.lineTo(headX - 3.2, headY + 1.5);
     ctx.closePath(); ctx.fill();
     // plume
-    ctx.strokeStyle = CB.cloakLt; ctx.lineWidth = 2; ctx.lineCap = "round";
+    ctx.strokeStyle = P.cloakLt; ctx.lineWidth = 2; ctx.lineCap = "round";
     ctx.beginPath();
     ctx.moveTo(headX, headY - 5.6);
     ctx.quadraticCurveTo(headX - 3 + flow * 0.25, headY - 8.5, headX - 6 + flow * 0.4, headY - 7);
@@ -555,6 +701,35 @@ export function drawArcher(u) {
     ctx.fillStyle = "rgba(10,14,10,0.4)";
     ctx.beginPath(); ctx.arc(headX - 0.5, headY - 2.2, 3.6, Math.PI * 1.05, Math.PI * 1.95); ctx.fill();
   }
+  if (P.detail === "frozen") {
+    ctx.strokeStyle = P.trim;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(headX - 0.8, headY - 1.5, 5.4, Math.PI * 0.95, Math.PI * 1.9); ctx.stroke();
+  } else if (P.detail === "desert") {
+    ctx.fillStyle = P.trim;
+    ctx.beginPath();
+    ctx.moveTo(headX - 5.2, headY - 4.1);
+    ctx.quadraticCurveTo(headX, headY - 8.2, headX + 5.2, headY - 4.1);
+    ctx.lineTo(headX + 4.4, headY - 1.1);
+    ctx.quadraticCurveTo(headX, headY - 3.1, headX - 5, headY - 1.1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = P.accent;
+    ctx.fillRect(headX - 4.6, headY + 1, 8.8, 2);
+  } else if (P.detail === "swamp") {
+    ctx.fillStyle = P.trim;
+    ctx.beginPath(); ctx.moveTo(headX - 4.5, headY - 4.5); ctx.lineTo(headX - 2, headY - 8.5); ctx.lineTo(headX, headY - 4.7); ctx.closePath(); ctx.fill();
+  } else if (P.detail === "volcano") {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = P.glow;
+    ctx.beginPath(); ctx.arc(headX + 2.5, headY - 3.5, 1, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  } else if (P.detail === "corrupted") {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = P.glow;
+    ctx.beginPath(); ctx.arc(headX + 1.6, headY - 0.4, 1.25, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
 
   // --- Arms + weapon ---------------------------------------------------------
   const frontSh = { x: shX + 4, y: shY + 2 };
@@ -566,8 +741,8 @@ export function drawArcher(u) {
     const hand = { x: frontSh.x + 3 + reachP * 6, y: frontSh.y + 6 - reachP * 15 };
     const grip = { x: backSh.x - 2, y: shY + 10 };
     limb(backSh.x, backSh.y, grip.x, grip.y, P.skin, 2.5);
-    if (ball) drawBallistaWeapon(grip.x, grip.y, 0.05, 0, 0, false);
-    else drawBow(grip.x, grip.y, 0.05, 0, null);
+    if (ball) drawBallistaWeapon(grip.x, grip.y, 0.05, 0, 0, false, P);
+    else drawBow(grip.x, grip.y, 0.05, 0, null, bowLook);
     limb(frontSh.x, frontSh.y, hand.x, hand.y, P.skin, 2.6);
   } else if (melee) {
     const slash = u.strike > 0 ? 1 - Math.min(1, u.strike / 0.22) : 0.18 + Math.sin(t * 8) * 0.05;
@@ -577,8 +752,8 @@ export function drawArcher(u) {
       y: frontSh.y + 7 - Math.sin(slash * Math.PI) * 5,
     };
     limb(backSh.x, backSh.y, guardHand.x, guardHand.y, P.skin, 2.5);
-    if (ball) drawBallistaWeapon(guardHand.x, guardHand.y, 0.05, 0, 0, false);
-    else drawBow(guardHand.x, guardHand.y, 0.05, 0, null);
+    if (ball) drawBallistaWeapon(guardHand.x, guardHand.y, 0.05, 0, 0, false, P);
+    else drawBow(guardHand.x, guardHand.y, 0.05, 0, null, bowLook);
     limb(frontSh.x, frontSh.y, knifeHand.x, knifeHand.y, P.skin, 2.8);
     drawDagger(knifeHand.x, knifeHand.y, slash);
     if (u.strike > 0) {
@@ -605,7 +780,7 @@ export function drawArcher(u) {
     }
     limb(backSh.x, backSh.y, crank.x, crank.y, P.skin, 2.5);
     const loaded = (shoot.phase === "draw" && shoot.p > 0.45) || shoot.phase === "release";
-    drawBallistaWeapon(grip.x, grip.y, aim, pull, recoil, loaded);
+    drawBallistaWeapon(grip.x, grip.y, aim, pull, recoil, loaded, P);
     // muzzle flare on release
     if (shoot.phase === "release") {
       ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.8 * (1 - shoot.p);
@@ -663,7 +838,7 @@ export function drawArcher(u) {
       ctx.beginPath(); ctx.moveTo(nockX, drawHand.y); ctx.lineTo(nockX - 3, drawHand.y + 2.6); ctx.lineTo(nockX + 1.5, drawHand.y + 0.6); ctx.closePath(); ctx.fill();
     }
 
-    drawBow(grip.x, grip.y, aim, pull, shoot.phase === "draw" ? drawHand : null);
+    drawBow(grip.x, grip.y, aim, pull, shoot.phase === "draw" ? drawHand : null, bowLook);
     // front arm over the bow
     limb(frontSh.x, frontSh.y, grip.x, grip.y, P.skin, 2.6);
   } else if (kneel > 0.01) {
@@ -673,8 +848,8 @@ export function drawArcher(u) {
     const handY = frontSh.y + 6 + reach * (groundY - 4 - frontSh.y - 6);
     const grip = { x: backSh.x - 2, y: shY + 10 };
     limb(backSh.x, backSh.y, grip.x, grip.y, P.skin, 2.5);
-    if (ball) drawBallistaWeapon(grip.x, grip.y, 0.05, 0, 0, false);
-    else drawBow(grip.x, grip.y, 0.05, 0, null);
+    if (ball) drawBallistaWeapon(grip.x, grip.y, 0.05, 0, 0, false, P);
+    else drawBow(grip.x, grip.y, 0.05, 0, null, bowLook);
     limb(frontSh.x, frontSh.y, handX, handY, P.skin, 2.6);
     // the folded trap in hand until the AI releases it
     if (!u.trapDropped) {
@@ -691,8 +866,8 @@ export function drawArcher(u) {
     limb(backSh.x, backSh.y, backSh.x - 2 - swing, shY + 11, P.skin, 2.5);
     ctx.fillStyle = P.belt;
     ctx.beginPath(); ctx.ellipse(backSh.x - 1 - swing * 0.5, shY + 8, 1.8, 2.8, -0.3, 0, Math.PI * 2); ctx.fill();
-    if (ball) drawBallistaWeapon(grip.x, grip.y, moving ? 0.15 : 0.05, 0, 0, false);
-    else drawBow(grip.x, grip.y, moving ? 0.15 : 0.05, 0, null);
+    if (ball) drawBallistaWeapon(grip.x, grip.y, moving ? 0.15 : 0.05, 0, 0, false, P);
+    else drawBow(grip.x, grip.y, moving ? 0.15 : 0.05, 0, null, bowLook);
     limb(frontSh.x, frontSh.y, grip.x, grip.y, P.skin, 2.6);
     ctx.fillStyle = P.belt;
     ctx.beginPath(); ctx.ellipse(grip.x - 1, grip.y - 1.5, 1.8, 2.8, 0.2, 0, Math.PI * 2); ctx.fill();

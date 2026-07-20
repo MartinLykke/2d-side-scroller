@@ -1,4 +1,4 @@
-"""Tiny static server for Kingdom — Crown of Embers.
+"""Tiny static server for Ashen Reign.
 Serves the game with no-cache (but revalidatable) headers so the browser
 always gets the latest files after edits, while unchanged files come back
 as cheap 304s. Threaded + HTTP/1.1 keep-alive so the ~54 ES module
@@ -23,5 +23,5 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
 http.server.ThreadingHTTPServer.allow_reuse_address = True
 with http.server.ThreadingHTTPServer(("", PORT), Handler) as httpd:
-    print(f"Kingdom serving on http://localhost:{PORT}/")
+    print(f"Ashen Reign serving on http://localhost:{PORT}/")
     httpd.serve_forever()

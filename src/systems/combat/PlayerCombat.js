@@ -3,6 +3,7 @@ import { WEAPONS, effectiveWeapon } from '../../config/weapons.js?v=biomeweapons
 import { mergeUpgradeEffects } from '../../config/weaponUpgrades.js?v=biomeweapons1';
 import { ARMORS, ARMOR_RARITY_COL, armorBlockChance } from '../../config/armor.js';
 import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive1';
+import { animalDef } from '../../config/animals.js';
 import { clamp, dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
@@ -609,8 +610,9 @@ function meleeStrike(player, tgt, tgtIsAnimal, wBase, fx, rawDmg, playerLift) {
     spawnParticles(tgt.x, groundY - 30, 5, "#8a2a2a");
     if (tgt.hp <= 0) {
       tgt.dying = true; tgt.deathT = 0;
-      spawnParticles(tgt.x, groundY - 20, 8, "#7a4a2a");
-      const reward = spawnGoldReward(tgt.x, 8, "hunt", { spreadX: 15, fromY: groundY - 20, vx: 50, vyMin: 120, vyMax: 220 });
+      const animal = animalDef(tgt.type);
+      spawnParticles(tgt.x, groundY - 20, 8, animal.blood || "#7a4a2a");
+      const reward = spawnGoldReward(tgt.x, animal.reward || 1, "hunt", { spreadX: 15, fromY: groundY - 20, vx: 50, vyMin: 120, vyMax: 220 });
       if (reward > 0) floaty(tgt.x, "+" + reward + "🪙", "#f2c14e");
     }
     return;

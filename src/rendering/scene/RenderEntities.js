@@ -11,6 +11,23 @@ import { drawGuard } from '../sprites/Guard.js';
 import { drawFarmer } from '../sprites/Farmer.js';
 import { drawImp, drawFireImp } from '../sprites/Imps.js';
 import { drawShade, drawVoidWraith, drawVoidBrute, drawVoidTitan, drawVoidSeraph } from '../sprites/VoidSpawn.js';
+import {
+  drawGreedlet, drawMaskedGreed, drawFloater, drawBreeder,
+  drawFrostSprite, drawIceGolem, drawBlizzardWitch,
+  drawSandScuttler, drawDustWraith, drawBehemothScorpion,
+  drawBogCrawler, drawSporeSpitter, drawMurkAbomination,
+  drawAshFiend, drawMagmaGargoyle, drawObsidianJuggernaut,
+  drawShadowStalker, drawRiftWeaver, drawAmalgam,
+} from '../sprites/BiomeEnemies.js';
+
+const BIOME_ENEMY_DRAWERS = {
+  greedlet: drawGreedlet, maskedGreed: drawMaskedGreed, floater: drawFloater, breeder: drawBreeder,
+  frostSprite: drawFrostSprite, iceGolem: drawIceGolem, blizzardWitch: drawBlizzardWitch,
+  sandScuttler: drawSandScuttler, dustWraith: drawDustWraith, behemothScorpion: drawBehemothScorpion,
+  bogCrawler: drawBogCrawler, sporeSpitter: drawSporeSpitter, murkAbomination: drawMurkAbomination,
+  ashFiend: drawAshFiend, magmaGargoyle: drawMagmaGargoyle, obsidianJuggernaut: drawObsidianJuggernaut,
+  shadowStalker: drawShadowStalker, riftWeaver: drawRiftWeaver, amalgam: drawAmalgam,
+};
 import { renderBudget } from '../RenderFrame.js';
 import { drawEnemySilhouette, shouldDrawEnemySilhouette } from './EnemySilhouette.js';
 
@@ -2317,6 +2334,51 @@ function drawWallChains(view) {
   }
 }
 
+const BOSS_TAU = Math.PI * 2;
+const bossClamp01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
+const bossSmooth = v => { v = bossClamp01(v); return v * v * (3 - 2 * v); };
+const bossMix = (a, b, p) => a + (b - a) * p;
+
+function bossPoly(points) {
+  ctx.beginPath();
+  ctx.moveTo(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+  ctx.closePath();
+}
+
+function bossGlow(x, y, r, inner, outer, alpha = 1, sx = 1, sy = 1) {
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = alpha;
+  const g = ctx.createRadialGradient(x, y, 1, x, y, r);
+  g.addColorStop(0, inner);
+  g.addColorStop(1, outer);
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.ellipse(x, y, r * sx, r * sy, 0, 0, BOSS_TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+function bossLimb(x1, y1, x2, y2, bend, color, width, foot = false) {
+  const mx = (x1 + x2) * 0.5 + bend;
+  const my = (y1 + y2) * 0.5 - Math.abs(bend) * 0.18;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.quadraticCurveTo(mx, my, x2, y2);
+  ctx.stroke();
+  ctx.lineCap = "butt";
+  if (foot) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.ellipse(x2, y2 + 1.5, width * 0.95, width * 0.34, 0, 0, BOSS_TAU);
+    ctx.fill();
+  }
+}
+
 
 function drawBiomeBoss(e, t, dark, atkF) {
   const T = performance.now() / 1000;
@@ -2340,143 +2402,1020 @@ function drawBiomeBoss(e, t, dark, atkF) {
   ctx.restore();
 
   if (t.forestStalker) {
-    const bob = Math.sin(e.biomeWalkPhase || e.anim) * 3;
-    const y = groundY - bob;
-    ctx.strokeStyle = flash ? "#fff" : "#25361e";
-    ctx.lineWidth = 9; ctx.lineCap = "round";
-    for (const lx of [-42, -15, 20, 46]) {
-      const step = Math.sin((e.biomeWalkPhase || 0) * 4 + lx * 0.05) * 8;
-      ctx.beginPath(); ctx.moveTo(lx, y - 38); ctx.lineTo(lx + step, y - 4); ctx.stroke();
+    const clamp01 = v => Math.max(0, Math.min(1, v));
+    const smooth = v => { v = clamp01(v); return v * v * (3 - 2 * v); };
+    const mixN = (a, b, p) => a + (b - a) * p;
+
+    const walkPhase = (e.biomeWalkPhase || 0) * Math.PI * 2;
+    const ramming = e.attackKind === "wall" && e.biomeWallAttackT !== undefined;
+    const wallT = e.biomeWallAttackT || 0;
+    const casting = e.attackKind === "roots" && e.biomeCastT !== undefined;
+    const castP = casting ? clamp01((e.biomeCastT || 0) / (e.biomeCastDur || 0.82)) : 0;
+    const vulnerable = (e.biomeVulnerable || 0) > 0;
+    const rooting = (e.natureRootT || 0) > 0;
+    const rootP = clamp01((e.natureRootT || 0) / 5);
+
+    // Ram windup pulls the antlers back and low, the strike thrusts them
+    // forward hard, then the whole pose eases back out over the recovery.
+    let headLunge = 0, headDip = 0, bodyLean = 0, crouch = 0;
+    if (ramming) {
+      if (wallT < 0.52) {
+        const p = smooth(wallT / 0.52);
+        headLunge = -16 * p; headDip = 12 * p; bodyLean = -7 * p; crouch = 5 * p;
+      } else {
+        const rise = smooth(Math.min(1, (wallT - 0.52) / 0.13));
+        const rec = smooth(clamp01((wallT - 0.65) / 0.47));
+        headLunge = mixN(-16, 36, rise) * (1 - rec);
+        headDip = mixN(12, -6, rise) * (1 - rec);
+        bodyLean = mixN(-7, 10, rise) * (1 - rec);
+        crouch = mixN(5, -3, rise) * (1 - rec);
+      }
+    } else if (atkF > 0) {
+      // A quick head snap toward whatever it just bit (base or player).
+      headLunge += atkF * 10; headDip -= atkF * 4;
     }
+
+    const bob = Math.sin(e.biomeWalkPhase || e.anim) * 3 - crouch;
+    const y = groundY - bob;
+
+    // ---- legs: two-segment bend with a diagonal trot gait ----
+    const legX = [-42, -15, 20, 46];
+    for (let i = 0; i < 4; i++) {
+      const lx = legX[i];
+      const ph = walkPhase + (i % 2 === 0 ? 0 : Math.PI);
+      const swing = Math.sin(ph);
+      const lift = Math.max(0, swing) * 9;
+      const hipY = y - 40;
+      const footX = lx + swing * 9 + bodyLean * 0.3;
+      const footY = y - 3 - lift;
+      const kneeSide = (swing >= 0 ? 1 : -1) * (5 + lift * 0.35);
+      const kneeX = (lx + footX) / 2 + kneeSide;
+      const kneeY = hipY + (footY - hipY) * 0.5;
+      ctx.strokeStyle = flash ? "#fff" : (i % 2 === 0 ? "#1d2b17" : "#28391f");
+      ctx.lineWidth = i % 2 === 0 ? 7.5 : 9; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(lx, hipY); ctx.quadraticCurveTo(kneeX, kneeY, footX, footY); ctx.stroke();
+      ctx.fillStyle = flash ? "#fff" : "#0f1710";
+      ctx.beginPath(); ctx.ellipse(footX, footY + 2, 4, 2.6, 0, 0, Math.PI * 2); ctx.fill();
+
+      if (vulnerable && i >= 2) {
+        const g = 0.45 + 0.4 * Math.sin(T * 11 + i);
+        ctx.save(); ctx.globalCompositeOperation = "lighter";
+        ctx.strokeStyle = `rgba(255,178,80,${g})`; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(lx - 3, hipY + 8); ctx.lineTo(kneeX + 2, kneeY - 2); ctx.lineTo(footX - 2, footY - 8); ctx.stroke();
+        ctx.restore();
+      }
+      if (rooting) {
+        ctx.save(); ctx.globalAlpha = 0.55 * rootP; ctx.strokeStyle = "#6f8a42"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(footX, footY + 2); ctx.quadraticCurveTo(footX + 4, footY - 6 - rootP * 5, footX + 2, footY - 12 - rootP * 8); ctx.stroke();
+        ctx.restore();
+      }
+    }
+    ctx.lineCap = "butt";
+
+    // ---- body ----
+    ctx.save(); ctx.translate(bodyLean * 0.4, 0);
+    ctx.fillStyle = flash ? "#fff" : "#1e2b18";
+    ctx.beginPath(); ctx.ellipse(2, y - 68, w * 0.5, w * 0.26, -0.04, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = col;
     ctx.beginPath(); ctx.ellipse(4, y - 72, w * 0.48, w * 0.24, -0.04, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = flash ? "#fff" : "rgba(120,150,90,0.3)";
+    ctx.beginPath(); ctx.ellipse(-4, y - 82, w * 0.34, w * 0.09, -0.06, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = flash ? "#fff" : "#16210f";
+    for (let k = -2; k <= 2; k++) {
+      const sx = k * 16 - 6, sy = y - 92 - Math.abs(k) * 1.5;
+      ctx.beginPath(); ctx.moveTo(sx - 5, sy + 6); ctx.lineTo(sx, sy - 6); ctx.lineTo(sx + 5, sy + 6); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+
+    // ---- head + antlers (this whole group lunges/dips for the ram) ----
+    ctx.save();
+    ctx.translate(headLunge, headDip);
     ctx.fillStyle = flash ? "#fff" : "#485a32";
     ctx.beginPath(); ctx.ellipse(56, y - 96, w * 0.22, w * 0.18, 0.12, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = flash ? "#fff" : "#5a3d26";
-    ctx.lineWidth = 5;
+    ctx.fillStyle = flash ? "#fff" : "#374528";
+    ctx.beginPath(); ctx.ellipse(70, y - 90, w * 0.11, w * 0.09, 0.2, 0, Math.PI * 2); ctx.fill();
+
+    const antlerCol = flash ? "#fff" : "#5a3d26";
+    const mistCol = e.enraged ? "#8a4bd6" : "#b66bff";
     for (const s of [-1, 1]) {
-      ctx.beginPath();
-      ctx.moveTo(66, y - 112);
-      ctx.lineTo(66 + s * 28, y - 154);
-      ctx.lineTo(66 + s * 54, y - 174);
-      ctx.stroke();
+      const bx = 66, by = y - 112;
+      const mx = bx + s * 30, my = y - 150 - castP * 6;
+      const tx = bx + s * 56, ty = y - 176 - castP * 10;
+      ctx.strokeStyle = antlerCol; ctx.lineWidth = 5; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(bx, by); ctx.quadraticCurveTo(mx, my + 10, tx, ty); ctx.stroke();
       ctx.lineWidth = 3;
       for (let k = 0; k < 3; k++) {
-        ctx.beginPath(); ctx.moveTo(66 + s * (28 + k * 8), y - 145 - k * 8); ctx.lineTo(66 + s * (48 + k * 13), y - 148 - k * 4); ctx.stroke();
+        const u = 0.35 + k * 0.22;
+        const px = mixN(bx, tx, u), py = mixN(by, ty, u);
+        ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + s * (14 + k * 5), py - 14 - k * 4); ctx.stroke();
       }
+      // corruption mist wisping off the antler, thicker while casting/enraged
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      for (let k = 0; k < 4; k++) {
+        const u = k / 3;
+        const px = mixN(bx, tx, u) + Math.sin(T * 1.6 + k + s) * 3;
+        const py = mixN(by, ty, u) + Math.cos(T * 1.3 + k) * 3;
+        const r = (2.4 + k * 0.6) * (1 + castP * 0.6);
+        ctx.globalAlpha = (0.14 + 0.1 * pulse) * (1 + castP * 0.8);
+        ctx.fillStyle = mistCol;
+        ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
       ctx.lineWidth = 5;
     }
+
     ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = eye;
-    for (const ex of [48, 61]) for (const ey of [-102, -113]) { ctx.beginPath(); ctx.arc(ex, y + ey, 3.5 + pulse * 1.5, 0, Math.PI * 2); ctx.fill(); }
+    const eyeGlow = 3.5 + pulse * 1.5 + (e.enraged ? 1.2 : 0);
+    for (const ex of [48, 61]) for (const ey of [-102, -113]) { ctx.beginPath(); ctx.arc(ex, y + ey, eyeGlow, 0, Math.PI * 2); ctx.fill(); }
     ctx.restore();
-    if (cast) {
-      ctx.strokeStyle = "#6f8a42"; ctx.lineWidth = 3; ctx.globalAlpha = 0.7;
+    ctx.restore(); // head group
+
+    // ---- roots erupting from the ground during the cast telegraph ----
+    if (casting) {
+      const spikeH = 40 * smooth(castP);
+      ctx.strokeStyle = "#6f8a42"; ctx.lineWidth = 3; ctx.lineCap = "round";
       for (let k = 0; k < 6; k++) {
         const x = -70 + k * 28;
-        ctx.beginPath(); ctx.moveTo(x, groundY - 2); ctx.quadraticCurveTo(x + 10, groundY - 25 - pulse * 14, x + 22, groundY - 5); ctx.stroke();
+        const h = spikeH * (0.7 + 0.3 * Math.sin(k * 1.7));
+        ctx.globalAlpha = 0.55 + 0.35 * smooth(castP);
+        ctx.beginPath(); ctx.moveTo(x, groundY - 2); ctx.quadraticCurveTo(x + 10, groundY - h - 10, x + 22, groundY - h * 0.4); ctx.stroke();
       }
-    }
-  } else if (t.skadiWrath) {
-    const y = groundY;
-    ctx.fillStyle = flash ? "#fff" : "#0d1220";
-    ctx.beginPath(); ctx.moveTo(-w * 0.34, y + w * 0.9); ctx.lineTo(0, y - w * 0.62); ctx.lineTo(w * 0.34, y + w * 0.9); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = flash ? "#fff" : "#1c2b45";
-    ctx.beginPath(); ctx.ellipse(0, y - w * 0.24, w * 0.32, w * 0.42, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#d8f8ff";
-    for (let k = -2; k <= 2; k++) {
-      ctx.beginPath(); ctx.moveTo(k * 13, y - w * 0.72); ctx.lineTo(k * 13 + 7, y - w * 0.92 - Math.abs(k) * 8); ctx.lineTo(k * 13 + 14, y - w * 0.72); ctx.closePath(); ctx.fill();
-    }
-    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = eye;
-    ctx.beginPath(); ctx.ellipse(-10, y - w * 0.28, 6, 4, 0, 0, Math.PI * 2); ctx.ellipse(10, y - w * 0.28, 6, 4, 0, 0, Math.PI * 2); ctx.fill();
-    if ((e.cryoShield || 0) > 0) {
-      ctx.strokeStyle = "#bfefff"; ctx.lineWidth = 4 + pulse * 3; ctx.globalAlpha = 0.55 + pulse * 0.22;
-      ctx.beginPath(); ctx.arc(0, y - w * 0.12, w * 0.72, 0, Math.PI * 2); ctx.stroke();
-    }
-    ctx.restore();
-  } else if (t.duneBroodmother) {
-    const y = groundY + (e.burrowT || 0) * 32;
-    ctx.fillStyle = col;
-    for (let k = 0; k < 6; k++) {
-      ctx.beginPath(); ctx.ellipse(-42 + k * 18, y - 48 + Math.sin(T * 5 + k) * 2, 26 - k * 1.5, 20, 0, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.strokeStyle = flash ? "#fff" : "#6f4e2d"; ctx.lineWidth = 6; ctx.lineCap = "round";
-    for (let k = 0; k < 4; k++) {
-      ctx.beginPath(); ctx.moveTo(-28 + k * 22, y - 34); ctx.lineTo(-44 + k * 22, y - 8); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(-28 + k * 22, y - 34); ctx.lineTo(-44 + k * 22, y - 62); ctx.stroke();
-    }
-    ctx.beginPath(); ctx.moveTo(34, y - 56); ctx.quadraticCurveTo(80, y - 116, 20, y - 150); ctx.stroke();
-    ctx.fillStyle = flash ? "#fff" : "#df8a3a";
-    for (let k = -1; k <= 1; k++) { ctx.beginPath(); ctx.moveTo(18 + k * 11, y - 150); ctx.lineTo(27 + k * 11, y - 180); ctx.lineTo(38 + k * 11, y - 150); ctx.closePath(); ctx.fill(); }
-    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = eye;
-    ctx.beginPath(); ctx.arc(54, y - 56, 5 + pulse, 0, Math.PI * 2); ctx.arc(68, y - 54, 4 + pulse, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-    if ((e.blinded || 0) > 0) {
-      ctx.fillStyle = "rgba(216,180,106,0.55)";
-      ctx.beginPath(); ctx.ellipse(42, y - 58, 42, 18, 0, 0, Math.PI * 2); ctx.fill();
-    }
-  } else if (t.sunkenBehemoth) {
-    const bob = Math.sin(e.biomeWalkPhase || e.anim) * 2;
-    const y = groundY - bob;
-    ctx.fillStyle = flash ? "#fff" : "#27391f";
-    ctx.beginPath(); ctx.ellipse(0, y - 54, w * 0.54, w * 0.32, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = col;
-    ctx.beginPath(); ctx.ellipse(46, y - 70, w * 0.34, w * 0.24, -0.08, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = flash ? "#fff" : "#2e4a28";
-    ctx.beginPath(); ctx.ellipse(-18, y - 96, w * 0.36, w * 0.13, 0.05, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = "#5d3f28"; ctx.lineWidth = 4; ctx.lineCap = "round";
-    for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.moveTo(-45 + k * 18, y - 105); ctx.lineTo(-54 + k * 22, y - 136 - k * 3); ctx.stroke(); }
-    ctx.fillStyle = "#b8ff7a";
-    for (let k = 0; k < 5; k++) { ctx.beginPath(); ctx.arc(-44 + k * 18, y - 124 - Math.sin(k) * 8, 5 + (k % 2) * 2, 0, Math.PI * 2); ctx.fill(); }
-    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = eye;
-    ctx.beginPath(); ctx.arc(60, y - 83, 5 + pulse, 0, Math.PI * 2); ctx.arc(81, y - 80, 4 + pulse, 0, Math.PI * 2); ctx.fill();
-    if ((e.suckT || 0) > 0) {
-      ctx.strokeStyle = "#b8ff7a"; ctx.lineWidth = 3; ctx.globalAlpha = 0.62;
-      for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.arc(54, y - 64, 36 + k * 34 + pulse * 10, 0, Math.PI * 2); ctx.stroke(); }
-    }
-    ctx.restore();
-  } else if (t.ignitedCore) {
-    const y = groundY;
-    ctx.save(); ctx.globalCompositeOperation = "lighter";
-    const heat = Math.max(e.coreHeat || 0, e.attackKind === "supernova" ? 1 : 0);
-    const rg = ctx.createRadialGradient(0, y - 36, 4, 0, y - 36, w * (0.55 + heat * 0.35));
-    rg.addColorStop(0, "#fff8c0");
-    rg.addColorStop(0.35, "#ff7a2a");
-    rg.addColorStop(1, "rgba(180,20,0,0)");
-    ctx.fillStyle = rg; ctx.globalAlpha = 0.75; ctx.beginPath(); ctx.arc(0, y - 36, w * (0.35 + heat * 0.08), 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-    ctx.fillStyle = flash ? "#fff" : "#171217";
-    for (let k = 0; k < 8; k++) {
-      const a = T * 0.9 + k * Math.PI * 2 / 8;
-      const rx = Math.cos(a) * w * 0.52, ry = Math.sin(a) * w * 0.32;
-      ctx.save(); ctx.translate(rx, y - 38 + ry); ctx.rotate(a + 0.4);
-      ctx.beginPath(); ctx.moveTo(-10, -18); ctx.lineTo(18, -8); ctx.lineTo(10, 20); ctx.lineTo(-16, 12); ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 1; ctx.lineCap = "butt";
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.strokeStyle = mistCol;
+      ctx.globalAlpha = 0.35 + 0.25 * pulse; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(0, groundY - 4, 50 + castP * 40, 0, Math.PI * 2); ctx.stroke();
       ctx.restore();
     }
+  } else if (t.skadiWrath) {
+    // ===== Skadi's Wrath — the Glacier Queen =====
+    // A floating figure of black ice cloaked in swirling snow, her lower body a
+    // massive icicle scraping the ground. Deep Freeze channels a cold beam
+    // forward; Cryo-Shield seals her in a refracting ice cocoon.
+    const L = (a, b, u) => a + (b - a) * u;
+    const y = groundY;
+    const cy = y - w * 0.30;                         // torso centre
+    const swirl = T * 0.8;
+    const sway = Math.sin((e.biomeWalkPhase || 0) * 1.1 + e.x * 0.01) * 4;
+    const castP = e.biomeCastT !== undefined ? Math.min(1, e.biomeCastT / (e.biomeCastDur || 1)) : 0;
+    const dk  = flash ? "#fff" : "#0a0f1c";
+    const mid = flash ? "#fff" : "#16233f";
+    const lt  = flash ? "#fff" : "#2c4670";
+    const ice = "#bfefff";
+    const snow = "#eaf6ff";
+
+    // --- wall-slam lunge: rear back on the wind-up, then stab forward ---
+    let slam = 0, lungeX = 0;
+    if (e.biomeWallAttackT !== undefined && e.attackKind === "wall") {
+      const IMP = 0.52, DUR = 1.12, wa = e.biomeWallAttackT;   // mirrors BIOME_WALL_ATTACK
+      if (wa < IMP) lungeX = -w * 0.1 * (wa / IMP);
+      else { slam = Math.sin(Math.min(1, (wa - IMP) / (DUR - IMP) * 3) * Math.PI); lungeX = w * 0.3 * slam; }
+    }
+    const reflectF = Math.max(0, Math.min(1, (e.reflectFlash || 0) / 0.35));
+    ctx.save();
+    ctx.translate(lungeX, slam * 5);
+
+    // --- swirling snow flakes orbiting behind her ---
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = snow;
+    for (let k = 0; k < 22; k++) {
+      const a = swirl * (0.5 + (k % 3) * 0.16) + k * 0.55;
+      const rad = w * (0.5 + (k % 5) * 0.16) + Math.sin(swirl * 1.7 + k) * 10;
+      const px = Math.cos(a) * rad * 1.05;
+      const py = cy + Math.sin(a) * rad * 0.72 - w * 0.05;
+      ctx.globalAlpha = 0.16 + 0.16 * (0.5 + 0.5 * Math.sin(swirl * 3 + k));
+      ctx.beginPath(); ctx.arc(px, py, 1.3 + (k % 3), 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+
+    // --- flowing snow-cloak sweeps behind the torso ---
+    for (const sgn of [-1, 1]) {
+      const wave = Math.sin(swirl * 1.4 + sgn) * 12;
+      const g = ctx.createLinearGradient(0, cy - w * 0.3, sgn * w * 0.9, y + w * 0.5);
+      g.addColorStop(0, flash ? "rgba(255,255,255,0.5)" : "rgba(180,220,255,0.32)");
+      g.addColorStop(1, "rgba(180,220,255,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(sgn * w * 0.06, cy - w * 0.28);
+      ctx.quadraticCurveTo(sgn * w * 0.78, cy - w * 0.1 + wave, sgn * w * 0.6 + wave, y + w * 0.62);
+      ctx.quadraticCurveTo(sgn * w * 0.3, y + w * 0.2, sgn * w * 0.05, cy + w * 0.1);
+      ctx.closePath(); ctx.fill();
+    }
+
+    // --- icicle lower body (black ice spike scraping the ground) ---
+    const tipY = y + w * 1.12 + slam * 12, topY = cy + w * 0.05, halfW = w * 0.30;
+    const midY = topY + (tipY - topY) * 0.44;
+    const tipX = sway * 0.7;
+    const icG = ctx.createLinearGradient(0, topY, 0, tipY);
+    icG.addColorStop(0, mid); icG.addColorStop(0.6, dk); icG.addColorStop(1, flash ? "#fff" : "#0e2036");
+    ctx.fillStyle = icG;
+    ctx.beginPath();
+    ctx.moveTo(-halfW, topY); ctx.lineTo(-halfW * 0.52, midY); ctx.lineTo(tipX, tipY);
+    ctx.lineTo(halfW * 0.52, midY); ctx.lineTo(halfW, topY); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = lt; ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(0, topY); ctx.lineTo(tipX, tipY); ctx.lineTo(halfW * 0.52, midY); ctx.lineTo(halfW, topY); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.strokeStyle = ice; ctx.lineCap = "round";
+    ctx.globalAlpha = 0.5; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, topY); ctx.lineTo(tipX, tipY); ctx.stroke();
+    ctx.globalAlpha = 0.26; ctx.lineWidth = 1.4;
+    for (let k = 0; k < 3; k++) {
+      const u = 0.28 + k * 0.22, yy = topY + (tipY - topY) * u;
+      ctx.beginPath(); ctx.moveTo(-halfW * (1 - u) * 0.7, yy); ctx.lineTo(0, yy + 6); ctx.stroke();
+    }
+    const tg = ctx.createRadialGradient(tipX, tipY, 1, tipX, tipY, 26);
+    tg.addColorStop(0, "rgba(191,239,255,0.8)"); tg.addColorStop(1, "rgba(191,239,255,0)");
+    ctx.globalAlpha = 0.65 + 0.2 * pulse; ctx.fillStyle = tg;
+    ctx.beginPath(); ctx.arc(tipX, tipY, 26, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    // frost spray where the spike scrapes the ground
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.strokeStyle = snow; ctx.lineCap = "round";
+    for (let k = -3; k <= 3; k++) {
+      const drift = Math.sin(T * 6 + k) * 3;
+      ctx.globalAlpha = 0.1 + 0.05 * (3 - Math.abs(k)); ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(tipX, tipY - 2); ctx.lineTo(tipX + k * 9 + drift, tipY - 12 - Math.abs(k) * 2); ctx.stroke();
+    }
+    ctx.restore();
+
+    // impact burst where the icicle stabs the wall
+    if (slam > 0.15) {
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      const fg = ctx.createRadialGradient(tipX, tipY, 2, tipX, tipY, 46 * slam);
+      fg.addColorStop(0, "rgba(255,255,255,0.9)"); fg.addColorStop(0.5, "rgba(191,239,255,0.5)"); fg.addColorStop(1, "rgba(191,239,255,0)");
+      ctx.globalAlpha = 0.7 * slam; ctx.fillStyle = fg;
+      ctx.beginPath(); ctx.arc(tipX, tipY, 46 * slam, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = snow; ctx.globalAlpha = 0.8 * slam; ctx.lineWidth = 2; ctx.lineCap = "round";
+      for (let k = 0; k < 7; k++) {
+        const a = -Math.PI * 0.9 + k * 0.28, r = 20 + 26 * slam;
+        ctx.beginPath(); ctx.moveTo(tipX, tipY - 4); ctx.lineTo(tipX + Math.cos(a) * r, tipY - 4 + Math.sin(a) * r * 0.6); ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // --- torso: faceted black-ice gem ---
+    const tw = w * 0.30, th = w * 0.34;
+    ctx.fillStyle = dk;
+    ctx.beginPath();
+    ctx.moveTo(0, cy - th); ctx.lineTo(tw, cy - th * 0.28); ctx.lineTo(tw * 0.72, cy + th * 0.62);
+    ctx.lineTo(0, cy + th * 0.9); ctx.lineTo(-tw * 0.72, cy + th * 0.62); ctx.lineTo(-tw, cy - th * 0.28);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = mid;
+    ctx.beginPath();
+    ctx.moveTo(0, cy - th); ctx.lineTo(tw, cy - th * 0.28); ctx.lineTo(tw * 0.72, cy + th * 0.62); ctx.lineTo(0, cy + th * 0.9);
+    ctx.closePath(); ctx.fill();
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.strokeStyle = ice; ctx.globalAlpha = 0.4; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(0, cy - th); ctx.lineTo(0, cy + th * 0.9); ctx.stroke();
+    ctx.restore();
+
+    // crystalline pauldrons
+    ctx.fillStyle = flash ? "#fff" : "#1b2c4a";
+    for (const sgn of [-1, 1]) for (let k = 0; k < 3; k++) {
+      const bx = sgn * tw * (0.7 + k * 0.16), by = cy - th * 0.3;
+      ctx.beginPath(); ctx.moveTo(bx - 5, by + 4); ctx.lineTo(bx + sgn * 2, by - 14 - k * 4); ctx.lineTo(bx + 6, by + 4); ctx.closePath(); ctx.fill();
+    }
+
+    // --- arms (front arm raises to channel during Deep Freeze) ---
+    const chan = castP;
+    const palmX = tw * 1.55, palmY = cy - th * 0.18;
+    ctx.strokeStyle = flash ? "#fff" : "#14203a"; ctx.lineWidth = w * 0.1; ctx.lineCap = "round";
+    for (const sgn of [1, -1]) {
+      const sx = sgn * tw * 0.9, sy = cy - th * 0.24;
+      let hx, hy;
+      if (sgn === 1) { hx = L(tw * 1.15, palmX, chan); hy = L(cy + th * 0.55, palmY, chan); }
+      else { hx = L(-tw * 1.15, -tw * 0.6, chan); hy = L(cy + th * 0.55, cy - th * 0.05, chan); }
+      const ex = (sx + hx) / 2 + sgn * w * 0.04, ey = (sy + hy) / 2 + w * 0.06;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.quadraticCurveTo(ex, ey, hx, hy); ctx.stroke();
+      ctx.fillStyle = flash ? "#fff" : "#22375c";
+      ctx.beginPath(); ctx.arc(hx, hy, w * 0.05, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.lineCap = "butt";
+
+    // --- head + ice crown ---
+    const hy0 = cy - th - w * 0.06;
+    ctx.fillStyle = dk;
+    ctx.beginPath();
+    ctx.moveTo(0, hy0 - w * 0.14); ctx.lineTo(w * 0.11, hy0 - w * 0.02); ctx.lineTo(w * 0.07, hy0 + w * 0.12);
+    ctx.lineTo(-w * 0.07, hy0 + w * 0.12); ctx.lineTo(-w * 0.11, hy0 - w * 0.02); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = mid;
+    ctx.beginPath();
+    ctx.moveTo(0, hy0 - w * 0.14); ctx.lineTo(w * 0.11, hy0 - w * 0.02); ctx.lineTo(w * 0.07, hy0 + w * 0.12); ctx.lineTo(0, hy0 + w * 0.12);
+    ctx.closePath(); ctx.fill();
+    const crownY = hy0 - w * 0.12;
+    for (let k = -3; k <= 3; k++) {
+      const bx = k * w * 0.05, h = w * (0.18 + (3 - Math.abs(k)) * 0.07), tipx = bx + k * 2;
+      ctx.fillStyle = flash ? "#fff" : "#152540";
+      ctx.beginPath(); ctx.moveTo(bx - w * 0.03, crownY); ctx.lineTo(tipx, crownY - h); ctx.lineTo(bx + w * 0.03, crownY); ctx.closePath(); ctx.fill();
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.32 + 0.25 * pulse; ctx.fillStyle = ice;
+      ctx.beginPath(); ctx.arc(tipx, crownY - h, 2.2, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    }
+
+    // --- glowing eyes ---
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = eye;
+    ctx.globalAlpha = Math.min(1, 0.7 + 0.3 * pulse + chan * 0.4);
+    for (const sgn of [-1, 1]) { ctx.beginPath(); ctx.ellipse(sgn * w * 0.05, hy0 + w * 0.02, 3.2, 5.5, sgn * 0.2, 0, Math.PI * 2); ctx.fill(); }
+    const eb = ctx.createRadialGradient(0, hy0 + w * 0.02, 1, 0, hy0 + w * 0.02, 22);
+    eb.addColorStop(0, "rgba(191,239,255,0.5)"); eb.addColorStop(1, "rgba(191,239,255,0)");
+    ctx.globalAlpha = 0.45 + chan * 0.3; ctx.fillStyle = eb;
+    ctx.beginPath(); ctx.arc(0, hy0 + w * 0.02, 22, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    // --- Deep Freeze channel: gathering orb + cold beam aimed at the target ---
+    if (castP > 0) {
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      // gathering orb at the palm
+      const orbR = w * (0.06 + castP * 0.12);
+      const og = ctx.createRadialGradient(palmX, palmY, 1, palmX, palmY, orbR * 2.4);
+      og.addColorStop(0, "#ffffff"); og.addColorStop(0.4, "#bfefff"); og.addColorStop(1, "rgba(120,200,255,0)");
+      ctx.globalAlpha = 0.85; ctx.fillStyle = og;
+      ctx.beginPath(); ctx.arc(palmX, palmY, orbR * 2.4, 0, Math.PI * 2); ctx.fill();
+      // aim point in local space: the locked target (wall/base) sits on the ground,
+      // so the beam angles down toward it instead of firing off horizontally.
+      const dir = e.dir || 1;
+      const aimX = e.freezeTargetX !== undefined ? e.freezeTargetX : e.x + dir * w * 3;
+      const tlx = (aimX - e.x) * dir - lungeX;
+      const tly = (groundY - 40 - (e.fy || 0)) - slam * 5;
+      const ang = Math.atan2(tly - palmY, tlx - palmX);
+      const full = Math.hypot(tlx - palmX, tly - palmY);
+      const reach = full * Math.min(1, 0.35 + castP * 0.85);
+      const beamW = w * (0.05 + castP * 0.16), flick = Math.sin(T * 30) * beamW * 0.25;
+      ctx.save(); ctx.translate(palmX, palmY); ctx.rotate(ang);
+      const bg = ctx.createLinearGradient(0, 0, reach, 0);
+      bg.addColorStop(0, "rgba(255,255,255,0.9)"); bg.addColorStop(0.5, "rgba(191,239,255,0.6)"); bg.addColorStop(1, "rgba(160,220,255,0)");
+      ctx.fillStyle = bg; ctx.globalAlpha = 0.5 + 0.4 * castP;
+      ctx.beginPath();
+      ctx.moveTo(0, -beamW); ctx.lineTo(reach, -beamW * 0.3 + flick);
+      ctx.lineTo(reach, beamW * 0.3 + flick); ctx.lineTo(0, beamW); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = snow; ctx.globalAlpha = 0.5 * castP; ctx.lineWidth = 1.6; ctx.lineCap = "round";
+      for (let k = 0; k < 6; k++) {
+        const u = (k / 6 + (T * 0.6) % 1) % 1, bx = reach * u, byv = Math.sin(T * 8 + k) * beamW * 0.5;
+        ctx.beginPath(); ctx.moveTo(bx, byv - 6); ctx.lineTo(bx + 4, byv); ctx.lineTo(bx, byv + 6); ctx.stroke();
+      }
+      // impact glow where the beam lands, once it reaches the target
+      if (castP > 0.55) {
+        const ig = ctx.createRadialGradient(reach, 0, 1, reach, 0, 22 * castP);
+        ig.addColorStop(0, "rgba(255,255,255,0.85)"); ig.addColorStop(1, "rgba(191,239,255,0)");
+        ctx.globalAlpha = 0.7 * castP; ctx.fillStyle = ig;
+        ctx.beginPath(); ctx.arc(reach, 0, 22 * castP, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+      ctx.restore();
+    }
+
+    // --- Cryo-Shield: refracting ice cocoon ---
+    if ((e.cryoShield || 0) > 0) {
+      const R = w * 0.82, cyy = cy - w * 0.02;
+      ctx.save();
+      ctx.globalAlpha = 0.26 + 0.12 * pulse;
+      const shg = ctx.createRadialGradient(-R * 0.3, cyy - R * 0.3, R * 0.2, 0, cyy, R);
+      shg.addColorStop(0, "rgba(230,248,255,0.7)"); shg.addColorStop(0.7, "rgba(120,190,240,0.28)"); shg.addColorStop(1, "rgba(120,190,240,0.05)");
+      ctx.fillStyle = shg;
+      ctx.beginPath(); ctx.ellipse(0, cyy, R * 0.82, R, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#dff2ff"; ctx.globalAlpha = 0.38; ctx.lineWidth = 1.4;
+      for (let k = 0; k < 7; k++) {
+        const a = swirl * 0.5 + k * Math.PI / 3.5;
+        ctx.beginPath(); ctx.moveTo(Math.cos(a) * R * 0.2, cyy + Math.sin(a) * R * 0.2); ctx.lineTo(Math.cos(a) * R * 0.82, cyy + Math.sin(a) * R); ctx.stroke();
+      }
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.strokeStyle = "#bfefff";
+      ctx.globalAlpha = 0.5 + 0.25 * pulse; ctx.lineWidth = 3 + pulse * 2;
+      ctx.beginPath(); ctx.ellipse(0, cyy, R * 0.82, R, 0, 0, Math.PI * 2); ctx.stroke();
+      const ha = swirl * 1.5; ctx.globalAlpha = 0.5; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.ellipse(0, cyy, R * 0.82, R, 0, ha, ha + 0.7); ctx.stroke();
+      // reflect pulse: the shell flares and throws a ripple when it bounces arrows
+      if (reflectF > 0) {
+        ctx.globalAlpha = 0.8 * reflectF; ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 4 + reflectF * 4;
+        ctx.beginPath(); ctx.ellipse(0, cyy, R * 0.82, R, 0, 0, Math.PI * 2); ctx.stroke();
+        const rr = 1 + (1 - reflectF) * 0.5;
+        ctx.globalAlpha = 0.5 * reflectF; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.ellipse(0, cyy, R * 0.82 * rr, R * rr, 0, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.restore();
+      ctx.restore();
+    }
+
+    ctx.restore();   // wall-slam lunge transform
+  } else if (t.duneBroodmother) {
+    const castP = e.biomeCastT !== undefined && e.attackKind === "breach" ? bossClamp01((e.biomeCastT || 0) / (e.biomeCastDur || 0.72)) : 0;
+    const burrowP = bossClamp01((e.burrowT || 0) / 0.55);
+    const wallT = e.biomeWallAttackT !== undefined && e.attackKind === "wall" ? e.biomeWallAttackT : -1;
+    const wind = wallT >= 0 && wallT < 0.52 ? bossSmooth(wallT / 0.52) : 0;
+    const snap = wallT >= 0.52 ? Math.sin(bossClamp01((wallT - 0.52) / 0.18) * Math.PI) : 0;
+    const recover = wallT >= 0.68 ? bossSmooth((wallT - 0.68) / 0.44) : 0;
+    const lunge = (-18 * wind + 48 * snap) * (1 - recover) + atkF * 8;
+    const phase = (e.biomeWalkPhase || e.anim || 0) * BOSS_TAU;
+    const crouch = wind * 9 - snap * 7 + castP * 16 + burrowP * 34;
+    const y = groundY + crouch;
+    const sand = flash ? "#fff" : "#c9ad72";
+    const shell = flash ? "#fff" : "#9a6f3c";
+    const shellDk = flash ? "#fff" : "#5d3a25";
+    const chitin = flash ? "#fff" : "#6f4e2d";
+    const venom = flash ? "#fff" : "#7fe05a";
+
+    ctx.save();
+    ctx.globalAlpha = 0.34;
+    ctx.fillStyle = "#160e08";
+    ctx.beginPath(); ctx.ellipse(2, groundY + 3, w * (0.64 + burrowP * 0.18), 16 + burrowP * 8, 0, 0, BOSS_TAU); ctx.fill();
+    ctx.restore();
+
+    if (castP > 0 || burrowP > 0.02) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = "#df8a3a";
+      ctx.lineWidth = 2 + castP * 3;
+      for (let k = 0; k < 4; k++) {
+        const rp = ((T * 0.65 + k * 0.25) % 1);
+        ctx.globalAlpha = (0.28 + castP * 0.34 + burrowP * 0.28) * (1 - rp);
+        ctx.beginPath();
+        ctx.ellipse(0, groundY - 3, w * (0.34 + rp * 0.78), 9 + rp * 27, 0, 0, BOSS_TAU);
+        ctx.stroke();
+      }
+      ctx.restore();
+      ctx.save();
+      ctx.fillStyle = "rgba(216,180,106,0.5)";
+      for (let k = 0; k < 18; k++) {
+        const a = T * 1.8 + k * 0.7;
+        const rp = (k % 6) / 6;
+        const px = Math.cos(a) * w * (0.22 + rp * 0.7);
+        const py = groundY - 5 - Math.sin(a * 1.7) * 8 - rp * 18;
+        ctx.globalAlpha = (castP * 0.45 + burrowP * 0.28) * (1 - rp * 0.4);
+        ctx.beginPath(); ctx.arc(px, py, 1.2 + rp * 2, 0, BOSS_TAU); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // Raised venom tail.
+    ctx.strokeStyle = chitin;
+    ctx.lineWidth = 10;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(-52, y - 66);
+    ctx.bezierCurveTo(-100, y - 118 - castP * 14, -25 + lunge * 0.1, y - 177 - castP * 18, 42 + lunge * 0.24, y - 145 - castP * 10);
+    ctx.stroke();
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = flash ? "#fff" : "#d8b46a";
+    ctx.beginPath();
+    ctx.moveTo(-50, y - 68);
+    ctx.bezierCurveTo(-88, y - 112, -18, y - 160 - castP * 16, 38 + lunge * 0.2, y - 141 - castP * 8);
+    ctx.stroke();
+    ctx.lineCap = "butt";
+    ctx.fillStyle = venom;
+    ctx.save(); ctx.translate(46 + lunge * 0.24, y - 146 - castP * 10); ctx.rotate(-0.28 + castP * 0.18);
+    bossPoly([[-12, 2], [0, -32 - castP * 18], [13, 1], [3, 12]]);
+    ctx.fill();
+    bossGlow(0, -12, 26 + castP * 22, "rgba(127,224,90,0.75)", "rgba(127,224,90,0)", 0.28 + castP * 0.45, 0.7, 1.1);
+    ctx.restore();
+
+    // Side legs under the plated body.
+    for (let k = 0; k < 7; k++) {
+      const sx = -64 + k * 22;
+      const stride = Math.sin(phase + k * 0.85);
+      const lift = Math.max(0, stride) * 9 * (1 - burrowP * 0.5);
+      const hipY = y - 50 + Math.sin(T * 2 + k) * 1.5;
+      const footY = groundY - 1 - lift + burrowP * 4;
+      const footBack = sx - 21 + stride * 11 - wind * 5 + snap * 4;
+      const footFront = sx + 17 - stride * 8 + lunge * 0.12;
+      bossLimb(sx - 4, hipY, footBack, footY, -13 - lift * 0.6, shellDk, 5.4, true);
+      bossLimb(sx + 5, hipY + 2, footFront, footY - 12 - lift * 0.6, 12 + lift * 0.4, chitin, 4.2, false);
+    }
+
+    // Armored abdomen, each plate overlapping the next.
+    for (let k = 0; k < 7; k++) {
+      const sx = -62 + k * 22 + lunge * (0.05 + k * 0.012);
+      const sy = y - 55 + Math.sin(T * 2.2 + k * 0.8) * 2 - castP * Math.max(0, 4 - Math.abs(k - 4));
+      const rx = w * (0.235 - k * 0.007);
+      const ry = 22 - k * 0.8;
+      ctx.fillStyle = k % 2 ? shell : sand;
+      ctx.beginPath(); ctx.ellipse(sx, sy, rx, ry, -0.04 + k * 0.015, 0, BOSS_TAU); ctx.fill();
+      ctx.fillStyle = flash ? "#fff" : "rgba(255,235,170,0.14)";
+      ctx.beginPath(); ctx.ellipse(sx - rx * 0.2, sy - ry * 0.35, rx * 0.45, ry * 0.25, -0.2, 0, BOSS_TAU); ctx.fill();
+      ctx.fillStyle = shellDk;
+      for (let s = -1; s <= 1; s += 2) {
+        ctx.beginPath();
+        ctx.moveTo(sx + s * rx * 0.28, sy - ry * 0.9);
+        ctx.lineTo(sx + s * (rx * 0.38 + 5), sy - ry * 1.45 - castP * 4);
+        ctx.lineTo(sx + s * (rx * 0.2), sy - ry * 0.9);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    // Head carapace, mandibles and eye cluster.
+    const hx = 52 + lunge;
+    const hy = y - 61 - castP * 4 + snap * 2;
+    ctx.save();
+    ctx.translate(hx, hy);
+    ctx.rotate(-0.05 + snap * 0.08 - wind * 0.12);
+    ctx.fillStyle = shellDk;
+    ctx.beginPath(); ctx.ellipse(-3, 2, w * 0.25, w * 0.19, 0.04, 0, BOSS_TAU); ctx.fill();
+    ctx.fillStyle = sand;
+    ctx.beginPath(); ctx.ellipse(6, -1, w * 0.27, w * 0.18, -0.04, 0, BOSS_TAU); ctx.fill();
+    ctx.fillStyle = shell;
+    ctx.beginPath(); ctx.ellipse(19, 7, w * 0.16, w * 0.11, 0.12, 0, BOSS_TAU); ctx.fill();
+    ctx.strokeStyle = chitin;
+    ctx.lineWidth = 6;
+    ctx.lineCap = "round";
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(14, 8 + s * 5);
+      ctx.quadraticCurveTo(36 + snap * 8, 20 * s + snap * 4, 54 + snap * 10, 11 * s + 2);
+      ctx.stroke();
+      ctx.strokeStyle = flash ? "#fff" : "#f0d08a";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(39 + snap * 6, 13 * s + 2);
+      ctx.lineTo(55 + snap * 9, 10 * s + 3);
+      ctx.stroke();
+      ctx.strokeStyle = chitin;
+      ctx.lineWidth = 6;
+    }
+    ctx.lineCap = "butt";
+    ctx.fillStyle = flash ? "#fff" : "#df8a3a";
+    for (let k = -2; k <= 2; k++) {
+      const bx = -5 + k * 9;
+      const h = 18 + (2 - Math.abs(k)) * 7 + castP * 8;
+      bossPoly([[bx - 5, -16], [bx, -16 - h], [bx + 5, -16]]);
+      ctx.fill();
+    }
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = eye;
+    ctx.globalAlpha = 0.72 + 0.28 * pulse;
+    for (const [ex, ey, r] of [[17, -6, 4.5], [29, -3, 4], [18, 8, 3.6], [31, 9, 3.2]]) {
+      ctx.beginPath(); ctx.arc(ex, ey, r + pulse * 1.2, 0, BOSS_TAU); ctx.fill();
+    }
+    ctx.restore();
+    if ((e.blinded || 0) > 0) {
+      ctx.fillStyle = "rgba(216,180,106,0.68)";
+      ctx.beginPath(); ctx.ellipse(23, 2, 35, 17, -0.05, 0, BOSS_TAU); ctx.fill();
+      ctx.strokeStyle = "#f0d08a"; ctx.lineWidth = 2; ctx.globalAlpha = 0.7;
+      for (let k = 0; k < 4; k++) {
+        ctx.beginPath();
+        ctx.moveTo(-8 + k * 12, -12);
+        ctx.quadraticCurveTo(11 + k * 8, 2 + Math.sin(T * 9 + k) * 4, 44 + k * 4, 12);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  } else if (t.sunkenBehemoth) {
+    const castP = e.biomeCastT !== undefined && e.attackKind === "consume" ? bossClamp01((e.biomeCastT || 0) / (e.biomeCastDur || 0.75)) : 0;
+    const suckActive = (e.suckT || 0) > 0;
+    const suckP = suckActive ? 0.68 + pulse * 0.32 : castP;
+    const wallT = e.biomeWallAttackT !== undefined && e.attackKind === "wall" ? e.biomeWallAttackT : -1;
+    const wind = wallT >= 0 && wallT < 0.52 ? bossSmooth(wallT / 0.52) : 0;
+    const snap = wallT >= 0.52 ? Math.sin(bossClamp01((wallT - 0.52) / 0.2) * Math.PI) : 0;
+    const phase = (e.biomeWalkPhase || e.anim || 0) * BOSS_TAU;
+    const bob = Math.sin(phase * 0.5) * 2 - snap * 5 + castP * 3;
+    const y = groundY - bob;
+    const moss = flash ? "#fff" : "#40542f";
+    const mud = flash ? "#fff" : "#27391f";
+    const belly = flash ? "#fff" : "#2e4a28";
+    const bark = flash ? "#fff" : "#5d3f28";
+    const acid = (e.healLocked || 0) > 0 ? "#7fe05a" : "#b8ff7a";
+    const lunge = -18 * wind + 34 * snap + atkF * 5;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(8,12,8,0.34)";
+    ctx.beginPath(); ctx.ellipse(2, groundY + 4, w * 0.72, 18, 0, 0, BOSS_TAU); ctx.fill();
+    ctx.fillStyle = "rgba(30,54,38,0.55)";
+    ctx.beginPath(); ctx.ellipse(8, groundY - 7, w * 0.58, 20 + suckP * 6, 0, 0, BOSS_TAU); ctx.fill();
+    ctx.restore();
+
+    if (suckP > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = acid;
+      ctx.lineCap = "round";
+      for (let k = 0; k < 4; k++) {
+        const rp = ((T * 0.72 + k * 0.25) % 1);
+        ctx.globalAlpha = (0.55 + castP * 0.25) * (1 - rp) * suckP;
+        ctx.lineWidth = 2 + (1 - rp) * 2;
+        ctx.beginPath();
+        ctx.ellipse(54 + lunge, y - 61, 42 + rp * 118, 23 + rp * 66, 0, 0, BOSS_TAU);
+        ctx.stroke();
+      }
+      for (let k = 0; k < 12; k++) {
+        const u = (k / 12 + T * 0.24) % 1;
+        const side = k % 2 ? 1 : -1;
+        ctx.globalAlpha = 0.28 * suckP * (1 - u);
+        ctx.beginPath();
+        ctx.arc(54 + lunge + side * (260 - u * 220), groundY - 16 - Math.sin(u * Math.PI) * 28, 2 + (1 - u) * 2, 0, BOSS_TAU);
+        ctx.fillStyle = acid;
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // Massive tail and rear haunch, half sunk in the mire.
+    ctx.strokeStyle = mud;
+    ctx.lineWidth = 18;
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(-18, y - 55);
+    ctx.bezierCurveTo(-88, y - 60, -118, y - 31, -142, groundY - 9);
+    ctx.stroke();
+    ctx.strokeStyle = belly;
+    ctx.lineWidth = 7;
+    ctx.beginPath();
+    ctx.moveTo(-18, y - 62);
+    ctx.bezierCurveTo(-78, y - 67, -111, y - 37, -134, groundY - 14);
+    ctx.stroke();
+    ctx.lineCap = "butt";
+
+    // Heavy feet brace wide, then shove forward during a wall bite.
+    for (let k = 0; k < 4; k++) {
+      const sx = -55 + k * 38;
+      const step = Math.sin(phase + k * Math.PI * 0.72);
+      const lift = Math.max(0, step) * 5;
+      const footX = sx - 18 + step * 10 + lunge * (k > 1 ? 0.32 : 0.08);
+      bossLimb(sx, y - 48 + k * 2, footX, groundY - 3 - lift, -10 + k * 4, mud, 10 - k, true);
+      ctx.fillStyle = flash ? "#fff" : "#182314";
+      for (let c = 0; c < 3; c++) {
+        ctx.beginPath(); ctx.ellipse(footX + 5 + c * 4, groundY - 4 - lift, 2.8, 1.6, 0, 0, BOSS_TAU); ctx.fill();
+      }
+    }
+
+    // Main bulk.
+    ctx.fillStyle = mud;
+    ctx.beginPath(); ctx.ellipse(-12, y - 56, w * 0.58, w * 0.32, -0.02, 0, BOSS_TAU); ctx.fill();
+    ctx.fillStyle = moss;
+    ctx.beginPath(); ctx.ellipse(8, y - 66, w * 0.57, w * 0.31, -0.05, 0, BOSS_TAU); ctx.fill();
+    ctx.fillStyle = flash ? "#fff" : "rgba(145,180,105,0.18)";
+    ctx.beginPath(); ctx.ellipse(13, y - 83, w * 0.39, w * 0.1, -0.08, 0, BOSS_TAU); ctx.fill();
+
+    // Bog ridge: driftwood, reeds, and pulsing fungus.
+    ctx.strokeStyle = bark;
+    ctx.lineWidth = 4.5;
+    ctx.lineCap = "round";
+    for (let k = 0; k < 6; k++) {
+      const bx = -62 + k * 23;
+      const h = 27 + (k % 3) * 9 + Math.sin(T * 1.3 + k) * 2;
+      ctx.beginPath();
+      ctx.moveTo(bx, y - 91);
+      ctx.quadraticCurveTo(bx - 5, y - 108 - h * 0.25, bx - 9 + k * 2, y - 116 - h);
+      ctx.stroke();
+      ctx.fillStyle = acid;
+      bossGlow(bx - 9 + k * 2, y - 116 - h, 9 + (k % 2) * 3, "rgba(184,255,122,0.72)", "rgba(184,255,122,0)", 0.25 + pulse * 0.16, 1, 0.8);
+      ctx.beginPath(); ctx.arc(bx - 9 + k * 2, y - 116 - h, 4 + (k % 2) * 1.5, 0, BOSS_TAU); ctx.fill();
+    }
+    ctx.lineCap = "butt";
+
+    // Head and articulated maw.
+    const hx = 53 + lunge;
+    const hy = y - 70 - castP * 5;
+    const jaw = 0.16 + suckP * 0.9 + snap * 0.5;
+    ctx.save();
+    ctx.translate(hx, hy);
+    ctx.rotate(-0.05 + snap * 0.04);
+    ctx.fillStyle = mud;
+    ctx.beginPath(); ctx.ellipse(3, 4, w * 0.34, w * 0.23, -0.08, 0, BOSS_TAU); ctx.fill();
+    ctx.fillStyle = moss;
+    ctx.beginPath(); ctx.ellipse(13, -6 - jaw * 12, w * 0.33, w * 0.16, -0.1 - jaw * 0.08, 0, BOSS_TAU); ctx.fill();
+    ctx.fillStyle = belly;
+    ctx.beginPath(); ctx.ellipse(18, 16 + jaw * 20, w * 0.29, w * 0.13, 0.08 + jaw * 0.08, 0, BOSS_TAU); ctx.fill();
+    bossGlow(34, 8 + jaw * 7, 34 + suckP * 42, "rgba(184,255,122,0.72)", "rgba(184,255,122,0)", 0.22 + suckP * 0.42, 1.4, 0.9);
+    ctx.fillStyle = flash ? "#fff" : "#162016";
+    for (let k = 0; k < 9; k++) {
+      const tx = -4 + k * 9;
+      const topY = 6 - jaw * 17 + Math.sin(k) * 2;
+      const botY = 11 + jaw * 23 - Math.cos(k) * 2;
+      bossPoly([[tx, topY], [tx + 4, topY + 13], [tx + 8, topY]]);
+      ctx.fill();
+      if (k < 8) {
+        bossPoly([[tx + 5, botY], [tx + 9, botY - 12], [tx + 13, botY]]);
+        ctx.fill();
+      }
+    }
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.7 + pulse * 0.3;
+    ctx.fillStyle = eye;
+    ctx.beginPath(); ctx.arc(19, -22 - jaw * 4, 5 + pulse, 0, BOSS_TAU); ctx.arc(41, -20 - jaw * 4, 4 + pulse, 0, BOSS_TAU); ctx.fill();
+    ctx.restore();
+    ctx.restore();
+
+    if ((e.healLocked || 0) > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = "#7fe05a";
+      ctx.lineWidth = 2.2;
+      ctx.globalAlpha = 0.72;
+      for (let k = 0; k < 5; k++) {
+        ctx.beginPath();
+        ctx.arc(-48 + k * 22, y - 72 + Math.sin(k) * 7, 8 + pulse * 2, 0.1, Math.PI * 1.5);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  } else if (t.ignitedCore) {
+    const y = groundY;
+    const heat = Math.max(e.coreHeat || 0, e.attackKind === "supernova" ? 1 : 0);
+    const superP = (e.supernovaT || 0) > 0 ? bossClamp01(1 - (e.supernovaT || 0) / 10) : 0;
+    const castP = e.biomeCastT !== undefined && e.attackKind === "lavaCracks" ? bossClamp01((e.biomeCastT || 0) / (e.biomeCastDur || 0.72)) : 0;
+    const wallT = e.biomeWallAttackT !== undefined && e.attackKind === "wall" ? e.biomeWallAttackT : -1;
+    const snap = wallT >= 0.52 ? Math.sin(bossClamp01((wallT - 0.52) / 0.18) * Math.PI) : 0;
+    const coreY = y - 46 - Math.sin(T * 2.2 + e.x * 0.02) * 5 - castP * 8;
+    const coreR = w * (0.31 + heat * 0.045 + superP * 0.09);
+
+    ctx.save();
+    ctx.globalAlpha = 0.25 + heat * 0.08;
+    ctx.fillStyle = "#120606";
+    ctx.beginPath(); ctx.ellipse(0, groundY + 3, w * 0.44, 10 + heat * 5, 0, 0, BOSS_TAU); ctx.fill();
+    ctx.restore();
+
+    bossGlow(0, coreY, w * (0.95 + heat * 0.34 + superP * 0.42), "rgba(255,240,160,0.92)", "rgba(180,20,0,0)", 0.42 + heat * 0.18 + superP * 0.16, 1, 0.9);
+    if (castP > 0 || superP > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = "#ff7a2a";
+      for (let k = 0; k < 5; k++) {
+        const rp = ((T * 0.55 + k * 0.2) % 1);
+        ctx.globalAlpha = (0.36 + superP * 0.3 + castP * 0.2) * (1 - rp);
+        ctx.lineWidth = 2 + k * 0.6 + superP * 3;
+        ctx.beginPath();
+        ctx.ellipse(0, coreY, w * (0.42 + rp * (0.55 + superP * 0.35)), w * (0.27 + rp * 0.34), 0, 0, BOSS_TAU);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    if (castP > 0) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = "#ff6a28";
+      ctx.lineCap = "round";
+      for (let k = -2; k <= 2; k++) {
+        const tx = k * w * 0.26 + Math.sin(T * 5 + k) * 5;
+        const crackY = groundY - 5;
+        ctx.globalAlpha = 0.34 + castP * 0.38;
+        ctx.lineWidth = 2 + castP * 4;
+        ctx.beginPath();
+        ctx.moveTo(Math.sin(k) * 8, coreY + coreR * 0.35);
+        ctx.quadraticCurveTo(tx * 0.35, coreY + 54, tx, crackY);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(tx - 20, crackY + 1);
+        ctx.lineTo(tx + 18, crackY - 2);
+        ctx.lineTo(tx + 32, crackY + 4);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // Back half of orbiting basalt armor.
+    const shardCount = 14;
+    for (let pass = 0; pass < 2; pass++) {
+      for (let k = 0; k < shardCount; k++) {
+        const a = T * (0.82 + superP * 0.55) + k * BOSS_TAU / shardCount;
+        const back = Math.sin(a) < 0;
+        if ((pass === 0) !== back) continue;
+        const orbit = w * (0.55 + heat * 0.1 + superP * 0.22 + (k % 3) * 0.025);
+        const rx = Math.cos(a) * orbit;
+        const ry = Math.sin(a) * orbit * 0.52;
+        const depth = 0.72 + (Math.sin(a) + 1) * 0.2;
+        const pull = 1 + castP * 0.2 + superP * 0.45;
+        ctx.save();
+        ctx.translate(rx * pull + snap * 16 * depth, coreY + ry * pull);
+        ctx.rotate(a + T * 0.35);
+        ctx.scale(depth, depth);
+        ctx.fillStyle = flash ? "#fff" : (k % 3 ? "#171217" : "#251a1a");
+        bossPoly([[-10, -20], [18, -9], [12, 18], [-16, 12]]);
+        ctx.fill();
+        ctx.strokeStyle = flash ? "#fff" : "#ff6a28";
+        ctx.globalAlpha = 0.38 + heat * 0.16;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.moveTo(-4, -12); ctx.lineTo(3, -2); ctx.lineTo(-2, 11); ctx.stroke();
+        ctx.restore();
+        ctx.globalAlpha = 1;
+      }
+      if (pass === 0) {
+        const rg = ctx.createRadialGradient(-coreR * 0.28, coreY - coreR * 0.28, 4, 0, coreY, coreR * 1.25);
+        rg.addColorStop(0, flash ? "#fff" : "#fff8c0");
+        rg.addColorStop(0.34, flash ? "#fff" : "#ffb040");
+        rg.addColorStop(0.72, flash ? "#fff" : "#ff4a1c");
+        rg.addColorStop(1, flash ? "#fff" : "#4a130d");
+        ctx.fillStyle = rg;
+        ctx.beginPath(); ctx.arc(0, coreY, coreR, 0, BOSS_TAU); ctx.fill();
+        ctx.fillStyle = flash ? "#fff" : "#190c0c";
+        for (let c = 0; c < 5; c++) {
+          const a = c * 1.35 + T * 0.16;
+          ctx.beginPath();
+          ctx.ellipse(Math.cos(a) * coreR * 0.48, coreY + Math.sin(a) * coreR * 0.34, coreR * (0.2 + c * 0.012), coreR * 0.08, a * 0.4, 0, BOSS_TAU);
+          ctx.fill();
+        }
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.strokeStyle = "#fff0a0";
+        ctx.lineWidth = 2 + heat * 2;
+        ctx.globalAlpha = 0.56 + heat * 0.16 + superP * 0.2;
+        ctx.beginPath();
+        ctx.moveTo(-coreR * 0.5, coreY - coreR * 0.08);
+        ctx.lineTo(-coreR * 0.08, coreY - coreR * 0.26);
+        ctx.lineTo(coreR * 0.06, coreY + coreR * 0.14);
+        ctx.lineTo(coreR * 0.52, coreY + coreR * 0.02);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
     if (e.attackKind === "supernova") {
-      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.strokeStyle = "#fff0a0"; ctx.lineWidth = 5 + pulse * 5; ctx.globalAlpha = 0.72;
-      ctx.beginPath(); ctx.arc(0, y - 36, w * (0.72 + pulse * 0.12), 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = "#fff0a0";
+      ctx.lineCap = "round";
+      for (let k = 0; k < 18; k++) {
+        const a = k * BOSS_TAU / 18 + T * 0.16;
+        const r1 = coreR * (1.0 + superP * 0.35);
+        const r2 = w * (0.82 + superP * 0.75 + Math.sin(T * 5 + k) * 0.03);
+        ctx.globalAlpha = 0.22 + superP * 0.42;
+        ctx.lineWidth = 2 + superP * 4;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * r1, coreY + Math.sin(a) * r1);
+        ctx.lineTo(Math.cos(a) * r2, coreY + Math.sin(a) * r2 * 0.8);
+        ctx.stroke();
+      }
+      ctx.restore();
     }
   } else if (t.voidMindflayer) {
     const y = groundY;
-    ctx.fillStyle = flash ? "#fff" : "#0a0614";
-    ctx.beginPath(); ctx.ellipse(0, y - 8, w * 0.44, w * 0.56, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = flash ? "#fff" : "#1e0f36"; ctx.lineWidth = 7; ctx.lineCap = "round";
-    for (let k = 0; k < 7; k++) {
-      const a = -Math.PI * 0.85 + k * Math.PI * 0.28;
+    const castP = e.biomeCastT !== undefined && e.attackKind === "possess" ? bossClamp01((e.biomeCastT || 0) / (e.biomeCastDur || 0.86)) : 0;
+    const cutP = bossClamp01((e.tentacleCut || 0) / 3.4);
+    const crackP = bossClamp01((e.maskCracked || 0) / 3.6);
+    const wallT = e.biomeWallAttackT !== undefined && e.attackKind === "wall" ? e.biomeWallAttackT : -1;
+    const wind = wallT >= 0 && wallT < 0.52 ? bossSmooth(wallT / 0.52) : 0;
+    const snap = wallT >= 0.52 ? Math.sin(bossClamp01((wallT - 0.52) / 0.2) * Math.PI) : 0;
+    const cy = y - 62 + Math.sin(T * 1.8 + e.x * 0.01) * 5 - castP * 7 + snap * 4;
+    const voidDk = flash ? "#fff" : "#0a0614";
+    const voidMid = flash ? "#fff" : "#24103b";
+    const voidLt = flash ? "#fff" : "#3b2360";
+    const voidGlow = crackP > 0 ? "#f0c8ff" : eye;
+    const spear = 22 * snap - 10 * wind;
+
+    ctx.save();
+    ctx.globalAlpha = 0.24;
+    ctx.fillStyle = "#05030a";
+    ctx.beginPath(); ctx.ellipse(0, groundY + 4, w * 0.46, 10, 0, 0, BOSS_TAU); ctx.fill();
+    ctx.restore();
+    bossGlow(0, cy - 12, w * (0.9 + castP * 0.24 + crackP * 0.18), "rgba(215,168,255,0.56)", "rgba(60,20,100,0)", 0.22 + castP * 0.26 + crackP * 0.18, 0.95, 1.25);
+
+    // Back halo and possession sigils.
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = "#8c4cff";
+    ctx.lineWidth = 2;
+    for (let k = 0; k < 3; k++) {
+      ctx.globalAlpha = (0.22 + castP * 0.25) * (1 - k * 0.14);
       ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * w * 0.22, y + Math.sin(a) * w * 0.2);
-      ctx.quadraticCurveTo(Math.cos(a) * w * (0.75 + pulse * 0.1), y + 80 + Math.sin(T * 3 + k) * 18, Math.cos(a) * w * 0.98, groundY - 5);
+      ctx.ellipse(0, cy - 20, w * (0.42 + k * 0.15), w * (0.58 + k * 0.13), T * 0.22 + k * 0.7, 0, BOSS_TAU);
       ctx.stroke();
     }
-    ctx.fillStyle = flash ? "#fff" : "#3b2360";
-    ctx.beginPath(); ctx.moveTo(-24, y - 52); ctx.lineTo(24, y - 58); ctx.lineTo(38, y - 8); ctx.lineTo(0, y + 28); ctx.lineTo(-38, y - 8); ctx.closePath(); ctx.fill();
-    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = eye;
-    ctx.beginPath(); ctx.ellipse(-12, y - 24, 7, 4, 0, 0, Math.PI * 2); ctx.ellipse(12, y - 24, 7, 4, 0, 0, Math.PI * 2); ctx.fill();
-    if ((e.tentacleCut || 0) > 0 || (e.maskCracked || 0) > 0) {
-      ctx.strokeStyle = "#f0c8ff"; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(0, y - 50); ctx.lineTo(6, y - 6); ctx.lineTo(-8, y + 24); ctx.stroke();
+    if (castP > 0) {
+      for (let k = 0; k < 8; k++) {
+        const a = T * 1.4 + k * BOSS_TAU / 8;
+        const px = Math.cos(a) * w * (0.54 + castP * 0.18);
+        const py = cy - 22 + Math.sin(a) * w * 0.72;
+        ctx.globalAlpha = 0.35 + castP * 0.25;
+        ctx.beginPath(); ctx.arc(px, py, 2.2 + castP * 2.2, 0, BOSS_TAU); ctx.stroke();
+      }
     }
     ctx.restore();
+
+    // Tentacle curtain. Cut tentacles visibly shorten and flare at the wound.
+    ctx.strokeStyle = voidMid;
+    ctx.lineCap = "round";
+    for (let k = 0; k < 10; k++) {
+      const u = k / 9;
+      const baseX = bossMix(-34, 34, u);
+      const baseY = cy + 22 + Math.sin(T * 1.7 + k) * 3;
+      const side = u < 0.5 ? -1 : 1;
+      const severed = cutP > 0 && (k === 1 || k === 4 || k === 7);
+      const lenMul = severed ? 0.56 + (1 - cutP) * 0.18 : 1;
+      const tipX = side * w * (0.34 + Math.abs(u - 0.5) * 0.9) + Math.sin(T * 2.7 + k) * (10 + castP * 8) + spear * (k > 5 ? 0.5 : 0.12);
+      const tipY = groundY - 3 - (1 - lenMul) * 76 + Math.cos(T * 1.6 + k) * 5 - castP * 12;
+      const c1x = baseX + side * w * (0.22 + castP * 0.12);
+      const c1y = cy + 56 + Math.sin(T * 2 + k) * 15;
+      const c2x = tipX - side * w * 0.2;
+      const c2y = bossMix(c1y + 34, tipY - 24, severed ? 0.55 : 0.76);
+      ctx.strokeStyle = flash ? "#fff" : (k % 2 ? "#1e0f36" : "#2c164a");
+      ctx.lineWidth = severed ? 5.2 : 7.2;
+      ctx.beginPath();
+      ctx.moveTo(baseX, baseY);
+      ctx.bezierCurveTo(c1x, c1y, c2x, c2y, tipX, tipY);
+      ctx.stroke();
+      if (severed) {
+        bossGlow(tipX, tipY, 15, "rgba(240,200,255,0.75)", "rgba(140,76,255,0)", 0.36 + pulse * 0.16, 1, 0.8);
+      }
+    }
+    ctx.lineCap = "butt";
+
+    if (snap > 0.05) {
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.strokeStyle = "#d7a8ff";
+      ctx.lineWidth = 7 + snap * 4;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(24, cy - 2);
+      ctx.quadraticCurveTo(80 + spear, cy - 24, 118 + spear * 1.6, cy + 22);
+      ctx.stroke();
+      bossGlow(118 + spear * 1.6, cy + 22, 24 + snap * 20, "rgba(215,168,255,0.8)", "rgba(140,76,255,0)", 0.42 * snap, 1.3, 0.9);
+      ctx.restore();
+    }
+
+    // Mantle and floating body.
+    ctx.fillStyle = voidDk;
+    ctx.beginPath(); ctx.ellipse(0, cy + 10, w * 0.36, w * 0.54, 0, 0, BOSS_TAU); ctx.fill();
+    ctx.fillStyle = voidMid;
+    bossPoly([[-38, cy - 20], [-22, cy + 54], [0, cy + 76], [24, cy + 54], [39, cy - 16], [18, cy + 12], [0, cy + 32], [-18, cy + 12]]);
+    ctx.fill();
+    ctx.fillStyle = flash ? "#fff" : "rgba(215,168,255,0.12)";
+    bossPoly([[0, cy - 28], [22, cy + 30], [0, cy + 66], [-8, cy + 22]]);
+    ctx.fill();
+
+    // Long arms fold outward during the possession cast.
+    ctx.strokeStyle = voidMid;
+    ctx.lineWidth = 8;
+    ctx.lineCap = "round";
+    for (const s of [-1, 1]) {
+      const reach = castP * 26 + (s > 0 ? spear * 0.4 : 0);
+      bossLimb(s * 23, cy - 16, s * (54 + reach), cy + 8 - castP * 18, s * (14 + castP * 10), voidMid, 7);
+      ctx.fillStyle = voidLt;
+      ctx.beginPath(); ctx.ellipse(s * (56 + reach), cy + 8 - castP * 18, 8, 5, s * 0.3, 0, BOSS_TAU); ctx.fill();
+    }
+    ctx.lineCap = "butt";
+
+    // Mask, crown, and exposed cracked inner eye.
+    ctx.fillStyle = voidLt;
+    bossPoly([[-30, cy - 58], [0, cy - 76], [31, cy - 58], [36, cy - 14], [0, cy + 12], [-36, cy - 14]]);
+    ctx.fill();
+    ctx.fillStyle = flash ? "#fff" : "#160b28";
+    bossPoly([[-21, cy - 49], [0, cy - 63], [22, cy - 49], [25, cy - 18], [0, cy - 1], [-25, cy - 18]]);
+    ctx.fill();
+    for (let k = -3; k <= 3; k++) {
+      const h = w * (0.12 + (3 - Math.abs(k)) * 0.035 + castP * 0.025);
+      ctx.fillStyle = voidMid;
+      bossPoly([[k * 9 - 4, cy - 56], [k * 9, cy - 56 - h], [k * 9 + 4, cy - 56]]);
+      ctx.fill();
+    }
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = voidGlow;
+    ctx.globalAlpha = 0.72 + pulse * 0.28 + castP * 0.3;
+    ctx.beginPath();
+    ctx.ellipse(-12, cy - 31, 8 + castP * 2, 4.4, -0.08, 0, BOSS_TAU);
+    ctx.ellipse(12, cy - 31, 8 + castP * 2, 4.4, 0.08, 0, BOSS_TAU);
+    ctx.fill();
+    if (castP > 0.35 || crackP > 0) {
+      ctx.beginPath(); ctx.arc(0, cy - 24, 5 + castP * 4 + crackP * 3, 0, BOSS_TAU); ctx.fill();
+    }
+    ctx.restore();
+    if (crackP > 0) {
+      ctx.save();
+      ctx.strokeStyle = "#f0c8ff";
+      ctx.lineWidth = 2 + crackP;
+      ctx.globalAlpha = 0.65 + crackP * 0.25;
+      ctx.beginPath(); ctx.moveTo(0, cy - 61); ctx.lineTo(7, cy - 39); ctx.lineTo(2, cy - 22); ctx.lineTo(15, cy - 5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-5, cy - 33); ctx.lineTo(-18, cy - 21); ctx.lineTo(-9, cy + 2); ctx.stroke();
+      ctx.restore();
+    }
   }
+  ctx.restore();
+}
+
+// Height (world px) the boss body occupies above the ground line. Mirrors the
+// per-boss visual scaling used for the in-world name plate / HP bar.
+function bossBodyHeight(type, t) {
+  return type === "magmaGolem" || type === "voidTitan" ? t.w * 1.58
+    : type === "voidSeraph" ? t.w * 1.24
+    : t.biomeBoss ? t.w * (t.flying ? 1.45 : 1.35)
+    : t.w * 1.2;
+}
+
+// Renders the ACTUAL in-world boss sprite at an arbitrary screen point, scaled
+// to `targetH` pixels tall. Used by the spawn intro so the portrait always
+// matches what the player is about to fight.
+export function drawBossPortrait(type, cx, cy, targetH) {
+  const t = ENEMY_TYPES[type];
+  if (!t) return;
+  const custom = type === "fireDragon" ? drawFireDragon
+    : type === "magmaGolem" ? drawMagmaGolem
+    : t.biomeBoss ? drawBiomeBoss
+    : type === "voidTitan" ? drawVoidTitan
+    : type === "voidSeraph" ? drawVoidSeraph
+    : null;
+  if (!custom) return;
+  const bodyH = bossBodyHeight(type, t);
+  const scale = targetH / bodyH;
+  // World-space vertical midpoint of the boss (feet at groundY, top ~bodyH up).
+  const midWorld = groundY - bodyH * (t.flying ? 0.52 : 0.5);
+  const e = {
+    type, x: 0, anim: performance.now() / 420, flash: 0, dying: false,
+    hp: t.hp, maxHp: t.hp, dir: 1, attackAnim: 0, fy: 0, shootCd: 1,
+  };
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(scale, scale);
+  ctx.translate(0, -midWorld);
+  custom(e, t, 0.6, 0);
   ctx.restore();
 }
 
@@ -2503,8 +3442,8 @@ export function drawEnemies(dark) {
     const w=t.w, bob=Math.abs(Math.sin(e.anim*2))*2;
     const isBoss = !!t.boss;
     const atkF = Math.max(0, e.attackAnim || 0) / 0.25;
-    const custom = e.type === "imp" ? drawImp : e.type === "fireImp" ? drawFireImp : e.type === "emberBrute" ? drawEmberBrute : e.type === "ashPriest" ? drawAshPriest : e.type === "siegeImp" ? drawSiegeImp : e.type === "chainImp" ? drawChainImp : e.type === "fireDragon" ? drawFireDragon : e.type === "magmaGolem" ? drawMagmaGolem : t.biomeBoss ? drawBiomeBoss
-      : e.type === "shade" ? drawShade : e.type === "voidWraith" ? drawVoidWraith : e.type === "voidBrute" ? drawVoidBrute : e.type === "voidTitan" ? drawVoidTitan : e.type === "voidSeraph" ? drawVoidSeraph : null;
+    const custom = BIOME_ENEMY_DRAWERS[e.type] || (e.type === "imp" ? drawImp : e.type === "fireImp" ? drawFireImp : e.type === "emberBrute" ? drawEmberBrute : e.type === "ashPriest" ? drawAshPriest : e.type === "siegeImp" ? drawSiegeImp : e.type === "chainImp" ? drawChainImp : e.type === "fireDragon" ? drawFireDragon : e.type === "magmaGolem" ? drawMagmaGolem : t.biomeBoss ? drawBiomeBoss
+      : e.type === "shade" ? drawShade : e.type === "voidWraith" ? drawVoidWraith : e.type === "voidBrute" ? drawVoidBrute : e.type === "voidTitan" ? drawVoidTitan : e.type === "voidSeraph" ? drawVoidSeraph : null);
     const useSilhouette = shouldDrawEnemySilhouette(e, t, budget);
     ctx.save(); ctx.translate(e.x + drawXOff, drawYOff);
     if (atkF > 0 && !custom && !useSilhouette) ctx.scale(1 + atkF * 0.18, 1 - atkF * 0.12);
@@ -2648,17 +3587,9 @@ export function drawEnemies(dark) {
 
     // Bosses get a big always-on health bar with a name plate
     if ((isBoss || t.legendary) && !e.dying) {
+      // Just a floating HP bar — no name plate or "BOSS" label hovering above.
       const bossVisualH = e.type === "magmaGolem" || e.type === "voidTitan" ? t.w * 1.58 : e.type === "voidSeraph" ? t.w * 1.24 : t.biomeBoss ? t.w * (t.flying ? 1.45 : 1.35) : t.w;
       drawHpBar(e.x, groundY+drawYOff-bossVisualH-28, t.w*0.85, e.hp/e.maxHp, "#ff2040");
-      ctx.save(); ctx.textAlign="center";
-      ctx.font="bold 15px Trebuchet MS";
-      ctx.fillStyle="rgba(0,0,0,0.85)"; ctx.fillText(t.name, e.x+1, groundY+drawYOff-bossVisualH-42);
-      ctx.fillStyle=t.eye; ctx.fillText(t.name, e.x, groundY+drawYOff-bossVisualH-43);
-      ctx.font="11px Trebuchet MS";
-      ctx.globalAlpha=0.65+0.25*Math.sin(bossT*3);
-      if (e.type === "magmaGolem" || e.type === "voidTitan" || t.biomeBoss) ctx.translate(0, -bossVisualH + t.w);
-      ctx.fillStyle="#f2c14e"; ctx.fillText(t.legendary ? "⚔ LEGENDARISK BOSS ⚔" : "⚔ BOSS ⚔", e.x, groundY+drawYOff-t.w-58);
-      ctx.restore();
       continue;
     }
 
@@ -2666,11 +3597,6 @@ export function drawEnemies(dark) {
     const hpFrac = e.maxHp ? e.hp / e.maxHp : 1;
     if (!e.dying && e.hp<e.maxHp && (budget.minorHealthBars || hpFrac < 0.45 || e.flash > 0)) {
       drawHpBar(e.x,groundY+drawYOff-sprH-4,t.w+(isBoss?12:4),hpFrac,isBoss?"#ff4080":"#d05a5a");
-    }
-    if (isBoss) {
-      ctx.save(); ctx.font="bold 12px Trebuchet MS"; ctx.textAlign="center";
-      ctx.fillStyle="rgba(0,0,0,0.7)"; ctx.fillText(t.name||e.type, e.x+1, groundY+drawYOff-sprH-18);
-      ctx.fillStyle=t.eye; ctx.fillText(t.name||e.type, e.x, groundY+drawYOff-sprH-19); ctx.restore();
     }
   }
 }

@@ -8,6 +8,7 @@ import { spawnParticles, floaty, spawnEnemy } from '../world/SpawnSystem.js?v=bi
 import { killEnemyWithAnimation, spawnImpBlood, killEnemy } from '../../util/EnemyUtils.js?v=biomeactive1';
 import { entityWallLift, wallHeight, wallReady, wallRenderWidth } from '../../entities/Wall.js';
 import { damagePlayer } from '../combat/PlayerCombat.js?v=biomeactive1';
+import { approachSpeedMult, unopposedSprintMult } from './EnemyShared.js';
 
 // All night-boss behavior lives here: the fire dragon (night 5), the magma
 // colossus (night 10) and the ground hazards they leave behind. EnemyAI
@@ -631,6 +632,7 @@ function updateBiomeTimers(e, t, dt) {
   if (t.skadiWrath) {
     e.cryoShieldCd = Math.max(0, (e.cryoShieldCd || 0) - dt);
     e.cryoShield = Math.max(0, (e.cryoShield || 0) - dt);
+    e.reflectFlash = Math.max(0, (e.reflectFlash || 0) - dt);
     if ((e.cryoShield || 0) <= 0 && e.cryoShieldCd <= 0) {
       e.cryoShield = playerWeaponIs("blizzard_chime") ? 1.8 : 5.2;
       e.cryoShieldCd = 30;
@@ -670,6 +672,9 @@ function reactToBiomeBossDamage(e, t) {
       e.hp = Math.min(e.maxHp, e.hp + taken * 0.55);
       stunArchersNear(e.x, 650, 1.25, "#bfefff", 1);
       floaty(e.x, "Reflected", "#bfefff", 14);
+      e.reflectFlash = 0.35;
+      pushBossRing(e.x, 120, "#eaf6ff", 0.4, 5);
+      spawnParticles(e.x, groundY + (e.fy || 0) - 40, 9, "#eaf6ff", 110, 80);
     } else if ((e.cryoShield || 0) > 0 && weapon === "icicle_spear") {
       e.cryoShield = 0;
       e.biomeStunned = Math.max(e.biomeStunned || 0, 0.65);
@@ -749,8 +754,12 @@ function releaseSkadiFreeze(e, t) {
     } else {
       floaty(wall.x, "Freeze cracked", "#ffffff", 15);
     }
-    pushBossRing(wall.x, 160, col, 0.7, 8);
-    spawnParticles(wall.x, groundY - wallHeight(wall) * 0.58, 28, col, 125, 150);
+    const ix = wall.x, iy = groundY - wallHeight(wall) * 0.58;
+    pushBossRing(ix, 160, col, 0.7, 8);
+    pushBossRing(ix, 96, "#ffffff", 0.5, 5);
+    spawnParticles(ix, iy, 30, col, 125, 150);
+    spawnParticles(ix, iy, 12, "#ffffff", 70, 120);
+    spawnParticles(ix, groundY - 6, 16, "#eaf6ff", 90, 60);
     if (wall.hp <= 0) killWallByBoss(wall);
   } else {
     damageBaseByBoss(e, t, 0.62, col);
@@ -970,6 +979,9 @@ function startBiomeCast(e, t) {
   e.biomeCastKind = cfg.kind;
   e.attackKind = cfg.kind;
   e.attackAnim = 0.45;
+  // Lock the Deep Freeze aim point so the channelled beam angles down at the
+  // target instead of firing off into the air.
+  if (cfg.kind === "deepFreeze") { const fw = strongestWall(); e.freezeTargetX = fw ? fw.x : state.base.x; }
   spawnParticles(e.x, groundY + (e.fy || 0) - t.w * 0.55, 16, t.eye, 90, 110);
   return true;
 }
@@ -1068,7 +1080,9 @@ function moveBiomeBoss(e, t, dt) {
   if (Math.abs(remaining) <= 2) return wallAhead;
   const slowMult = e.rooted > 0 ? 0.05 : (e.frost > 0 ? 0.45 : (e.slow > 0 ? 0.62 : 1));
   const statusMult = (e.blinded || 0) > 0 ? 0.72 : 1;
-  const speed = t.speed * (e.enraged ? 1.22 : 1) * slowMult * statusMult;
+  const approachMult = approachSpeedMult(Math.abs(state.base.x - e.x));
+  const sprintMult = unopposedSprintMult(e);
+  const speed = t.speed * (e.enraged ? 1.22 : 1) * slowMult * statusMult * approachMult * sprintMult;
   const stepDist = Math.min(Math.abs(remaining), speed * dt);
   e.x += Math.sign(remaining) * stepDist;
   e.biomeWalkPhase = (e.biomeWalkPhase || 0) + dt * (t.flying ? 1.4 : 2.2) * slowMult;

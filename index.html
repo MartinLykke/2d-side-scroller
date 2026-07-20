@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="mobile-web-app-capable" content="yes" />
-<title>Kingdom — Crown of Embers</title>
+<title>Ashen Reign</title>
 <link rel="stylesheet" href="style.css" />
 <style>
 .diff-select { display:flex; align-items:center; gap:8px; margin:14px 0 10px; justify-content:center; }
@@ -56,8 +56,7 @@
     <!-- Start screen -->
     <div id="start-screen" class="overlay">
       <div class="overlay-card">
-        <h1>K I N G D O M</h1>
-        <h2>Crown of Embers</h2>
+        <h1>A S H E N&nbsp;&nbsp;R E I G N</h1>
         <p class="tag">A small kingdom in a dark forest. Gather gold, recruit your subjects, build your walls — and survive the nightly hordes of greed.</p>
         <div class="controls">
           <div><kbd>A</kbd>/<kbd>D</kbd> or <kbd>←</kbd><kbd>→</kbd> — ride &nbsp;·&nbsp; <kbd>Shift</kbd> — gallop &nbsp;·&nbsp; <kbd>Space</kbd> — jump &nbsp;·&nbsp; <kbd>X</kbd>/<kbd>Ctrl</kbd> — dodge</div>
@@ -115,215 +114,155 @@
       </div>
     </div>
 
-    <!-- Dev Tools Panel (toggle with P) -->
-    <div id="dev-panel" class="hidden" aria-label="Developer tools">
-      <div class="dev-header">
-        <div class="dev-title">
-          <span class="dev-eyebrow">Developer</span>
-          <strong>Tools</strong>
-        </div>
-        <div class="dev-header-actions">
-          <output id="dev-fps" class="dev-fps" aria-label="Frames per second">-- FPS</output>
-          <kbd>P</kbd>
-          <button type="button" id="dev-close" class="dev-close" title="Close dev tools" aria-label="Close dev tools">×</button>
-        </div>
-      </div>
-
-      <dl id="dev-stats" class="dev-stats" aria-live="polite"></dl>
-
-      <div class="dev-quickbar" aria-label="Quick dev controls">
-        <button class="dev-btn" id="dev-profiler-btn" data-dev="profiler">Profiler: ⚫ OFF</button>
-        <button class="dev-btn" id="dev-god-btn" data-dev="godMode">God mode: ⚫ OFF</button>
-        <button class="dev-btn" data-dev="healAll">Full heal 💚</button>
-        <div class="dev-speed" role="group" aria-label="Game speed">
-          <button class="dev-btn dev-speed-btn dev-active" id="dev-spd-1" data-dev="speed1">×1</button>
-          <button class="dev-btn dev-speed-btn" id="dev-spd-2" data-dev="speed2">×2</button>
-          <button class="dev-btn dev-speed-btn" id="dev-spd-4" data-dev="speed4">×4</button>
-        </div>
-      </div>
-
-      <details class="dev-section" open>
-        <summary><span>Run setup</span><small>Gold, embers and day jumps</small></summary>
-        <div class="dev-section-body">
-          <div class="dev-group">
-            <div class="dev-label">Gold</div>
-            <div class="dev-row dev-equal">
-              <button class="dev-btn" data-dev="coins10">+10 🪙</button>
-              <button class="dev-btn" data-dev="coins50">+50 🪙</button>
-              <button class="dev-btn" data-dev="coins1000">+1000 🪙</button>
-            </div>
-          </div>
-          <div class="dev-group">
-            <div class="dev-label">Embers</div>
-            <div class="dev-row dev-equal">
-              <button class="dev-btn" data-dev="embers10">+10 🔥</button>
-              <button class="dev-btn" data-dev="embers50">+50 🔥</button>
-              <button class="dev-btn" data-dev="embers500">+500 🔥</button>
-            </div>
-          </div>
-          <div class="dev-group">
-            <div class="dev-label">Time</div>
-            <div class="dev-row">
-              <button class="dev-btn" data-dev="night">→ Night 🌙</button>
-              <button class="dev-btn" data-dev="day">→ Day ☀</button>
-              <button class="dev-btn dev-danger" data-dev="day10">Day 10 ☠</button>
-              <button class="dev-btn dev-danger" data-dev="day15">Day 15 ☠</button>
-              <button class="dev-btn dev-danger" data-dev="day20">Day 20 ☠</button>
-            </div>
-          </div>
-          <div class="dev-group">
-            <div class="dev-label">Meta</div>
-            <div class="dev-row">
-              <button class="dev-btn dev-danger" data-dev="resetUpgrades">Reset upgrades</button>
-              <button class="dev-btn dev-danger" data-dev="clearLeaderboard">Clear leaderboard</button>
-            </div>
-          </div>
-        </div>
-      </details>
-
-      <details class="dev-section" open>
-        <summary><span>Kingdom</span><small>Base, walls and recovery</small></summary>
-        <div class="dev-section-body">
-          <div class="dev-row">
-            <button class="dev-btn" data-dev="upgradeBase">Upgrade base ⬆</button>
-            <button class="dev-btn dev-danger" data-dev="maxBase">Max base 🏰</button>
-            <button class="dev-btn dev-danger" data-dev="maxWalls">Max walls 🧱</button>
-            <button class="dev-btn" data-dev="fortTier">Fort tier +1 🔮</button>
-          </div>
-        </div>
-      </details>
-
-      <details class="dev-section" open>
-        <summary><span>World</span><small>Switch the active biome</small></summary>
-        <div class="dev-section-body">
-          <div class="dev-group">
-            <div class="dev-label">Biomes</div>
-            <div class="dev-row">
-              <button class="dev-btn" data-dev="biomeForest">Forest</button>
-              <button class="dev-btn" data-dev="biomeFrozen">Frozen Wastes</button>
-              <button class="dev-btn" data-dev="biomeDesert">Desert</button>
-              <button class="dev-btn" data-dev="biomeSwamp">Swamp</button>
-              <button class="dev-btn" data-dev="biomeVolcano">Volcano</button>
-              <button class="dev-btn" data-dev="biomeCorrupted">Corrupted Lands</button>
-            </div>
-          </div>
-        </div>
-      </details>
-
-      <details class="dev-section">
-        <summary><span>Spawn</span><small>Enemies, units and wildlife</small></summary>
-        <div class="dev-section-body">
-          <div class="dev-group">
-            <div class="dev-label">Enemies</div>
-            <div class="dev-row">
-              <button class="dev-btn" data-dev="imp">Imp</button>
-              <button class="dev-btn" data-dev="fireImp">Flying Imp</button>
-              <button class="dev-btn" data-dev="emberBrute">Ember Brute</button>
-              <button class="dev-btn" data-dev="ashPriest">Ash Priest</button>
-              <button class="dev-btn" data-dev="siegeImp">Siege Imp</button>
-              <button class="dev-btn" data-dev="chainImp">Chain Imp</button>
-              <button class="dev-btn" data-dev="8imp">8x Imp</button>
-              <button class="dev-btn" data-dev="dragon">🐉 Dragon</button>
-              <button class="dev-btn" data-dev="magmaGolem">Magma Colossus</button>
-              <button class="dev-btn dev-danger" data-dev="killAll">💀 Kill all</button>
-            </div>
-          </div>
-          <div class="dev-group">
-            <div class="dev-label">The Hollow (phase 2)</div>
-            <div class="dev-row">
-              <button class="dev-btn" data-dev="shade">Shade</button>
-              <button class="dev-btn" data-dev="voidWraith">Void Wraith</button>
-              <button class="dev-btn" data-dev="voidBrute">Hollow Brute</button>
-              <button class="dev-btn" data-dev="voidTitan">Void Titan</button>
-              <button class="dev-btn" data-dev="voidSeraph">Null Seraph</button>
-            </div>
-          </div>
-          <div class="dev-group">
-            <div class="dev-label">Biome bosses</div>
-            <div class="dev-row">
-              <button class="dev-btn" data-dev="forestBoss">Forest Stalker</button>
-              <button class="dev-btn" data-dev="frozenBoss">Skadi's Wrath</button>
-              <button class="dev-btn" data-dev="desertBoss">Dune Broodmother</button>
-              <button class="dev-btn" data-dev="swampBoss">Sunken Behemoth</button>
-              <button class="dev-btn" data-dev="volcanoBoss">Ignited Core</button>
-              <button class="dev-btn" data-dev="corruptedBoss">Void Mind-Flayer</button>
-            </div>
-          </div>
-          <div class="dev-group">
-            <div class="dev-label">Assault & phases</div>
-            <div class="dev-row">
-              <button class="dev-btn" data-dev="startAssault">⚔ Start assault</button>
-              <button class="dev-btn" data-dev="crackPortals">Crack portals</button>
-              <button class="dev-btn dev-danger" data-dev="phase2">🌀 Begin biome shift</button>
-            </div>
-          </div>
-          <div class="dev-group">
-            <div class="dev-label">Units</div>
-            <div class="dev-row dev-equal">
-              <button class="dev-btn" data-dev="unitArcher">🏹 Archer</button>
-              <button class="dev-btn" data-dev="unitBuilder">🔨 Builder</button>
-              <button class="dev-btn" data-dev="unitFarmer">🌾 Farmer</button>
-              <button class="dev-btn" data-dev="unitGuard">🛡️ Guard</button>
-              <button class="dev-btn" data-dev="unitMiner">⛏️ Miner</button>
-            </div>
-          </div>
-          <div class="dev-group">
-            <div class="dev-label">Wildlife</div>
-            <div class="dev-row">
-              <button class="dev-btn" data-dev="deer">🦌 Deer</button>
-              <button class="dev-btn" data-dev="rabbit">🐇 Rabbit</button>
-              <button class="dev-btn" data-dev="duck">🦆 Duck</button>
-              <button class="dev-btn dev-danger" data-dev="bear">🐻 Bear</button>
-            </div>
-          </div>
-        </div>
-      </details>
-
-      <details class="dev-section">
-        <summary><span>Progression</span><small>Levels and skill points</small></summary>
-        <div class="dev-section-body">
-          <div class="dev-row">
-            <button class="dev-btn" data-dev="archerLvl1">🏹 +1 lvl</button>
-            <button class="dev-btn" data-dev="archerLvl5">🏹 +5 lvl</button>
-            <button class="dev-btn" data-dev="guardLvl1">🛡️ +1 lvl</button>
-            <button class="dev-btn" data-dev="guardLvl5">🛡️ +5 lvl</button>
-            <button class="dev-btn" data-dev="skillPts5">+5 skill pts</button>
-            <button class="dev-btn dev-danger" data-dev="archerAllSkills">🏹 All skills</button>
-          </div>
-        </div>
-      </details>
-
-      <details class="dev-section">
-        <summary><span>Player loadout</span><small>Death hub, weapons and armor</small></summary>
-        <div class="dev-section-body">
-          <div class="dev-group">
-            <div class="dev-label">Player</div>
-            <div class="dev-row">
-              <button class="dev-btn dev-danger" data-dev="deathHub">Death hub</button>
-            </div>
-          </div>
-          <div class="dev-group">
-            <div class="dev-label">Weapons</div>
-            <div class="dev-stack" id="dev-weapon-buttons">
-              <button class="dev-btn dev-danger" data-dev="dropWeapon">Drop equipped</button>
-            </div>
-          </div>
-          <div class="dev-group">
-            <div class="dev-label">Armor</div>
-            <div class="dev-stack" id="dev-armor-buttons">
-              <button class="dev-btn dev-danger" data-dev="removeArmor">Remove armor</button>
-            </div>
-          </div>
-          <div class="dev-group">
-            <div class="dev-label">Mounts</div>
-            <div class="dev-stack" id="dev-mount-buttons">
-              <button class="dev-btn dev-danger" data-dev="stableMount">Dismount</button>
-            </div>
-          </div>
-        </div>
-      </details>
+<!-- Dev Tools Panel (toggle with P) -->
+<div id="dev-panel" class="hidden compact-dev" aria-label="Developer tools">
+  <div class="dev-header">
+    <div class="dev-title">
+      <span class="dev-eyebrow">Developer</span>
+      <strong>Tools</strong>
+    </div>
+    <div class="dev-header-actions">
+      <output id="dev-fps" class="dev-fps" aria-label="Frames per second">-- FPS</output>
+      <kbd>P</kbd>
+      <button type="button" id="dev-close" class="dev-close" title="Close dev tools" aria-label="Close dev tools">×</button>
     </div>
   </div>
+
+  <dl id="dev-stats" class="dev-stats" aria-live="polite"></dl>
+
+  <!-- QUICKBAR -->
+  <div class="dev-quickbar dev-button-grid" aria-label="Quick dev controls">
+    <button class="dev-btn" id="dev-profiler-btn" data-dev="profiler">Profiler: ⚫</button>
+    <button class="dev-btn" id="dev-god-btn" data-dev="godMode">God: ⚫</button>
+    <button class="dev-btn" data-dev="healAll">Heal 💚</button>
+    <div class="dev-speed dev-button-grid" role="group" aria-label="Game speed" style="flex-wrap: nowrap;">
+      <button class="dev-btn dev-speed-btn dev-active" id="dev-spd-1" data-dev="speed1">×1</button>
+      <button class="dev-btn dev-speed-btn" id="dev-spd-2" data-dev="speed2">×2</button>
+      <button class="dev-btn dev-speed-btn" id="dev-spd-4" data-dev="speed4">×4</button>
+    </div>
+  </div>
+
+  <!-- SETUP & META -->
+  <details class="dev-section" open>
+    <summary><span>Run setup</span><small>Ressourcer & Tid</small></summary>
+    <div class="dev-section-body dev-button-grid">
+      <button class="dev-btn" data-dev="coins100">+100 🪙</button>
+      <button class="dev-btn" data-dev="embers100">+100 🔥</button>
+      <div class="dev-divider"></div>
+      <button class="dev-btn" data-dev="day">Dag ☀️</button>
+      <button class="dev-btn" data-dev="night">Nat 🌙</button>
+      <button class="dev-btn dev-danger" data-dev="day10">D 10 ☠</button>
+      <button class="dev-btn dev-danger" data-dev="day15">D 15 ☠</button>
+      <button class="dev-btn dev-danger" data-dev="day20">D 20 ☠</button>
+      <div class="dev-divider"></div>
+      <button class="dev-btn dev-danger" data-dev="resetUpgrades">Nulstil Upg.</button>
+      <button class="dev-btn dev-danger" data-dev="clearLeaderboard">Ryd Leaderboard</button>
+    </div>
+  </details>
+
+  <!-- KINGDOM -->
+  <details class="dev-section" open>
+    <summary><span>Kingdom</span><small>Base & Vægge</small></summary>
+    <div class="dev-section-body dev-button-grid">
+      <button class="dev-btn" data-dev="upgradeBase">Upg. Base ⬆</button>
+      <button class="dev-btn dev-danger" data-dev="maxBase">Max Base 🏰</button>
+      <button class="dev-btn dev-danger" data-dev="maxWalls">Max Vægge 🧱</button>
+      <button class="dev-btn" data-dev="fortTier">Fort +1 🔮</button>
+    </div>
+  </details>
+
+  <!-- WORLD -->
+  <details class="dev-section">
+    <summary><span>World</span><small>Skift biom</small></summary>
+    <div class="dev-section-body dev-button-grid">
+      <button class="dev-btn" data-dev="biomeForest">Skov</button>
+      <button class="dev-btn" data-dev="biomeFrozen">Frost</button>
+      <button class="dev-btn" data-dev="biomeDesert">Ørken</button>
+      <button class="dev-btn" data-dev="biomeSwamp">Sump</button>
+      <button class="dev-btn" data-dev="biomeVolcano">Vulkan</button>
+      <button class="dev-btn" data-dev="biomeCorrupted">Korrupt</button>
+    </div>
+  </details>
+
+  <!-- SPAWN (Slået sammen til én massiv og tæt grid) -->
+  <details class="dev-section">
+    <summary><span>Spawn</span><small>Fjender, Bosses & Dyr</small></summary>
+    <div class="dev-section-body">
+      
+      <div class="dev-label">Standard & Bosses</div>
+      <div class="dev-button-grid">
+        <button class="dev-btn" data-dev="imp">Imp</button>
+        <button class="dev-btn" data-dev="fireImp">Flyv. Imp</button>
+        <button class="dev-btn" data-dev="emberBrute">Brute</button>
+        <button class="dev-btn" data-dev="ashPriest">Præst</button>
+        <button class="dev-btn" data-dev="siegeImp">Siege</button>
+        <button class="dev-btn" data-dev="chainImp">Chain</button>
+        <button class="dev-btn" data-dev="8imp">8x Imp</button>
+        <button class="dev-btn" data-dev="dragon">🐉</button>
+        <button class="dev-btn" data-dev="magmaGolem">🌋</button>
+        <button class="dev-btn dev-danger" data-dev="killAll">💀 Kill All</button>
+      </div>
+
+      <div class="dev-label">The Hollow (Phase 2)</div>
+      <div class="dev-button-grid">
+        <button class="dev-btn" data-dev="shade">Shade</button>
+        <button class="dev-btn" data-dev="voidWraith">Wraith</button>
+        <button class="dev-btn" data-dev="voidBrute">H. Brute</button>
+        <button class="dev-btn" data-dev="voidTitan">Titan</button>
+        <button class="dev-btn" data-dev="voidSeraph">Seraph</button>
+      </div>
+
+      <div class="dev-label">Assault & Units</div>
+      <div class="dev-button-grid">
+        <button class="dev-btn" data-dev="startAssault">⚔ Assault</button>
+        <button class="dev-btn" data-dev="crackPortals">Portaler</button>
+        <button class="dev-btn dev-danger" data-dev="phase2">🌀 Phase 2</button>
+        <div class="dev-divider"></div>
+        <button class="dev-btn" title="Archer" data-dev="unitArcher">🏹</button>
+        <button class="dev-btn" title="Builder" data-dev="unitBuilder">🔨</button>
+        <button class="dev-btn" title="Farmer" data-dev="unitFarmer">🌾</button>
+        <button class="dev-btn" title="Guard" data-dev="unitGuard">🛡️</button>
+        <button class="dev-btn" title="Miner" data-dev="unitMiner">⛏️</button>
+        <div class="dev-divider"></div>
+        <div id="dev-animal-buttons" style="display:contents;"></div>
+      </div>
+
+      <!-- Pladsholder til dynamiske biome enemies -->
+      <div id="dev-biome-enemy-buttons" class="dev-button-grid" style="margin-top:4px;"></div>
+    </div>
+  </details>
+
+  <!-- PROGRESSION & LOADOUT -->
+  <details class="dev-section">
+    <summary><span>Progression & Loadout</span><small>Skills & Udstyr</small></summary>
+    <div class="dev-section-body">
+      <div class="dev-button-grid">
+        <button class="dev-btn" data-dev="archerLvl1">🏹 +1</button>
+        <button class="dev-btn" data-dev="archerLvl5">🏹 +5</button>
+        <button class="dev-btn" data-dev="guardLvl1">🛡️ +1</button>
+        <button class="dev-btn" data-dev="guardLvl5">🛡️ +5</button>
+        <button class="dev-btn" data-dev="skillPts5">+5 SP</button>
+        <button class="dev-btn dev-danger" data-dev="archerAllSkills">🏹 Max</button>
+        <div class="dev-divider"></div>
+        <button class="dev-btn dev-danger" data-dev="deathHub">Death Hub</button>
+      </div>
+      
+      <!-- Dynamiske knapper, som dit script tilføjer til -->
+      <div class="dev-button-grid" style="margin-top:4px;">
+        <div id="dev-weapon-buttons" style="display:contents;">
+          <button class="dev-btn dev-danger" data-dev="dropWeapon">Smid Våben</button>
+        </div>
+        <div id="dev-armor-buttons" style="display:contents;">
+          <button class="dev-btn dev-danger" data-dev="removeArmor">Fjern Rustning</button>
+        </div>
+        <div id="dev-mount-buttons" style="display:contents;">
+          <button class="dev-btn dev-danger" data-dev="stableMount">Afstig</button>
+        </div>
+      </div>
+    </div>
+  </details>
+
+</div>
 
   <!-- Mobile touch controls -->
   <div id="touch-controls" class="hidden">
@@ -339,6 +278,6 @@
     </div>
   </div>
 
-  <script type="module" src="src/core/game.js?v=biomeactive1"></script>
+  <script type="module" src="src/core/game.js?v=biomevisual1"></script>
 </body>
 </html>

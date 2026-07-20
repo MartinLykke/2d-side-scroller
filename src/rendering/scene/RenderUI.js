@@ -16,6 +16,7 @@ import { currentShopList, isShopItemOwned, SHOP_COLS } from '../../systems/econo
 import { CASTLE_UPGRADES } from '../../config/castleUpgrades.js';
 import { castleUpgradeCost } from '../../systems/economy/CastleUpgradeSystem.js?v=biomeweapons1';
 import { ensureCastleUpgrades, currentPopCap, currentCoinCap, crownAegisStats } from '../../util/DefenseStats.js';
+import { drawBossPortrait } from './RenderEntities.js?v=biomeactive1';
 
 // ---------- Shared UI helpers ----------
 const GOLD = "#f2c14e";
@@ -952,114 +953,111 @@ export function drawXpBar() {
 }
 
 // ---------- Legendary intro ----------
-function drawLegendaryBossHead(intro, cx, cy, size) {
-  const t = ENEMY_TYPES[intro.bossType];
-  if (!t) return;
-  const T = performance.now() / 1000;
-  const w = size, col = t.color, eye = t.eye;
-  if (intro.bossType === "magmaGolem") {
-    // Match the in-world redesign: a narrow furnace rift and one severe visor
-    // read far more threatening than the generic pair of round boss eyes.
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    ctx.globalAlpha = 0.24 + 0.12 * Math.sin(T * 2.4);
-    const glow = ctx.createRadialGradient(cx, cy, 3, cx, cy, w * 1.08);
-    glow.addColorStop(0, "rgba(255,125,35,0.78)"); glow.addColorStop(1, "rgba(120,10,0,0)");
-    ctx.fillStyle = glow; ctx.beginPath(); ctx.ellipse(cx, cy, w * 0.9, w * 1.04, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-    ctx.save();
-    ctx.fillStyle = "#101318";
-    ctx.beginPath();
-    ctx.moveTo(cx - w * 0.42, cy + w * 0.44); ctx.lineTo(cx - w * 0.48, cy - w * 0.14);
-    ctx.lineTo(cx - w * 0.24, cy - w * 0.58); ctx.lineTo(cx + w * 0.16, cy - w * 0.62);
-    ctx.lineTo(cx + w * 0.44, cy - w * 0.2); ctx.lineTo(cx + w * 0.36, cy + w * 0.46); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = "#333b44";
-    ctx.beginPath();
-    ctx.moveTo(cx - w * 0.33, cy + w * 0.39); ctx.lineTo(cx - w * 0.36, cy - w * 0.08);
-    ctx.lineTo(cx - w * 0.16, cy - w * 0.48); ctx.lineTo(cx + w * 0.11, cy - w * 0.52);
-    ctx.lineTo(cx + w * 0.3, cy - w * 0.14); ctx.lineTo(cx + w * 0.25, cy + w * 0.39); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = "#090b0e";
-    ctx.beginPath(); ctx.moveTo(cx - w * 0.19, cy - w * 0.3); ctx.lineTo(cx + w * 0.22, cy - w * 0.34); ctx.lineTo(cx + w * 0.16, cy - w * 0.21); ctx.lineTo(cx - w * 0.15, cy - w * 0.17); ctx.closePath(); ctx.fill();
-    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.82 + 0.16 * Math.sin(T * 7);
-    ctx.fillStyle = "#ffad48";
-    ctx.beginPath(); ctx.moveTo(cx - w * 0.13, cy - w * 0.265); ctx.lineTo(cx + w * 0.17, cy - w * 0.292); ctx.lineTo(cx + w * 0.12, cy - w * 0.232); ctx.lineTo(cx - w * 0.1, cy - w * 0.208); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = "#f45a21";
-    ctx.beginPath(); ctx.moveTo(cx - w * 0.055, cy - w * 0.1); ctx.lineTo(cx + w * 0.055, cy - w * 0.04); ctx.lineTo(cx + w * 0.02, cy + w * 0.26); ctx.lineTo(cx - w * 0.05, cy + w * 0.14); ctx.closePath(); ctx.fill();
-    ctx.restore();
-    ctx.restore();
-    return;
-  }
-  ctx.save(); ctx.globalCompositeOperation = "lighter";
-  const ag = ctx.createRadialGradient(cx, cy, 4, cx, cy, w * 1.1);
-  ag.addColorStop(0, eye); ag.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.globalAlpha = 0.35 + 0.12 * Math.sin(T * 2); ctx.fillStyle = ag;
-  ctx.beginPath(); ctx.arc(cx, cy, w * 1.1, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-  ctx.fillStyle = col;
-  ctx.beginPath(); ctx.ellipse(cx, cy, w * 0.55, w * 0.65, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = col;
-  const hc = 5;
-  for (let i = 0; i < hc; i++) { const hx = cx + (i / (hc - 1) - 0.5) * w * 0.9, hh = i % 2 === 0 ? w * 0.45 : w * 0.3; ctx.beginPath(); ctx.moveTo(hx - 4, cy - w * 0.6); ctx.lineTo(hx, cy - w * 0.6 - hh); ctx.lineTo(hx + 4, cy - w * 0.6); ctx.fill(); }
-  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = eye;
-  ctx.globalAlpha = 0.7 + 0.25 * Math.sin(T * 4); ctx.beginPath();
-  ctx.ellipse(cx - w * 0.14, cy - w * 0.05, w * 0.13, w * 0.09, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.ellipse(cx + w * 0.14, cy - w * 0.05, w * 0.13, w * 0.09, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.restore(); ctx.fillStyle = eye;
-  ctx.beginPath(); ctx.arc(cx - w * 0.14, cy - w * 0.05, w * 0.05, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(cx + w * 0.14, cy - w * 0.05, w * 0.05, 0, Math.PI * 2); ctx.fill();
-}
+const BOSS_INTRO_DESCS = {
+  legend1: "Stomps the ground and sends a shockwave destroying everything within 200px.",
+  legend2: "Charges up and rushes at lightning speed, crushing everything in its path.",
+  legend3: "Emits a massive void pulse that hits everything within 310px.",
+  magmaGolem: "Armored obsidian shell – hit the glowing core when it opens! Crushes walls and leaves burning pools of magma.",
+  voidTitan: "Sealed void plates halve damage until the star-core opens. Tears gravity scars into the battlefield.",
+  voidSeraph: "A flying ritual horror that fires black-star lances, screams shockwaves and summons the Hollow.",
+  forestStalker: "Rams walls, stuns archers and grows roots through the base. Splinter Bow clears roots; Lumberjack's Hatchet cracks its bark.",
+  skadiWrath: "Deep Freeze makes your strongest wall brittle and Cryo-Shield reflects arrows. Icicle Lance breaks the shield; Blizzard Chime protects archers.",
+  duneBroodmother: "Burrows under the line, breaches near the outer wall and leaves acid rain. Sandstorm Sling makes her big attacks miss.",
+  sunkenBehemoth: "Sucks in coins and defenders, healing from swallowed gold. Acid Blowgun blocks the healing; Gator Maul interrupts the suction.",
+  ignitedCore: "Opens lava cracks and charges a Supernova at half HP. Obsidian Brand and Magma Mortar can interrupt the core.",
+  voidMindflayer: "Possesses archers and decays your gold. Shadow Scythe cuts the control tentacles; Possessed Heart cracks the mask.",
+};
 
+// A cinematic reveal: the actual, full-size boss rises out of a dark band while
+// its name streaks across the screen — no abstract "portrait head" that never
+// matched the real creature.
 export function drawLegendaryIntro() {
   const intro = Game.legendaryIntro;
   if (!intro) return;
   intro.timer -= 1 / 60;
   if (intro.timer <= 0) { Game.legendaryIntro = null; return; }
-  const max = intro.maxTimer;
-  const slideIn = Math.min(1, (max - intro.timer) / 0.6);
-  const fadeOut = intro.timer < 1.2 ? intro.timer / 1.2 : 1;
-  const alpha = Math.min(slideIn, fadeOut);
-  const yOff = (1 - slideIn) * -220;
-  const cx = W / 2, panW = Math.min(620, W - 40), panH = 200;
-  const py = H * 0.12 + yOff;
-
-  ctx.save(); ctx.globalAlpha = alpha;
-  ctx.fillStyle = "rgba(6,4,14,0.92)";
-  roundedRect(cx - panW / 2, py, panW, panH, 16); ctx.fill();
   const ET = ENEMY_TYPES[intro.bossType];
-  if (!ET) { Game.legendaryIntro = null; ctx.restore(); return; }
-  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.5 * alpha;
-  ctx.strokeStyle = ET.eye; ctx.lineWidth = 2;
-  roundedRect(cx - panW / 2, py, panW, panH, 16); ctx.stroke();
+  if (!ET) { Game.legendaryIntro = null; return; }
+  const T = performance.now() / 1000;
+  const max = intro.maxTimer;
+  const inP = Math.min(1, (max - intro.timer) / 0.7);            // rise / fade-in
+  const ease = 1 - Math.pow(1 - inP, 3);
+  const alpha = Math.min(ease, intro.timer < 1.1 ? intro.timer / 1.1 : 1);
+  const eye = ET.eye || "#ff6a4a";
+  const bandY = H * 0.32, bandH = H * 0.42;
+  const cx = W / 2;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // ── dark cinematic band the boss stands in ──
+  const band = ctx.createLinearGradient(0, bandY, 0, bandY + bandH);
+  band.addColorStop(0, "rgba(4,2,10,0)");
+  band.addColorStop(0.18, "rgba(6,3,14,0.86)");
+  band.addColorStop(0.82, "rgba(6,3,14,0.86)");
+  band.addColorStop(1, "rgba(4,2,10,0)");
+  ctx.fillStyle = band;
+  ctx.fillRect(0, bandY, W, bandH);
+  // thin colour rules top & bottom of the band
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = alpha * 0.6;
+  ctx.fillStyle = eye;
+  ctx.fillRect(0, bandY + bandH * 0.16, W, 1.5);
+  ctx.fillRect(0, bandY + bandH * 0.84, W, 1.5);
   ctx.restore();
-  drawLegendaryBossHead(intro, cx - panW / 2 + 110, py + panH / 2, 72);
-  const tx = cx - panW / 2 + 210;
-  ctx.fillStyle = "rgba(255,255,255,0.35)"; ctx.font = "11px Trebuchet MS"; ctx.textAlign = "left";
-  ctx.fillText("⚔ LEGENDARY BOSS APPROACHES", tx, py + 38);
-  ctx.fillStyle = "#f2c14e"; ctx.font = "bold 28px Trebuchet MS";
-  ctx.fillText(ET.name, tx, py + 74);
-  ctx.fillStyle = ET.eye; ctx.font = "13px Trebuchet MS";
-  ctx.fillText("Day " + Game.day + "  ·  Special attack: " + (ET.attackName || ""), tx, py + 98);
-  ctx.fillStyle = "rgba(240,230,210,0.7)"; ctx.font = "12px Trebuchet MS";
-  const descs = {
-    legend1: "Stomps the ground and sends a shockwave destroying everything within 200px.",
-    legend2: "Charges up and rushes at lightning speed, crushing everything in its path.",
-    legend3: "Emits a massive void pulse that hits everything within 310px.",
-    magmaGolem: "Armored obsidian shell – hit the glowing core when it opens! Crushes walls and leaves burning pools of magma.",
-  };
-  descs.voidTitan = "Sealed void plates halve damage until the star-core opens. Tears gravity scars into the battlefield.";
-  descs.voidSeraph = "A flying ritual horror that fires black-star lances, screams shockwaves and summons the Hollow.";
-  descs.forestStalker = "Rams walls, stuns archers and grows roots through the base. Splinter Bow clears roots; Lumberjack's Hatchet cracks its bark.";
-  descs.skadiWrath = "Deep Freeze makes your strongest wall brittle and Cryo-Shield reflects arrows. Icicle Lance breaks the shield; Blizzard Chime protects archers.";
-  descs.duneBroodmother = "Burrows under the line, breaches near the outer wall and leaves acid rain. Sandstorm Sling makes her big attacks miss.";
-  descs.sunkenBehemoth = "Sucks in coins and defenders, healing from swallowed gold. Acid Blowgun blocks the healing; Gator Maul interrupts the suction.";
-  descs.ignitedCore = "Opens lava cracks and charges a Supernova at half HP. Obsidian Brand and Magma Mortar can interrupt the core.";
-  descs.voidMindflayer = "Possesses archers and decays your gold. Shadow Scythe cuts the control tentacles; Possessed Heart cracks the mask.";
-  ctx.fillText(descs[intro.bossType] || "", tx, py + 120);
-  ctx.fillStyle = "rgba(255,255,255,0.1)"; roundedRect(tx, py + 140, panW - 230, 12, 6); ctx.fill();
-  ctx.fillStyle = ET.eye;
-  const barW = (panW - 230) * 0.7;
-  roundedRect(tx, py + 140, barW, 12, 6); ctx.fill();
-  ctx.fillStyle = "rgba(255,255,255,0.5)"; ctx.font = "10px Trebuchet MS"; ctx.textAlign = "left";
-  ctx.fillText("HP: " + ET.hp, tx, py + 168);
+
+  // ── ground glow the boss looms out of ──
+  const floorY = bandY + bandH * 0.86;
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = alpha * (0.4 + 0.12 * Math.sin(T * 3));
+  const gg = ctx.createRadialGradient(cx, floorY, 6, cx, floorY, W * 0.34);
+  gg.addColorStop(0, eye); gg.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = gg;
+  ctx.beginPath(); ctx.ellipse(cx, floorY, W * 0.32, bandH * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  // ── the ACTUAL boss, large, rising into place ──
+  const bossH = bandH * 0.78;
+  const rise = (1 - ease) * bandH * 0.55;      // slides up from below the band
+  const bossCy = floorY - bossH * 0.5 + rise;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  // clip to the band so the rise reads as emerging from the dark
+  ctx.beginPath(); ctx.rect(0, bandY, W, bandH); ctx.clip();
+  drawBossPortrait(intro.bossType, cx, bossCy, bossH);
+  ctx.restore();
+
+  // ── title, streaking in from the side ──
+  const titleX = cx + (1 - ease) * 120;
+  const titleY = bandY - 6;
+  ctx.textAlign = "center";
+  ctx.font = "bold 12px Trebuchet MS";
+  ctx.save(); ctx.globalAlpha = alpha * 0.7;
+  ctx.fillStyle = "rgba(255,255,255,0.6)";
+  ctx.fillText("⚔  L E G E N D A R Y   B O S S  ⚔", cx, titleY - 30);
+  ctx.restore();
+
+  const name = (ET.name || "").toUpperCase();
+  ctx.font = "bold 40px Trebuchet MS";
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.shadowColor = eye; ctx.shadowBlur = 24;
+  ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.fillText(name, titleX + 2, titleY + 2);
+  ctx.fillStyle = "#fff"; ctx.fillText(name, titleX, titleY);
+  ctx.restore();
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = alpha * 0.5;
+  ctx.fillStyle = eye; ctx.fillText(name, titleX, titleY);
+  ctx.restore();
+
+  // ── subtitle line under the band: attack + HP ──
+  const subY = bandY + bandH + 26;
+  ctx.font = "13px Trebuchet MS";
+  ctx.fillStyle = eye;
+  ctx.fillText((ET.attackName ? ET.attackName + "  ·  " : "") + "Day " + Game.day + "  ·  " + ET.hp + " HP", cx, subY);
+  const desc = BOSS_INTRO_DESCS[intro.bossType];
+  if (desc) {
+    ctx.font = "12px Trebuchet MS";
+    ctx.fillStyle = "rgba(240,230,210,0.72)";
+    ctx.fillText(desc, cx, subY + 22);
+  }
   ctx.restore();
 }
 

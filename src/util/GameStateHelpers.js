@@ -4,7 +4,7 @@ import { groundY } from '../core/canvas.js';
 import { Audio } from '../systems/infrastructure/Audio.js';
 import { floaty, spawnParticles } from '../systems/world/SpawnSystem.js';
 import { storeWeapon } from '../systems/economy/InventorySystem.js';
-import { baseName } from '../rendering/HUD.js?v=biomeactive1';
+import { baseName } from '../rendering/HUD.js?v=biomevisual1';
 import { baseMaxHpForLevel } from './DefenseStats.js';
 
 let buildStationsFn = null;

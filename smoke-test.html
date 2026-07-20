@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Smoke Tests - Crown of Embers</title>
+<title>Smoke Tests - Ashen Reign</title>
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; background: #171717; color: #ddd; font: 14px/1.55 Consolas, monospace; padding: 20px; }
@@ -27,7 +27,7 @@
 </head>
 <body>
 <h1>Smoke Tests</h1>
-<p class="subtitle">Crown of Embers - lightweight browser smoke suite</p>
+<p class="subtitle">Ashen Reign - lightweight browser smoke suite</p>
 <div id="controls">
   <button id="run-btn">Run All Tests</button>
   <span id="summary"></span>
@@ -209,8 +209,8 @@ async function testFactoriesAndServices() {
 }
 
 async function testGameBoot() {
-  const saveKey = "kingdom_embers_save_v1";
-  const metaKey = "kingdom_embers_meta_v1";
+  const saveKey = "ashen_reign_save_v1";
+  const metaKey = "ashen_reign_meta_v1";
   const oldSave = localStorage.getItem(saveKey);
   const oldMeta = localStorage.getItem(metaKey);
   let iframe = null;

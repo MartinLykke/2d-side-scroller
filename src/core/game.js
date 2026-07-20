@@ -10,23 +10,26 @@ import { Game, state } from './state.js';
 import { Audio } from '../systems/infrastructure/Audio.js';
 import { keys } from '../systems/input/Input.js';
 import { saveGame, hasSave, loadGame, deleteSave } from '../systems/infrastructure/SaveSystem.js?v=biomeactive1';
-import { updateSpawning, floaty, spawnParticles, spawnAnimal, planNight, spawnEnemy } from '../systems/world/SpawnSystem.js?v=biomeactive1';
+import { updateSpawning, floaty, spawnParticles, spawnAnimal, planNight, spawnEnemy, portalGuardianType } from '../systems/world/SpawnSystem.js?v=biomeactive1';
 import { updatePayment, updateCoins } from '../systems/economy/Economy.js';
 import { updateForestTrees, updateForestCamps } from '../systems/world/ForestSystem.js?v=biomeactive1';
 import { updateMine } from '../systems/world/MineSystem.js';
 import { updateBuildings } from '../systems/world/OutpostSystem.js?v=biomeactive1';
-import { updateUnits, updateAssignments, updateVagrants, updateAnimals, nearestEnemy, updateCaltrops } from '../systems/ai/AI.js?v=biomeactive1';
+import { updateUnits, updateAssignments, updateVagrants, updateAnimals, nearestEnemy, updateCaltrops } from '../systems/ai/AI.js?v=biomevisual1';
 import { updateEnemies, updateArrows, updatePlayerAttack, updateSpells } from '../systems/combat/Combat.js?v=biomeactive1';
 import { updateFirePools } from '../systems/ai/BossAI.js?v=biomeactive1';
 import { updateDyingEnemies } from '../util/EnemyUtils.js?v=biomeactive1';
 
 import { FX, initFX, updateFX as updateFXEffects, biomeAt } from '../rendering/Effects.js?v=biomeactive1';
-import { render, drawEntityShadows } from '../rendering/Renderer.js?v=biomeactive1';
-import { UI, DEV, baseName } from '../rendering/HUD.js?v=biomeactive1';
+import { render, drawEntityShadows } from '../rendering/Renderer.js?v=biomevisual1';
+import { UI, DEV, baseName } from '../rendering/HUD.js?v=biomevisual1';
 import { updateArcherShoot } from '../rendering/sprites/Archer.js';
 
 import { makePlayer } from '../entities/Player.js';
-import { makeWall, wallReady, wallBackDir, wallClimbAnchorX, nearWallClimbAnchor, nearWallClimbAccess, overWallPlatform } from '../entities/Wall.js';
+import {
+  makeWall, wallReady, wallBackDir, wallLayout, wallClimbX,
+  nearWallClimbBottom, nearWallClimbTop
+} from '../entities/Wall.js';
 import { makeUnit } from '../entities/Unit.js';
 
 import { WEAPON_SHOP, ARMOR_SHOP, updateShop, setPickupWeapon as setShopPickupWeapon } from '../systems/economy/ShopSystem.js?v=biomeweapons1';
@@ -39,9 +42,9 @@ import { newGame, buildStations } from '../systems/infrastructure/GameInit.js?v=
 import { initMeta, enterDeathHub, updateHub, updateHubTransition, renderHub, permanentDayLengthBonusSeconds } from '../systems/infrastructure/RoguelikeSystem.js';
 import { applyDifficulty } from '../systems/infrastructure/DifficultySystem.js';
 import { updateLootItems, updateWeaponPickup, updateChests, updateLootPhysics, setPickupWeapon as setLootPickupWeapon } from '../systems/economy/LootSystem.js';
-import { updateAssault, performPhaseShift } from '../systems/world/AssaultSystem.js?v=biomeactive1';
+import { updateAssault, performPhaseShift } from '../systems/world/AssaultSystem.js?v=biomevisual1';
 import { updateFortifications } from '../systems/world/FortificationSystem.js?v=biomeactive1';
-import { setupInputHandlers } from '../systems/input/InputHandler.js?v=biomeactive1';
+import { setupInputHandlers } from '../systems/input/InputHandler.js?v=biomevisual1';
 import { provide } from './services.js';
 // Profiler uses window._perf (set by HUD toggle) to avoid ES module cache issues
 
@@ -231,8 +234,8 @@ function checkDodgeRiposte(player) {
 function nearestPlayerWallAccess(player) {
   let best = null, bd = 1e9;
   for (const w of state.walls) {
-    if (!wallReady(w) || !nearWallClimbAccess(w, player.x)) continue;
-    const d = Math.abs(player.x - wallClimbAnchorX(w));
+    if (!wallReady(w) || !nearWallClimbBottom(w, player.x)) continue;
+    const d = Math.abs(player.x - wallLayout(w).accessBottomX);
     if (d < bd) { bd = d; best = w; }
   }
   return best;
@@ -248,8 +251,9 @@ function updatePlayerWallClimb(player, dt, upHeld, downHeld) {
   }
 
   const accessWall = nearestPlayerWallAccess(player);
-  let wall = wallReady(player.wall) ? player.wall : null;
-  if (!wall || (player.wallClimbT || 0) <= 0.02) wall = accessWall || wall;
+  const oldWall = wallReady(player.wall) ? player.wall : null;
+  const oldT = player.wallClimbT || (player.onWall ? 1 : 0);
+  let wall = oldWall && oldT > 0.02 ? oldWall : accessWall;
 
   if (!wall) {
     player.wall = null;
@@ -268,11 +272,11 @@ function updatePlayerWallClimb(player, dt, upHeld, downHeld) {
   }
 
   const cur = player.wallClimbT || 0;
-  if (upHeld && (accessWall === wall || nearWallClimbAccess(wall, player.x))) player.wallClimbTarget = 1;
-  if (downHeld && cur > 0.02 && (nearWallClimbAnchor(wall, player.x) || (player.climbingWall && (player.wallClimbTarget || 0) === 0))) {
-    player.wallClimbTarget = 0;
+  const midClimb = cur > 0.02 && cur < 0.98;
+  if (upHeld && ((cur <= 0.02 && nearWallClimbBottom(wall, player.x)) || midClimb)) {
+    player.wallClimbTarget = 1;
   }
-  if ((cur > 0.02 || player.onWall) && !overWallPlatform(wall, player.x) && !nearWallClimbAccess(wall, player.x)) {
+  if (downHeld && (midClimb || (cur >= 0.98 && nearWallClimbTop(wall, player.x)))) {
     player.wallClimbTarget = 0;
   }
 
@@ -282,8 +286,7 @@ function updatePlayerWallClimb(player, dt, upHeld, downHeld) {
     const step = PLAYER_WALL_CLIMB_SPEED * dt * Math.sign(target - cur);
     player.wallClimbT = clamp(cur + step, 0, 1);
     if (Math.abs(player.wallClimbT - target) < 0.03) player.wallClimbT = target;
-    const anchorX = wallClimbAnchorX(wall);
-    player.x += (anchorX - player.x) * Math.min(1, dt * 8);
+    player.x = wallClimbX(wall, player.wallClimbT);
     player.vx = 0;
     player.jumpH = 0;
     player.jumpVy = 0;
@@ -294,6 +297,10 @@ function updatePlayerWallClimb(player, dt, upHeld, downHeld) {
 
   player.onWall = (player.wallClimbT || 0) >= 0.98;
   player.climbingWall = movingVertically && !player.onWall;
+  if (player.onWall && (player.wallClimbTarget ?? 1) === 1) {
+    const layout = wallLayout(wall);
+    player.x = clamp(player.x, layout.walkMinX, layout.walkMaxX);
+  }
   if ((player.wallClimbT || 0) <= 0.02 && target === 0 && !upHeld) {
     player.wallClimbT = 0;
     player.onWall = false;
@@ -451,7 +458,7 @@ function updateCamera() {
 function updatePortals() {
   if (Game.isNight) return;
   const { portals, player } = state;
-  const guardianType = (Game.worldPhase || 1) >= 2 ? "shade" : "imp";
+  const guardianType = portalGuardianType();
   for (const p of portals) {
     if (p.destroyed) continue;
     if ((p.lastDayActivated||0) >= Game.day) continue;

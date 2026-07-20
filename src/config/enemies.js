@@ -36,10 +36,10 @@ export const BIOME_ENEMY_POOLS = {
     heavy: "murkAbomination",
   },
   volcano: {
-    basic: "ashFiend",
-    standard: "magmaGargoyle",
-    special: "obsidianJuggernaut",
-    heavy: "obsidianJuggernaut",
+    basic: ["imp", "ashFiend"],
+    standard: ["fireImp", "magmaGargoyle"],
+    special: ["chainImp", "emberBrute", "ashPriest"],
+    heavy: ["siegeImp", "obsidianJuggernaut"],
   },
   corrupted: {
     basic: "shadowStalker",
@@ -50,7 +50,7 @@ export const BIOME_ENEMY_POOLS = {
 };
 
 export const ENEMY_TYPES = {
-  imp: { hp: 6, speed: 95, w: 22, color: "#8f221c", eye: "#ffd060", reward: 1, dmg: 6, baseDmg: 2, meleeDmg: 1 },
+  imp: { hp: 6, speed: 95, w: 22, color: "#8f221c", eye: "#ffd060", reward: 1, dmg: 6, baseDmg: 2, meleeDmg: 1, biome: "volcano" },
   greedlet: {
     name: "Greedlet", hp: 5, speed: 128, w: 20, color: "#6f2118", eye: "#ffd060",
     reward: 1, dmg: 5, baseDmg: 2, meleeDmg: 1, biome: "forest", greed: true,
@@ -69,7 +69,7 @@ export const ENEMY_TYPES = {
     breeder: true, spawnType: "greedlet", spawnInterval: 7.5, spawnCount: 3,
     rangedSiege: true, shootInterval: 5.6, shootRange: 520,
   },
-  fireImp: { name: "Flying Imp", hp: 8, speed: 64, w: 25, color: "#9b2418", eye: "#ffd060", reward: 3, dmg: 9, meleeDmg: 2, flying: true, fireball: true, shootRange: 430, shootInterval: 2.8 },
+  fireImp: { name: "Flying Imp", hp: 8, speed: 64, w: 25, color: "#9b2418", eye: "#ffd060", reward: 3, dmg: 9, meleeDmg: 2, biome: "volcano", flying: true, fireball: true, shootRange: 430, shootInterval: 2.8 },
   frostSprite: {
     name: "Frost-Sprite", hp: 9, speed: 118, w: 22, color: "#bfefff", eye: "#ffffff",
     reward: 2, dmg: 5, baseDmg: 2, meleeDmg: 1, biome: "frozen", wallFreezeOnHit: 5.5,
@@ -143,13 +143,13 @@ export const ENEMY_TYPES = {
   },
   emberBrute: {
     name: "Ember Brute", hp: 45, speed: 46, w: 50, color: "#5a1a10", eye: "#ff8a30",
-    reward: 7, dmg: 11, meleeDmg: 2,
+    reward: 7, dmg: 11, meleeDmg: 2, biome: "volcano",
     charger: true, chargeMin: 5, chargeMax: 8, chargeRangeMin: 140, chargeRangeMax: 420,
     stomper: true, stompMin: 4.5, stompMax: 7, stompRadius: 95,
   },
   ashPriest: {
     name: "Ash Priest", hp: 14, speed: 110, w: 34, color: "#412225", eye: "#ffc060",
-    reward: 4, dmg: 8, baseDmg: 3, meleeDmg: 2,
+    reward: 4, dmg: 8, baseDmg: 3, meleeDmg: 2, biome: "volcano",
     caster: true, shootRange: 520, shootInterval: 3.4,
     ashFireballScale: 2.45, ashFireballRadius: 54, ashFireballSplash: 104, ashFireballDmg: 2,
     scorchRange: 265, scorchInterval: 4.8,
@@ -158,7 +158,7 @@ export const ENEMY_TYPES = {
   },
   chainImp: {
     name: "Chain Imp", hp: 10, speed: 106, w: 22, color: "#5f4436", eye: "#ffd84a",
-    reward: 3, dmg: 2, baseDmg: 1, meleeDmg: 1,
+    reward: 3, dmg: 2, baseDmg: 1, meleeDmg: 1, biome: "volcano",
     // Support unit: hangs back, hooks a grappling chain onto a wall so the imp
     // horde can climb it and vault far faster than building a stack. Physically
     // weak — killing it (or the chain) drops any imps mid-climb.
@@ -166,7 +166,7 @@ export const ENEMY_TYPES = {
   },
   siegeImp: {
     name: "Siege Imp", hp: 58, speed: 34, w: 46, color: "#8a3520", eye: "#ffd060",
-    reward: 9, dmg: 22, baseDmg: 8, meleeDmg: 2,
+    reward: 9, dmg: 22, baseDmg: 8, meleeDmg: 2, biome: "volcano",
     // A huge shield up front deflects frontal arrows; heavy enough to ignore knockback.
     siege: true, shieldBlock: true, noKnockback: true,
     // Scrap platform on its back: loose imps can climb aboard and ride to the walls.
@@ -174,10 +174,10 @@ export const ENEMY_TYPES = {
     // Ram cadence when braced against a wall/gate.
     ramWindup: 0.72, ramInterval: 1.55, ramRange: 58,
   },
-  fireDragon: { name: "Fire Dragon", hp: 320, speed: 88, w: 120, color: "#7a1408", eye: "#ffd060", reward: 70, dmg: 14, meleeDmg: 2, flying: true, boss: true, dragon: true, noKnockback: true, shootInterval: 2.6, attackName: "Fire Breath" },
+  fireDragon: { name: "Fire Dragon", hp: 320, speed: 88, w: 120, color: "#7a1408", eye: "#ffd060", reward: 70, dmg: 14, meleeDmg: 2, biome: "volcano", flying: true, boss: true, dragon: true, noKnockback: true, shootInterval: 2.6, attackName: "Fire Breath" },
   magmaGolem: {
     name: "Magma Colossus", hp: 650, speed: 40, w: 130, color: "#3a2a26", eye: "#ffb040",
-    reward: 130, dmg: 24, meleeDmg: 2,
+    reward: 130, dmg: 24, meleeDmg: 2, biome: "volcano",
     boss: true, golem: true, legendary: true, noKnockback: true, fireImmune: true,
     shootInterval: 7, attackName: "Volcanic Impact",
   },
@@ -270,8 +270,8 @@ export const ENEMY_TYPES = {
   },
 };
 
-// Legacy non-biome bosses. The biome bosses above are chosen from the current
-// active biome, not from this global calendar.
+// Legacy ember bosses, now tied to the volcano theme. The biome bosses above
+// are chosen from the current active biome before this fallback calendar.
 export const BOSS_SCHEDULE = {
   3: "fireDragon",
   6: "magmaGolem",

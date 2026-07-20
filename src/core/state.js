@@ -46,7 +46,7 @@ export const Game = {
   nightPortalWarnT: 0,
   activeBiome: "forest",  // the entire run world uses one biome at a time
   unlockedBiomes: ["forest"],
-  worldPhase: 1,          // 1 = Crown of Embers, 2 = the Hollow (after the final biome)
+  worldPhase: 1,          // 1 = Ashen Reign, 2 = the Hollow (after the final biome)
   phaseTransition: null,  // { t, swapped } while the phase-2 flash plays
   oneSidedNightSide: null, // -1|1 while tonight's attacks only come from one portal side, else null
   oneSidedAnnounce: null,  // { timer, maxTimer, side } banner shown at nightfall
