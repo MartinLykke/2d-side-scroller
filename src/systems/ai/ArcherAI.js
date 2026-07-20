@@ -236,49 +236,110 @@ function guardWallOccupancy(w) {
   ).length;
 }
 
-function wallOccupancy(w) {
-  return Game.wallSlots[w.x] ?? guardWallOccupancy(w);
+function wallOccupancy(w, excludeUnit = null) {
+  const archers = state.units.filter(unit =>
+    unit !== excludeUnit &&
+    unit.role === "archer" &&
+    unit.hp > 0 &&
+    !unit.dying &&
+    unit.wall === w &&
+    Number.isInteger(unit.archerWallSlot)
+  ).length;
+  return guardWallOccupancy(w) + archers;
 }
 
-function reserveWallSlot(w) {
-  if (Game.wallSlots[w.x] == null) Game.wallSlots[w.x] = guardWallOccupancy(w);
-  const slot = Game.wallSlots[w.x]++;
+function reserveWallSlot(u, w) {
   const cap = archerWallCapacity(w);
+  const used = new Set();
+  const guards = guardWallOccupancy(w);
+  for (let slot = 0; slot < guards; slot++) used.add(slot);
+  for (const other of state.units) {
+    if (other === u || other.role !== "archer" || other.hp <= 0 || other.dying || other.wall !== w) continue;
+    if (Number.isInteger(other.archerWallSlot)) used.add(other.archerWallSlot);
+  }
+
+  let slot = u.wall === w && Number.isInteger(u.archerWallSlot) ? u.archerWallSlot : -1;
+  if (slot < guards || used.has(slot)) slot = -1;
+  if (slot < 0) {
+    slot = 0;
+    while (used.has(slot)) slot++;
+    u.archerWallSlot = slot;
+  }
   return { slot, onWall: slot < cap };
 }
 
-function bestArcherWall(side) {
+function bestArcherWall(preferredSide, excludeUnit = null) {
   let best = null, bestScore = 1e9;
   for (const w of state.walls) {
-    if (!w.commissioned || w.hp <= 0 || w.buildProgress < 1 || w.side !== side) continue;
-    const occ = wallOccupancy(w);
+    if (!archerWallReady(w)) continue;
+    const occ = wallOccupancy(w, excludeUnit);
     const cap = archerWallCapacity(w);
-    const overflow = Math.max(0, occ - cap + 1) * 1000;
-    const score = overflow + occ * 40 - dist(w.x, CFG.baseX) * 0.01;
+    const overflow = Math.max(0, occ - cap + 1) * 10000;
+    const sidePenalty = w.side === preferredSide ? 0 : 5;
+    const score = overflow + occ * 100 + sidePenalty - dist(w.x, CFG.baseX) * 0.001;
     if (score < bestScore) { best = w; bestScore = score; }
   }
   return best;
 }
 
+function archerWallReady(w) {
+  return !!(w && w.commissioned && w.hp > 0 && w.buildProgress >= 1 && w.level > 0);
+}
+
+function clearInvalidArcherWall(u) {
+  const wallBroken = u.wall
+    ? !archerWallReady(u.wall)
+    : !!(u.onWall || (u.wallClimbT || 0) > 0.02 || u.wallApproach);
+  const grappleWallBroken = u.grapple && !archerWallReady(u.grapple.wall);
+  if (!wallBroken && !grappleWallBroken) return;
+
+  if (u.combatTarget) clearArcherMelee(u);
+  u.grapple = null;
+  u.grappleLiftY = 0;
+  u.wall = null;
+  u.onWall = false;
+  u.wallClimbT = 0;
+  u.climbingWall = false;
+  u.wallApproach = false;
+  u.archerPostX = null;
+  u.archerWallSlot = null;
+  u.shootState = null;
+  u.shootTimer = 0;
+}
+
+function activeEnemyRemains() {
+  return state.enemies.some(e => e.hp > 0 && !e.dying && !e.fleeing);
+}
+
+function archerDefenseActive() {
+  if (sunsetApproaching()) return true;
+  return Game.isNight && (!Game.nightCleared || activeEnemyRemains());
+}
+
 function assignArcherPost(u, preferredSide, dt) {
-  let wall = bestArcherWall(preferredSide);
-  if (!wall) wall = bestArcherWall(-preferredSide);
+  // Excluding this archer from occupancy makes its current wall look one slot
+  // lighter when the defense is balanced, so it stays put. Only archers on an
+  // overcrowded wall move to the globally least-occupied usable wall.
+  const wall = bestArcherWall(preferredSide, u);
 
   if (wall !== u.wall) {
     u.wallClimbT = 0;
     u.wallApproach = false;
+    u.archerWallSlot = null;
   }
   u.wall = wall;
+  if (wall) u.fixedSide = wall.side;
 
   if (!wall) {
     u.onWall = false;
     u.wallClimbT = 0;
     u.climbingWall = false;
     u.wallApproach = false;
+    u.archerWallSlot = null;
     return CFG.baseX + preferredSide * 110;
   }
 
-  const { slot, onWall: wantOnWall } = reserveWallSlot(wall);
+  const { slot, onWall: wantOnWall } = reserveWallSlot(u, wall);
   const postX = wantOnWall
     ? wallStandX(wall, slot)
     : wall.x + wallBackDir(wall) * (wallRenderWidth(wall) / 2 + wallPlatformDepth(wall) + 30 + (slot - archerWallCapacity(wall)) * 26);
@@ -310,8 +371,10 @@ function assignArcherPost(u, preferredSide, dt) {
   u.wallClimbT = clamp(climbBefore + Math.sign(climbTarget - climbBefore) * ARCHER_CLIMB_SPEED * dt, 0, 1);
   if (Math.abs((u.wallClimbT || 0) - climbTarget) < 0.02) u.wallClimbT = climbTarget;
   u.onWall = u.wallClimbT >= 0.98;
-  u.climbingWall = Math.abs((u.wallClimbT || 0) - climbBefore) > 0.001 && !u.onWall;
-  if ((u.wallClimbT || 0) <= 0.02 || u.onWall) u.climbingWall = false;
+  // Any positive in-between progress belongs to the access route. Treating
+  // the first 2% as ground movement makes the final post pull the archer back
+  // off the ladder every frame, so climb progress can never accumulate.
+  u.climbingWall = !u.onWall && (u.wallClimbT || 0) > 0;
   if (u.climbingWall) {
     if (layout.accessType === "stairs") {
       u.dir = Math.sign(layout.accessTopX - layout.accessBottomX) || u.dir;
@@ -332,6 +395,7 @@ function assignArcherPost(u, preferredSide, dt) {
 function leaveArcherWall(u, dt) {
   if (!u.wall || (u.wallClimbT || 0) <= 0.02) {
     u.wall = null;
+    u.archerWallSlot = null;
     u.wallClimbT = 0;
     u.onWall = false;
     u.climbingWall = false;
@@ -340,6 +404,7 @@ function leaveArcherWall(u, dt) {
   }
   if (!u.wall.commissioned || u.wall.hp <= 0 || u.wall.buildProgress < 1) {
     u.wall = null;
+    u.archerWallSlot = null;
     u.wallClimbT = 0;
     u.onWall = false;
     u.climbingWall = false;
@@ -370,7 +435,44 @@ function leaveArcherWall(u, dt) {
     return false;
   }
   u.wall = null;
+  u.archerWallSlot = null;
   return true;
+}
+
+function updateArcherDefense(u, dt) {
+  if (u.grapple) {
+    updateGrapple(u, dt);
+    return;
+  }
+  if (updateArcherWallMelee(u, dt)) return;
+
+  // Recall always wins over field combat and unfinished shots. Archers can
+  // resume firing as soon as they have reached their reserved defensive post.
+  if (u.combatTarget) clearArcherMelee(u);
+  u.placingTrap = 0;
+
+  const preferredSide = assignFixedSide(u);
+  const post = assignArcherPost(u, preferredSide, dt);
+  const side = u.wall?.side || preferredSide;
+  const settled = !u.climbingWall && !u.wallApproach && Math.abs(u.x - post) <= 6;
+
+  if (!settled) {
+    u.shootState = null;
+    u.shootTimer = 0;
+    if (tryStartGrapple(u, u.wall, post)) return;
+    moveToward(u, post, 200, dt);
+    return;
+  }
+
+  if (u.shootState) return;
+  const sideFoe = nearestThreatOnSide(u.x, ARCHER_NIGHT_SIGHT, side);
+  if (sideFoe && u.cooldown <= 0) {
+    const shootH = u.onWall && u.wall && overWallPlatform(u.wall, u.x) ? wallHeight(u.wall) + 16 : 40;
+    archerShoot(u, u.x, groundY - shootH, sideFoe);
+    u.cooldown = hasSkill("heavy_ballista") ? 2.2 : 0.8;
+    u.dir = Math.sign(sideFoe.x - u.x) || u.dir;
+    u.smokeReveal = 0.5;
+  }
 }
 
 // ── Gold drop ────────────────────────────────────────────────────────────
@@ -403,6 +505,12 @@ function separateFromArchers(u, dt) {
 export function archerAI(u, dt) {
   if ((u.gold || 0) > 0 && dist(u.x, state.player.x) < 120) {
     dropArcherGoldToPlayer(u);
+  }
+
+  clearInvalidArcherWall(u);
+  if (archerDefenseActive()) {
+    updateArcherDefense(u, dt);
+    return;
   }
 
   if (u.grapple) { updateGrapple(u, dt); return; }
@@ -521,41 +629,8 @@ export function archerAI(u, dt) {
     return;
   }
 
-  // Night / dusk
-  if (Game.isNight || sunsetApproaching()) {
-    const side = assignFixedSide(u);
-    const post = assignArcherPost(u, side, dt);
-
-    const sideFoe = nearestThreatOnSide(u.x, ARCHER_NIGHT_SIGHT, side);
-
-    if (sideFoe && u.cooldown <= 0 && !u.climbingWall && !u.wallApproach) {
-      const shootH = u.onWall && u.wall && overWallPlatform(u.wall, u.x) ? wallHeight(u.wall) + 16 : 40;
-      archerShoot(u, u.x, groundY - shootH, sideFoe);
-      u.cooldown = hasSkill("heavy_ballista") ? 2.2 : 0.8;
-      u.dir = Math.sign(sideFoe.x - u.x) || u.dir;
-      u.smokeReveal = 0.5;
-    } else if (!sideFoe && u.cooldown <= 0 && !u.climbingWall && !u.wallApproach) {
-      const prey = nearestAnimal(u.x, ARCHER_HUNT_SHOOT_RANGE);
-      if (prey && prey.type !== "bear") {
-        const shootH = u.onWall && u.wall && overWallPlatform(u.wall, u.x) ? wallHeight(u.wall) + 16 : 40;
-        shootArrow(u.x, groundY - shootH, prey, u);
-        u.cooldown = 1.6;
-        u.dir = Math.sign(prey.x - u.x) || u.dir;
-      } else {
-        if (!sideFoe || dist(u.x, sideFoe.x) > 150) {
-          if (tryStartGrapple(u, u.wall, post)) return;
-          moveToward(u, post, Game.isNight ? 84 : 65, dt);
-        }
-      }
-    } else {
-      if (!sideFoe || dist(u.x, sideFoe.x) > 150) {
-        if (tryStartGrapple(u, u.wall, post)) return;
-        moveToward(u, post, Game.isNight ? 84 : 65, dt);
-      }
-    }
-  }
-  // Day
-  else {
+  // Day / cleared night
+  {
     if (!leaveArcherWall(u, dt)) return;
     const tooClose = nearestEnemy(u.x, 90);
     if (tooClose) {

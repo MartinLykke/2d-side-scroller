@@ -52,7 +52,8 @@ export function moveToward(u, tx, speed, dt) {
 }
 
 export function sunsetApproaching() {
-  return Game.time > 0.48 && Game.time < 0.65 && !Game.isNight;
+  const recallTime = Math.max(0, CFG.phases.day - 0.07);
+  return !Game.isNight && Game.time >= recallTime && Game.time <= CFG.phases.dusk;
 }
 
 export function nearestAnimal(x, range) {
