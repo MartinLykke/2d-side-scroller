@@ -313,6 +313,9 @@ function assignArcherPost(u, preferredSide, dt) {
   u.climbingWall = Math.abs((u.wallClimbT || 0) - climbBefore) > 0.001 && !u.onWall;
   if ((u.wallClimbT || 0) <= 0.02 || u.onWall) u.climbingWall = false;
   if (u.climbingWall) {
+    if (layout.accessType === "stairs") {
+      u.dir = Math.sign(layout.accessTopX - layout.accessBottomX) || u.dir;
+    }
     u.x = wallClimbX(wall, u.wallClimbT);
     u.climbAnim = (u.climbAnim || 0) + dt * 8;
     return u.x;
@@ -360,6 +363,9 @@ function leaveArcherWall(u, dt) {
   u.onWall = false;
   u.climbingWall = u.wallClimbT > 0.02;
   if (u.climbingWall) {
+    if (layout.accessType === "stairs") {
+      u.dir = Math.sign(layout.accessBottomX - layout.accessTopX) || u.dir;
+    }
     u.climbAnim = (u.climbAnim || 0) + dt * 8;
     return false;
   }

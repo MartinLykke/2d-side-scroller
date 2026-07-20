@@ -4,6 +4,7 @@ import { Audio } from '../../systems/infrastructure/Audio.js';
 import { drawBoot } from '../DrawHelpers.js';
 import { biomeHumanoidSkin, unitSkinVariant } from '../BiomeHumanoidSkins.js';
 import { drawClimbPose, isClimbingEntity } from './FriendlyClimb.js';
+import { wallLayout } from '../../entities/Wall.js';
 
 // ---------------------------------------------------------------------------
 // Procedural hooded archer: idle / walk / run / shoot, mirrored for east/west.
@@ -424,7 +425,11 @@ function drawBallistaWeapon(hx, hy, aim, pull, recoil, loaded, P = CB) {
 export function drawArcher(u) {
   const t = performance.now() / 1000;
   const speed = u.moveSpeed || 0;
-  const moving = !!u.moving;
+  const climbT = u.wallClimbT || 0;
+  const walkingStairs = !!(u.wall &&
+    wallLayout(u.wall).accessType === "stairs" &&
+    (u.climbingWall || (climbT > 0.03 && climbT < 0.98)));
+  const moving = !!u.moving || walkingStairs;
   const run = moving && speed > 72;
   const shoot = shootPose(u);
   const anim = u.anim || 0;
@@ -442,7 +447,9 @@ export function drawArcher(u) {
   ctx.translate(u.x, 0);
   if (u.dir < 0) ctx.scale(-1, 1);
 
-  if (isClimbingEntity(u)) {
+  // Stairs use the regular grounded walk cycle. Only vertical ladder access
+  // uses the hand-over-hand climbing pose.
+  if (isClimbingEntity(u) && !walkingStairs) {
     drawClimbPose(u, P, { hood: !ball, helm: ball, plume: ball, cloak: true, quiver: true });
     ctx.restore();
     return;
