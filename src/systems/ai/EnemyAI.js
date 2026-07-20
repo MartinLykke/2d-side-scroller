@@ -566,7 +566,7 @@ function shootEnemyFireball(e, t, target) {
     radius: 28,
   });
   e.shootCd = t.shootInterval || 2.8;
-  e.attackAnim = 0.38;
+  startEnemyAttack(e, 0.38, { kind: t.voidBolt ? "voidCast" : "fireCast", impact: 0.18 });
   spawnParticles(e.x, launchY, 10, t.voidBolt ? "#8a5aff" : "#ff6a20", 42, 40);
   spawnParticles(e.x, launchY, 5, t.voidBolt ? "#b9e8ff" : "#ffd060", 26, 54);
   Audio.bow();
@@ -1633,6 +1633,7 @@ function updateBiomeCommon(e, t, dt) {
   }
 
   if (t.goldEater) {
+    if (e.feedPulse > 0) e.feedPulse = Math.max(0, e.feedPulse - dt);
     e.goldEatCd = (e.goldEatCd || 0) - dt;
     if (e.goldEatCd <= 0) {
       e.goldEatCd = 0.55;
@@ -1647,6 +1648,7 @@ function updateBiomeCommon(e, t, dt) {
         e.hp = Math.min((e.maxHp || t.hp) + 24, (e.hp || 0) + 8 + (c.value || 1));
         e.maxHp = Math.max(e.maxHp || t.hp, e.hp);
         e.w = Math.min((e.w || t.w) + 1.4, (t.w || 70) * 1.25);
+        e.feedPulse = 0.55;
         e.flash = Math.max(e.flash || 0, 0.12);
         spawnParticles(c.x, groundY - 18, 10, t.eye || "#b8ff7a", 44, 68);
         floaty(e.x, "+fed", t.eye || "#b8ff7a", 12);
@@ -1828,6 +1830,7 @@ export function updateEnemies(dt) {
         const arrowY = groundY + (e.fy || -80);
         state.arrows.push({ x: e.x, y: arrowY, vx: Math.sign(player.x - e.x) * 320, vy: 180, target: {x: player.x}, life: 1.5, hitKind: "player" });
         e.shootCd = 2.2;
+        startEnemyAttack(e, 0.34, { kind: "cast", impact: 0.18 });
         Audio.bow();
       }
       if (!Game.inMine && dist(e.x, player.x) < 28 && Math.abs((groundY + (e.fy || -80)) - (groundY - 50 - playerCombatLift())) < 72 && e.attackCd <= 0) {
@@ -1840,6 +1843,7 @@ export function updateEnemies(dt) {
     if (e.flash > 0) e.flash -= dt;
     if (e.attackAnim > 0) e.attackAnim -= dt;
     e.attackCd -= dt;
+    if (e.burrowT > 0) e.burrowT = Math.max(0, e.burrowT - dt);
     if (e.poisonCd !== undefined) e.poisonCd -= dt;
 
     // Imp falling when leaving wall/stack
@@ -2003,7 +2007,10 @@ export function updateEnemies(dt) {
     if (wall && t.burrower && wall.level < 3 && dist(e.x, wall.x) < 34) {
       e.x = wallInsideX(wall);
       e.burrowedWall = wall;
-      e.fy = -4;
+      // Reappear from below the ground after crossing the weak wall. The timer
+      // is update-owned so the emergence continues even while off-screen.
+      e.burrowT = 1.15;
+      e.fy = 0;
       e.aggroPlayer = false;
       spawnParticles(wall.x + wall.side * 12, groundY - 4, 18, "#d8b46a", 70, 38);
       floaty(wall.x, "Burrow!", "#d8b46a", 13);
