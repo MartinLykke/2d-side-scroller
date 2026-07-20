@@ -193,100 +193,230 @@ function drawHead(headX, headY, hurt, armorId = null, P = C) {
   }
 }
 
+function drawBiomeBackSilhouette(P, shX, shY, hipY, headX, headY, moveB, runB, airB, gallop) {
+  const t = performance.now() / 1000;
+  const stride = Math.sin(gallop * 1.4);
+  const flow = -2.5 - moveB * (4 + runB * 6) - airB * 4 + stride * moveB * 1.4 + Math.sin(t * 1.7) * 0.8;
+  ctx.save();
+  ctx.lineCap = "round";
+
+  if (P.detail === "frozen") {
+    // Translucent crystal mantle: long shards make a sovereign silhouette.
+    ctx.save();
+    ctx.globalAlpha = 0.72;
+    ctx.fillStyle = P.accent;
+    for (const [ox, len, w] of [[-7,31,5],[-2,38,6],[4,28,4]]) {
+      ctx.beginPath();
+      ctx.moveTo(shX + ox - w, shY + 3);
+      ctx.lineTo(shX + ox + w, shY + 4);
+      ctx.lineTo(shX + flow * 0.35 + ox, shY + len);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.strokeStyle = P.trim; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(shX - 9, shY + 2); ctx.lineTo(shX + flow * 0.35 - 7, shY + 34); ctx.stroke();
+    ctx.restore();
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = P.glow;
+    for (let i = 0; i < 3; i++) {
+      const a = t * (0.7 + i * 0.12) + i * 2.1;
+      ctx.globalAlpha = 0.35 + i * 0.08;
+      ctx.beginPath(); ctx.arc(shX + Math.cos(a) * (10 + i * 2), shY + 10 + Math.sin(a) * 12, 0.9 + i * 0.2, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  } else if (P.detail === "desert") {
+    // Sun halo and two long royal scarves that stream independently.
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.3;
+    ctx.strokeStyle = P.gold; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(headX - 1, headY - 1, 10, 0, Math.PI * 2); ctx.stroke();
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      ctx.beginPath(); ctx.moveTo(headX - 1 + Math.cos(a) * 12, headY - 1 + Math.sin(a) * 12); ctx.lineTo(headX - 1 + Math.cos(a) * 15, headY - 1 + Math.sin(a) * 15); ctx.stroke();
+    }
+    ctx.restore();
+    for (let i = 0; i < 2; i++) {
+      ctx.strokeStyle = i ? P.accent : P.trim;
+      ctx.lineWidth = i ? 3.2 : 2.5;
+      ctx.beginPath();
+      ctx.moveTo(headX - 4 - i * 2, headY + 2 + i * 2);
+      ctx.bezierCurveTo(shX - 10, shY + 10 + i * 4, shX + flow - 9 - i * 5, hipY + i * 5, shX + flow - 15 - i * 4, groundY - 8 + i * 4);
+      ctx.stroke();
+    }
+  } else if (P.detail === "swamp") {
+    // Bark antlers and dripping moss turn the player into a bog monarch.
+    ctx.strokeStyle = P.goldDk;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(headX - 3, headY - 4); ctx.lineTo(headX - 8, headY - 13); ctx.lineTo(headX - 7, headY - 20);
+    ctx.moveTo(headX - 8, headY - 13); ctx.lineTo(headX - 14, headY - 16);
+    ctx.moveTo(headX + 1, headY - 5); ctx.lineTo(headX + 5, headY - 14); ctx.lineTo(headX + 4, headY - 19);
+    ctx.moveTo(headX + 5, headY - 14); ctx.lineTo(headX + 10, headY - 17);
+    ctx.stroke();
+    ctx.strokeStyle = P.trim; ctx.lineWidth = 2;
+    for (const [ox, len] of [[-8,25],[-3,33],[3,23]]) {
+      ctx.beginPath(); ctx.moveTo(shX + ox, shY + 3); ctx.bezierCurveTo(shX + ox + flow * 0.3, shY + 13, shX + flow + ox, hipY + 8, shX + flow + ox - 2, shY + len); ctx.stroke();
+    }
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = P.accent;
+    for (let i = 0; i < 3; i++) {
+      const a = t * (0.9 + i * 0.1) + i * 2.3;
+      ctx.globalAlpha = 0.28 + Math.sin(t * 3 + i) * 0.08;
+      ctx.beginPath(); ctx.arc(shX - 3 + Math.cos(a) * (13 + i * 2), shY + 11 + Math.sin(a) * 8, 1.25, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  } else if (P.detail === "volcano") {
+    // Obsidian fins frame a molten mantle; drifting embers sell the heat.
+    ctx.fillStyle = P.capeDk;
+    for (const [ox, top, w] of [[-8,-15,5],[-2,-22,6],[5,-12,4]]) {
+      ctx.beginPath(); ctx.moveTo(shX + ox - w, shY + 5); ctx.lineTo(shX + ox, shY + top); ctx.lineTo(shX + ox + w, shY + 5); ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle = P.cape;
+    ctx.beginPath();
+    ctx.moveTo(shX - 6, shY + 2); ctx.lineTo(shX + 4, shY + 3);
+    ctx.bezierCurveTo(shX + flow - 2, shY + 13, shX + flow - 9, hipY + 8, shX + flow - 5, groundY - 2);
+    ctx.lineTo(shX + flow + 2, hipY + 7); ctx.closePath(); ctx.fill();
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = P.glow;
+    for (let i = 0; i < 4; i++) {
+      const rise = (t * (12 + i * 2) + i * 9) % 30;
+      const ex = shX + flow * 0.5 - 8 + i * 5 + Math.sin(t * 3 + i) * 2;
+      ctx.globalAlpha = 0.75 * (1 - rise / 30);
+      ctx.beginPath(); ctx.arc(ex, hipY + 10 - rise, 1.2 + (i % 2) * 0.4, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  } else if (P.detail === "corrupted") {
+    // Broken void halo, floating shards and tentacle-cloak silhouette.
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = P.rune; ctx.lineWidth = 2; ctx.globalAlpha = 0.42;
+    ctx.beginPath(); ctx.arc(headX - 2, headY - 2, 13, -0.2, 1.7); ctx.stroke();
+    ctx.beginPath(); ctx.arc(headX - 2, headY - 2, 13, 2.05, 4.9); ctx.stroke();
+    ctx.restore();
+    ctx.strokeStyle = P.capeLt; ctx.lineWidth = 2.8;
+    for (let i = 0; i < 3; i++) {
+      const wave = Math.sin(t * 2.2 + i * 1.8) * 3;
+      ctx.beginPath();
+      ctx.moveTo(shX - 5 + i * 3, shY + 4);
+      ctx.bezierCurveTo(shX + flow - 5 - i * 3, shY + 11 + wave, shX + flow - 12 + i * 2, hipY + 7, shX + flow - 8 - i * 5, groundY - 4 - i * 3);
+      ctx.stroke();
+    }
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = P.glow;
+    for (let i = 0; i < 4; i++) {
+      const a = t * (0.8 + i * 0.06) + i * Math.PI / 2;
+      const rx = headX - 2 + Math.cos(a) * (15 + (i % 2) * 4);
+      const ry = headY + 2 + Math.sin(a) * 11;
+      ctx.globalAlpha = 0.55;
+      ctx.beginPath(); ctx.moveTo(rx, ry - 3); ctx.lineTo(rx + 2, ry); ctx.lineTo(rx, ry + 3); ctx.lineTo(rx - 2, ry); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 function drawBiomeRegalia(P, shX, shY, hipY, headX, headY, armorId) {
   const detail = P.detail;
+  const t = performance.now() / 1000;
   ctx.save();
   ctx.lineCap = "round";
 
   if (detail === "forest") {
-    // A small living-leaf badge keeps the default woodland model distinct.
+    // Keep the original understated forest model: one living-leaf badge.
     ctx.fillStyle = P.trim;
-    ctx.beginPath();
-    ctx.ellipse(shX + 2.6, shY + 7, 1.8, 3.5, -0.6, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); ctx.ellipse(shX + 2.6, shY + 7, 1.8, 3.5, -0.6, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = P.goldDk;
     ctx.lineWidth = 0.65;
     ctx.beginPath(); ctx.moveTo(shX + 1.4, shY + 9.3); ctx.lineTo(shX + 4, shY + 4.7); ctx.stroke();
   } else if (detail === "frozen") {
-    // Fur collar and an ice-edged crown silhouette.
-    ctx.strokeStyle = P.trim;
-    ctx.lineWidth = 2.2;
-    ctx.beginPath();
-    ctx.moveTo(shX - 5.5, shY + 0.2);
-    ctx.quadraticCurveTo(shX, shY + 5.2, shX + 5.5, shY + 0.2);
-    ctx.stroke();
+    // Ice-blade shoulders, fur gorget, and a tall crystal diadem.
+    ctx.strokeStyle = P.trim; ctx.lineWidth = 2.6;
+    ctx.beginPath(); ctx.moveTo(shX - 6, shY + 0.2); ctx.quadraticCurveTo(shX, shY + 5.6, shX + 6, shY + 0.2); ctx.stroke();
     ctx.fillStyle = P.accent;
-    for (const ox of [-4, 4]) {
+    for (const side of [-1, 1]) {
       ctx.beginPath();
-      ctx.moveTo(shX + ox - 1.2, hipY + 4);
-      ctx.lineTo(shX + ox, hipY + 8);
-      ctx.lineTo(shX + ox + 1.2, hipY + 4);
-      ctx.closePath();
-      ctx.fill();
+      ctx.moveTo(shX + side * 5, shY + 2); ctx.lineTo(shX + side * 11, shY - 6); ctx.lineTo(shX + side * 9, shY + 4); ctx.closePath(); ctx.fill();
     }
+    ctx.fillStyle = P.trim;
+    for (const [ox, h] of [[-4,5],[0,9],[4,6]]) {
+      ctx.beginPath(); ctx.moveTo(headX + ox - 1.5, headY - 6); ctx.lineTo(headX + ox, headY - 6 - h); ctx.lineTo(headX + ox + 1.5, headY - 6); ctx.closePath(); ctx.fill();
+    }
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = P.glow; ctx.globalAlpha = 0.55;
+    ctx.beginPath(); ctx.arc(shX, shY + 8, 2.2 + Math.sin(t * 4) * 0.3, 0, Math.PI * 2); ctx.fill(); ctx.restore();
   } else if (detail === "desert") {
-    // Turquoise sash and sun-disc brooch.
-    ctx.strokeStyle = P.accent;
-    ctx.lineWidth = 2.2;
-    ctx.beginPath(); ctx.moveTo(shX - 4.5, shY + 4); ctx.lineTo(shX + 3.5, hipY + 3.5); ctx.stroke();
+    // Winged gold shoulders, lapis sash, sun disc, and royal face-wrap.
     ctx.fillStyle = P.gold;
-    ctx.beginPath(); ctx.arc(shX + 4.2, shY + 3.2, 1.7, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = P.trim;
-    ctx.lineWidth = 0.8;
-    for (let i = 0; i < 6; i++) {
-      const a = i * Math.PI / 3;
+    for (const side of [-1, 1]) {
       ctx.beginPath();
-      ctx.moveTo(shX + 4.2 + Math.cos(a) * 2.2, shY + 3.2 + Math.sin(a) * 2.2);
-      ctx.lineTo(shX + 4.2 + Math.cos(a) * 3.3, shY + 3.2 + Math.sin(a) * 3.3);
-      ctx.stroke();
+      ctx.moveTo(shX + side * 4.5, shY + 1); ctx.lineTo(shX + side * 12, shY - 2); ctx.lineTo(shX + side * 9, shY + 4); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = P.goldDk; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.moveTo(shX + side * 6, shY + 1); ctx.lineTo(shX + side * 10.5, shY); ctx.stroke();
+    }
+    ctx.strokeStyle = P.accent; ctx.lineWidth = 2.6;
+    ctx.beginPath(); ctx.moveTo(shX - 4.8, shY + 3.5); ctx.lineTo(shX + 3.8, hipY + 4); ctx.stroke();
+    ctx.fillStyle = P.gold;
+    ctx.beginPath(); ctx.arc(shX + 4.4, shY + 3.2, 2.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = P.accent;
+    ctx.beginPath(); ctx.arc(shX + 4.4, shY + 3.2, 0.9, 0, Math.PI * 2); ctx.fill();
+    if (!armorId) {
+      ctx.fillStyle = P.trim;
+      ctx.beginPath(); ctx.moveTo(headX - 5.2, headY - 3.8); ctx.quadraticCurveTo(headX, headY - 7.8, headX + 5.3, headY - 3.8); ctx.lineTo(headX + 4.3, headY - 1.6); ctx.lineTo(headX - 4.8, headY - 1.6); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = P.accent; ctx.fillRect(headX - 4.8, headY + 1.2, 9.4, 1.6);
     }
   } else if (detail === "swamp") {
-    // A vine winds around the cuirass and sprouts a bright marsh leaf.
-    ctx.strokeStyle = P.trim;
-    ctx.lineWidth = 1.1;
-    ctx.beginPath();
-    ctx.moveTo(shX - 4.5, shY + 3);
-    ctx.bezierCurveTo(shX + 5, shY + 5, shX - 4, hipY, shX + 4.5, hipY + 5);
-    ctx.stroke();
-    ctx.fillStyle = P.accent;
-    ctx.beginPath(); ctx.ellipse(shX - 2.5, shY + 8, 1.4, 2.8, 0.7, 0, Math.PI * 2); ctx.fill();
+    // Bark pauldrons, luminous heart-seed, and hanging moss crown.
+    ctx.fillStyle = P.goldDk;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(shX + side * 4, shY + 1); ctx.lineTo(shX + side * 11, shY - 4); ctx.lineTo(shX + side * 9, shY + 5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = P.trim;
+      ctx.beginPath(); ctx.ellipse(shX + side * 9, shY - 1, 1.8, 3.8, side * 0.7, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = P.goldDk;
+    }
+    ctx.strokeStyle = P.trim; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(shX - 4.5, shY + 3); ctx.bezierCurveTo(shX + 5, shY + 5, shX - 4, hipY, shX + 4.5, hipY + 5); ctx.stroke();
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = P.accent; ctx.globalAlpha = 0.75;
+    ctx.beginPath(); ctx.arc(shX, shY + 8, 2.1 + Math.sin(t * 3) * 0.3, 0, Math.PI * 2); ctx.fill(); ctx.restore();
   } else if (detail === "volcano") {
-    // Ember cracks remain visible even when an equipped armor supplies colors.
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    ctx.strokeStyle = P.glow;
-    ctx.lineWidth = 1.05;
-    ctx.beginPath();
-    ctx.moveTo(shX - 1, shY + 2);
-    ctx.lineTo(shX + 1.5, shY + 6);
-    ctx.lineTo(shX - 0.2, shY + 9);
-    ctx.lineTo(shX + 2.8, shY + 13);
-    ctx.stroke();
-    ctx.fillStyle = P.accent;
-    ctx.beginPath(); ctx.arc(shX + 6.5, shY - 1.5, 1.15, 0, Math.PI * 2); ctx.fill();
+    // Obsidian shoulder horns, molten fissures and a horned ember crown.
+    ctx.fillStyle = P.capeDk;
+    for (const side of [-1, 1]) {
+      ctx.beginPath(); ctx.moveTo(shX + side * 4, shY + 2); ctx.lineTo(shX + side * 10, shY - 8); ctx.lineTo(shX + side * 9, shY + 5); ctx.closePath(); ctx.fill();
+    }
+    ctx.fillStyle = P.capeDk;
+    ctx.beginPath(); ctx.moveTo(headX - 4, headY - 5); ctx.lineTo(headX - 8, headY - 13); ctx.lineTo(headX - 1.5, headY - 7); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(headX + 4, headY - 5); ctx.lineTo(headX + 8, headY - 13); ctx.lineTo(headX + 1.5, headY - 7); ctx.closePath(); ctx.fill();
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.strokeStyle = P.glow; ctx.lineWidth = 1.15;
+    ctx.beginPath(); ctx.moveTo(shX - 2, shY + 1); ctx.lineTo(shX + 1.4, shY + 6); ctx.lineTo(shX - 0.5, shY + 9); ctx.lineTo(shX + 3, shY + 14); ctx.stroke();
+    ctx.fillStyle = P.accent2; ctx.beginPath(); ctx.arc(shX + 6.7, shY - 1.8, 1.4, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   } else if (detail === "corrupted") {
-    // The corrupted king wears a luminous broken-circle rune.
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    ctx.strokeStyle = P.rune;
-    ctx.lineWidth = 1.15;
-    ctx.beginPath(); ctx.arc(shX, shY + 8, 3.2, 0.25, Math.PI * 1.72); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(shX - 2.5, shY + 5.8); ctx.lineTo(shX + 2.6, shY + 10.4); ctx.stroke();
+    // Void-crystal pauldrons, split mask, chest rune and floating crown.
+    ctx.fillStyle = P.capeDk;
+    for (const side of [-1, 1]) {
+      ctx.beginPath(); ctx.moveTo(shX + side * 4, shY + 3); ctx.lineTo(shX + side * 11, shY - 9); ctx.lineTo(shX + side * 9, shY + 5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = P.accent;
+      ctx.beginPath(); ctx.moveTo(shX + side * 8, shY); ctx.lineTo(shX + side * 12, shY - 5); ctx.lineTo(shX + side * 10, shY + 2); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = P.capeDk;
+    }
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.strokeStyle = P.rune; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(shX, shY + 8, 3.4, 0.25, Math.PI * 1.72); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(shX - 2.6, shY + 5.7); ctx.lineTo(shX + 2.7, shY + 10.5); ctx.stroke();
     if (!armorId) {
       ctx.fillStyle = P.glow;
-      ctx.beginPath(); ctx.arc(headX + 2.2, headY - 0.5, 1, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(headX + 2.2, headY - 0.5, 1.15, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = P.rune; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(headX - 1, headY - 4); ctx.lineTo(headX + 4.5, headY + 3); ctx.stroke();
+    }
+    for (const [ox, oy] of [[-5,-10],[0,-14],[5,-10]]) {
+      const floatY = Math.sin(t * 2.4 + ox) * 0.8;
+      ctx.fillStyle = P.accent2;
+      ctx.beginPath(); ctx.moveTo(headX + ox, headY + oy - 2 + floatY); ctx.lineTo(headX + ox + 1.8, headY + oy + floatY); ctx.lineTo(headX + ox, headY + oy + 2 + floatY); ctx.lineTo(headX + ox - 1.8, headY + oy + floatY); ctx.closePath(); ctx.fill();
     }
     ctx.restore();
   }
 
   if (P.hollow) {
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    ctx.strokeStyle = P.rune;
-    ctx.globalAlpha = 0.65;
-    ctx.lineWidth = 0.9;
-    ctx.beginPath(); ctx.ellipse(headX, headY - 9.5, 7.5, 2.2, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.strokeStyle = P.rune; ctx.globalAlpha = 0.72; ctx.lineWidth = 1.1;
+    ctx.beginPath(); ctx.ellipse(headX, headY - 11, 8.5, 2.6, 0, 0, Math.PI * 2); ctx.stroke();
+    for (let i = 0; i < 3; i++) {
+      const a = t * 1.3 + i * Math.PI * 2 / 3;
+      ctx.fillStyle = P.glow;
+      ctx.beginPath(); ctx.arc(headX + Math.cos(a) * 8, headY - 11 + Math.sin(a) * 2.3, 1.1, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.restore();
   }
   ctx.restore();
@@ -299,10 +429,13 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
   // boots, trims and (via `gloves`) the bare arms.
   const P = biomeHumanoidSkin("player", p.x, C);
   const outfit = armorOutfit(p.armor);
-  const O = outfit ? { ...P, ...outfit } : P;
+  // Armor is a full-body appearance. Fall back to the neutral player palette
+  // before applying it so no biome color or model detail bleeds through.
+  const B = outfit ? C : P;
+  const O = outfit ? { ...C, ...outfit } : P;
   if (isClimbingEntity(p)) {
     drawClimbPose(p, {
-      skin: P.skin,
+      skin: B.skin,
       tunic: O.tabard,
       tunicLt: O.capeLt,
       pants: O.pants,
@@ -311,11 +444,11 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
       steel: O.armor,
       steelDk: O.armorDk,
       buckle: O.gold,
-      hair: P.hair,
+      hair: B.hair,
       cloak: O.cape,
       cloakDk: O.capeDk,
       accent: O.capeLt,
-      gold: P.gold,
+      gold: B.gold,
     }, {
       armor: true, cape: true, crown: true, scale: 1.06,
       helm: outfit?.headgear === "helm",
@@ -364,7 +497,9 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
   // Legendary/epic outfits radiate an ambient aura behind the whole body.
   if (outfit?.aura) drawArmorAura(p.armor, shX, shY + 8);
 
-  drawCape(shX, shY, hipY, moveB, runB, airB, gallop, O, !!outfit?.longCloak);
+  if (!outfit) drawBiomeBackSilhouette(P, shX, shY, hipY, headX, headY, moveB, runB, airB, gallop);
+  const biomeLongCloak = !outfit && (P.detail === "frozen" || P.detail === "volcano" || P.detail === "corrupted");
+  drawCape(shX, shY, hipY, moveB, runB, airB, gallop, O, !!outfit?.longCloak || biomeLongCloak);
 
   if (riding) {
     // Seated pose: hips rest on the saddle (local groundY - 17), the thigh
@@ -438,7 +573,7 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
   ctx.restore();
 
   // Neck connecting head to torso (drawn first so the cuirass overlaps it).
-  limb(shX + 0.3, shY + 1.5, headX + 0.2, headY + 3.6, P.skin, 3.2);
+  limb(shX + 0.3, shY + 1.5, headX + 0.2, headY + 3.6, B.skin, 3.2);
 
   // Torso: cuirass with side shadow, chest highlight and a center ridge.
   plate(shX, shY, 14, 20, O.armor, O.armorDk);
@@ -512,7 +647,7 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
   // but these base arms give idle/run/jump poses weight.
   const strideSwing = stride * (2.6 + 1.4 * runB);
   const armSwing = (breathe * 0.7 + (strideSwing - breathe * 0.7) * moveB) * (1 - airB) - 3 * airB;
-  const armCol = outfit?.gloves || P.skin;
+  const armCol = outfit?.gloves || B.skin;
   ctx.fillStyle = O.armor;
   ctx.beginPath(); ctx.ellipse(shX - 6.8, shY + 1.6, 3.0, 3.7, -0.3, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.ellipse(shX + 6.8, shY + 1.6, 3.0, 3.7, 0.3, 0, Math.PI * 2); ctx.fill();
@@ -552,7 +687,7 @@ export function drawPlayer(p, dir = p.dir, moving = p.moving, gallop = p.gallop 
   ctx.lineWidth = 0.7;
   ctx.stroke();
 
-  drawHead(headX, headY, hurt, p.armor, P);
-  drawBiomeRegalia(P, shX, shY, hipY, headX, headY, p.armor);
+  drawHead(headX, headY, hurt, p.armor, B);
+  if (!outfit) drawBiomeRegalia(P, shX, shY, hipY, headX, headY, p.armor);
   ctx.restore();
 }

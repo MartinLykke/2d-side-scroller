@@ -210,7 +210,7 @@ const SKINS = {
         detail: "volcano", skin: "#bd8061", hair: "#251916", boots: "#1d1714", leather: "#4b2c20",
         pants: "#302729", armor: "#55484a", armorDk: "#201c20", armorLt: "#9b6654",
         cape: "#8f2d22", capeDk: "#451512", capeLt: "#d95b32", tabard: "#5f3429", tabardDk: "#372323",
-        gold: "#ff9a46", goldDk: "#9a3f22", jewel: "#ffd05a", trim: "#ff9a46", accent: "#ff6a28", glow: "#ff7a36",
+        gold: "#ff9a46", goldDk: "#9a3f22", jewel: "#ffd05a", trim: "#ff9a46", accent: "#ff6a28", accent2: "#ffd35a", glow: "#ff7a36",
       },
     },
     villager: {
@@ -261,7 +261,7 @@ const SKINS = {
         detail: "corrupted", skin: "#baa0b9", hair: "#1b1222", boots: "#19141f", leather: "#382642",
         pants: "#292338", armor: "#504361", armorDk: "#21192c", armorLt: "#8e73a7",
         cape: "#512d72", capeDk: "#231330", capeLt: "#9254c1", tabard: "#493850", tabardDk: "#282130",
-        gold: "#c79aff", goldDk: "#70469a", jewel: "#f078ff", trim: "#b897ff", accent: "#c56bff", glow: "#9f68ff", rune: "#d1a1ff",
+        gold: "#c79aff", goldDk: "#70469a", jewel: "#f078ff", trim: "#b897ff", accent: "#c56bff", accent2: "#e8b2ff", glow: "#9f68ff", rune: "#d1a1ff",
       },
     },
     villager: {
