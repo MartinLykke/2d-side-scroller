@@ -1,4 +1,4 @@
-import { DEV } from '../../rendering/HUD.js?v=biomevisual1';
+import { DEV } from '../../rendering/HUD.js?v=biomevisual4';
 import { inject } from '../../core/services.js';
 
 export function setupDevPanel() {
@@ -38,12 +38,12 @@ export function setupDevPanel() {
   bind('[data-dev="healAll"]',     () => DEV.healAll());
   bind('[data-dev="maxBase"]',     () => DEV.maxBaseLevel());
   bind('[data-dev="maxWalls"]',    () => DEV.maxWallLevels());
-  bind('[data-dev="fortTier"]',    () => DEV.fortTierUp());
 
   // Spawn enemy
   bind('[data-dev="imp"]',          () => DEV.spawnEnemyNearBase('imp'));
   bind('[data-dev="fireImp"]',      () => DEV.spawnEnemyNearBase('fireImp'));
   bind('[data-dev="emberBrute"]',   () => DEV.spawnEnemyNearBase('emberBrute'));
+  bind('[data-dev="brute"]',        () => DEV.spawnEnemyNearBase('brute'));
   bind('[data-dev="ashPriest"]',    () => DEV.spawnEnemyNearBase('ashPriest'));
   bind('[data-dev="siegeImp"]',     () => DEV.spawnEnemyNearBase('siegeImp'));
   bind('[data-dev="chainImp"]',     () => DEV.spawnEnemyNearBase('chainImp'));
@@ -99,6 +99,7 @@ export function setupDevPanel() {
   bind('[data-dev="godMode"]',    () => DEV.toggleGodMode());
   bind('[data-dev="deathHub"]',   () => inject('enterDeathHub')?.('Dev test: the crown fell between worlds.'));
   bind('[data-dev="dropWeapon"]', () => DEV.dropWeapon());
+  bind('[data-dev="generateWeapon"]', () => DEV.spawnGeneratedWeapon());
   bind('[data-dev="removeArmor"]', () => DEV.removeArmor());
   bind('[data-dev="stableMount"]', () => DEV.stableMount());
 

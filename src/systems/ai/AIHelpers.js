@@ -2,9 +2,9 @@ import { CFG } from '../../config/config.js';
 import { dist } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
-import { floaty as showFloaty } from '../world/SpawnSystem.js?v=biomeactive1';
-import { entityWallLift } from '../../entities/Wall.js';
-import { spawnHumanBlood } from '../../util/EnemyUtils.js?v=biomeactive1';
+import { floaty as showFloaty } from '../world/SpawnSystem.js?v=biomeactive4';
+import { entityWallLift, wallReady, wallCritical, bridgeSpan } from '../../entities/Wall.js';
+import { spawnHumanBlood } from '../../util/EnemyUtils.js?v=biomeactive4';
 
 export function floaty(x, text, color) {
   if (typeof text === "string" && text.includes("Unders")) return;
@@ -127,6 +127,60 @@ export function getArcherSideCounts() {
     }
   }
   return { left, right };
+}
+
+// ── Rampart bridge crossing ──────────────────────────────────────────────
+// A defender fleeing a failing or overrun outer wall crosses the elevated
+// bridge straight onto the safer wall closer to the base, instead of
+// climbing down to the ground and walking over. Call from a wall-bound
+// unit's own AI once it decides its current wall is unsafe; returns false
+// (does nothing) when no bridge exists or the inner wall isn't actually safe.
+export function tryStartBridgeFlee(u, fromWall) {
+  if (!fromWall || !u.onWall || (u.wallClimbT || 0) < 0.98) return false;
+  const span = bridgeSpan(fromWall.side, state.walls);
+  if (!span || span.outer !== fromWall || wallCritical(span.inner)) return false;
+  u.bridge = {
+    toWall: span.inner,
+    fromX: u.x, fromY: entityWallLift(u),
+    toX: span.innerX, toY: span.innerY,
+    t: 0,
+  };
+  u.bridgeLiftY = u.bridge.fromY;
+  u.wallApproach = false;
+  u.climbingWall = false;
+  u.shootState = null;
+  u.shootTimer = 0;
+  return true;
+}
+
+// Advances an in-progress bridge crossing. Returns true once the crossing is
+// resolved (arrived, or aborted because the destination wall gave out) —
+// callers should bail out for the rest of this frame while it returns false.
+export function updateBridgeCross(u, dt, speed = 150) {
+  const b = u.bridge;
+  if (!b) return true;
+  if (!wallReady(b.toWall)) {
+    u.bridge = null;
+    u.bridgeLiftY = 0;
+    u.onWall = false;
+    u.wall = null;
+    u.wallClimbT = 0;
+    return true;
+  }
+  const span = Math.abs(b.toX - b.fromX) || 1;
+  b.t = Math.min(1, (b.t || 0) + (speed * dt) / span);
+  u.x = b.fromX + (b.toX - b.fromX) * b.t;
+  u.bridgeLiftY = b.fromY + (b.toY - b.fromY) * b.t;
+  u.dir = Math.sign(b.toX - b.fromX) || u.dir;
+  if (b.t < 1) return false;
+  u.wall = b.toWall;
+  u.onWall = true;
+  u.wallClimbT = 1;
+  u.climbingWall = false;
+  u.wallApproach = false;
+  u.bridge = null;
+  u.bridgeLiftY = 0;
+  return true;
 }
 
 export function assignFixedSide(u) {

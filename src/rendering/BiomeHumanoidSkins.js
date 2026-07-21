@@ -1,5 +1,5 @@
 import { Game } from '../core/state.js';
-import { biomeAt } from './Effects.js?v=biomeactive1';
+import { biomeAt } from './Effects.js?v=biomeactive4';
 
 const HOLLOW_MARKS = {
   player: { hollow: true, rune: "#d7b4ff", glow: "#ad82ff" },

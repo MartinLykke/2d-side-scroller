@@ -3,14 +3,36 @@ import { clamp, dist, rand } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles } from '../world/SpawnSystem.js?v=biomeactive1';
-import { nearestChoppableTree, chopTree, nearestLog, deliverLog } from '../world/ForestSystem.js?v=biomeactive1';
-import { nearestEnemy, moveToward, sunsetApproaching } from './AIHelpers.js?v=biomeactive1';
+import { spawnParticles } from '../world/SpawnSystem.js?v=biomeactive4';
+import { nearestChoppableTree, chopTree, nearestLog, deliverLog } from '../world/ForestSystem.js?v=biomeactive4';
+import { nearestEnemy, moveToward, sunsetApproaching } from './AIHelpers.js?v=biomeactive4';
 
-const BUILDER_TASK_SPEED = 200;
+const BUILDER_TASK_SPEED = 140;
+const BUILDER_CARRY_SPEED = 90;
+const CHOP_STANDOFF = 15; // stop short of the trunk so the swing lands on its edge, not inside it
+
+// Chopping swing: wind-up (0-40%) -> strike (40-52%) -> impact/recoil (52-58%) -> reset (58-100%).
+// Timed independent of wall-clock so it stays in lockstep across framerates.
+const CHOP_SWING_CYCLE = 0.85;
+const CHOP_IMPACT_PHASE = 0.52;
+
+function advanceChopSwing(u, tree, dt) {
+  const impactOffset = CHOP_IMPACT_PHASE * CHOP_SWING_CYCLE;
+  const prevTime = u.chopTime || 0;
+  u.chopTime = prevTime + dt;
+  u.chopSwing = (u.chopTime % CHOP_SWING_CYCLE) / CHOP_SWING_CYCLE;
+  const prevHits = Math.floor((prevTime - impactOffset) / CHOP_SWING_CYCLE + 1e-6);
+  const hits = Math.floor((u.chopTime - impactOffset) / CHOP_SWING_CYCLE + 1e-6);
+  if (hits > prevHits) {
+    tree.chopImpactPulse = 1;
+    spawnParticles(tree.x + rand(-5, 5), groundY - tree.tree.h * 0.42, 3 + Math.floor(Math.random() * 3), "#c9a35f", 75, 95);
+    Audio.build();
+  }
+}
 
 export function builderAI(u, dt) {
   u.working = false;
+  u.chopping = false;
   for (const e of state.enemies) {
     if (e.type !== "imp" || e.hp <= 0 || e.dying || e.fleeing) continue;
     if (dist(u.x, e.x) < 260) { u.panic = Math.max(u.panic || 0, 0.6); break; }
@@ -26,6 +48,7 @@ export function builderAI(u, dt) {
   }
   if (u.panic <= 0) u.bearThreatX = null;
   if (u.panic > 0) {
+    u.waitingTree = null;
     if (u.pendingLog) { u.pendingLog.claimedBy = null; u.pendingLog = null; }
     if (u.carryLog) {
       u.carryLog.x = u.x;
@@ -43,7 +66,7 @@ export function builderAI(u, dt) {
     return;
   }
   if (u.carryLog) {
-    if (moveToward(u, CFG.baseX, BUILDER_TASK_SPEED, dt)) {
+    if (moveToward(u, CFG.baseX, BUILDER_CARRY_SPEED, dt)) {
       deliverLog(u.carryLog);
       u.carryLog = null;
     }
@@ -83,6 +106,20 @@ export function builderAI(u, dt) {
     return;
   }
 
+  if (u.waitingTree) {
+    const wt = u.waitingTree;
+    if (wt.lying) {
+      wt.claimedBy = null;
+      wt.carriedBy = u;
+      wt.lying = false;
+      u.carryLog = wt;
+      u.waitingTree = null;
+    } else if (!wt.falling) {
+      u.waitingTree = null;
+    }
+    return;
+  }
+
   if (u.pendingLog && (u.pendingLog.chopped || u.pendingLog.carriedBy || u.pendingLog.claimedBy !== u)) u.pendingLog = null;
   if (u.pendingLog) {
     const log = u.pendingLog;
@@ -117,9 +154,18 @@ export function builderAI(u, dt) {
     if (dist(u.x, u.targetX) < 8 || Math.random() < 0.004) u.targetX = CFG.baseX + rand(-160, 160);
     moveToward(u, u.targetX, 30, dt); return;
   }
-  if (moveToward(u, tree.x, BUILDER_TASK_SPEED, dt)) {
+  const standAt = tree.x + (u.x < tree.x ? -1 : 1) * CHOP_STANDOFF;
+  if (moveToward(u, standAt, BUILDER_TASK_SPEED, dt)) {
     u.working = true;
+    u.chopping = true;
+    advanceChopSwing(u, tree, dt);
     chopTree(tree, dt, u);
+    if (tree.falling) {
+      u.waitingTree = tree;
+      u.chopping = false;
+      u.chopTime = 0;
+      u.chopSwing = 0;
+    }
   } else {
     tree.beingChopped = false;
   }

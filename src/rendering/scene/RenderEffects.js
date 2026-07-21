@@ -1,7 +1,7 @@
 import { clamp } from '../../util/math.js';
 import { ctx, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
-import { FX } from '../Effects.js?v=biomeactive1';
+import { FX } from '../Effects.js?v=biomeactive4';
 import { visibleWorldBounds } from '../Viewport.js';
 import { renderBudget } from '../RenderFrame.js';
 
@@ -323,6 +323,63 @@ export function drawAegisStrikes() {
     ctx.beginPath();
     ctx.ellipse(s.x2, groundY - 5, 10 + k * (s.r - 10), (10 + k * (s.r - 10)) * 0.28, 0, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// Warwolf Cradle boulders: a spinning stone lobbed along a parabolic arc
+// from the trebuchet to its target, followed by a dusty crater ring on
+// impact. Purely visual — the actual damage already landed in OutpostSystem.
+export function drawTrebuchetShots() {
+  const arr = state.trebuchetShots;
+  if (!arr || !arr.length) return;
+  const now = performance.now() / 1000;
+  const view = visibleWorldBounds(200);
+  for (const s of arr) {
+    const xMin = Math.min(s.x1, s.x2) - 40, xMax = Math.max(s.x1, s.x2) + 40;
+    if (xMax < view.left || xMin > view.right) continue;
+
+    if (!s.impacted) {
+      const k = clamp((now - s.born) / s.life, 0, 1);
+      const arcH = 130 + Math.abs(s.x2 - s.x1) * 0.06;
+      const x = s.x1 + (s.x2 - s.x1) * k;
+      const y = s.y1 + (s.y2 - s.y1) * k - Math.sin(k * Math.PI) * arcH;
+
+      const kb = Math.max(0, k - 0.1);
+      const xb = s.x1 + (s.x2 - s.x1) * kb;
+      const yb = s.y1 + (s.y2 - s.y1) * kb - Math.sin(kb * Math.PI) * arcH;
+      ctx.save();
+      ctx.globalAlpha = 0.3;
+      ctx.strokeStyle = "#8a7a68"; ctx.lineWidth = 3; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(xb, yb); ctx.lineTo(x, y); ctx.stroke();
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(k * 14 + s.seed);
+      ctx.fillStyle = "#4a423a";
+      ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#6b6058";
+      ctx.beginPath(); ctx.arc(1.5, 1.5, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.18)";
+      ctx.beginPath(); ctx.arc(-2.5, -2.5, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      continue;
+    }
+
+    const age = now - s.impactAt;
+    const fade = Math.max(0, 1 - age / 0.6);
+    if (fade <= 0) continue;
+    const growK = clamp(age / 0.25, 0, 1);
+    const ringR = 14 + growK * (s.radius - 14);
+    ctx.save();
+    ctx.globalAlpha = fade * 0.35;
+    ctx.fillStyle = "#7d6a52";
+    ctx.beginPath(); ctx.ellipse(s.x2, s.y2, 22 * (1 - fade * 0.35), 13 * (1 - fade * 0.35), 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = fade * 0.55;
+    ctx.strokeStyle = "#cfae7a";
+    ctx.lineWidth = 3 * fade + 0.5;
+    ctx.beginPath(); ctx.ellipse(s.x2, groundY - 5, ringR, ringR * 0.28, 0, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
   }
 }

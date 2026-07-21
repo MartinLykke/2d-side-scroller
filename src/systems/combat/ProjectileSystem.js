@@ -1,18 +1,18 @@
 import { CFG } from '../../config/config.js';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive1';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive4';
 import { clamp, dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnGoldReward, spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js?v=biomeactive1';
-import { spawnLevelUpBeam } from '../../rendering/Effects.js?v=biomeactive1';
-import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive1';
+import { spawnGoldReward, spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js?v=biomeactive4';
+import { spawnLevelUpBeam } from '../../rendering/Effects.js?v=biomeactive4';
+import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive4';
 import { startArcherShoot, SHOOT_RELEASE_TIME } from '../../rendering/sprites/Archer.js';
 import { entityWallLift } from '../../entities/Wall.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
-import { spawnFirePool, spawnVoidPool } from '../ai/BossAI.js?v=biomeactive1';
-import { damagePlayer } from './PlayerCombat.js?v=biomeactive1';
-import { chainLightning } from './SpellSystem.js?v=biomeactive1';
+import { spawnFirePool, spawnVoidPool } from '../ai/BossAI.js?v=biomeactive4';
+import { damagePlayer } from './PlayerCombat.js?v=biomeactive4';
+import { chainLightning } from './SpellSystem.js?v=biomeactive4';
 import { addSkillPoints } from '../economy/SkillSystem.js';
 import { playerMountLift } from '../economy/MountSystem.js';
 import { animalDef } from '../../config/animals.js';
@@ -251,6 +251,31 @@ function blindDustBurst(ar, primary, index, y) {
   if (blinded > 0) floaty(primary.x, "Blinded x" + blinded, "#d8b46a");
 }
 
+// Shatter Crit: a critical hit fragments into shards that seek out nearby enemies.
+function shatterCritBurst(ar, primary, index, damage, y) {
+  const count = Math.max(1, Math.round(ar.shatterCrit || 0));
+  const radius = 130;
+  const fragDmg = Math.max(1, Math.round(damage * 0.45));
+  const col = ar.upgradeCol || "#e0f0ff";
+  let hit = 0;
+  spawnParticles(primary.x, y, 10, col, 60, 90);
+  spawnParticles(primary.x, y, 5, "#ffffff", 40, 100);
+  const start = enemyIndexStart(index, primary.x - radius);
+  for (let ni = start; ni < index.length && hit < count; ni++) {
+    const ne = index[ni];
+    if (ne.x > primary.x + radius) break;
+    if (ne === primary || ne.fleeing || ne.dying || ne.hp <= 0 || dist(ne.x, primary.x) > radius) continue;
+    ne.hp -= fragDmg;
+    ne.flash = Math.max(ne.flash || 0, 0.12);
+    spawnParticles(ne.x, groundY + (ne.fy || 0) - 24, 5, col, 34, 50);
+    spawnImpBlood(ne, 0.4 + fragDmg * 0.05, groundY + (ne.fy || 0) - 24);
+    floaty(ne.x, "-" + fragDmg, col);
+    if (ne.hp <= 0) killEnemyWithAnimation(ne, Math.sign(ne.x - primary.x) || 1);
+    hit++;
+  }
+  if (hit > 0) floaty(primary.x, "Shatter x" + hit, col);
+}
+
 function splinterArrowBurst(ar, primary, index, damage, y) {
   const count = ar.splinterCount || 0;
   if (!count) return;
@@ -479,8 +504,10 @@ export function updateArrows(dt) {
           const crit = applyCrit(baseDmg, CFG.critChance + (ar.critBonus || 0), CFG.critMultiplier);
           stickArrowInEnemy(e, ar, enemyDrawY);
           e.hp -= crit.damage; e.flash = 0.12; Audio.hit();
-          if (crit.isCrit) critFloaty(e.x, crit.damage);
-          else floaty(e.x, "-" + crit.damage, "#8a2a4a");
+          if (crit.isCrit) {
+            critFloaty(e.x, crit.damage);
+            if (ar.shatterCrit) shatterCritBurst(ar, e, enemyXIndex, crit.damage, enemyDrawY);
+          } else floaty(e.x, "-" + crit.damage, "#8a2a4a");
           spawnImpBlood(e, ar.powered || ar.ballista ? 1.7 : 1, enemyDrawY);
           if (ar.fireArrow) {
             e.burn = Math.max(e.burn || 0, 4);
@@ -622,7 +649,7 @@ export function updateArrows(dt) {
                 dmg: ar.dmg, dmgMult: ar.dmgMult, critBonus: ar.critBonus,
                 playerShot: ar.playerShot, powered: ar.powered,
                 explosiveR: ar.explosiveR, explosiveFrac: ar.explosiveFrac,
-                gravityChance: ar.gravityChance, chainBounces: ar.chainBounces,
+                gravityChance: ar.gravityChance, chainBounces: ar.chainBounces, shatterCrit: ar.shatterCrit,
                 splinterCount: ar.splinterCount, splinterRadius: ar.splinterRadius, splinterDmgFrac: ar.splinterDmgFrac,
                 poisonArrow: ar.poisonArrow, poisonDmg: ar.poisonDmg, acidPool: ar.acidPool,
                 sandBlind: ar.sandBlind, sandBlindRadius: ar.sandBlindRadius, slowHit: ar.slowHit,
@@ -694,7 +721,7 @@ export function updateArrows(dt) {
     if (!hit && ar.hitKind === "player") {
       const playerY = playerBlastY(player);
       const hitRadius = ar.ashFireball ? (ar.radius || 54) : 18;
-      const hitHeight = ar.ashFireball ? 62 : 50;
+      const hitHeight = ar.ashFireball ? 62 : 28;
       if (dist(ar.x, player.x) < hitRadius && Math.abs(ar.y - playerY) < hitHeight) {
         if (ar.ashFireball) {
           detonateAshFireball(ar);

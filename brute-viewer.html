@@ -1,0 +1,2333 @@
+<title>Brute &mdash; procedural rig</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --ground:   #12101A;
+    --panel:    #1A1723;
+    --panel-hi: #221E2D;
+    --edge:     #2E2939;
+    --ink:      #CBC2D4;
+    --ink-dim:  #857C93;
+    --ink-faint:#5C5568;
+    --ember:    #FF6A1E;
+    --ember-hi: #FFD9A8;
+    --mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", "SF Mono", Consolas, monospace;
+    --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    margin: 0;
+    padding: 0 20px 64px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1140px; margin: 0 auto; }
+
+  /* ---- header ---- */
+  header {
+    display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 28px;
+    padding: 40px 0 22px;
+    border-bottom: 1px solid var(--edge);
+  }
+  .eyebrow {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .22em;
+    text-transform: uppercase; color: var(--ink-faint); margin: 0 0 6px;
+  }
+  h1 {
+    font-size: clamp(38px, 7vw, 62px); line-height: .92; margin: 0;
+    font-weight: 800; letter-spacing: .1em; text-wrap: balance;
+    color: var(--ink);
+  }
+  h1 .glow { color: var(--ember); }
+  .lede {
+    margin: 0; max-width: 46ch; color: var(--ink-dim); font-size: 14px;
+    padding-bottom: 5px;
+  }
+
+  /* ---- main split ---- */
+  .split {
+    display: grid; grid-template-columns: minmax(0,1fr) 268px; gap: 22px;
+    margin-top: 26px; align-items: start;
+  }
+  @media (max-width: 880px) { .split { grid-template-columns: minmax(0,1fr); } }
+
+  .stage {
+    background:
+      radial-gradient(120% 90% at 50% 88%, #1D1926 0%, #131019 62%, #0E0C14 100%);
+    border: 1px solid var(--edge);
+    border-radius: 3px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stage canvas { display: block; width: 100%; height: auto; }
+  .stamp {
+    position: absolute; top: 12px; left: 14px;
+    font-family: var(--mono); font-size: 10px; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--ink-faint); pointer-events: none;
+  }
+  .stamp b { color: var(--ember); font-weight: 500; }
+
+  /* ---- control rail ---- */
+  .rail { display: flex; flex-direction: column; gap: 18px; }
+  .group { display: flex; flex-direction: column; gap: 7px; }
+  .group > h2 {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .2em;
+    text-transform: uppercase; color: var(--ink-faint);
+    margin: 0 0 3px; font-weight: 500;
+  }
+
+  .motion {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    background: var(--panel); color: var(--ink-dim);
+    border: 1px solid transparent; border-left: 2px solid var(--edge);
+    border-radius: 0 2px 2px 0;
+    padding: 8px 11px; font-family: var(--mono); font-size: 12px;
+    transition: background .12s, color .12s, border-color .12s;
+  }
+  .motion:hover { background: var(--panel-hi); color: var(--ink); }
+  .motion[aria-pressed="true"] {
+    background: var(--panel-hi); color: var(--ember-hi);
+    border-left-color: var(--ember);
+  }
+  .motion .k { display: block; color: var(--ink-faint); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+  .motion[aria-pressed="true"] .k { color: var(--ember); }
+
+  .row { display: flex; gap: 7px; }
+  .btn {
+    flex: 1; cursor: pointer; background: var(--panel); color: var(--ink-dim);
+    border: 1px solid var(--edge); border-radius: 2px; padding: 7px 4px;
+    font-family: var(--mono); font-size: 11px; letter-spacing: .08em;
+    transition: background .12s, color .12s, border-color .12s;
+  }
+  .btn:hover { background: var(--panel-hi); color: var(--ink); }
+  .btn[aria-pressed="true"] { color: var(--ember-hi); border-color: var(--ember); }
+
+  input[type=range] {
+    width: 100%; accent-color: var(--ember); background: transparent; margin: 2px 0;
+  }
+  :is(.btn, .motion, input):focus-visible {
+    outline: 2px solid var(--ember); outline-offset: 2px;
+  }
+
+  /* ---- telemetry ---- */
+  .tel {
+    font-family: var(--mono); font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+    border: 1px solid var(--edge); border-radius: 2px; background: var(--panel);
+  }
+  .tel div {
+    display: flex; justify-content: space-between; gap: 10px;
+    padding: 5px 11px; border-bottom: 1px solid var(--edge);
+  }
+  .tel div:last-child { border-bottom: 0; }
+  .tel span:first-child { color: var(--ink-faint); }
+  .tel span:last-child { color: var(--ember-hi); }
+
+  /* ---- contact sheet ---- */
+  .sheet-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; margin: 40px 0 12px;
+    border-top: 1px solid var(--edge); padding-top: 22px;
+  }
+  .sheet-head h2 {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .2em;
+    text-transform: uppercase; color: var(--ink-faint); margin: 0; font-weight: 500;
+  }
+  .sheet-head p { margin: 0; color: var(--ink-dim); font-size: 13.5px; max-width: 62ch; }
+  .sheet-scroll { overflow-x: auto; padding-bottom: 6px; }
+  .sheet { display: flex; gap: 1px; background: var(--edge); border: 1px solid var(--edge); min-width: min-content; }
+  .cell { background: #131019; display: flex; flex-direction: column; }
+  .cell canvas { display: block; }
+  .cell .cap {
+    font-family: var(--mono); font-size: 10px; letter-spacing: .1em;
+    color: var(--ink-faint); padding: 5px 8px 7px; border-top: 1px solid var(--edge);
+    display: flex; justify-content: space-between; gap: 8px;
+  }
+  .cell .cap b { color: var(--ember); font-weight: 500; }
+
+  footer {
+    margin-top: 44px; padding-top: 20px; border-top: 1px solid var(--edge);
+    color: var(--ink-faint); font-size: 12.5px; font-family: var(--mono);
+    display: flex; flex-wrap: wrap; gap: 6px 20px;
+  }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <p class="eyebrow">Ashen Reign &middot; sprites/Brute.js</p>
+      <h1>THE&nbsp;BR<span class="glow">U</span>TE</h1>
+    </div>
+    <p class="lede">
+      Every frame below is drawn live from the shipping rig &mdash; capsules, arcs and
+      two-bone IK, no sprite sheets. Pick a motion; scrub it frame by frame.
+    </p>
+  </header>
+
+  <div class="split">
+    <div class="stage">
+      <div class="stamp">MOTION <b id="stamp-name">idle</b> &nbsp;&middot;&nbsp; <b id="stamp-phase">0.00</b></div>
+      <canvas id="stage" width="1040" height="880"></canvas>
+    </div>
+
+    <div class="rail">
+      <div class="group">
+        <h2>Motion</h2>
+        <div id="motions"></div>
+      </div>
+
+      <div class="group">
+        <h2>Transport</h2>
+        <div class="row">
+          <button class="btn" id="play" aria-pressed="true">PAUSE</button>
+          <button class="btn" id="flip">FLIP</button>
+        </div>
+        <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Scrub through the motion" />
+        <div class="row">
+          <button class="btn spd" data-spd="0.15">.15&times;</button>
+          <button class="btn spd" data-spd="0.5">.5&times;</button>
+          <button class="btn spd" data-spd="1" aria-pressed="true">1&times;</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <h2>Rig readout</h2>
+        <div class="tel">
+          <div><span>squashY</span><span id="t-sq">1.000</span></div>
+          <div><span>stretchX</span><span id="t-st">1.000</span></div>
+          <div><span>leanAngle</span><span id="t-ln">0.000</span></div>
+          <div><span>overreach</span><span id="t-ov">1.000</span></div>
+          <div><span>attackPhase</span><span id="t-p">0.00</span></div>
+          <div><span>breathe</span><span id="t-br">0.00</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sheet-head">
+    <div>
+      <h2>Contact sheet</h2>
+      <p id="sheet-note">Key poses sampled across the motion.</p>
+    </div>
+  </div>
+  <div class="sheet-scroll"><div class="sheet" id="sheet"></div></div>
+
+  <footer>
+    <span>capsules + arcs only</span>
+    <span>2-bone analytic IK</span>
+    <span>layer order: back limbs &rarr; FX &rarr; torso &rarr; head &rarr; front limbs</span>
+  </footer>
+</div>
+
+<script type="module">
+import { Brute as ShippingBrute } from './src/rendering/sprites/Brute.js?v=impstyle1';
+// ---------------------------------------------------------------------------
+// Brute â€” procedural heavy melee monster.
+//
+// Built purely from stroked capsules, arcs and ellipses (no authored paths).
+// Follows the ProceduralEnemy contract: all *timing* lives in update(), draw()
+// only reads the resolved pose. Every component brackets itself in
+// save()/restore() so no component can leak transform or composite state.
+//
+// Layer order is strict:
+//   0. contact shadow
+//   1. back arm + back leg   (desaturated, solveIK)
+//   2. effects  (drawTail â€” shockwaves, dust, embers)
+//   3. torso    (breatheCycle + bodyBob)
+//   4. head     (small, hunched, overlapping the torso)
+//   5. front leg + front arm (brighter, solveIK)
+//
+// Local space: origin at the feet, -y is up, +x is forward. Mirroring is done
+// once by draw() via ctx.scale(facing, 1), so all pose math is facing-agnostic.
+// ---------------------------------------------------------------------------
+
+// ---- palette --------------------------------------------------------------
+// Red devil. Every fleshy surface is a lit face fading to a dark crimson edge,
+// so the gradients themselves carry the muscle volume; bone (horns, spines,
+// claws, joint caps) is a warm brown that reads clearly against the red, and
+// molten orange/gold is reserved for internal fire and ground impacts.
+const COL = {
+  // flesh â€” front-facing
+  skin:       '#9E2A2B', // primary lava-red mass
+  skinLit:    '#C8483B', // lit crown of a muscle
+  skinDeep:   '#5E1718', // dark crimson edge
+  muscle:     '#7C1F20', // secondary definition ellipses
+  // flesh â€” back-facing limbs, pushed down into shadow
+  skinBack:   '#5E1718',
+  skinBackLit:'#7E2223',
+  skinBackDeep:'#380D0E',
+  // bone
+  bone:       '#4A3A2C',
+  boneLit:    '#8A7358',
+  boneTip:    '#CBBA95',
+  // fire
+  molten0:    '#FF7F11',
+  molten1:    '#FFD700',
+  eyeCore:    '#FFF4D6',
+  eyeGlow:    '#FF3A0A',
+  // structure â€” NO black anywhere on the body. Separation between overlapping
+  // masses comes from value: each shape's gradient falls to `edgeDeep` at its
+  // rim, so a limb crossing the torso reads as a dark red seam, not an inked
+  // cartoon outline. Creases are crimson.
+  edgeDeep:   '#3E0C0D', // darkest flesh tone, used at every silhouette rim
+  crease:     '#4A0D0D', // inner muscle creases and wrinkles
+  socket:     '#2A0809', // eye socket interior (deepest recess on the body)
+  rock:       '#241416', // volcanic debris
+  shadow:     '#12080A', // ground shadow only â€” never on the body
+};
+
+// ---- proportions ----------------------------------------------------------
+// Barrel torso, tiny hunched head, tree-trunk legs, gorilla arms that outreach
+// the legs by a wide margin.
+// The torso bottom must clear the hips, or the legs vanish behind the mass;
+// the head must clear the torso top, or it reads as a lump on the shoulder.
+//   torso spans  cyÂ±ry  = -164 .. -72     hips at -78, so the legs stay visible
+//   head bottom  -158                     just overlapping the torso top
+const P = {
+  pelvisY: -78, hipX: 18,
+  torsoCY: -118, torsoRX: 52, torsoRY: 46,
+  shoulderY: -150, shoulderFX: 22, shoulderBX: -20,
+  // headR drives the whole skull path; it has to hold its own against the
+  // shoulder wedge or the head reads as a knob stuck on a boulder.
+  headX: 28, headY: -180, headR: 27,
+  thigh: 42, shin: 42,
+  upperArm: 62, foreArm: 66,
+};
+
+// Height of the foot from sole to ankle joint. Pose targets address the SOLE
+// (foot.y === 0 means "standing on the floor"), so the drawn ankle is lifted by
+// this much and the foot path puts every contact point back down on the target.
+const ANKLE_LIFT = 14;
+
+// Minimum elbow bend, in radians (~26Â°). Enforced at draw time so an arm never
+// locks out into a straight cylinder at rest.
+const MIN_ELBOW_FLEX = 0.45;
+
+// How long each strike takes, end to end. attackPhase is stateTime / this.
+const DUR = {
+  throw:   1.05,
+  siege0:  0.95, // overhead slam
+  siege1:  1.35, // knockback stomp (holds a beat mid-lift)
+  melee0:  0.80, // knockback backhand sweep
+  melee1:  0.90, // hammer-fist
+};
+
+// ---- small math -----------------------------------------------------------
+const clamp   = (v, a, b) => (v < a ? a : v > b ? b : v);
+const clamp01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
+const lerp    = (a, b, t) => a + (b - a) * t;
+const ease    = p => { p = clamp01(p); return p * p * (3 - 2 * p); };
+// Fast out, slow in â€” the shape of a heavy thing committing to a blow.
+const easeOut = p => { p = clamp01(p); return 1 - (1 - p) * (1 - p) * (1 - p); };
+// Windowed pulse, peaks at 1 in the middle of [a,b], zero outside.
+const pulse = (p, a, b) => (p <= a || p >= b ? 0 : Math.sin(((p - a) / (b - a)) * Math.PI));
+// Framerate-independent exponential approach.
+const approach = (cur, tgt, rate, dt) => cur + (tgt - cur) * (1 - Math.exp(-rate * dt));
+
+/**
+ * Two-bone analytic IK. Returns the joint and the *reachable* end point: when
+ * the target is out of range the chain locks straight instead of stretching,
+ * so a limb never visually snaps apart. `invertKnee` picks the bend side.
+ */
+function solveTwoBoneIK(startX, startY, targetX, targetY, bone1Len, bone2Len, invertKnee) {
+  const dx = targetX - startX, dy = targetY - startY;
+  const dist = Math.hypot(dx, dy) || 1e-4;
+  const maxD = bone1Len + bone2Len - 1e-3;
+  const minD = Math.abs(bone1Len - bone2Len) + 1e-3;
+  const d = clamp(dist, minD, maxD);
+
+  const ux = dx / dist, uy = dy / dist;
+  const handX = startX + ux * d, handY = startY + uy * d;
+
+  // Law of cosines for the shoulder/hip interior angle.
+  const cosA = clamp((bone1Len * bone1Len + d * d - bone2Len * bone2Len) / (2 * bone1Len * d), -1, 1);
+  const a = Math.acos(cosA);
+  const base = Math.atan2(uy, ux);
+  const jointAngle = base + a * (invertKnee ? -1 : 1);
+
+  return {
+    elbowX: startX + Math.cos(jointAngle) * bone1Len,
+    elbowY: startY + Math.sin(jointAngle) * bone1Len,
+    handX, handY,
+    // 0..1+ â€” how close to locked-out the chain is. Drives tendon strain.
+    strain: clamp01(dist / (bone1Len + bone2Len)),
+  };
+}
+
+// ---- drawing primitives ---------------------------------------------------
+// Every primitive is gradient-shaded. The light is a single key from the upper
+// front, so limbs get a lit stripe running just off their spine axis and masses
+// get a hot spot up and forward of centre â€” that alone reads as volume.
+
+/** Blend two #rrggbb colours, t=0 â†’ a, t=1 â†’ b. */
+function mix(a, b, t) {
+  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+  const r = Math.round(((pa >> 16) & 255) * (1 - t) + ((pb >> 16) & 255) * t);
+  const g = Math.round(((pa >> 8) & 255) * (1 - t) + ((pb >> 8) & 255) * t);
+  const bl = Math.round((pa & 255) * (1 - t) + (pb & 255) * t);
+  return `rgb(${r},${g},${bl})`;
+}
+
+/**
+ * Muscle capsule: a stroked segment whose gradient runs *across* the bone axis,
+ * so the limb reads as a cylinder rather than a flat lozenge.
+ */
+function capsule(ctx, x1, y1, x2, y2, w, lit, edge) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1e-4;
+  const nx = -dy / len, ny = dx / len;   // unit normal to the segment
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  const h = w * 0.5;
+
+  // Seven stops. These rim tones do the job the black stroke used to: the form
+  // falls to the darkest flesh red at both edges and lifts off-centre, so it
+  // separates from whatever it overlaps purely through value.
+  const mid = mix(lit, edge, 0.55);
+  const g = ctx.createLinearGradient(mx - nx * h, my - ny * h, mx + nx * h, my + ny * h);
+  g.addColorStop(0.00, COL.edgeDeep);
+  g.addColorStop(0.10, edge);
+  g.addColorStop(0.28, mid);
+  g.addColorStop(0.44, lit);    // lit stripe sits off-centre, not down the middle
+  g.addColorStop(0.74, mid);
+  g.addColorStop(0.91, edge);
+  g.addColorStop(1.00, COL.edgeDeep);
+
+  ctx.save();
+  ctx.strokeStyle = g;
+  ctx.lineWidth = w;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** Flat capsule, for the few places that must not pick up shading. */
+function capsuleFlat(ctx, x1, y1, x2, y2, w, col) {
+  ctx.save();
+  ctx.strokeStyle = col;
+  ctx.lineWidth = w;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * Volumetric mass. Drawn as a unit circle under a scale transform so the radial
+ * gradient stretches with the ellipse instead of staying stubbornly circular.
+ */
+function blob(ctx, x, y, rx, ry, rot, lit, edge) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  ctx.scale(rx, ry);
+  const g = ctx.createRadialGradient(-0.30, -0.40, 0.05, 0, 0, 1.15);
+  g.addColorStop(0.00, lit);
+  g.addColorStop(1.00, edge);
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(0, 0, 1, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Point on a cubic bezier â€” used to walk the back contour for spine ridges. */
+function bezPt(p0, p1, p2, p3, t) {
+  const u = 1 - t, a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
+  return { x: a * p0.x + b * p1.x + c * p2.x + d * p3.x,
+           y: a * p0.y + b * p1.y + c * p2.y + d * p3.y };
+}
+
+/**
+ * Tapered limb segment: a closed path that is *wider at the root than the tip*
+ * with an optional outward bulge, so an upper arm reads as a bicep swelling
+ * into a narrow elbow rather than a uniform tube.
+ *
+ *   bulge  0 = straight taper, >0 pushes the outer edge out at ~40% along
+ */
+function limbTaper(ctx, x1, y1, x2, y2, w1, w2, lit, edge, bulge = 0) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.hypot(dx, dy) || 1e-4;
+  const ux = dx / len, uy = dy / len;
+  const nx = -uy, ny = ux;
+  const a = Math.atan2(uy, ux);
+  const h1 = w1 * 0.5, h2 = w2 * 0.5;
+
+  const build = (g1, g2) => {
+    ctx.beginPath();
+    ctx.moveTo(x1 + nx * g1, y1 + ny * g1);
+    // Outer edge, bulging toward the root.
+    ctx.quadraticCurveTo(
+      x1 + ux * len * 0.40 + nx * (g1 * (1 + bulge)),
+      y1 + uy * len * 0.40 + ny * (g1 * (1 + bulge)),
+      x2 + nx * g2, y2 + ny * g2);
+    ctx.arc(x2, y2, g2, a + Math.PI / 2, a - Math.PI / 2, true);   // tip cap
+    // Inner edge, flatter than the outer one.
+    ctx.quadraticCurveTo(
+      x1 + ux * len * 0.40 - nx * (g1 * (1 + bulge * 0.35)),
+      y1 + uy * len * 0.40 - ny * (g1 * (1 + bulge * 0.35)),
+      x1 - nx * g1, y1 - ny * g1);
+    ctx.arc(x1, y1, g1, a - Math.PI / 2, a + Math.PI / 2, false);  // root cap
+    ctx.closePath();
+  };
+
+  ctx.save();
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, hm = (h1 + h2) * 0.5;
+  const mid = mix(lit, edge, 0.55);
+  const g = ctx.createLinearGradient(mx - nx * hm, my - ny * hm, mx + nx * hm, my + ny * hm);
+  g.addColorStop(0.00, COL.edgeDeep);
+  g.addColorStop(0.10, edge);
+  g.addColorStop(0.28, mid);
+  g.addColorStop(0.44, lit);
+  g.addColorStop(0.74, mid);
+  g.addColorStop(0.91, edge);
+  g.addColorStop(1.00, COL.edgeDeep);
+  ctx.fillStyle = g;
+  build(h1, h2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/** Bone cap â€” joint plate at an elbow or knee. */
+function bonePlate(ctx, x, y, r, rot = 0) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rot);
+  const g = ctx.createRadialGradient(-r * 0.32, -r * 0.38, r * 0.08, 0, 0, r);
+  g.addColorStop(0.00, COL.boneLit);
+  g.addColorStop(0.72, COL.bone);
+  g.addColorStop(1.00, COL.edgeDeep);
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+  // A single scored line so the cap reads as plate, not sphere.
+  ctx.strokeStyle = 'rgba(74,13,13,0.55)';
+  ctx.lineWidth = Math.max(1, r * 0.14);
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 0.58, Math.PI * 0.15, Math.PI * 1.05);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * Claw. Built from lineTo + quadraticCurveTo so it tapers to a real point, with
+ * a gradient running baseâ†’tip and scored segment lines across the shaft.
+ * Drawn in local space: base at the origin, curving out along +x.
+ */
+function claw(ctx, len, w, curl = 0.42) {
+  ctx.save();
+  const g = ctx.createLinearGradient(0, 0, len, 0);
+  g.addColorStop(0.00, COL.bone);
+  g.addColorStop(0.58, COL.boneLit);
+  g.addColorStop(1.00, COL.boneTip);
+  ctx.fillStyle = g;
+
+  ctx.beginPath();
+  ctx.moveTo(0, -w * 0.50);
+  ctx.quadraticCurveTo(len * 0.58, -w * (0.40 + curl * 0.20), len, -w * 0.05);
+  ctx.lineTo(len, w * 0.05);
+  ctx.quadraticCurveTo(len * 0.52, w * (0.46 - curl * 0.10), 0, w * 0.50);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(74,13,13,0.6)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i <= 2; i++) {
+    const t = i / 3, taper = 1 - t * 0.62;
+    ctx.beginPath();
+    ctx.moveTo(len * t, -w * 0.46 * taper);
+    ctx.lineTo(len * t, w * 0.48 * taper);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * Horn â€” a tapering curved spike laid down as a run of overlapping filled arcs
+ * along a circular sweep, so the curve stays smooth without an authored path.
+ */
+function horn(ctx, ox, oy, a0, a1, R, r0) {
+  ctx.save();
+  const steps = 18;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const a = lerp(a0, a1, t);
+    const px = ox + Math.cos(a) * R;
+    const py = oy + Math.sin(a) * R;
+    const rr = r0 * (1 - t * 0.93);
+    if (rr <= 0.2) break;
+    const g = ctx.createRadialGradient(px - rr * 0.35, py - rr * 0.35, rr * 0.1, px, py, rr);
+    g.addColorStop(0.00, t > 0.62 ? COL.boneTip : COL.boneLit);
+    g.addColorStop(1.00, t > 0.82 ? COL.bone : mix(COL.bone, COL.crease, 0.5));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(px, py, rr, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/**
+ * Back spine â€” a jagged bone blade with a molten core, suggesting fire venting
+ * through the ridge. `h` is height above the hide, `w` the half-width of its base.
+ */
+function spine(ctx, x, y, ang, h, w) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(ang);
+
+  // Bone blade, deliberately asymmetric so the row reads as ragged.
+  const bg = ctx.createLinearGradient(0, 0, 0, -h);
+  bg.addColorStop(0.00, mix(COL.bone, COL.crease, 0.55));
+  bg.addColorStop(0.45, COL.bone);
+  bg.addColorStop(1.00, COL.boneLit);
+  ctx.fillStyle = bg;
+  ctx.beginPath();
+  ctx.moveTo(-w, 0);
+  ctx.lineTo(-w * 0.42, -h * 0.52);
+  ctx.lineTo(-w * 0.16, -h * 0.33);   // the jag
+  ctx.lineTo(0, -h);
+  ctx.lineTo(w * 0.26, -h * 0.38);
+  ctx.lineTo(w * 0.56, -h * 0.58);
+  ctx.lineTo(w, 0);
+  ctx.closePath();
+  ctx.fill();
+
+  // Molten core venting up the centre of the blade.
+  const mg = ctx.createLinearGradient(0, 0, 0, -h);
+  mg.addColorStop(0.00, COL.molten0);
+  mg.addColorStop(1.00, COL.molten1);
+  ctx.fillStyle = mg;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.30, 0);
+  ctx.lineTo(0, -h * 0.74);
+  ctx.lineTo(w * 0.30, 0);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+// ---------------------------------------------------------------------------
+
+class Brute {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.facing = 1;
+
+    // idle | walk | throw | siege | melee
+    this.state = 'idle';
+    this.attackVariation = 0;   // 0 or 1 â€” alternates each strike
+    this.attackPhase = 0;       // 0..1 across windup â†’ impact â†’ recovery
+
+    // --- procedural drivers -------------------------------------------------
+    this.time = Math.random() * 100; // desync from other brutes
+    this.runCycle = Math.random() * Math.PI * 2;
+    this.breatheCycle = 0;
+    this.moveAmt = 0;           // 0..1 smoothed exertion
+
+    // --- body transforms ----------------------------------------------------
+    this.squashY = 1;
+    this.stretchX = 1;
+    this.leanAngle = 0;
+    this.bodyBob = 0;
+    this.torsoLift = 0;         // extra rise/drop on top of the gait bob
+    this.overreach = 1;         // >1 momentarily over-extends the arm chain
+
+    // --- IK targets (local space) ------------------------------------------
+    this.handF = { x: 48, y: -20 };
+    this.handB = { x: -40, y: -16 };
+    this.footF = { x: 15, y: 0 };
+    this.footB = { x: -16, y: 0 };
+
+    // --- reactive extras ----------------------------------------------------
+    this.headTuck = 0;          // 0 = neutral, 1 = jammed down into the chest
+    this.jawOpen = 0;
+    this.eyeFlare = 0;          // spikes on impact
+    this.shock = 0;             // shockwave ring life, 1 â†’ 0
+    this.shockX = 0;
+    this.dust = 0;
+  }
+
+  /** Begin a strike. Call from the AI; update() drives the rest. */
+  setState(state, variation) {
+    this.state = state;
+    if (variation === undefined) this.attackVariation ^= 1; // alternate
+    else this.attackVariation = variation & 1;
+    this.attackPhase = 0;
+  }
+
+  /** Full duration of the current strike, so attackPhase is real time-based. */
+  attackDuration() {
+    if (this.state === 'throw') return DUR.throw;
+    if (this.state === 'siege') return this.attackVariation ? DUR.siege1 : DUR.siege0;
+    if (this.state === 'melee') return this.attackVariation ? DUR.melee1 : DUR.melee0;
+    return 0;
+  }
+
+  // =========================================================================
+  // UPDATE â€” owns every bit of timing. draw() adds nothing.
+  // =========================================================================
+  update(dt, velocityX, stateTime) {
+    dt = Math.min(dt, 0.05);
+    this.time += dt;
+
+    const speed = Math.abs(velocityX);
+    const attacking = this.state === 'throw' || this.state === 'siege' || this.state === 'melee';
+
+    if (!attacking && speed > 6) this.facing = velocityX < 0 ? -1 : 1;
+
+    // 1. Procedural drivers ---------------------------------------------------
+    // Slow and deep: a full breath takes ~5.7s and visibly swells the barrel.
+    this.breatheCycle = Math.sin(this.time * 1.1);
+    // Very slow, heavy steps â€” a low multiplier keeps strides long at speed.
+    this.runCycle += speed * dt * 0.042;
+    this.moveAmt = approach(this.moveAmt, clamp01(speed / 46), 6, dt);
+
+    const dur = this.attackDuration();
+    this.attackPhase = dur > 0 ? clamp01(stateTime / dur) : 0;
+    const p = this.attackPhase;
+
+    // 2. Resolve pose targets -------------------------------------------------
+    const t = this._restPose();
+    let blend = 12; // how eagerly the body chases the target pose
+
+    switch (this.state) {
+      case 'throw':  this._poseThrow(t, p);        blend = 26; break;
+      case 'siege':  this.attackVariation ? this._poseStomp(t, p) : this._poseSlam(t, p); blend = 30; break;
+      case 'melee':  this.attackVariation ? this._poseHammer(t, p) : this._poseSweep(t, p); blend = 30; break;
+      case 'walk':   this._poseWalk(t);            blend = 16; break;
+      default:       this._poseIdle(t);            break;
+    }
+
+    // 3. Smooth toward the pose ------------------------------------------------
+    this.bodyBob   = approach(this.bodyBob,   t.bob,      blend, dt);
+    this.torsoLift = approach(this.torsoLift, t.lift,     blend, dt);
+    this.squashY   = approach(this.squashY,   t.squashY,  blend, dt);
+    this.stretchX  = approach(this.stretchX,  t.stretchX, blend, dt);
+    this.leanAngle = approach(this.leanAngle, t.lean,     blend, dt);
+    this.headTuck  = approach(this.headTuck,  t.tuck,     blend, dt);
+    this.jawOpen   = approach(this.jawOpen,   t.jaw,      blend, dt);
+    this.overreach = approach(this.overreach, t.overreach, blend, dt);
+
+    for (const [cur, tgt] of [[this.handF, t.handF], [this.handB, t.handB],
+                              [this.footF, t.footF], [this.footB, t.footB]]) {
+      cur.x = approach(cur.x, tgt.x, blend, dt);
+      cur.y = approach(cur.y, tgt.y, blend, dt);
+    }
+
+    // 4. Impact reactions ------------------------------------------------------
+    if (t.impact > 0 && this.shock <= 0.01) {
+      this.shock = 1;
+      this.shockX = t.impactX;
+      this.dust = 1;
+      this.eyeFlare = 1;
+    }
+    this.shock     = Math.max(0, this.shock - dt * 2.0);
+    this.dust      = Math.max(0, this.dust - dt * 1.6);
+    this.eyeFlare  = Math.max(0, this.eyeFlare - dt * 2.8);
+  }
+
+  // ---- pose builders -------------------------------------------------------
+  // Each returns targets in local space. Neutral first, then each state
+  // overwrites only what it cares about.
+
+  _restPose() {
+    const breath = this.breatheCycle;
+    return {
+      bob: 0, lift: 0, squashY: 1, stretchX: 1, lean: 0, tuck: 0, jaw: 0,
+      overreach: 1, impact: 0, impactX: 0,
+      handF: { x: 48, y: -20 + breath * 2 },
+      handB: { x: -40, y: -16 + breath * 2 },
+      footF: { x: 15, y: 0 },
+      footB: { x: -16, y: 0 },
+    };
+  }
+
+  _poseIdle(t) {
+    const b = this.breatheCycle;
+    // Knuckles planted, weight rocking almost imperceptibly.
+    t.bob  = b * 1.6;
+    t.lean = b * 0.012;
+    t.handF.x = 48 + b * 2;
+    t.handB.x = -40 - b * 1.5;
+    t.tuck = 0.15 + b * 0.05;
+  }
+
+  _poseWalk(t) {
+    const c = this.runCycle, m = this.moveAmt;
+    const stride = 26 * m, lift = 15 * m;
+    const sf = Math.sin(c), sb = Math.sin(c + Math.PI);
+
+    // Heavy dips: the body drops hardest as each foot takes the load.
+    t.bob  = -Math.abs(Math.cos(c)) * 9 * m + this.breatheCycle * 1.2;
+    t.lean = 0.09 * m + Math.sin(c * 2) * 0.02 * m;
+
+    t.footF.x = 15 + sf * stride;
+    t.footF.y = -Math.max(0, sf) * lift;
+    t.footB.x = -16 + sb * stride;
+    t.footB.y = -Math.max(0, sb) * lift;
+
+    // Gorilla knuckle-walk: hands swing counter to the legs and stay low.
+    t.handF.x = 48 - sf * 18 * m;
+    t.handF.y = -20 - Math.max(0, -sf) * 12 * m;
+    t.handB.x = -40 - sb * 16 * m;
+    t.handB.y = -16 - Math.max(0, -sb) * 10 * m;
+
+    // Shoulders roll, so the mass squashes a touch on each plant.
+    t.squashY  = 1 - Math.abs(Math.cos(c)) * 0.05 * m;
+    t.stretchX = 1 + Math.abs(Math.cos(c)) * 0.04 * m;
+    t.tuck = 0.35 * m;
+  }
+
+  // throw â€” front arm sweeps from the floor, up over the head, snaps forward.
+  _poseThrow(t, p) {
+    // One continuous arc around the shoulder, described in polar coords:
+    // 0 rad = straight forward, negative = up (canvas y grows downward).
+    let ang, rad, lean;
+    if (p < 0.45) {              // scoop from the floor behind
+      const k = ease(p / 0.45);
+      ang  = lerp(2.55, -1.75, k);
+      rad  = lerp(102, 96, k);
+      lean = lerp(0, -0.20, k);
+    } else if (p < 0.62) {       // over the top, whipping forward
+      const k = easeOut((p - 0.45) / 0.17);
+      ang  = lerp(-1.75, -0.10, k);
+      rad  = lerp(96, 116, k);   // arm straightens through the release
+      lean = lerp(-0.20, 0.24, k);
+    } else {                     // follow-through, arm falls back to a drag
+      const k = ease((p - 0.62) / 0.38);
+      ang  = lerp(-0.10, 0.55, k);
+      rad  = lerp(116, 100, k);
+      lean = lerp(0.24, 0, k);
+    }
+
+    t.handF.x = P.shoulderFX + Math.cos(ang) * rad;
+    t.handF.y = P.shoulderY  + Math.sin(ang) * rad;
+    t.lean = lean;
+    t.bob  = p < 0.45 ? -p * 6 : 0;
+    t.lift = p > 0.45 && p < 0.7 ? -5 : 0;
+    t.tuck = p < 0.45 ? 0.4 : -0.25;
+    t.jaw  = pulse(p, 0.45, 0.75);
+    // Braced back leg absorbs the throw.
+    t.footB.x = -22 - ease(clamp01(p / 0.5)) * 8;
+    t.handB.x = -30;
+    t.squashY  = 1 - pulse(p, 0.45, 0.7) * 0.06;
+    t.stretchX = 1 + pulse(p, 0.45, 0.7) * 0.07;
+  }
+
+  // siege v0 â€” two-handed overhead slam.
+  _poseSlam(t, p) {
+    if (p < 0.40) {                       // rise: both hands high, body stretches up
+      const k = ease(p / 0.40);
+      t.handF.x = lerp(48, 30, k);  t.handF.y = lerp(-20, -212, k);
+      t.handB.x = lerp(-40, 6, k);  t.handB.y = lerp(-16, -204, k);
+      t.squashY = lerp(1, 1.15, k);
+      t.stretchX = lerp(1, 0.88, k);
+      t.lift = lerp(0, -14, k);
+      t.lean = lerp(0, -0.13, k);
+      t.tuck = -0.5 * k;
+      t.jaw = k * 0.7;
+    } else if (p < 0.54) {                // SLAM straight down
+      const k = easeOut((p - 0.40) / 0.14);
+      t.handF.x = lerp(30, 50, k);  t.handF.y = lerp(-212, -6, k);
+      t.handB.x = lerp(6, 30, k);   t.handB.y = lerp(-204, -2, k);
+      t.squashY = lerp(1.15, 0.76, k);
+      t.stretchX = lerp(0.88, 1.26, k);
+      t.lift = lerp(-14, 16, k);
+      t.lean = lerp(-0.13, 0.20, k);
+      t.tuck = lerp(-0.5, 0.9, k);
+      t.jaw = 1;
+      if (p >= 0.50) { t.impact = 1; t.impactX = 40; }
+    } else {                              // recovery: mass rebounds, hands drag back
+      const k = ease((p - 0.54) / 0.46);
+      t.handF.x = lerp(50, 48, k);  t.handF.y = lerp(-6, -20, k);
+      t.handB.x = lerp(30, -40, k); t.handB.y = lerp(-2, -16, k);
+      t.squashY = lerp(0.76, 1, k);
+      t.stretchX = lerp(1.26, 1, k);
+      t.lift = lerp(16, 0, k);
+      t.lean = lerp(0.20, 0, k);
+      t.tuck = lerp(0.9, 0.15, k);
+      t.jaw = 1 - k;
+    }
+    // Feet spread wide and dig in for the whole motion.
+    t.footF.x = 24; t.footB.x = -24;
+  }
+
+  // siege v1 â€” knockback stomp. Loads onto the back leg, lifts the front knee
+  // impossibly high, holds a beat, then drives it down.
+  _poseStomp(t, p) {
+    if (p < 0.30) {                       // load onto the back leg
+      const k = ease(p / 0.30);
+      t.footF.x = lerp(15, 26, k);  t.footF.y = lerp(0, -96, k); // knee into the chest
+      t.footB.x = lerp(-16, -8, k);
+      t.lean = lerp(0, -0.20, k);
+      t.lift = lerp(0, -8, k);
+      t.squashY = lerp(1, 1.08, k);
+      t.stretchX = lerp(1, 0.93, k);
+      t.handF.x = lerp(48, 44, k);  t.handF.y = lerp(-20, -96, k); // arms flare for balance
+      t.handB.x = lerp(-40, -50, k); t.handB.y = lerp(-16, -92, k);
+      t.tuck = -0.3 * k;
+    } else if (p < 0.50) {                // hold the beat â€” nothing moves but breath
+      t.footF.x = 26; t.footF.y = -96 + this.breatheCycle * 1.5;
+      t.footB.x = -8;
+      t.lean = -0.20; t.lift = -8;
+      t.squashY = 1.08; t.stretchX = 0.93;
+      t.handF.x = 44; t.handF.y = -96;
+      t.handB.x = -50; t.handB.y = -92;
+      t.tuck = -0.3; t.jaw = 0.5;
+    } else if (p < 0.60) {                // STOMP
+      const k = easeOut((p - 0.50) / 0.10);
+      t.footF.x = lerp(26, 36, k);  t.footF.y = lerp(-96, 0, k);
+      t.footB.x = -12;
+      t.lean = lerp(-0.20, 0.12, k);
+      t.lift = lerp(-8, 12, k);
+      t.squashY = lerp(1.08, 0.78, k);
+      t.stretchX = lerp(0.93, 1.24, k);
+      t.handF.x = lerp(44, 40, k);  t.handF.y = lerp(-96, -16, k);
+      t.handB.x = lerp(-50, -34, k); t.handB.y = lerp(-92, -14, k);
+      t.tuck = lerp(-0.3, 0.8, k);
+      t.jaw = 1;
+      if (p >= 0.56) { t.impact = 1; t.impactX = 36; }
+    } else {                              // recovery
+      const k = ease((p - 0.60) / 0.40);
+      t.footF.x = lerp(36, 15, k);
+      t.footB.x = lerp(-12, -16, k);
+      t.lean = lerp(0.12, 0, k);
+      t.lift = lerp(12, 0, k);
+      t.squashY = lerp(0.78, 1, k);
+      t.stretchX = lerp(1.24, 1, k);
+      t.handF.x = lerp(40, 48, k);  t.handF.y = lerp(-16, -20, k);
+      t.handB.x = lerp(-34, -40, k); t.handB.y = lerp(-14, -16, k);
+      t.tuck = lerp(0.8, 0.15, k);
+      t.jaw = 1 - k;
+    }
+  }
+
+  // melee v0 â€” knockback sweep. Huge horizontal backhand that over-extends.
+  _poseSweep(t, p) {
+    if (p < 0.40) {                       // coil: arm hauls back across the chest
+      const k = ease(p / 0.40);
+      t.handF.x = lerp(48, -30, k);  t.handF.y = lerp(-20, -112, k);
+      t.lean = lerp(0, -0.28, k);        // twist away from the target
+      t.stretchX = lerp(1, 0.90, k);
+      t.squashY = lerp(1, 1.06, k);
+      t.footF.x = lerp(15, 10, k);
+      t.footB.x = lerp(-16, -26, k);
+      t.tuck = -0.35 * k;
+      t.handB.x = lerp(-40, -8, k); t.handB.y = lerp(-16, -80, k);
+    } else if (p < 0.56) {                // SNAP through â€” arm blows past its reach
+      const k = easeOut((p - 0.40) / 0.16);
+      t.handF.x = lerp(-30, 118, k); t.handF.y = lerp(-112, -84, k);
+      t.lean = lerp(-0.28, 0.30, k);
+      t.stretchX = lerp(0.90, 1.22, k);
+      t.squashY = lerp(1.06, 0.86, k);
+      t.footF.x = lerp(10, 30, k);
+      t.overreach = lerp(1, 1.14, k);    // bones lengthen for follow-through force
+      t.tuck = lerp(-0.35, 0.45, k);
+      t.jaw = 1;
+      if (p >= 0.47) { t.impact = 1; t.impactX = 70; }
+    } else {                              // over-rotated recovery, momentum bleeding off
+      const k = ease((p - 0.56) / 0.44);
+      t.handF.x = lerp(118, 48, k);  t.handF.y = lerp(-84, -20, k);
+      t.lean = lerp(0.30, 0, k);
+      t.stretchX = lerp(1.22, 1, k);
+      t.squashY = lerp(0.86, 1, k);
+      t.footF.x = lerp(30, 15, k);
+      t.footB.x = lerp(-26, -16, k);
+      t.overreach = lerp(1.14, 1, k);
+      t.handB.x = lerp(-8, -40, k);  t.handB.y = lerp(-80, -16, k);
+      t.tuck = lerp(0.45, 0.15, k);
+      t.jaw = 1 - k;
+    }
+  }
+
+  // melee v1 â€” heavy downward hammer-fist with the BACK arm.
+  _poseHammer(t, p) {
+    if (p < 0.40) {                       // raise the back fist high and behind
+      const k = ease(p / 0.40);
+      t.handB.x = lerp(-40, -22, k); t.handB.y = lerp(-16, -216, k);
+      t.lean = lerp(0, -0.14, k);
+      t.lift = lerp(0, -9, k);
+      t.squashY = lerp(1, 1.10, k);
+      t.stretchX = lerp(1, 0.92, k);
+      t.handF.x = lerp(48, 46, k);  t.handF.y = lerp(-20, -60, k); // front arm braces
+      t.footB.x = lerp(-16, -24, k);
+      t.tuck = -0.4 * k;
+    } else if (p < 0.54) {                // hammer down
+      const k = easeOut((p - 0.40) / 0.14);
+      t.handB.x = lerp(-22, 46, k);  t.handB.y = lerp(-216, -8, k);
+      t.lean = lerp(-0.14, 0.26, k);
+      t.lift = lerp(-9, 12, k);
+      t.squashY = lerp(1.10, 0.80, k);
+      t.stretchX = lerp(0.92, 1.20, k);
+      t.handF.x = lerp(46, 20, k);  t.handF.y = lerp(-60, -30, k);
+      t.overreach = lerp(1, 1.08, k);
+      t.tuck = lerp(-0.4, 0.85, k);
+      t.jaw = 1;
+      if (p >= 0.50) { t.impact = 1; t.impactX = 46; }
+    } else {                              // recovery
+      const k = ease((p - 0.54) / 0.46);
+      t.handB.x = lerp(46, -40, k);  t.handB.y = lerp(-8, -16, k);
+      t.lean = lerp(0.26, 0, k);
+      t.lift = lerp(12, 0, k);
+      t.squashY = lerp(0.80, 1, k);
+      t.stretchX = lerp(1.20, 1, k);
+      t.handF.x = lerp(20, 48, k);   t.handF.y = lerp(-30, -20, k);
+      t.footB.x = lerp(-24, -16, k);
+      t.overreach = lerp(1.08, 1, k);
+      t.tuck = lerp(0.85, 0.15, k);
+      t.jaw = 1 - k;
+    }
+  }
+
+  // =========================================================================
+  // DRAW â€” reads the resolved pose only.
+  // =========================================================================
+  /**
+   * Standalone draw: positions and mirrors itself in world space.
+   * Inside the game the enemy renderer has already done both â€” use drawBody().
+   */
+  draw(ctx) {
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.scale(this.facing, 1);
+    this.drawBody(ctx);
+    ctx.restore();
+  }
+
+  /**
+   * Draw at the origin, feet on `ground`. The caller owns world translation and
+   * mirroring, so this composes with the game's drawEnemies() transform stack.
+   */
+  drawBody(ctx, ground = 0) {
+    ctx.save();
+    ctx.translate(0, ground);
+
+    // Layer 0 â€” contact shadow, drawn before the body transform so squash and
+    // lean never drag it off the ground plane.
+    this.drawShadow(ctx);
+
+    ctx.rotate(this.leanAngle);
+    ctx.scale(this.stretchX, this.squashY);
+
+    const bob = this.bodyBob + this.torsoLift;
+
+    // 1. Back arm & back leg
+    this.drawLimb(ctx, 'back', bob);
+    // 2. Effects
+    this.drawTail(ctx);
+    // 3. Torso
+    this.drawTorso(ctx, bob);
+    // 4. Head
+    this.drawHead(ctx, bob);
+    // 5. Front leg & front arm
+    this.drawLimb(ctx, 'front', bob);
+
+    ctx.restore();
+  }
+
+  drawShadow(ctx) {
+    ctx.save();
+    const spread = 1 + this.dust * 0.35;
+    ctx.globalAlpha = 0.38;
+    blob(ctx, 4, -2, 56 * spread, 9, 0, COL.shadow, COL.shadow);
+    ctx.globalAlpha = 0.22;
+    blob(ctx, 4, -2, 78 * spread, 6, 0, COL.shadow, COL.shadow);
+    ctx.restore();
+  }
+
+  // ---- torso ---------------------------------------------------------------
+  drawTorso(ctx, bob) {
+    ctx.save();
+    ctx.translate(0, bob);
+
+    // Breath swells the barrel noticeably â€” wide on the inhale, dropping and
+    // narrowing on the exhale.
+    const br = this.breatheCycle;
+
+    // ---- silhouette ---------------------------------------------------------
+    // Two tapered organic masses, NOT one sphere: a broad hunched shoulder /
+    // chest wedge that narrows into a thick waist, giving a gorilla V-taper.
+    const shY = P.shoulderY - 2;                 // shoulder line
+    const wsY = P.pelvisY - 12;                  // waist line
+    const shW = 50 + br * 4.5;                   // half-width at the shoulders
+    const wsW = 28 + br * 2.0;                   // half-width at the waist
+    const chF = 32 + br * 2.0;                   // how far the chest juts forward
+
+    // Back contour of the wedge, kept as explicit control points so the spine
+    // ridges can be walked along the exact same curve.
+    const back = {
+      p0: { x: -wsW - 4, y: wsY },
+      p1: { x: -wsW - 26, y: wsY - 34 },
+      p2: { x: -shW * 0.98, y: shY + 42 },
+      p3: { x: -shW * 0.80, y: shY - 2 },
+    };
+    this._backCurve = back;
+
+    const wedge = () => {
+      ctx.beginPath();
+      ctx.moveTo(back.p3.x, back.p3.y);
+      // over the hunched shoulders to the front clavicle
+      ctx.bezierCurveTo(-shW * 0.44, shY - 30, shW * 0.20, shY - 32, chF + 12, shY + 4);
+      // chest falling into the ribs and on into the waist
+      ctx.bezierCurveTo(chF + 24, shY + 34, wsW + 18, wsY - 30, wsW + 4, wsY);
+      ctx.lineTo(-wsW - 4, wsY);
+      // lat sweeping back up to the shoulder
+      ctx.bezierCurveTo(back.p1.x, back.p1.y, back.p2.x, back.p2.y, back.p3.x, back.p3.y);
+      ctx.closePath();
+    };
+
+    // Spine ridges go down before the hide so the blades crest out from behind.
+    this.drawSpineRidges(ctx);
+
+    // ---- core / pelvis mass -------------------------------------------------
+    // Drawn BEFORE the chest wedge so the wedge overlaps its top edge. This is
+    // the mass that closes the gap that used to show background between the
+    // ribcage and the legs: it runs from inside the wedge (wsY - 6) down past
+    // both hip joints to well below them, so the thigh roots land on solid body.
+    const coreTop = wsY - 8;
+    const coreBot = P.pelvisY + 32;              // ~34px below the hip joints
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(-wsW - 8, coreTop);
+    ctx.bezierCurveTo(-wsW - 18, wsY + 16, -P.hipX - 26, P.pelvisY + 4, -P.hipX - 17, coreBot);
+    ctx.quadraticCurveTo(0, coreBot + 15, P.hipX + 19, coreBot);      // groin underside
+    ctx.bezierCurveTo(chF + 2, P.pelvisY + 4, wsW + 18, wsY + 16, wsW + 8, coreTop);
+    ctx.closePath();
+    const pg = ctx.createRadialGradient(4, P.pelvisY - 6, 5, 0, P.pelvisY, 74);
+    pg.addColorStop(0.00, COL.skin);
+    pg.addColorStop(0.55, mix(COL.skin, COL.muscle, 0.5));
+    pg.addColorStop(1.00, COL.edgeDeep);
+    ctx.fillStyle = pg;
+    ctx.fill();
+    ctx.restore();
+
+    // Glute mass wrapping the back hip, so the tail root sits on something.
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(-wsW - 6, wsY + 12);
+    ctx.bezierCurveTo(-wsW - 30, P.pelvisY - 16, -P.hipX - 30, P.pelvisY + 20, -P.hipX - 10, coreBot - 6);
+    ctx.quadraticCurveTo(-P.hipX + 4, P.pelvisY + 2, -wsW - 6, wsY + 12);
+    ctx.closePath();
+    const gg = ctx.createRadialGradient(-30, P.pelvisY - 8, 4, -26, P.pelvisY, 52);
+    gg.addColorStop(0.00, COL.muscle);
+    gg.addColorStop(1.00, COL.edgeDeep);
+    ctx.fillStyle = gg;
+    ctx.fill();
+    ctx.restore();
+
+    // ---- chest wedge --------------------------------------------------------
+    // No stroke. The radial gradient bottoms out at edgeDeep, so the silhouette
+    // edge is the darkest flesh red rather than an inked line.
+    ctx.save();
+    const tg = ctx.createRadialGradient(-shW * 0.10, shY + 18, 6, 0, (shY + wsY) / 2, shW * 1.62);
+    tg.addColorStop(0.00, COL.skinLit);
+    tg.addColorStop(0.44, COL.skin);
+    tg.addColorStop(0.80, COL.skinDeep);
+    tg.addColorStop(1.00, COL.edgeDeep);
+    ctx.fillStyle = tg;
+    wedge();
+    ctx.fill();
+    ctx.restore();
+
+    // ---- overlapping muscle groups -----------------------------------------
+    ctx.save();
+
+    // Latissimus first â€” it sits underneath the trap and pec.
+    ctx.beginPath();
+    ctx.moveTo(-shW * 0.74, shY + 10);
+    ctx.bezierCurveTo(-shW * 0.86, shY + 52, -wsW - 16, wsY - 34, -wsW - 2, wsY - 6);
+    ctx.bezierCurveTo(-shW * 0.34, wsY - 24, -shW * 0.46, shY + 34, -shW * 0.74, shY + 10);
+    ctx.closePath();
+    const lg = ctx.createLinearGradient(-shW, shY + 20, -wsW, wsY);
+    lg.addColorStop(0.00, mix(COL.muscle, COL.skin, 0.30));
+    lg.addColorStop(1.00, COL.edgeDeep);
+    ctx.fillStyle = lg;
+    ctx.fill();
+
+    // Trapezius / hunch, riding between the neck and the shoulder cap.
+    ctx.beginPath();
+    ctx.moveTo(-shW * 0.52, shY - 12);
+    ctx.bezierCurveTo(-shW * 0.20, shY - 34, shW * 0.16, shY - 30, chF * 0.62, shY - 2);
+    ctx.bezierCurveTo(shW * 0.10, shY + 12, -shW * 0.22, shY + 14, -shW * 0.52, shY - 12);
+    ctx.closePath();
+    const trg = ctx.createLinearGradient(0, shY - 30, 0, shY + 14);
+    trg.addColorStop(0.00, mix(COL.skinLit, COL.skin, 0.30));
+    trg.addColorStop(1.00, COL.muscle);
+    ctx.fillStyle = trg;
+    ctx.fill();
+
+    // Pectoral slab â€” LIGHTER than the base torso, hanging off the clavicle and
+    // undercut by a crimson crease so it reads as a shelf of muscle.
+    ctx.beginPath();
+    ctx.moveTo(chF + 9, shY + 6);
+    ctx.bezierCurveTo(chF + 22, shY + 28, chF + 8, shY + 54, -shW * 0.06, shY + 51);
+    ctx.bezierCurveTo(-shW * 0.22, shY + 30, -shW * 0.12, shY + 6, chF + 9, shY + 6);
+    ctx.closePath();
+    const pcg = ctx.createRadialGradient(chF * 0.55, shY + 20, 4, chF * 0.30, shY + 30, 54);
+    pcg.addColorStop(0.00, mix(COL.skinLit, '#D9584A', 0.45));
+    pcg.addColorStop(0.62, COL.skinLit);
+    pcg.addColorStop(1.00, COL.muscle);
+    ctx.fillStyle = pcg;
+    ctx.fill();
+
+    ctx.strokeStyle = COL.crease;
+    ctx.lineWidth = 3.4;
+    ctx.lineCap = 'round';
+    ctx.globalAlpha = 0.75;
+    ctx.beginPath();
+    ctx.moveTo(chF + 16, shY + 40);
+    ctx.quadraticCurveTo(chF * 0.5, shY + 55, -shW * 0.04, shY + 49);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Abdominal wall â€” overlapping filled segments, narrowing to the waist,
+    // each undercut by a crimson crease. Bare stroked lines read as scratches.
+    for (let i = 0; i < 4; i++) {
+      const t = i / 3;
+      const y = lerp(shY + 60, wsY + 4, t);
+      const hw = lerp(chF * 0.66, wsW * 0.62, t);
+      const hh = lerp(9.5, 6.5, t);
+
+      ctx.beginPath();
+      ctx.moveTo(-hw * 0.72, y);
+      ctx.quadraticCurveTo(hw * 0.12, y - hh, hw, y - hh * 0.34);
+      ctx.quadraticCurveTo(hw * 0.16, y + hh, -hw * 0.72, y + hh * 0.28);
+      ctx.closePath();
+      const ag = ctx.createLinearGradient(0, y - hh, 0, y + hh);
+      ag.addColorStop(0.00, mix(COL.skinLit, COL.skin, 0.45 + t * 0.3));
+      ag.addColorStop(1.00, COL.muscle);
+      ctx.fillStyle = ag;
+      ctx.fill();
+
+      ctx.globalAlpha = 0.55;
+      ctx.strokeStyle = COL.crease;
+      ctx.lineWidth = 2.6 - t * 0.6;
+      ctx.beginPath();
+      ctx.moveTo(-hw * 0.70, y + hh * 0.30);
+      ctx.quadraticCurveTo(hw * 0.16, y + hh * 1.02, hw * 0.96, y - hh * 0.30);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+
+    // Rim light down the hunched back edge.
+    ctx.save();
+    ctx.globalAlpha = 0.40;
+    ctx.strokeStyle = COL.skinLit;
+    ctx.lineWidth = 4.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(back.p3.x + 3, back.p3.y + 2);
+    ctx.bezierCurveTo(back.p2.x + 5, back.p2.y, back.p1.x + 6, back.p1.y, back.p0.x + 4, back.p0.y - 4);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.restore();
+  }
+
+  /**
+   * The segmented ridge running the length of the back. Sampled along the same
+   * bezier that forms the wedge's back contour, so the blades sit exactly on
+   * the silhouette instead of floating off an imagined circle.
+   */
+  drawSpineRidges(ctx) {
+    ctx.save();
+
+    const b = this._backCurve;
+    const N = 8;
+    const pts = [];
+    for (let i = 0; i < N; i++) {
+      const t = i / (N - 1);
+      const p = bezPt(b.p0, b.p1, b.p2, b.p3, t);
+      const q = bezPt(b.p0, b.p1, b.p2, b.p3, Math.min(1, t + 0.02));
+      // Outward normal = tangent rotated a quarter turn.
+      const a = Math.atan2(q.y - p.y, q.x - p.x) - Math.PI * 0.5;
+      pts.push({
+        x: p.x, y: p.y, a,
+        h: 21 - Math.abs(t - 0.70) * 17,     // tallest up near the shoulders
+        t: 1 - t,
+      });
+    }
+
+    // Internal fire bleeding through the hide beneath the ridge.
+    // Tight per-blade bloom. A wide radius here just pooled into one glowing
+    // smear across the flank instead of reading as fire between the spines.
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.22 + this.eyeFlare * 0.24 + this.breatheCycle * 0.04;
+    for (const p of pts) {
+      if (p.h < 6) continue;
+      const rad = 6 + p.h * 0.28;
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rad);
+      g.addColorStop(0.00, COL.molten1);
+      g.addColorStop(0.42, 'rgba(255,127,17,0.38)');
+      g.addColorStop(1.00, 'rgba(255,60,0,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, rad, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    for (const p of pts) {
+      if (p.h < 6) continue;
+      spine(ctx, p.x, p.y, p.a, p.h * 1.35, 6.4 - p.t * 1.6);
+    }
+
+    ctx.restore();
+  }
+
+  // ---- head ----------------------------------------------------------------
+  drawHead(ctx, bob) {
+    ctx.save();
+
+    // Hunched forward and down; tuck jams it deeper into the chest.
+    const tuck = this.headTuck;
+    const hx = P.headX + tuck * 5;
+    const hy = P.headY + bob * 0.85 + tuck * 12 - this.breatheCycle * 1.2;
+    ctx.translate(hx, hy);
+    ctx.rotate(0.18 + tuck * 0.30);
+
+    const r = P.headR;
+
+    // Ears and horns go down first so their roots are buried by the skull.
+    this.drawEars(ctx, r);
+    this.drawHorns(ctx, r);
+
+    // Neck â€” a thick column running down and back into the shoulder mass.
+    // (Shoulder sits at head-local â‰ˆ (-8, 28) with the current proportions.)
+    limbTaper(ctx, -6, 30, -1, 8, 30, 25, COL.skin, COL.skinDeep, 0.05, false);
+
+    // ---- angular skull ------------------------------------------------------
+    // Narrow cranium, heavy overhanging brow, wide protruding muzzle. Built as
+    // one path: a circle here is what made it read as a friendly ball.
+    const skull = () => {
+      ctx.beginPath();
+      ctx.moveTo(-r * 1.02, -r * 0.10);                       // back of cranium
+      ctx.quadraticCurveTo(-r * 0.92, -r * 0.86, -r * 0.30, -r * 1.00); // top-back angle
+      ctx.quadraticCurveTo(r * 0.30, -r * 1.10, r * 0.86, -r * 0.68);   // crown to brow
+      ctx.lineTo(r * 1.24, -r * 0.20);                        // brow overhang
+      ctx.lineTo(r * 0.96, r * 0.06);                         // socket shelf
+      ctx.quadraticCurveTo(r * 1.36, r * 0.20, r * 1.34, r * 0.50); // muzzle bridge
+      ctx.lineTo(r * 0.94, r * 0.66);                         // upper lip
+      ctx.quadraticCurveTo(r * 0.20, r * 0.80, -r * 0.52, r * 0.62);   // cheek
+      ctx.quadraticCurveTo(-r * 1.00, r * 0.44, -r * 1.02, -r * 0.10); // jaw hinge
+      ctx.closePath();
+    };
+
+    ctx.save();
+    const sg = ctx.createRadialGradient(-r * 0.18, -r * 0.48, r * 0.06, r * 0.10, r * 0.05, r * 1.7);
+    sg.addColorStop(0.00, COL.skinLit);
+    sg.addColorStop(0.55, COL.skin);
+    sg.addColorStop(1.00, COL.skinDeep);
+    ctx.fillStyle = sg;
+    skull();
+    ctx.fill();
+    ctx.restore();
+
+    // Deep sockets carved back under the brow.
+    ctx.save();
+    ctx.fillStyle = COL.socket;
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.34, -r * 0.30);
+    ctx.quadraticCurveTo(r * 0.44, -r * 0.44, r * 0.98, -r * 0.06);
+    ctx.quadraticCurveTo(r * 0.40, r * 0.20, -r * 0.30, r * 0.06);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // Glowing eyes â€” additive, blooming out of the socket shadow.
+    this.drawEyes(ctx, r);
+
+    // Brow ridge over the glow, so the eyes read as recessed beneath bone.
+    ctx.save();
+    ctx.fillStyle = mix(COL.skinLit, COL.skin, 0.25);
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.60, -r * 0.52);
+    ctx.quadraticCurveTo(r * 0.34, -r * 0.72, r * 1.20, -r * 0.22);
+    ctx.lineTo(r * 1.00, r * 0.02);
+    ctx.quadraticCurveTo(r * 0.30, -r * 0.34, -r * 0.56, -r * 0.24);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // Jaw + fangs, hinged open on impact.
+    ctx.save();
+    ctx.translate(-r * 0.72, r * 0.34);          // hinge sits at the jaw joint
+    ctx.rotate(this.jawOpen * 0.46);
+    ctx.translate(r * 0.72, -r * 0.34);
+    this.drawJaw(ctx, r);
+    ctx.restore();
+
+    ctx.restore();
+  }
+
+  /** Pointed, tattered ears swept back off the jaw hinge. */
+  drawEars(ctx, r) {
+    ctx.save();
+
+    const ear = (ox, oy, len, rise, notch) => {
+      ctx.beginPath();
+      ctx.moveTo(ox, oy);
+      ctx.quadraticCurveTo(ox - len * 0.55, oy - rise * 0.90, ox - len, oy - rise);
+      // torn notch on the trailing edge
+      ctx.lineTo(ox - len * 0.66, oy - rise * 0.42);
+      ctx.lineTo(ox - len * 0.78, oy - rise * 0.16);
+      ctx.quadraticCurveTo(ox - len * 0.44, oy + notch, ox, oy + notch * 0.5);
+      ctx.closePath();
+      ctx.fill();
+    };
+
+    // Far ear, dimmed.
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = COL.muscle;
+    ear(-r * 0.58, -r * 0.06, r * 1.30, r * 0.78, r * 0.26);
+    ctx.restore();
+
+    // Near ear: outlined so it separates from the skull, with a lit inner
+    // membrane. Filling it in skinDeep left it invisible against the head.
+    // A slightly larger ear in the darkest flesh red sits behind the real one,
+    // so the silhouette separates from the skull by value, not by an ink line.
+    ctx.save();
+    ctx.fillStyle = COL.edgeDeep;
+    ear(-r * 0.70, r * 0.18, r * 1.58, r * 0.94, r * 0.32);
+    ctx.restore();
+
+    ctx.fillStyle = COL.skin;
+    ear(-r * 0.72, r * 0.16, r * 1.46, r * 0.88, r * 0.30);
+    ctx.save();
+    ctx.globalAlpha = 0.75;
+    ctx.fillStyle = mix(COL.muscle, COL.molten0, 0.30);
+    ear(-r * 0.82, r * 0.12, r * 1.02, r * 0.58, r * 0.18);
+    ctx.restore();
+
+    ctx.restore();
+  }
+
+  /**
+   * A pair of heavy horns rising off the crown and curling back.
+   *
+   * The arc centre sits well behind and below the skull, so sweeping the angle
+   * *upward* carries each horn up and then back â€” a centre placed above or in
+   * front makes the sweep dive back down and the pair reads as a dark cap.
+   */
+  drawHorns(ctx, r) {
+    ctx.save();
+
+    // The sweep starts at a POSITIVE angle so the first arcs land roughly
+    // 0.5r *inside* the cranium â€” a base sitting on the outer contour is what
+    // makes a horn look glued on rather than grown out of the skull.
+    // Far horn: shorter, thinner and dimmed by distance.
+    ctx.save();
+    ctx.globalAlpha = 0.62;
+    horn(ctx, -r * 1.55, -r * 0.72, 0.30, -0.86, r * 1.86, r * 0.32);
+    ctx.restore();
+
+    // Near horn: the silhouette read.
+    horn(ctx, -r * 1.40, -r * 0.90, 0.23, -0.80, r * 2.00, r * 0.42);
+
+    // Small cheek spur, echoing the crown pair.
+    ctx.save();
+    ctx.globalAlpha = 0.9;
+    horn(ctx, -r * 0.30, r * 0.62, -0.42, -1.05, r * 0.86, r * 0.14);
+    ctx.restore();
+
+    ctx.restore();
+  }
+
+  /**
+   * Wide protruding lower jaw with a snarling gum line and bone fangs that
+   * overlap the lip. Fangs are drawn as continuous tapered paths rooted inside
+   * the gum, both pointing up from the mandible and down from the muzzle.
+   */
+  drawJaw(ctx, r) {
+    ctx.save();
+
+    // Furnace behind the teeth, showing through when the jaw cracks open.
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = 0.22 + this.jawOpen * 0.62;
+    const mg = ctx.createLinearGradient(-r * 0.40, r * 0.55, r * 1.20, r * 0.55);
+    mg.addColorStop(0.00, 'rgba(255,127,17,0)');
+    mg.addColorStop(0.45, COL.molten1);
+    mg.addColorStop(1.00, 'rgba(255,60,0,0)');
+    ctx.fillStyle = mg;
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.44, r * 0.56);
+    ctx.quadraticCurveTo(r * 0.36, r * 0.40, r * 1.10, r * 0.52);
+    ctx.quadraticCurveTo(r * 0.36, r * 0.86, -r * 0.44, r * 0.72);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // Mandible: heavy, wide, jutting past the muzzle.
+    const jaw = () => {
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.92, r * 0.36);                                  // hinge
+      ctx.quadraticCurveTo(-r * 0.20, r * 0.60, r * 1.06, r * 0.58);    // gum line
+      ctx.quadraticCurveTo(r * 1.42, r * 0.74, r * 1.16, r * 1.02);     // chin
+      ctx.quadraticCurveTo(r * 0.20, r * 1.30, -r * 0.72, r * 0.92);    // underside
+      ctx.quadraticCurveTo(-r * 1.02, r * 0.72, -r * 0.92, r * 0.36);
+      ctx.closePath();
+    };
+    ctx.save();
+    const jg = ctx.createLinearGradient(0, r * 0.45, 0, r * 1.15);
+    jg.addColorStop(0.00, COL.skin);
+    jg.addColorStop(1.00, COL.skinDeep);
+    ctx.fillStyle = jg;
+    jaw();
+    ctx.fill();
+    ctx.restore();
+
+    // Exposed bone along the mandible edge.
+    ctx.save();
+    ctx.globalAlpha = 0.72;
+    ctx.strokeStyle = COL.bone;
+    ctx.lineWidth = r * 0.13;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.52, r * 0.98);
+    ctx.quadraticCurveTo(r * 0.30, r * 1.20, r * 1.02, r * 0.98);
+    ctx.stroke();
+    ctx.restore();
+
+    // ---- fangs --------------------------------------------------------------
+    const fang = (bx, by, len, halfW, dir, lean) => {
+      ctx.beginPath();
+      ctx.moveTo(bx - halfW, by);
+      ctx.quadraticCurveTo(bx - halfW * 0.5, by + dir * len * 0.62,
+                           bx + lean, by + dir * len);            // sharp tip
+      ctx.quadraticCurveTo(bx + halfW * 0.7, by + dir * len * 0.5,
+                           bx + halfW, by);
+      ctx.closePath();
+      const fg = ctx.createLinearGradient(bx, by, bx + lean, by + dir * len);
+      fg.addColorStop(0.00, COL.bone);
+      fg.addColorStop(0.45, COL.boneLit);
+      fg.addColorStop(1.00, COL.boneTip);
+      ctx.fillStyle = fg;
+      ctx.fill();
+    };
+
+    // Lower fangs rising from the mandible, overlapping the upper lip.
+    fang(r * 0.94, r * 0.56, r * 0.62, r * 0.15, -1, -r * 0.05);
+    fang(r * 0.52, r * 0.58, r * 0.44, r * 0.12, -1, -r * 0.04);
+    fang(r * 0.12, r * 0.60, r * 0.30, r * 0.10, -1, -r * 0.03);
+
+    // Upper fangs biting down over the lower lip.
+    ctx.save();
+    ctx.globalAlpha = 0.95;
+    fang(r * 0.74, r * 0.50, r * 0.40, r * 0.11, 1, r * 0.03);
+    fang(r * 0.30, r * 0.52, r * 0.28, r * 0.09, 1, r * 0.02);
+    ctx.restore();
+
+    ctx.restore();
+  }
+
+  drawEyes(ctx, r) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+
+    // Hotter and further-reaching than before, but the *core* stays small so
+    // the eyes still read as points of light set deep under the brow rather
+    // than a wash across the face. Two stacked gradients: a wide outer bloom
+    // and a tight inner furnace.
+    const flare = 1 + this.eyeFlare * 1.1 + this.breatheCycle * 0.05;
+    const eyes = [[0.5, -1.0, 2.3], [8.5, 0.8, 1.8]]; // far eye reads smaller
+
+    for (const [ex, ey, er] of eyes) {
+      const rad = er * flare;
+
+      // Outer bloom â€” the light the socket throws onto the surrounding hide.
+      ctx.globalAlpha = 0.55;
+      const outer = ctx.createRadialGradient(ex, ey, 0, ex, ey, rad * 5.4);
+      outer.addColorStop(0.00, 'rgba(255,120,30,0.75)');
+      outer.addColorStop(0.42, 'rgba(255,58,10,0.30)');
+      outer.addColorStop(1.00, 'rgba(255,40,0,0)');
+      ctx.fillStyle = outer;
+      ctx.beginPath();
+      ctx.arc(ex, ey, rad * 5.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Inner furnace.
+      ctx.globalAlpha = 0.95;
+      const inner = ctx.createRadialGradient(ex, ey, 0, ex, ey, rad * 2.4);
+      inner.addColorStop(0.00, COL.eyeCore);
+      inner.addColorStop(0.26, COL.molten1);
+      inner.addColorStop(0.58, COL.eyeGlow);
+      inner.addColorStop(1.00, 'rgba(255,58,10,0)');
+      ctx.fillStyle = inner;
+      ctx.beginPath();
+      ctx.arc(ex, ey, rad * 2.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = COL.eyeCore;
+      ctx.beginPath();
+      ctx.arc(ex, ey, rad * 0.62, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  // ---- limbs ---------------------------------------------------------------
+  // One call per depth layer, matching the strict z-order: 'back' draws the
+  // back arm then the back leg, 'front' draws the front leg then the front arm.
+  drawLimb(ctx, type, bob) {
+    ctx.save();
+
+    const back = type === 'back';
+    if (back) {
+      this.drawArm(ctx, back, bob);
+      this.drawLeg(ctx, back, bob);
+    } else {
+      this.drawLeg(ctx, back, bob);
+      this.drawArm(ctx, back, bob);
+    }
+
+    ctx.restore();
+  }
+
+  drawLeg(ctx, back, bob) {
+    ctx.save();
+
+    const hipX = back ? -P.hipX : P.hipX;
+    const hipY = P.pelvisY + bob;
+    const foot = back ? this.footB : this.footF;
+
+    // The pose target is the *sole*, not the ankle. Solving IK straight to it
+    // put the joint on the floor and left the foot hanging off the side of a
+    // leg stub; lifting the ankle by the foot's height sits the leg on top of
+    // the foot and drops the pads flat onto the target plane.
+    const ankleY = foot.y - ANKLE_LIFT;
+
+    // Knee bends forward (invertKnee = true in this coordinate space).
+    const ik = solveTwoBoneIK(hipX, hipY, foot.x, ankleY, P.thigh, P.shin, true);
+
+    const lit    = back ? COL.skinBackLit : COL.skinLit;
+    const edge   = back ? COL.skinBackDeep : COL.skinDeep;
+    const thighW = back ? 30 : 34;
+    const shinW  = back ? 24 : 27;
+
+    // Thigh swells at the haunch and narrows into the knee; the shin tapers
+    // again into the ankle. Uniform tubes are what read as scaffolding poles.
+    limbTaper(ctx, hipX, hipY, ik.elbowX, ik.elbowY, thighW + 5, thighW * 0.74, lit, edge, 0.20);
+    limbTaper(ctx, ik.elbowX, ik.elbowY, ik.handX, ik.handY, shinW, shinW * 0.66, lit, edge, 0.16);
+
+    // Knee bone plate.
+    ctx.save();
+    if (back) ctx.globalAlpha = 0.72;
+    bonePlate(ctx, ik.elbowX, ik.elbowY, shinW * 0.46,
+              Math.atan2(ik.handY - ik.elbowY, ik.handX - ik.elbowX));
+    ctx.restore();
+
+    // Foot, drawn in ankle space with its sole on the target plane.
+    ctx.save();
+    ctx.translate(ik.handX, ik.handY);
+    this.drawFoot(ctx, back, lit, edge);
+    ctx.restore();
+
+    ctx.restore();
+  }
+
+  /**
+   * Digitigrade foot as a single continuous path: heel pad, sole, and three
+   * talons extruded straight out of the foot mass. Local origin is the ANKLE â€”
+   * every ground-contact point is at y = ANKLE_LIFT, so the pads land flat on
+   * the pose target rather than hovering above it.
+   */
+  drawFoot(ctx, back, lit, edge) {
+    ctx.save();
+
+    const G = ANKLE_LIFT;   // ground plane in ankle-local space
+
+    const sole = () => {
+      ctx.beginPath();
+      ctx.moveTo(-13, -G * 0.30);                       // heel, up behind the ankle
+      ctx.quadraticCurveTo(-17, G * 0.60, -11, G);      // heel pad down to the floor
+      ctx.lineTo(16, G);                                // flat sole
+      // three talons extruded forward, every tip resting on the floor
+      ctx.quadraticCurveTo(24, G, 31, G - 1.5);
+      ctx.quadraticCurveTo(24, G - 4.5, 17, G - 5);
+      ctx.quadraticCurveTo(26, G - 6, 32, G - 8);
+      ctx.quadraticCurveTo(24, G - 9.5, 16, G - 9.5);
+      ctx.quadraticCurveTo(24, G - 12, 29, G - 15);
+      ctx.quadraticCurveTo(20, G - 15, 13, G - 13);
+      ctx.quadraticCurveTo(16, -G * 0.10, 4, -G * 0.42); // instep back to the ankle
+      ctx.closePath();
+    };
+
+    ctx.save();
+    // Flesh at the heel grading into bone at the talons.
+    const fg = ctx.createLinearGradient(-14, 0, 32, 0);
+    fg.addColorStop(0.00, edge);
+    fg.addColorStop(0.34, lit);
+    fg.addColorStop(0.62, mix(lit, COL.bone, 0.55));
+    fg.addColorStop(1.00, COL.boneTip);
+    ctx.fillStyle = fg;
+    sole();
+    ctx.fill();
+    ctx.restore();
+
+    // Rear dew-claw hooking back off the heel.
+    ctx.save();
+    if (back) ctx.globalAlpha = 0.8;
+    ctx.translate(-11, G * 0.25);
+    ctx.rotate(Math.PI - 0.55);
+    claw(ctx, 11, 6, 0.5);
+    ctx.restore();
+
+    ctx.restore();
+  }
+
+  drawArm(ctx, back, bob) {
+    ctx.save();
+
+    const shX = back ? P.shoulderBX : P.shoulderFX;
+    const shY = P.shoulderY + bob;
+    const hand = back ? this.handB : this.handF;
+
+    // Over-extension on follow-through: the chain itself lengthens so the arm
+    // locks out past its resting reach instead of just pointing at the target.
+    const u = P.upperArm * this.overreach;
+    const f = P.foreArm * this.overreach;
+
+    // Force a minimum elbow flex. The gorilla rest pose puts the hand ~132px
+    // from the shoulder against a 120px chain, so the IK locked out straight
+    // and the arm hung as a lifeless stick. Pulling the *effective* target in
+    // to the distance that yields MIN_ELBOW_FLEX keeps a live bend without
+    // touching the pose targets the state machine drives.
+    const dx = hand.x - shX, dy = hand.y - shY;
+    const reach = Math.hypot(dx, dy) || 1e-4;
+    // Law of cosines for the interior elbow angle at full minimum flex.
+    const flexed = Math.sqrt(u * u + f * f - 2 * u * f * Math.cos(Math.PI - MIN_ELBOW_FLEX));
+    const eff = Math.min(reach, flexed);
+    const tx = shX + (dx / reach) * eff;
+    const ty = shY + (dy / reach) * eff;
+
+    // Elbow bows backward/outward (invertKnee = false here).
+    const ik = solveTwoBoneIK(shX, shY, tx, ty, u, f, false);
+
+    const lit   = back ? COL.skinBackLit : COL.skinLit;
+    const edge  = back ? COL.skinBackDeep : COL.skinDeep;
+    const upW   = back ? 26 : 30;
+    const foreW = back ? 22 : 25;
+
+    // Base arm segments: broad at the shoulder, narrowing hard into the elbow,
+    // forearm tapering again into the wrist.
+    limbTaper(ctx, shX, shY, ik.elbowX, ik.elbowY, upW + 3, upW * 0.68, lit, edge, 0.26);
+    limbTaper(ctx, ik.elbowX, ik.elbowY, ik.handX, ik.handY, foreW + 2, foreW * 0.68, lit, edge, 0.14);
+
+    // ---- overlapping muscle groups on top of the base arm -------------------
+    const ua = Math.atan2(ik.elbowY - shY, ik.elbowX - shX);
+    const fa = Math.atan2(ik.handY - ik.elbowY, ik.handX - ik.elbowX);
+
+    // Bicep belly: sits on the upper third, peaking short of the elbow so the
+    // arm has topography instead of one uniform gradient down its length.
+    const bx = lerp(shX, ik.elbowX, 0.40), by = lerp(shY, ik.elbowY, 0.40);
+    ctx.save();
+    ctx.translate(bx, by);
+    ctx.rotate(ua);
+    ctx.beginPath();
+    ctx.moveTo(-u * 0.30, 0);
+    ctx.bezierCurveTo(-u * 0.14, -upW * 0.52, u * 0.16, -upW * 0.50, u * 0.30, 0);
+    ctx.bezierCurveTo(u * 0.16, upW * 0.30, -u * 0.14, upW * 0.32, -u * 0.30, 0);
+    ctx.closePath();
+    const bg = ctx.createLinearGradient(0, -upW * 0.5, 0, upW * 0.34);
+    bg.addColorStop(0.00, back ? COL.skinBackLit : mix(COL.skinLit, '#D9584A', 0.35));
+    bg.addColorStop(0.62, back ? COL.skinBack : COL.skin);
+    bg.addColorStop(1.00, back ? COL.skinBackDeep : COL.muscle);
+    ctx.fillStyle = bg;
+    ctx.fill();
+    ctx.restore();
+
+    // Forearm flexor mass, bulging just past the elbow.
+    const fx = lerp(ik.elbowX, ik.handX, 0.34), fy2 = lerp(ik.elbowY, ik.handY, 0.34);
+    ctx.save();
+    ctx.translate(fx, fy2);
+    ctx.rotate(fa);
+    ctx.beginPath();
+    ctx.moveTo(-f * 0.26, 0);
+    ctx.bezierCurveTo(-f * 0.10, -foreW * 0.46, f * 0.14, -foreW * 0.40, f * 0.30, 0);
+    ctx.bezierCurveTo(f * 0.14, foreW * 0.26, -f * 0.10, foreW * 0.28, -f * 0.26, 0);
+    ctx.closePath();
+    const fgm = ctx.createLinearGradient(0, -foreW * 0.44, 0, foreW * 0.28);
+    fgm.addColorStop(0.00, back ? COL.skinBackLit : COL.skinLit);
+    fgm.addColorStop(1.00, back ? COL.skinBackDeep : COL.muscle);
+    ctx.fillStyle = fgm;
+    ctx.fill();
+    ctx.restore();
+
+    // Deltoid LAST of the arm masses and centred slightly outboard of the
+    // shoulder pivot, so it caps and hides the joint seam entirely.
+    ctx.save();
+    ctx.translate(shX, shY);
+    ctx.rotate(ua - 0.35);
+    ctx.beginPath();
+    ctx.moveTo(-upW * 0.86, -upW * 0.28);
+    ctx.bezierCurveTo(-upW * 0.30, -upW * 0.92, upW * 0.62, -upW * 0.72, upW * 0.80, upW * 0.04);
+    ctx.bezierCurveTo(upW * 0.58, upW * 0.72, -upW * 0.34, upW * 0.86, -upW * 0.86, upW * 0.30);
+    ctx.closePath();
+    const dg = ctx.createRadialGradient(-upW * 0.18, -upW * 0.34, upW * 0.06,
+                                        0, 0, upW * 1.15);
+    dg.addColorStop(0.00, back ? COL.skinBackLit : mix(COL.skinLit, '#D9584A', 0.30));
+    dg.addColorStop(0.58, back ? COL.skinBack : COL.skin);
+    dg.addColorStop(1.00, back ? COL.skinBackDeep : COL.edgeDeep);
+    ctx.fillStyle = dg;
+    ctx.fill();
+
+    // Crimson crease where the deltoid overlaps the bicep.
+    ctx.globalAlpha = back ? 0.35 : 0.6;
+    ctx.strokeStyle = COL.crease;
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-upW * 0.10, upW * 0.62);
+    ctx.quadraticCurveTo(upW * 0.44, upW * 0.40, upW * 0.72, -upW * 0.06);
+    ctx.stroke();
+    ctx.restore();
+
+    // Forearm strain: a molten tendon that lights only while the chain is being
+    // forced *past* its resting reach. Keying this off ik.strain would burn it
+    // permanently â€” the gorilla rest pose already sits at full extension.
+    if (this.overreach > 1.01 && !back) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = Math.min(1, (this.overreach - 1) / 0.13) * 0.55;
+      capsuleFlat(ctx, ik.elbowX, ik.elbowY, ik.handX, ik.handY, foreW * 0.30, COL.molten0);
+      ctx.restore();
+    }
+
+    // Elbow bone plate.
+    ctx.save();
+    if (back) ctx.globalAlpha = 0.72;
+    bonePlate(ctx, ik.elbowX, ik.elbowY, foreW * 0.50,
+              Math.atan2(ik.handY - ik.elbowY, ik.handX - ik.elbowX));
+    ctx.restore();
+
+    // Hand.
+    ctx.save();
+    ctx.translate(ik.handX, ik.handY);
+    ctx.rotate(Math.atan2(ik.handY - ik.elbowY, ik.handX - ik.elbowX));
+    this.drawHand(ctx, back, lit, edge);
+    ctx.restore();
+
+    ctx.restore();
+  }
+
+  /**
+   * Hand as ONE continuous polygon: a blocky asymmetric palm with a heavy heel,
+   * out of which the claws are extruded directly. Drawing a circle palm and
+   * then parking cones on knuckle coordinates is exactly what made the old
+   * hand read as assembled parts rather than one piece of anatomy.
+   *
+   * Local space: wrist at the origin, hand extending along +x.
+   */
+  drawHand(ctx, back, lit, edge) {
+    ctx.save();
+
+    const s = back ? 0.88 : 1;      // far hand slightly smaller
+    ctx.scale(s, s);
+
+    const hand = () => {
+      ctx.beginPath();
+      // --- palm heel, deliberately asymmetric -------------------------------
+      ctx.moveTo(-7, -13);
+      ctx.lineTo(3, -16);                                  // top of the knuckle block
+      // --- index claw --------------------------------------------------------
+      ctx.quadraticCurveTo(16, -20, 33, -17);              // thick base â†’ sharp tip
+      ctx.quadraticCurveTo(19, -11, 11, -9);
+      // --- middle claw (longest) --------------------------------------------
+      ctx.quadraticCurveTo(24, -6, 40, -1);
+      ctx.quadraticCurveTo(23, 2, 12, 3);
+      // --- ring claw ---------------------------------------------------------
+      ctx.quadraticCurveTo(22, 8, 34, 15);
+      ctx.quadraticCurveTo(19, 14, 8, 12);
+      // --- heel of the palm --------------------------------------------------
+      ctx.lineTo(-2, 17);
+      ctx.quadraticCurveTo(-12, 14, -13, 3);               // heavy palm heel
+      ctx.quadraticCurveTo(-13, -8, -7, -13);
+      ctx.closePath();
+    };
+
+    ctx.save();
+    // One gradient carries flesh at the heel into bone at the claw tips, so the
+    // claws read as continuous with the hand instead of stuck on.
+    const hg = ctx.createLinearGradient(-13, 0, 40, 0);
+    hg.addColorStop(0.00, edge);
+    hg.addColorStop(0.26, lit);
+    hg.addColorStop(0.48, mix(lit, COL.bone, 0.45));
+    hg.addColorStop(0.72, COL.boneLit);
+    hg.addColorStop(1.00, COL.boneTip);
+    ctx.fillStyle = hg;
+    hand();
+    ctx.fill();
+    ctx.restore();
+
+    // Knuckle ridge â€” a scored line, not stacked discs.
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = COL.skinDeep;
+    ctx.lineWidth = 2.4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(2, -13);
+    ctx.quadraticCurveTo(9, 0, 5, 12);
+    ctx.stroke();
+    ctx.restore();
+
+    // Thumb, extruded off the heel with its own claw.
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(-6, 8);
+    ctx.quadraticCurveTo(2, 20, 15, 26);                   // thumb tip
+    ctx.quadraticCurveTo(4, 27, -4, 20);
+    ctx.quadraticCurveTo(-9, 15, -6, 8);
+    ctx.closePath();
+    const tg = ctx.createLinearGradient(-6, 8, 15, 26);
+    tg.addColorStop(0.00, edge);
+    tg.addColorStop(0.42, lit);
+    tg.addColorStop(1.00, COL.boneTip);
+    ctx.fillStyle = tg;
+    ctx.fill();
+    ctx.restore();
+
+    ctx.restore();
+  }
+
+  // ---- tail + effects layer -------------------------------------------------
+  // The template's slot 2. Hosts the physical tail (which must sit behind the
+  // torso, so this is exactly the right depth for it) and every ground effect.
+  drawTail(ctx) {
+    ctx.save();
+
+    this.drawSpineTail(ctx);
+    this.drawImpactFissures(ctx);
+    this.drawEmbers(ctx);
+
+    ctx.restore();
+  }
+
+  /**
+   * Thick segmented tail off the base of the spine. It carries no state of its
+   * own â€” the sway is read straight out of the existing drivers (gait phase,
+   * breath, lean, strike phase), so it swings with the body during every
+   * animation without the update loop knowing it exists.
+   */
+  drawSpineTail(ctx) {
+    ctx.save();
+
+    const SEG = 7;
+    const rootX = -P.hipX - 6;
+    const rootY = P.pelvisY - 6 + this.bodyBob;
+
+    // Sway sources: walk cycle, idle breath, and a whip-crack on strike recoil.
+    const gait   = Math.sin(this.runCycle * 1.0) * 0.16 * this.moveAmt;
+    const idle   = Math.sin(this.time * 1.3) * 0.05;
+    const recoil = -this.leanAngle * 0.9;
+
+    let x = rootX, y = rootY;
+    let ang = Math.PI * 0.86;            // pointing back and slightly down
+
+    const pts = [{ x, y }];
+    for (let i = 0; i < SEG; i++) {
+      const t = i / (SEG - 1);
+      // Curl accumulates along the tail so the tip trails the root.
+      ang += 0.17 + gait * (0.5 + t) + idle * (0.4 + t) + recoil * (0.10 + t * 0.22);
+      const len = 15 - t * 5;
+      x += Math.cos(ang) * len;
+      y += Math.sin(ang) * len;
+      pts.push({ x, y });
+    }
+
+    // Silhouette edge in one pass first â€” per-segment rims would band the tail
+    // with dark stripes where each capsule overdrew the last.
+    for (let i = 0; i < pts.length - 1; i++) {
+      const t = i / (pts.length - 2);
+      capsuleFlat(ctx, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y,
+                  25 - t * 13, COL.edgeDeep);
+    }
+    // Flesh, tapering to the tip.
+    for (let i = 0; i < pts.length - 1; i++) {
+      const t = i / (pts.length - 2);
+      capsule(ctx, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y,
+              20 - t * 13, COL.skinBackLit, COL.skinBackDeep, false);
+    }
+
+    // Segment rings + a dorsal fin of small spines running the length.
+    for (let i = 1; i < pts.length - 1; i++) {
+      const t = i / (pts.length - 2);
+      const a = Math.atan2(pts[i + 1].y - pts[i].y, pts[i + 1].x - pts[i].x);
+      ctx.save();
+      ctx.globalAlpha = 0.55;
+      bonePlate(ctx, pts[i].x, pts[i].y, (9 - t * 5.5), a);
+      ctx.restore();
+      if (t < 0.85) spine(ctx, pts[i].x, pts[i].y, a - Math.PI * 0.5, 11 - t * 6, 3.4 - t * 1.4);
+    }
+
+    // Barbed tip.
+    const last = pts[pts.length - 1], prev = pts[pts.length - 2];
+    ctx.save();
+    ctx.translate(last.x, last.y);
+    ctx.rotate(Math.atan2(last.y - prev.y, last.x - prev.x));
+    claw(ctx, 19, 9, 0.55);
+    ctx.restore();
+
+    ctx.restore();
+  }
+
+  /**
+   * Ground impact. Rather than a clean ring, the floor splits: jagged fissures
+   * radiate from the point of impact, lit from within by a molten gradient, and
+   * volcanic rock is thrown clear and drifts as it fades.
+   *
+   * Everything is a pure function of `this.shock` / `this.dust` (both already
+   * decayed by update), so the debris needs no particle state of its own â€”
+   * identical input always yields an identical frame.
+   */
+  drawImpactFissures(ctx) {
+    if (this.shock <= 0.01 && this.dust <= 0.01) return;
+    ctx.save();
+
+    const s = this.shock;          // 1 â†’ 0 over the life of the impact
+    const k = 1 - s;               // 0 â†’ 1, the expansion parameter
+    const ox = this.shockX;
+
+    // --- fissures -----------------------------------------------------------
+    if (s > 0.01) {
+      const reach = 26 + k * 104;
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+
+      // Molten light welling up out of the crack, brightest at the centre.
+      ctx.globalAlpha = s * 0.85;
+      const core = ctx.createRadialGradient(ox, -4, 0, ox, -4, reach * 0.9);
+      core.addColorStop(0.00, COL.molten1);
+      core.addColorStop(0.22, COL.molten0);
+      core.addColorStop(0.60, 'rgba(255,58,10,0.22)');
+      core.addColorStop(1.00, 'rgba(255,40,0,0)');
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      ctx.ellipse(ox, -4, reach * 0.9, reach * 0.26, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Six cracks, each a jagged polyline stepping outward along the ground.
+      // The zig-zag is generated from a fixed hash per branch, so a given
+      // impact always cracks the same way for the whole of its life.
+      const grad = ctx.createLinearGradient(ox - reach, 0, ox + reach, 0);
+      grad.addColorStop(0.00, 'rgba(255,127,17,0)');
+      grad.addColorStop(0.28, COL.molten0);
+      grad.addColorStop(0.50, COL.molten1);
+      grad.addColorStop(0.72, COL.molten0);
+      grad.addColorStop(1.00, 'rgba(255,127,17,0)');
+
+      ctx.strokeStyle = grad;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      for (let b = 0; b < 6; b++) {
+        const dir = b % 2 ? 1 : -1;
+        const seed = b * 12.9898;
+        const spread = 0.18 + (b >> 1) * 0.16;      // three fans per side
+        const lenF = 0.55 + ((b * 37) % 45) / 100;  // deterministic per branch
+
+        ctx.globalAlpha = s * 0.9;
+        ctx.lineWidth = (3.4 - (b >> 1) * 0.8) * s + 0.6;
+        ctx.beginPath();
+        ctx.moveTo(ox, -4);
+        let px = ox, py = -4;
+        for (let i = 1; i <= 5; i++) {
+          const t = i / 5;
+          const step = reach * lenF * t;
+          // Jag alternates side to side; amplitude grows with distance.
+          const jag = Math.sin(seed + i * 2.3) * 7 * t;
+          px = ox + dir * step;
+          py = -4 - Math.sin(spread) * step * 0.30 + jag * 0.55;
+          ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // --- volcanic debris ----------------------------------------------------
+    // Ballistic arcs thrown from the impact, fading as they settle.
+    if (this.dust > 0.01) {
+      const d = this.dust, kd = 1 - d;
+      ctx.save();
+      for (let i = 0; i < 11; i++) {
+        const dir = i % 2 ? 1 : -1;
+        const sp = 0.35 + ((i * 29) % 70) / 70;      // deterministic speed
+        const size = 1.8 + ((i * 17) % 40) / 12;
+        const dx = dir * sp * 78 * kd;
+        // Simple ballistic: up fast, then gravity pulls it back to the floor.
+        const dy = -(sp * 54 * kd) + (kd * kd) * 78 * sp;
+
+        ctx.globalAlpha = d * 0.85;
+        ctx.fillStyle = COL.rock;
+        ctx.save();
+        ctx.translate(ox + dx, Math.min(-2, -6 + dy));
+        ctx.rotate(kd * 6 * dir + i);
+        ctx.beginPath();
+        ctx.moveTo(-size, -size * 0.7);
+        ctx.lineTo(size * 0.8, -size);
+        ctx.lineTo(size, size * 0.6);
+        ctx.lineTo(-size * 0.6, size);
+        ctx.closePath();
+        ctx.fill();
+
+        // Cooling edge â€” each shard keeps a molten rim early on.
+        ctx.globalAlpha = d * d * 0.9;
+        ctx.strokeStyle = COL.molten0;
+        ctx.lineWidth = 0.9;
+        ctx.stroke();
+        ctx.restore();
+      }
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+
+  /** Ambient embers rising off the hide. */
+  drawEmbers(ctx) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 4; i++) {
+      const ph = (this.time * 0.34 + i * 0.25) % 1;
+      ctx.globalAlpha = (1 - ph) * 0.30;
+      const ex = -26 + i * 20 + Math.sin(this.time * 1.4 + i) * 7;
+      const ey = -150 - ph * 54;
+      const g = ctx.createRadialGradient(ex, ey, 0, ex, ey, 5);
+      g.addColorStop(0.00, COL.molten1);
+      g.addColorStop(0.45, 'rgba(255,127,17,0.5)');
+      g.addColorStop(1.00, 'rgba(255,60,0,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(ex, ey, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+
+
+// ---------------------------------------------------------------------------
+// Viewer
+// ---------------------------------------------------------------------------
+const MOTIONS = [
+  { id:'idle',   key:'idle',            state:'idle',  v:0, vx:0,  loop:3.4,
+    note:'Knuckles planted, weight rocking. The barrel torso swells and drops on a slow, deep breath.' },
+  { id:'walk',   key:'walk',            state:'walk',  v:0, vx:44, loop:3.4,
+    note:'Very slow, heavy steps. The body dips hard as each foot takes the load; arms swing counter to the legs and knuckle along the ground.' },
+  { id:'wall',   key:'wall smash',      state:'wall',  v:0, vx:0,
+    note:'Two planted feet and a chest-height double-fist smash. The hands travel into the wall face instead of down into the ground, then recoil through a full recovery beat.' },
+  { id:'throw',  key:'throw',           state:'throw', v:0, vx:0,
+    note:'The front arm scoops from the floor behind, sweeps up over the head and snaps forward 2014 the arm straightens through the release, then falls back into a drag.' },
+  { id:'siege0', key:'siege 00b7 slam',    state:'siege', v:0, vx:0,
+    note:'Two-handed overhead slam. Both hands rise, the whole body stretches upward, then it drives straight down and squashes on impact.' },
+  { id:'siege1', key:'siege 00b7 stomp',   state:'siege', v:1, vx:0,
+    note:'Knockback stomp. It loads entirely onto the back leg, lifts the front knee into its chest, holds a beat, then stomps down and throws a shockwave.' },
+  { id:'melee0', key:'melee 00b7 sweep',   state:'melee', v:0, vx:0,
+    note:'Planted backhand. The shoulder and torso lead a compact chest-height sweep while both feet stay weighted, then the hands settle through a controlled recovery.' },
+  { id:'melee1', key:'melee 00b7 hammer',  state:'melee', v:1, vx:0,
+    note:'Heavy downward hammer-fist with the back arm, raised high and behind, then driven straight down through the target.' },
+];
+
+const SHEET_PHASES = {
+  attack: [0, 0.20, 0.40, 0.50, 0.62, 1.00],
+  cycle:  [0, 0.17, 0.34, 0.50, 0.67, 0.84],
+};
+
+const BREATH_SEED = 3.1;   // fixed so sampled columns stay comparable
+const STEP = 1 / 120;      // integration step for deterministic re-simulation
+
+let current = MOTIONS[0];
+let playing = true;
+let speed = 1;
+let facing = 1;
+let clock = 0;
+
+/** Build a rig posed exactly `t` seconds into a motion, integrated from rest. */
+function poseAt(motion, t) {
+  const rig = new ShippingBrute(0, 0);
+  rig.time = BREATH_SEED;
+  rig.runCycle = 0;
+  rig.state = motion.state;
+  rig.attackVariation = motion.v;
+  let s = 0;
+  while (s < t) { const d = Math.min(STEP, t - s); s += d; rig.update(d, motion.vx, s); }
+  return rig;
+}
+
+function motionLength(m) {
+  const probe = new ShippingBrute(0, 0);
+  probe.state = m.state; probe.attackVariation = m.v;
+  return probe.attackDuration() || m.loop || 3;
+}
+
+function paint(ctx, rig, w, h, scale, dir) {
+  ctx.save();
+  ctx.clearRect(0, 0, w, h);
+  const gy = h * 0.88;
+
+  // ground line
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, gy + 0.5); ctx.lineTo(w, gy + 0.5); ctx.stroke();
+  ctx.restore();
+
+  ctx.translate(w / 2, gy);
+  ctx.scale(dir * scale, scale);
+  rig.drawBody(ctx, 0);
+  ctx.restore();
+}
+
+// ---- live stage -----------------------------------------------------------
+const stage = document.getElementById('stage');
+const sctx = stage.getContext('2d');
+const liveRig = new ShippingBrute(0, 0);
+liveRig.time = BREATH_SEED;
+
+function syncLive(t) {
+  const len = motionLength(current);
+  const isAttack = current.state !== 'idle' && current.state !== 'walk';
+  // Re-integrate so scrubbing and playback land on identical poses.
+  const posed = poseAt(current, isAttack ? Math.min(t, len) : t);
+  paint(sctx, posed, stage.width, stage.height, 2.15, facing);
+
+  document.getElementById('stamp-name').textContent = current.key;
+  document.getElementById('stamp-phase').textContent = (t / len).toFixed(2);
+  const set = (id, v) => document.getElementById(id).textContent = v;
+  set('t-sq', posed.squashY.toFixed(3));
+  set('t-st', posed.stretchX.toFixed(3));
+  set('t-ln', posed.leanAngle.toFixed(3));
+  set('t-ov', posed.overreach.toFixed(3));
+  set('t-p',  posed.attackPhase.toFixed(2));
+  set('t-br', posed.breatheCycle.toFixed(2));
+}
+
+const scrub = document.getElementById('scrub');
+let last = performance.now();
+
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 0.05);
+  last = now;
+  if (playing) {
+    const len = motionLength(current);
+    const isAttack = current.state !== 'idle' && current.state !== 'walk';
+    clock += dt * speed;
+    const span = isAttack ? len + 0.45 : len;  // beat of rest between strikes
+    if (clock > span) clock = 0;
+    scrub.value = String(Math.round(Math.min(clock / len, 1) * 1000));
+    syncLive(Math.min(clock, len));
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---- contact sheet --------------------------------------------------------
+function buildSheet() {
+  const host = document.getElementById('sheet');
+  host.textContent = '';
+  const len = motionLength(current);
+  const isAttack = current.state !== 'idle' && current.state !== 'walk';
+  const phases = isAttack ? SHEET_PHASES.attack : SHEET_PHASES.cycle;
+
+  for (const ph of phases) {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    const c = document.createElement('canvas');
+    c.width = 330; c.height = 400;
+    c.style.width = '165px'; c.style.height = '200px';
+    paint(c.getContext('2d'), poseAt(current, ph * len), c.width, c.height, 0.98, 1);
+
+    const cap = document.createElement('div');
+    cap.className = 'cap';
+    const a = document.createElement('span'); a.textContent = 'p';
+    const b = document.createElement('b');    b.textContent = ph.toFixed(2);
+    cap.append(a, b);
+    cell.append(c, cap);
+    host.append(cell);
+  }
+  document.getElementById('sheet-note').textContent = current.note;
+}
+
+// ---- controls -------------------------------------------------------------
+const list = document.getElementById('motions');
+MOTIONS.forEach(m => {
+  const b = document.createElement('button');
+  b.className = 'motion';
+  b.type = 'button';
+  b.setAttribute('aria-pressed', String(m === current));
+  const k = document.createElement('span'); k.className = 'k'; k.textContent = m.state;
+  const n = document.createElement('span'); n.textContent = m.key;
+  b.append(k, n);
+  b.addEventListener('click', () => {
+    current = m; clock = 0;
+    [...list.children].forEach(el => el.setAttribute('aria-pressed', String(el === b)));
+    buildSheet();
+    syncLive(0);
+  });
+  list.append(b);
+});
+
+const playBtn = document.getElementById('play');
+playBtn.addEventListener('click', () => {
+  playing = !playing;
+  playBtn.textContent = playing ? 'PAUSE' : 'PLAY';
+  playBtn.setAttribute('aria-pressed', String(playing));
+  last = performance.now();
+});
+
+document.getElementById('flip').addEventListener('click', () => {
+  facing *= -1;
+  syncLive(clock);
+});
+
+document.querySelectorAll('.spd').forEach(btn => {
+  btn.addEventListener('click', () => {
+    speed = Number(btn.dataset.spd);
+    document.querySelectorAll('.spd').forEach(o => o.setAttribute('aria-pressed', String(o === btn)));
+  });
+});
+
+scrub.addEventListener('input', () => {
+  playing = false;
+  playBtn.textContent = 'PLAY';
+  playBtn.setAttribute('aria-pressed', 'false');
+  const len = motionLength(current);
+  clock = (Number(scrub.value) / 1000) * len;
+  syncLive(clock);
+});
+
+if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  playing = false;
+  playBtn.textContent = 'PLAY';
+  playBtn.setAttribute('aria-pressed', 'false');
+}
+
+buildSheet();
+syncLive(0);
+requestAnimationFrame(frame);
+window.__VIEWER_READY = true;
+</script>

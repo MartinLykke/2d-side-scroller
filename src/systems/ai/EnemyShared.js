@@ -84,7 +84,7 @@ export function changeState(e, newState, duration = 0) {
 }
 
 export function swingMult(e) {
-  return e.type === "emberBrute" ? 2.6 : 1;
+  return e.type === "brute" ? 2.6 : 1;
 }
 
 export function killWall(w) {

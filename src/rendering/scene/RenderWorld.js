@@ -2,13 +2,11 @@ import { clamp, lerp, lerpColor, rgb, withA, shade, atmo, hazeColor, mulberry32,
 import { CFG, STATIONS_X } from '../../config/config.js';
 import { ctx, W, H, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
-import { FX, biomeAt, getGroundTex, getDeco, windGust, windSway, drawTree, makeTree } from '../Effects.js?v=biomeactive1';
+import { FX, biomeAt, getGroundTex, getDeco, windGust, windSway, drawTree, makeTree } from '../Effects.js?v=biomeactive4';
 import { visibleWorldBounds } from '../Viewport.js';
-import { wallHeight, wallRenderWidth, wallLayout } from '../../entities/Wall.js';
+import { wallHeight, wallRenderWidth, wallLayout, bridgeSpan } from '../../entities/Wall.js';
 import { groundShadow, roundedRect, stoneCol, stoneLt, woodCol, litWindow, drawHpBar } from '../DrawHelpers.js?v=biomeweapons1';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive1';
-import { fortHas, fortLevel, fortNext } from '../../systems/world/FortificationSystem.js?v=biomeactive1';
-import { FORT_TRACK } from '../../config/fortifications.js';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive4';
 import { renderBudget } from '../RenderFrame.js';
 import { castleUpgradeLevel } from '../../util/DefenseStats.js';
 
@@ -430,14 +428,9 @@ export function drawPonds(dark) {
     }
 
     // ---- wading ripples: anything walking through the shallow water ----
-    const waders = [];
-    if (state.player) waders.push(state.player);
-    for (const u of state.units) waders.push(u);
-    for (const v of state.vagrants) waders.push(v);
-    for (const e of state.enemies) if (!e.fy || e.fy >= -4) waders.push(e);
-    for (const a of state.animals) if (a.alive && a.type !== "duck" && !(a.fy < 0)) waders.push(a);
-    for (const wd of waders) {
-      if (Math.abs(wd.x - p.x) >= hw - 12) continue;
+    // check entities directly instead of building a temporary array each pond
+    const checkWader = (wd) => {
+      if (Math.abs(wd.x - p.x) >= hw - 12) return;
       const moving = Math.abs(wd.vx || 0) > 5;
       pondRipple(wd.x, sy + 2.5, 9 + Math.sin(t * 5 + wd.x) * 1.5, 0.34);
       pondRipple(wd.x - (wd.vx > 0 ? 8 : -8), sy + 2.5, 14, moving ? 0.2 : 0.08);
@@ -447,7 +440,12 @@ export function drawPonds(dark) {
         ctx.arc(wd.x + (Math.random() * 12 - 6), sy - (1 + Math.random() * 4), 0.6 + Math.random() * 0.8, 0, Math.PI * 2);
         ctx.fill();
       }
-    }
+    };
+    if (state.player) checkWader(state.player);
+    for (const u of state.units) checkWader(u);
+    for (const v of state.vagrants) checkWader(v);
+    for (const e of state.enemies) { if (!e.fy || e.fy >= -4) checkWader(e); }
+    for (const a of state.animals) { if (a.alive && a.type !== "duck" && !(a.fy < 0)) checkWader(a); }
   }
 }
 
@@ -1332,10 +1330,12 @@ function drawLog(x, dir, len) {
 export function drawForestTrees(dark) {
   const haze = hazeColor(dark);
   const view = visibleWorldBounds(220), camL = view.left, camR = view.right;
+  const plx = state.player ? state.player.x : null;
+  const fernRange = 500;
+  const b = biomeAt(0);
   for (const ft of state.forestTrees) {
     if (ft.x < camL || ft.x > camR) continue;
     if (ft.chopped || ft.carriedBy) continue;
-    const b = biomeAt(ft.x);
     // stagger apparent depth so the dense forest reads as layered rows
     const depth = 0.05 + (Math.abs(Math.floor(ft.x / 60)) % 3) * 0.07;
     const light = atmo(b.treeL, haze, depth), dcol = atmo(b.treeD, haze, depth);
@@ -1368,18 +1368,28 @@ export function drawForestTrees(dark) {
       continue;
     }
 
-    drawTree(ft.tree, ft.x, groundY + 4, light, dcol, depth, 16);
-    // ferny undergrowth hugging the trunk base
-    ctx.save(); ctx.lineCap = "round";
-    ctx.strokeStyle = withA(atmo(shade(b.gT, 0.62), haze, depth), 0.9); ctx.lineWidth = 1.6;
-    for (let i = -2; i <= 2; i++) {
-      const sway = windSway(ft.tree.phase + i, 3);
-      const fh = 11 + ((i * i + (Math.abs(ft.x | 0) % 4)) % 3) * 4;
-      ctx.beginPath(); ctx.moveTo(ft.x + i * 5, groundY + 2);
-      ctx.quadraticCurveTo(ft.x + i * 7 + sway, groundY - fh * 0.55, ft.x + i * 10 + sway, groundY - fh);
-      ctx.stroke();
+    const impactPulse = ft.chopImpactPulse || 0;
+    if (impactPulse > 0) {
+      const jitter = impactPulse * impactPulse * 1.8;
+      ctx.save();
+      ctx.translate(Math.sin(performance.now() / 18 + ft.x) * jitter, 0);
+      drawTree(ft.tree, ft.x, groundY + 4, light, dcol, depth, 16);
+      ctx.restore();
+    } else {
+      drawTree(ft.tree, ft.x, groundY + 4, light, dcol, depth, 16);
     }
-    ctx.restore();
+    if (plx !== null && Math.abs(ft.x - plx) < fernRange) {
+      ctx.save(); ctx.lineCap = "round";
+      ctx.strokeStyle = withA(atmo(shade(b.gT, 0.62), haze, depth), 0.9); ctx.lineWidth = 1.6;
+      for (let i = -2; i <= 2; i++) {
+        const sway = windSway(ft.tree.phase + i, 3);
+        const fh = 11 + ((i * i + (Math.abs(ft.x | 0) % 4)) % 3) * 4;
+        ctx.beginPath(); ctx.moveTo(ft.x + i * 5, groundY + 2);
+        ctx.quadraticCurveTo(ft.x + i * 7 + sway, groundY - fh * 0.55, ft.x + i * 10 + sway, groundY - fh);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
     if (ft.marked || ft.beingChopped || ft.chopProgress > 0) {
       const bob = Math.sin(performance.now() / 300 + ft.x) * 3;
       ctx.save(); ctx.font = "16px serif"; ctx.textAlign = "center"; ctx.globalAlpha = 0.9;
@@ -2189,6 +2199,66 @@ function drawBiomeWallDetails(w, h, WW, skin, flash, night) {
   ctx.restore();
 }
 
+// Rampart bridge connecting the two wall platforms on one side once both
+// slots are finished. Slopes to match differing wall levels so it reads as
+// a single crossable span rather than two unrelated platforms.
+function drawWallBridgeSpan(span) {
+  const skin = baseSkinAt(span.outerX, false);
+  const wood  = skin?.id === "frozen" ? "#8fb2c8" : skin?.id === "desert" ? "#9a6330" : skin?.id === "volcano" ? "#5a2c1d" : skin?.id === "corrupted" ? "#3a2138" : skin?.wood || "#6b4a26";
+  const woodD = skin?.id === "frozen" ? "#476c84" : skin?.id === "desert" ? "#6a3f1d" : skin?.id === "volcano" ? "#2a1510" : skin?.id === "corrupted" ? "#170b20" : skin?.gate || "#4c3216";
+  const x0 = span.outerX, y0 = groundY - span.outerY;
+  const x1 = span.innerX, y1 = groundY - span.innerY;
+  const len = Math.abs(x1 - x0);
+  if (len < 4) return;
+  const thickness = 7;
+
+  ctx.save();
+
+  // Support posts along the span, planted at the ground below each point.
+  const nPosts = Math.max(2, Math.round(len / 60) + 1);
+  ctx.fillStyle = woodD;
+  for (let i = 0; i < nPosts; i++) {
+    const t = i / (nPosts - 1);
+    const px = x0 + (x1 - x0) * t;
+    const py = y0 + (y1 - y0) * t;
+    ctx.fillRect(px - 2, py + thickness, 4, groundY - (py + thickness));
+  }
+
+  // Plank deck, sloped between the two platform heights.
+  ctx.fillStyle = wood;
+  ctx.beginPath();
+  ctx.moveTo(x0, y0); ctx.lineTo(x1, y1);
+  ctx.lineTo(x1, y1 + thickness); ctx.lineTo(x0, y0 + thickness);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.10)";
+  ctx.beginPath();
+  ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.lineTo(x1, y1 + 2); ctx.lineTo(x0, y0 + 2);
+  ctx.closePath(); ctx.fill();
+
+  // Plank seams
+  ctx.strokeStyle = "rgba(0,0,0,0.25)"; ctx.lineWidth = 1;
+  const seams = Math.max(2, Math.round(len / 16));
+  for (let i = 1; i < seams; i++) {
+    const t = i / seams;
+    const px = x0 + (x1 - x0) * t, py = y0 + (y1 - y0) * t;
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py + thickness); ctx.stroke();
+  }
+
+  // Rope rail
+  ctx.strokeStyle = woodD; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x0, y0 - 13); ctx.lineTo(x1, y1 - 13); ctx.stroke();
+  ctx.strokeStyle = "rgba(235,220,185,0.2)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x0, y0 - 14); ctx.lineTo(x1, y1 - 14); ctx.stroke();
+  ctx.strokeStyle = woodD; ctx.lineWidth = 2;
+  for (let i = 0; i <= nPosts; i++) {
+    const t = i / nPosts;
+    const px = x0 + (x1 - x0) * t, py = y0 + (y1 - y0) * t;
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, py - 13); ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 export function drawWalls(dark) {
   const night=dark>0.25;
   const view = visibleWorldBounds(170);
@@ -2238,8 +2308,14 @@ export function drawWalls(dark) {
       }
       ctx.restore();
     }
-    drawWallWards(w, h, WW);
     drawHpBar(x,groundY-h-18,WW+6,w.hp/w.maxHp,"#9bd05a");
+  }
+
+  for (const side of [-1, 1]) {
+    const span = bridgeSpan(side, state.walls);
+    if (!span) continue;
+    if (span.outerX < view.left - 200 || span.outerX > view.right + 200) continue;
+    drawWallBridgeSpan(span);
   }
 }
 
@@ -3157,8 +3233,107 @@ export function drawBase(dark) {
     drawBiomeStronghold(x, lvl, skin, dark, night);
     drawCastleUpgradeDressing(x,lvl,dark,skin);
   }
-  if (fortHas("sigil")) drawCrownSigil(x, lvl);
   drawHpBar(x,groundY-(lvl>=7?292:lvl>=4?250:lvl>=2?130:70),70,base.hp/base.maxHp,"#f2c14e");
+  ctx.restore();
+}
+
+const TREB_WOOD = "#6a4a2a", TREB_WOOD_D = "#3f2c18", TREB_IRON = "#8a8a96", TREB_STONE = "#5a5a66", TREB_ROPE = "#cdbfa3";
+
+// Timeline for the throwing arm: -1 = cocked & loaded, snaps to +1 (thrown)
+// on release, then winches back down to -1 over a couple of seconds.
+function trebuchetArmT(fireT, t) {
+  if (!fireT) return -1;
+  const since = t - fireT;
+  if (since < 0.16) return lerp(-1, 1, 1 - Math.pow(1 - since / 0.16, 3));
+  if (since < 2.3) return lerp(1, -1, (since - 0.16) / (2.3 - 0.16));
+  return -1;
+}
+
+// Warwolf Cradle: a wall-mounted trebuchet — an A-frame cradle with a
+// counterweighted throwing arm that snaps forward on release and winches
+// back down to reload. footY is passed explicitly (rather than reading the
+// module's groundY) so the same model can sit on the battlements in-world
+// or spin idly as an animated preview icon in the Castle Council menu.
+export function drawTrebuchetModel(cx, footY, side, scale, level, fireT, tNow) {
+  const t = tNow ?? performance.now() / 1000;
+  const armT = trebuchetArmT(fireT, t);
+  const loaded = armT < -0.55;
+  const angDeg = lerp(112, -26, (armT + 1) / 2) * side;
+  const ang = angDeg * Math.PI / 180;
+  const pivotY = -68;
+  const longLen = 50 + level * 4, shortLen = 22 + level * 2;
+  const dx = Math.sin(ang), dy = -Math.cos(ang);
+  const longX = dx * longLen, longY = pivotY + dy * longLen;
+  const shortX = -dx * shortLen, shortY = pivotY - dy * shortLen;
+
+  ctx.save();
+  ctx.translate(cx, footY);
+  ctx.scale(scale, scale);
+
+  ctx.fillStyle = TREB_STONE;
+  ctx.beginPath(); ctx.ellipse(0, -2, 40, 9, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.1)";
+  ctx.beginPath(); ctx.ellipse(-10, -4, 16, 4, 0, 0, Math.PI * 2); ctx.fill();
+
+  // A-frame legs, front + back for a little depth
+  ctx.lineCap = "round";
+  ctx.strokeStyle = TREB_WOOD_D; ctx.lineWidth = 9;
+  for (const off of [-13, 13]) { ctx.beginPath(); ctx.moveTo(off * 1.9, 0); ctx.lineTo(0, pivotY); ctx.stroke(); }
+  ctx.strokeStyle = TREB_WOOD; ctx.lineWidth = 5;
+  for (const off of [-13, 13]) { ctx.beginPath(); ctx.moveTo(off * 1.9, 0); ctx.lineTo(0, pivotY); ctx.stroke(); }
+  ctx.strokeStyle = TREB_WOOD_D; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(-20, -22); ctx.lineTo(20, -22); ctx.stroke();
+  if (level >= 2) {
+    ctx.strokeStyle = TREB_IRON; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(-16, -40); ctx.lineTo(16, -40); ctx.stroke();
+  }
+
+  ctx.fillStyle = TREB_IRON;
+  ctx.beginPath(); ctx.arc(0, pivotY, 5, 0, Math.PI * 2); ctx.fill();
+
+  // the throwing arm: one rigid beam through the pivot — long sling end,
+  // short counterweight end
+  ctx.strokeStyle = TREB_WOOD; ctx.lineWidth = 6; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(shortX, shortY); ctx.lineTo(longX, longY); ctx.stroke();
+  if (level >= 2) {
+    ctx.strokeStyle = TREB_IRON; ctx.lineWidth = 2.4;
+    ctx.beginPath(); ctx.moveTo(shortX * 0.5, (shortY + pivotY) / 2); ctx.lineTo(longX * 0.5, (longY + pivotY) / 2); ctx.stroke();
+  }
+
+  // counterweight box, swaying gently on its hanger
+  const cwSwing = Math.sin(t * 1.6) * 0.12;
+  ctx.save();
+  ctx.translate(shortX, shortY);
+  ctx.rotate(cwSwing);
+  const cwSize = 12 + level * 2;
+  ctx.fillStyle = TREB_WOOD_D;
+  roundedRect(-cwSize / 2, 0, cwSize, cwSize + 6, 2); ctx.fill();
+  ctx.strokeStyle = TREB_IRON; ctx.lineWidth = 1.5;
+  roundedRect(-cwSize / 2, 0, cwSize, cwSize + 6, 2); ctx.stroke();
+  ctx.restore();
+
+  // sling + boulder at the long end, only while cocked and freshly loaded
+  if (loaded) {
+    const sx = longX + dx * 14, sy = longY + dy * 14;
+    ctx.strokeStyle = TREB_ROPE; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(longX, longY); ctx.lineTo(sx, sy); ctx.stroke();
+    ctx.fillStyle = "#7d7166";
+    ctx.beginPath(); ctx.arc(sx, sy, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.15)";
+    ctx.beginPath(); ctx.arc(sx - 2, sy - 2, 3, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // level 3: a war pennant flying from the apex of the twin-arm cradle
+  if (level >= 3) {
+    const sway = windSway(cx, 3);
+    ctx.strokeStyle = TREB_ROPE; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(0, pivotY); ctx.lineTo(0, pivotY - 18); ctx.stroke();
+    ctx.fillStyle = "#c1453b";
+    ctx.beginPath(); ctx.moveTo(0, pivotY - 18);
+    ctx.quadraticCurveTo(9 + sway, pivotY - 16, 15 + sway, pivotY - 12);
+    ctx.quadraticCurveTo(9 + sway, pivotY - 8, 0, pivotY - 6); ctx.fill();
+  }
+
   ctx.restore();
 }
 
@@ -3208,6 +3383,32 @@ function drawCastleUpgradeDressing(x, lvl, dark, skin = BASE_BIOME_SKINS.forest)
       ctx.beginPath(); ctx.ellipse(x, groundY - 12, 194, 24, 0, 0, Math.PI * 2); ctx.stroke();
       ctx.restore();
     }
+
+    // Murder Holes: a cauldron perched on the outermost buttress each side,
+    // tilting to pour boiling oil down onto the gate whenever it triggers.
+    const oilAge = state.base?.oilPourT ? t - state.base.oilPourT : 999;
+    const oilTilt = oilAge < 0.5 ? (1 - oilAge / 0.5) * 0.6 : 0;
+    const oi = masonry - 1;
+    for (const side of [-1, 1]) {
+      const bx = x + side * (154 - oi * 42);
+      const topY = groundY - (58 + oi * 18) - 6;
+      ctx.save();
+      ctx.translate(bx, topY);
+      ctx.rotate(side * oilTilt);
+      ctx.fillStyle = "#2d2620";
+      ctx.beginPath(); ctx.ellipse(0, 2, 10, 5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#4a3a28";
+      ctx.beginPath();
+      ctx.moveTo(-9, 0); ctx.quadraticCurveTo(0, 10, 9, 0); ctx.lineTo(7, -8);
+      ctx.quadraticCurveTo(0, -4, -7, -8); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      if (oilAge < 0.5) {
+        ctx.save(); ctx.globalAlpha = (1 - oilAge / 0.5) * 0.85;
+        ctx.strokeStyle = "#5a3a1e"; ctx.lineWidth = 3; ctx.lineCap = "round";
+        ctx.beginPath(); ctx.moveTo(bx, topY + 6); ctx.lineTo(bx + side * 10, groundY - 4); ctx.stroke();
+        ctx.restore();
+      }
+    }
   }
 
   if (garrison > 0) {
@@ -3237,6 +3438,30 @@ function drawCastleUpgradeDressing(x, lvl, dark, skin = BASE_BIOME_SKINS.forest)
         }
       }
     }
+
+    // War Drums: a drummer beating out a rally rhythm, sending a ring of
+    // sound rolling out across the yard whenever the fervor triggers.
+    const drumAge = state.base?.drumBeatT ? t - state.base.drumBeatT : 999;
+    const dx = x - 60, dy = groundY;
+    ctx.fillStyle = "#5a3a1e";
+    roundedRect(dx - 9, dy - 22, 18, 16, 3); ctx.fill();
+    ctx.strokeStyle = "#2d2018"; ctx.lineWidth = 1.5; ctx.strokeRect(dx - 9, dy - 22, 18, 16);
+    ctx.fillStyle = "#e6d8b8";
+    ctx.beginPath(); ctx.ellipse(dx, dy - 22, 9, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = skin.wood || "#6a4a2a";
+    ctx.beginPath(); ctx.ellipse(dx, dy - 34, 5, 9, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(dx, dy - 46, 4.5, 0, Math.PI * 2); ctx.fill();
+    const beat = drumAge < 1.2 ? Math.abs(Math.sin(drumAge * 14)) : Math.abs(Math.sin(t * 1.4)) * 0.3;
+    ctx.strokeStyle = skin.wood || "#6a4a2a"; ctx.lineWidth = 2.4; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(dx - 4, dy - 38); ctx.lineTo(dx - 7, dy - 24 - beat * 8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(dx + 4, dy - 38); ctx.lineTo(dx + 7, dy - 24 - beat * 8); ctx.stroke();
+    if (drumAge < 1.4) {
+      const dk = clamp(drumAge / 1.4, 0, 1);
+      ctx.save(); ctx.globalAlpha = (1 - dk) * 0.4;
+      ctx.strokeStyle = "#9bd05a"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.ellipse(dx, dy - 10, 20 + dk * 90, 7 + dk * 20, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+    }
   }
 
   if (treasury > 0) {
@@ -3260,6 +3485,36 @@ function drawCastleUpgradeDressing(x, lvl, dark, skin = BASE_BIOME_SKINS.forest)
         ctx.fillStyle = "#5a3a20"; roundedRect(sx - 16, groundY - 18, 32, 18, 3); ctx.fill();
         ctx.fillStyle = "#8a5a24"; ctx.fillRect(sx - 16, groundY - 18, 32, 5);
         ctx.fillStyle = skin.accent2; ctx.fillRect(sx - 2, groundY - 14, 4, 9);
+      }
+    }
+
+    // Greedwyrm's Hoard: a coiled coin-wyrm perched over the vault, spitting
+    // a mouthful of coin whenever the hoard can't help but overflow.
+    const hoardAge = state.base?.hoardBurstT ? t - state.base.hoardBurstT : 999;
+    const wx = x, wy = groundY - 96, wobble = Math.sin(t * 1.8) * 2;
+    ctx.strokeStyle = skin.accent2; ctx.lineWidth = 5; ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(wx - 14, wy + 8 + wobble);
+    ctx.quadraticCurveTo(wx - 6, wy - 4 + wobble, wx + 2, wy + 2 + wobble);
+    ctx.quadraticCurveTo(wx + 10, wy + 8 + wobble, wx + 6, wy - 2 + wobble);
+    ctx.stroke();
+    ctx.fillStyle = skin.accent2;
+    ctx.beginPath(); ctx.arc(wx + 6, wy - 4 + wobble, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#1a1310";
+    ctx.beginPath(); ctx.arc(wx + 8, wy - 5 + wobble, 1.3, 0, Math.PI * 2); ctx.fill();
+    if (hoardAge < 0.4) {
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 1 - hoardAge / 0.4;
+      ctx.fillStyle = "#fff4c8";
+      ctx.beginPath(); ctx.arc(wx + 10, wy - 2 + wobble, 4 + hoardAge * 10, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+    if (hoardAge < 0.7) {
+      const hk = hoardAge / 0.7;
+      for (let i = 0; i < 3; i++) {
+        const kk = clamp(hk - i * 0.08, 0, 1);
+        if (kk <= 0) continue;
+        ctx.fillStyle = "#f2c14e";
+        ctx.beginPath(); ctx.arc(wx + 10 + i * 6, wy - 2 + wobble - Math.sin(kk * Math.PI) * 26, 2.4, 0, Math.PI * 2); ctx.fill();
       }
     }
   }
@@ -3291,6 +3546,20 @@ function drawCastleUpgradeDressing(x, lvl, dark, skin = BASE_BIOME_SKINS.forest)
       for (const off of [-52, 52]) {
         ctx.beginPath(); ctx.moveTo(x, fy + 10); ctx.quadraticCurveTo(x + off * 0.45, fy + 44, x + off, groundY - 204); ctx.stroke();
       }
+    }
+  }
+
+  const siege = castleUpgradeLevel("siege");
+  if (siege > 0) {
+    const fireT = state.base?.trebuchetFireT;
+    if (siege >= 3) {
+      groundShadow(x - 235, 46, 0.28); groundShadow(x + 235, 46, 0.28);
+      drawTrebuchetModel(x - 235, groundY, -1, 0.7, siege, fireT, t);
+      drawTrebuchetModel(x + 235, groundY, 1, 0.7, siege, fireT, t);
+    } else {
+      const side = state.base?.trebuchetSide || 1;
+      groundShadow(x + side * 235, 46, 0.28);
+      drawTrebuchetModel(x + side * 235, groundY, side, 0.7, siege, fireT, t);
     }
   }
 }
@@ -4026,7 +4295,6 @@ export function drawStations() {
   }
   if (state.base && state.base.level >= 2 && seen(STATIONS_X.shop)) drawShopBuilding(STATIONS_X.shop);
   if (state.base && state.base.level >= 3 && seen(STATIONS_X.guard)) drawGuardStation(STATIONS_X.guard);
-  if (state.base && state.base.level >= 3 && seen(STATIONS_X.runeforge)) drawRuneforge(STATIONS_X.runeforge);
 }
 
 // The Runeforge: a dark obelisk whose runes glow in the color of the next
@@ -4497,15 +4765,12 @@ export function drawBuildings(dark) {
     if (b.x < view.left || b.x > view.right) continue;
     if (!b.built) {
       if (b.needsClearing && !b.cleared) { drawClearingHint(b.x); continue; }
-      const markerCol = b.type==="tower" ? "#c98a4a" : b.type==="lumber" ? "#8a9a5a" : b.type==="ballista" ? "#c1453b" : b.type==="kennel" ? "#ffb45f" : b.type==="trap_foundry" ? "#cfd3d9" : b.type==="raven_roost" ? "#b9a7ff" : b.type==="market_cart" ? "#7fd6a4" : "#8fd8ff";
+      const markerCol = b.type==="lumber" ? "#8a9a5a" : b.type==="kennel" ? "#ffb45f" : b.type==="trap_foundry" ? "#cfd3d9" : b.type==="raven_roost" ? "#b9a7ff" : b.type==="market_cart" ? "#7fd6a4" : "#8fd8ff";
       drawBuildMarker(b.x, markerCol);
-      drawStationIcon(b.x, b.type==="tower" ? "🏹" : b.type==="lumber" ? "🪵" : b.type==="ballista" ? "🎯" : b.type==="kennel" ? "H" : b.type==="trap_foundry" ? "T" : b.type==="raven_roost" ? "R" : b.type==="market_cart" ? "M" : "⛲");
+      drawStationIcon(b.x, b.type==="lumber" ? "🪵" : b.type==="kennel" ? "H" : b.type==="trap_foundry" ? "T" : b.type==="raven_roost" ? "R" : b.type==="market_cart" ? "M" : "⛺");
       continue;
     }
-    if (b.type === "tower") drawWatchtower(b, night);
-    else if (b.type === "lumber") drawLumberCamp(b, night);
-    else if (b.type === "shrine") drawShrine(b, dark);
-    else if (b.type === "ballista") drawBallista(b, night);
+    if (b.type === "lumber") drawLumberCamp(b, night);
     else if (b.type === "kennel") drawKennel(b, night);
     else if (b.type === "trap_foundry") drawTrapFoundry(b, night);
     else if (b.type === "raven_roost") drawRavenRoost(b, night);

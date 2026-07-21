@@ -50,25 +50,35 @@ export const CFG = {
   critMultiplier: 1.5,
   // Buildings unlocked by base upgrades
   clearRadius: 65,          // forest must be felled this close before building
-  towerCosts: [15, 22, 34], // watchtower build + upgrade costs (lvl 1-3)
-  towerRange: 430,
   lumberCost: 11,
   lumberLogBonus: 2,        // extra coins per delivered log, per camp
-  shrineCost: 18,
-  shrineRange: 190,
-  shrineHealTime: 3.5,
   repairAllCost: 14,
   reinforceCostBase: 26,
   reinforceCostPerDay: 2,
-  // Ballista emplacements (unlocked at base level 6): heavy piercing bolts
-  ballistaCosts: [45, 70],  // build + upgrade cost (lvl 1-2)
-  ballistaRange: 640,
+  // Murder Holes: machicolations pour boiling oil on foes right at the gate
+  murderHoleRange: 130,
+  murderHoleInterval: 3.2,
+  murderHoleDamage: 3,
+  murderHoleSlowDuration: 1.4,
+  // War Drums: a periodic beat spurs the whole garrison to fight faster
+  warDrumInterval: 16,
+  warDrumBuffDuration: 5,
+  // Greedwyrm's Hoard: the vault periodically overflows with bonus coin
+  hoardBurstInterval: 20,
+  hoardBurstGold: 3,
   // Crown Aegis (base level 7): the castle smites enemies near the walls
   aegisRange: 620,
   aegisInterval: 3.0,
   aegisDamage: 6,
   aegisSplashDamage: 2,   // reduced damage to enemies caught near the primary target
   aegisRadius: 80,
+  // Warwolf Cradle (base level 5): a castle-council trebuchet lobbing boulders at approaching hordes
+  trebuchetRange: 900,
+  trebuchetInterval: 5.5,
+  trebuchetDamage: 12,
+  trebuchetSplashDamage: 5,
+  trebuchetRadius: 95,
+  trebuchetTravelTime: 0.85,
   // Portal assault (G): archers + guards march on a portal to destroy it
   portalHp: 300,
   portalHpPerDay: 12,        // portals harden as the days pass
@@ -83,7 +93,6 @@ export const STATIONS_X = {
   farm:   CFG.baseX - 480,
   shop:   CFG.baseX + 445, // between the two right wall slots (mirrors the farm on the left)
   guard:  CFG.baseX + 220,
-  runeforge: CFG.baseX - 550, // between the left walls and the farm
 };
 
 export const WALL_SLOTS = [
@@ -98,12 +107,6 @@ export const WALL_SLOTS = [
 export const BUILDING_SLOTS = [
   { type: "lumber", x: CFG.baseX - 1010, unlock: 2, needsClearing: true },
   { type: "lumber", x: CFG.baseX + 1010, unlock: 2, needsClearing: true },
-  { type: "tower",  x: CFG.baseX - 780,  unlock: 3, needsClearing: true },
-  { type: "tower",  x: CFG.baseX + 780,  unlock: 3, needsClearing: true },
-  { type: "shrine", x: CFG.baseX + 530,  unlock: 3 },
-  // Appended after the original slots so old saves (indexed by slot) still load.
-  { type: "ballista", x: CFG.baseX - 900, unlock: 6, needsClearing: true },
-  { type: "ballista", x: CFG.baseX + 900, unlock: 6, needsClearing: true },
 ];
 
 export const PORTALS = [
@@ -117,7 +120,7 @@ export const FOREST = {
   endDist: 1250,    // stays clear of the portals
   spacing: 46,
   interactRange: 70,
-  chopWork: 1.6,    // seconds of builder work to fell a tree
+  chopWork: 3.2,    // seconds of builder work to fell a tree
   regrowMin: 90,    // seconds after a delivered log before the tree returns
   regrowMax: 190,
 };

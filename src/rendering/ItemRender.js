@@ -8,10 +8,16 @@ import { WEAPONS, RARITY_COL } from '../config/weapons.js?v=biomeweapons1';
 import { cachedUpgradeEffects } from '../config/weaponUpgrades.js?v=biomeweapons1';
 import { ARMORS, ARMOR_RARITY_COL } from '../config/armor.js';
 import { shootPose, ease, drawBow, limb } from './sprites/Archer.js';
-import { drawWandModel, wandTipLength, roundedRect } from './DrawHelpers.js?v=biomeweapons1';
+import { drawWandModel, wandTipLength, roundedRect, spellTypeWandLook } from './DrawHelpers.js?v=biomeweapons1';
 import { armorOutfit } from './ArmorOutfits.js';
 
 export const WEAPON_TYPE_LABEL = { melee: "Melee", ranged: "Ranged", magic: "Magic" };
+
+// Generated casters have no hand-authored WAND_LOOKS entry — theme them off
+// their rolled spellType/color instead of always falling back to "arcane".
+function proceduralWandLook(w) {
+  return w.generated ? spellTypeWandLook(w.spellType, w.col) : null;
+}
 
 // ---------- Small helpers ----------
 function rarityHalo(rarity, col, r, extra = 0) {
@@ -88,9 +94,12 @@ function drawSwordLikeWeapon(weaponId, w, len, fx) {
   const upgEpic = rank >= 2;
   const upgLeg = rank >= 3;
   const vCol = upgradeColor(fx, w.col);
-  let bladeW = weaponId === "dagger" ? 2.5 : weaponId === "longsword" || weaponId === "kings_sword" ? 4.2 : 3.5;
+  let bladeW = weaponId.includes("rapier") ? 1.6 : weaponId.includes("claymore") ? 5.6
+    : weaponId === "dagger" ? 2.5 : weaponId === "longsword" || weaponId === "kings_sword" ? 4.2 : 3.5;
   if (weaponId === "dagger" && upgEpic) bladeW = upgLeg ? 1.7 : 2.0;
   if (weaponId === "longsword" && upgEpic) bladeW += upgLeg ? 1.4 : 0.8;
+  if (weaponId.includes("claymore")) len *= 1.2;
+  if (weaponId.includes("rapier")) len *= 1.08;
   const t = performance.now() / 1000;
   ctx.save();
   if (weaponId === "longsword" && upgLeg) {
@@ -230,6 +239,17 @@ function drawSwordLikeWeapon(weaponId, w, len, fx) {
   ctx.beginPath(); ctx.moveTo(-7, 0); ctx.lineTo(2, 0); ctx.stroke();
   ctx.strokeStyle = upgLeg ? vCol : "#d4a838"; ctx.lineWidth = 4.5;
   ctx.beginPath(); ctx.moveTo(-3, -5); ctx.lineTo(-3, 5); ctx.stroke();
+  if (weaponId.includes("rapier")) {
+    ctx.strokeStyle = upgLeg ? vCol : "#c8ccd4"; ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.arc(-3, 0, 4.4, 0.15, Math.PI * 2 - 0.15); ctx.stroke();
+  }
+  if (weaponId.includes("claymore")) {
+    ctx.strokeStyle = upgLeg ? vCol : "#9aa0aa"; ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.moveTo(-3, -8.5); ctx.lineTo(-3, 8.5); ctx.stroke();
+    ctx.fillStyle = upgLeg ? vCol : "#d4a838";
+    ctx.beginPath(); ctx.arc(-3, -8.5, 1.3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(-3, 8.5, 1.3, 0, Math.PI * 2); ctx.fill();
+  }
   if (upgLeg) {
     ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.5 + 0.3 * Math.sin(t * 3.5);
     ctx.fillStyle = vCol;
@@ -509,6 +529,192 @@ function drawAxeWeaponModel(weaponId, w, len, fx) {
   ctx.restore();
 }
 
+function drawMaceWeaponModel(weaponId, w, len, fx) {
+  const t = performance.now() / 1000;
+  const rank = upgradeRank(fx);
+  const upgLeg = rank >= 3;
+  const vCol = upgradeColor(fx, w.col);
+  const headX = len - 2;
+  ctx.save();
+  ctx.strokeStyle = "#4a3520"; ctx.lineWidth = 3.4; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-7, 0); ctx.lineTo(headX - 3, 0); ctx.stroke();
+  ctx.strokeStyle = "#7a5a34"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(-5, -1); ctx.lineTo(headX - 5, -1); ctx.stroke();
+  const grad = ctx.createRadialGradient(headX - 1, -1, 1, headX, 0, 9);
+  grad.addColorStop(0, "#e8e8f0"); grad.addColorStop(0.5, vCol || w.col); grad.addColorStop(1, "#3a3a44");
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(headX, 0, 7.2, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#20202a"; ctx.lineWidth = 0.8; ctx.stroke();
+  ctx.fillStyle = "#c8c8d4";
+  for (let k = 0; k < 6; k++) {
+    const a = k * Math.PI / 3;
+    ctx.save(); ctx.translate(headX, 0); ctx.rotate(a);
+    ctx.beginPath();
+    ctx.moveTo(3, -2); ctx.lineTo(10, -1.5); ctx.lineTo(10, 1.5); ctx.lineTo(3, 2);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 0.6; ctx.stroke();
+    ctx.restore();
+  }
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.4 + 0.2 * Math.sin(t * 4);
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath(); ctx.arc(headX - 2, -3, 1.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  if (upgLeg) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.32 + 0.14 * Math.sin(t * 3);
+    ctx.strokeStyle = vCol; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(headX, 0, 11, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.strokeStyle = "#2c2117"; ctx.lineWidth = 4; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-8, 0); ctx.lineTo(-2, 0); ctx.stroke();
+  ctx.fillStyle = "#4a3520";
+  ctx.beginPath(); ctx.arc(-8, 0, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawCleaverWeaponModel(weaponId, w, len, fx) {
+  const t = performance.now() / 1000;
+  const vCol = upgradeColor(fx, w.col);
+  const bladeH = 11;
+  ctx.save();
+  ctx.strokeStyle = "#3a281a"; ctx.lineWidth = 3; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-7, 0); ctx.lineTo(4, 0); ctx.stroke();
+  const grad = ctx.createLinearGradient(2, -bladeH, len, bladeH * 0.6);
+  grad.addColorStop(0, "#f0ecd8"); grad.addColorStop(0.5, vCol || w.col); grad.addColorStop(1, "#2a2a30");
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(2, -bladeH * 0.3);
+  ctx.lineTo(len * 0.3, -bladeH);
+  ctx.lineTo(len, -bladeH * 0.55);
+  ctx.lineTo(len + 3, 0);
+  ctx.lineTo(len, bladeH * 0.6);
+  ctx.lineTo(2, bladeH * 0.55);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "rgba(20,16,13,0.5)"; ctx.lineWidth = 0.8; ctx.stroke();
+  ctx.fillStyle = "rgba(0,0,0,0.3)";
+  ctx.beginPath(); ctx.arc(len * 0.25, -bladeH * 0.55, 1.4, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.3 + 0.15 * Math.sin(t * 5);
+  ctx.strokeStyle = vCol || w.col; ctx.lineWidth = 1.2;
+  ctx.beginPath(); ctx.moveTo(len * 0.4, -bladeH * 0.8); ctx.lineTo(len * 0.9, -bladeH * 0.3); ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = "#4a3520";
+  ctx.beginPath(); ctx.arc(-7.5, 0, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawFlailWeaponModel(weaponId, w, len, fx) {
+  const t = performance.now() / 1000;
+  const rank = upgradeRank(fx);
+  const upgLeg = rank >= 3;
+  const vCol = upgradeColor(fx, w.col);
+  ctx.save();
+  ctx.strokeStyle = "#3a281a"; ctx.lineWidth = 3.4; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-8, 0); ctx.lineTo(6, 0); ctx.stroke();
+  const swing = Math.sin(t * 2.6) * 0.32;
+  const reach = len - 3;
+  const ballX = 6 + Math.cos(swing) * reach;
+  const ballY = Math.sin(swing) * reach * 0.55 - 2;
+  ctx.strokeStyle = "#8a8a96"; ctx.lineWidth = 1.3;
+  ctx.beginPath();
+  const links = 5;
+  for (let i = 0; i <= links; i++) {
+    const p = i / links;
+    const cx = 6 + (ballX - 6) * p;
+    const cy = ballY * p + Math.sin(p * Math.PI) * -3;
+    if (i === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
+  }
+  ctx.stroke();
+  if (upgLeg) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.3 + 0.15 * Math.sin(t * 5);
+    ctx.strokeStyle = vCol; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(ballX, ballY, 9, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+  const grad = ctx.createRadialGradient(ballX - 1.2, ballY - 1.2, 1, ballX, ballY, 7);
+  grad.addColorStop(0, "#e8e8f0"); grad.addColorStop(0.55, vCol || w.col); grad.addColorStop(1, "#2a2a30");
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(ballX, ballY, 6.4, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#1c1712"; ctx.lineWidth = 0.7; ctx.stroke();
+  ctx.strokeStyle = "#c8c8d4"; ctx.lineWidth = 1.1; ctx.lineCap = "round";
+  for (let k = 0; k < 7; k++) {
+    const a = k * (Math.PI * 2 / 7);
+    ctx.beginPath();
+    ctx.moveTo(ballX + Math.cos(a) * 6, ballY + Math.sin(a) * 6);
+    ctx.lineTo(ballX + Math.cos(a) * 9.6, ballY + Math.sin(a) * 9.6);
+    ctx.stroke();
+  }
+  ctx.fillStyle = "#4a3520";
+  ctx.beginPath(); ctx.arc(-8.5, 0, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawGlaiveWeaponModel(weaponId, w, len, fx) {
+  const t = performance.now() / 1000;
+  const rank = upgradeRank(fx);
+  const upgLeg = rank >= 3;
+  const vCol = upgradeColor(fx, w.col);
+  ctx.save();
+  ctx.strokeStyle = "#4a3520"; ctx.lineWidth = 3; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(len + 4, 0); ctx.stroke();
+  ctx.strokeStyle = "#7a5a34"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(-6, -1); ctx.lineTo(len + 1, -1); ctx.stroke();
+  if (upgLeg) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.32 + 0.12 * Math.sin(t * 3);
+    ctx.strokeStyle = vCol; ctx.lineWidth = 8; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(len - 2, 0); ctx.quadraticCurveTo(len + 12, -10, len + 22, -2); ctx.stroke();
+    ctx.restore();
+  }
+  const grad = ctx.createLinearGradient(len - 4, -14, len + 22, 4);
+  grad.addColorStop(0, "#f0ecd8"); grad.addColorStop(0.4, vCol || w.col); grad.addColorStop(1, "#2a2a30");
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(len - 4, 2.5);
+  ctx.quadraticCurveTo(len + 6, -3, len + 12, -11);
+  ctx.quadraticCurveTo(len + 20, -14, len + 24, -4);
+  ctx.quadraticCurveTo(len + 14, -2, len + 6, 4.5);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "rgba(20,16,13,0.5)"; ctx.lineWidth = 0.8; ctx.stroke();
+  ctx.fillStyle = "#3a3a44";
+  ctx.fillRect(len - 5, -2.4, 4, 4.8);
+  ctx.fillStyle = "#4a3520";
+  ctx.beginPath(); ctx.arc(-9.5, 0, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawTridentWeaponModel(weaponId, w, len, fx) {
+  const t = performance.now() / 1000;
+  const rank = upgradeRank(fx);
+  const upgLeg = rank >= 3;
+  const vCol = upgradeColor(fx, w.col);
+  ctx.save();
+  ctx.strokeStyle = "#4a3520"; ctx.lineWidth = 3; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-9, 0); ctx.lineTo(len, 0); ctx.stroke();
+  ctx.strokeStyle = "#7a5a34"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(-6, -1); ctx.lineTo(len - 3, -1); ctx.stroke();
+  const tineCol = vCol || w.col;
+  ctx.strokeStyle = "#3a3a44"; ctx.lineWidth = 1.6; ctx.lineCap = "round";
+  for (const off of [-6, 0, 6]) {
+    ctx.beginPath(); ctx.moveTo(len - 2, off * 0.5); ctx.lineTo(len + 12, off); ctx.stroke();
+  }
+  ctx.strokeStyle = tineCol; ctx.lineWidth = 1.9; ctx.lineCap = "round";
+  for (const off of [-6, 0, 6]) {
+    ctx.beginPath(); ctx.moveTo(len + 6, off * 0.75); ctx.lineTo(len + 13, off); ctx.stroke();
+  }
+  if (upgLeg) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.4 + 0.2 * Math.sin(t * 4);
+    ctx.strokeStyle = vCol; ctx.lineWidth = 3;
+    for (const off of [-6, 0, 6]) {
+      ctx.beginPath(); ctx.moveTo(len + 6, off * 0.75); ctx.lineTo(len + 13, off); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  ctx.fillStyle = "#8a8f98";
+  ctx.beginPath(); ctx.arc(len - 3, 0, 2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#4a3520";
+  ctx.beginPath(); ctx.arc(-9.5, 0, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
 export function drawMeleeWeaponModel(weaponId, w, len, fx) {
   const rank = upgradeRank(fx);
   const upgEpic = rank >= 2;
@@ -637,6 +843,26 @@ export function drawMeleeWeaponModel(weaponId, w, len, fx) {
     drawAxeWeaponModel(weaponId, w, len, fx);
     return;
   }
+  if (weaponId.includes("mace")) {
+    drawMaceWeaponModel(weaponId, w, len, fx);
+    return;
+  }
+  if (weaponId.includes("cleaver")) {
+    drawCleaverWeaponModel(weaponId, w, len, fx);
+    return;
+  }
+  if (weaponId.includes("flail")) {
+    drawFlailWeaponModel(weaponId, w, len, fx);
+    return;
+  }
+  if (weaponId.includes("glaive")) {
+    drawGlaiveWeaponModel(weaponId, w, len, fx);
+    return;
+  }
+  if (weaponId.includes("trident")) {
+    drawTridentWeaponModel(weaponId, w, len, fx);
+    return;
+  }
   if (weaponId.includes("hammer")) {
     const t = performance.now() / 1000;
     if (upgEpic) ctx.translate(Math.sin(t * 17) * 0.25, Math.cos(t * 13) * 0.18);
@@ -749,6 +975,47 @@ function drawBlowgunWeaponModel(w, fx = null) {
   ctx.fillStyle = "#d8f0c0";
   ctx.beginPath(); ctx.ellipse(-18, -3, 2.2, 4.4, -0.7, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.ellipse(-16, 4, 2, 4, 0.6, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawHandCannonWeaponModel(w, fx = null) {
+  const t = performance.now() / 1000;
+  const col = upgradeColor(fx, w.col);
+  const rank = upgradeRank(fx);
+  ctx.save();
+  // stubby wooden stock
+  ctx.fillStyle = "#4a3520";
+  roundedRect(-16, -3.6, 12, 7.2, 2.2); ctx.fill();
+  ctx.strokeStyle = "#2a1c10"; ctx.lineWidth = 0.8; ctx.stroke();
+  // brass-banded barrel, flared at the muzzle
+  const barrel = ctx.createLinearGradient(-6, -6, 20, 6);
+  barrel.addColorStop(0, "#8a7048"); barrel.addColorStop(0.5, "#c9a860"); barrel.addColorStop(1, "#5a4526");
+  ctx.fillStyle = barrel;
+  ctx.beginPath();
+  ctx.moveTo(-6, -5.2); ctx.lineTo(14, -5.2); ctx.lineTo(19, -8); ctx.lineTo(19, 8); ctx.lineTo(14, 5.2); ctx.lineTo(-6, 5.2);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "rgba(20,14,6,0.5)"; ctx.lineWidth = 0.8; ctx.stroke();
+  ctx.strokeStyle = "#3a2c18"; ctx.lineWidth = 1.4;
+  for (const bx of [0, 6, 12]) { ctx.beginPath(); ctx.moveTo(bx, -5.4); ctx.lineTo(bx, 5.4); ctx.stroke(); }
+  // rune vents glowing along the top
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  for (let k = 0; k < 3; k++) {
+    const vx = -2 + k * 6;
+    ctx.globalAlpha = 0.5 + 0.35 * Math.sin(t * 5 + k * 1.6);
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(vx, -5.4, 1.1, 0, Math.PI * 2); ctx.fill();
+  }
+  // charged muzzle glow
+  ctx.globalAlpha = (rank >= 2 ? 0.42 : 0.28) + 0.15 * Math.sin(t * 6);
+  const g = ctx.createRadialGradient(19, 0, 0.5, 19, 0, 9);
+  g.addColorStop(0, col); g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(19, 0, 9, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = "#1c1712"; ctx.beginPath(); ctx.ellipse(19, 0, 1.6, 5.6, 0, 0, Math.PI * 2); ctx.fill();
+  // grip + trigger guard
+  ctx.strokeStyle = "#2a1c10"; ctx.lineWidth = 2.2; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-11, 3.6); ctx.lineTo(-14, 11); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-13, 2.6); ctx.quadraticCurveTo(-16, 6, -13, 8.4); ctx.stroke();
   ctx.restore();
 }
 
@@ -959,20 +1226,22 @@ export function drawWeaponModel(weaponId, s = 1, opts = {}) {
     ctx.rotate(-0.72);
     ctx.translate(-(len - 4) / 2, 0);
     drawMeleeWeaponModel(weaponId, w, len, modelFx);
-  } else if (weaponId === "sandstorm_sling") {
+  } else if (weaponId.includes("sling")) {
     drawSlingWeaponModel(w, modelFx, true);
-  } else if (weaponId === "acid_blowgun") {
+  } else if (weaponId.includes("blowgun")) {
     ctx.rotate(-0.18);
     drawBlowgunWeaponModel(w, modelFx);
-  } else if (weaponId === "crossbow") {
+  } else if (weaponId.includes("crossbow")) {
     const crossCol = modelFx?._vfxCols?.length ? modelFx._vfxCols[modelFx._vfxCols.length - 1] : w.col;
     drawHeldCrossbow(-2, 0, 1, 0, 0, true, crossCol, modelFx);
+  } else if (weaponId.includes("handcannon")) {
+    drawHandCannonWeaponModel(w, modelFx);
   } else if (w.type === "ranged") {
     ctx.translate(-4, 0);
     drawBowModel(weaponId, w, modelFx);
   } else {
     ctx.rotate(0.42);
-    drawWandModel(weaponId, w.col, 0.92, { glow: (opts.glow || 0) + (w.rarity >= 3 ? 0.25 : 0.1), fx: modelFx });
+    drawWandModel(weaponId, w.col, 0.92, { glow: (opts.glow || 0) + (w.rarity >= 3 ? 0.25 : 0.1), fx: modelFx, look: proceduralWandLook(w) });
   }
   ctx.restore();
 }
@@ -1694,7 +1963,7 @@ export function drawHeldWeapon(player, px = 0) {
     const attackP = sw > 0 ? 1 - clamp(sw / 0.32, 0, 1) : 0;
     const len = clamp(w.range * 0.48, 18, 46);
     let angle, grip, slide = 0;
-    if (player.weapon.includes("spear")) {
+    if (player.weapon.includes("spear") || player.weapon.includes("glaive") || player.weapon.includes("trident")) {
       // Two-handed thrust: coil back, drive the point forward, recover.
       let ext = 0; // -1 fully coiled .. 1 fully extended
       if (sw > 0) {
@@ -1706,7 +1975,7 @@ export function drawHeldWeapon(player, px = 0) {
       angle = sw > 0 ? -0.06 + push * 0.04 : -0.42;
       grip = { x: px + 6 - coil * 7 + push * 9, y: groundY - 24 + push * 1.5 };
       slide = push * 10 - coil * 4; // shaft slides through the hands on the jab
-    } else if (player.weapon.includes("axe")) {
+    } else if (player.weapon.includes("axe") || player.weapon.includes("mace") || player.weapon.includes("cleaver")) {
       // Heavy overhead chop: slow raise, fast drop, brief follow-through.
       let raise = 0, drop = 0;
       angle = -0.55;
@@ -1726,7 +1995,7 @@ export function drawHeldWeapon(player, px = 0) {
       };
     }
     // Spears are gripped further apart than one-handed hilts.
-    const rearReach = player.weapon.includes("spear") ? 11 : 6;
+    const rearReach = (player.weapon.includes("spear") || player.weapon.includes("glaive") || player.weapon.includes("trident")) ? 11 : 6;
     const rearGrip = {
       x: grip.x - Math.cos(angle) * rearReach,
       y: grip.y - Math.sin(angle) * rearReach,
@@ -1752,7 +2021,7 @@ export function drawHeldWeapon(player, px = 0) {
     }
     const grip = { x: frontSh.x + 4 + aim * 7, y: frontSh.y + 7 - aim * 8 };
     let drawHand = null;
-    if (player.weapon === "crossbow") {
+    if (player.weapon.includes("crossbow")) {
       let recoil = 0;
       if (shoot?.phase === "release") recoil = 1 - shoot.p;
       else if (shoot?.phase === "recoil") recoil = 1 - ease(shoot.p);
@@ -1765,7 +2034,7 @@ export function drawHeldWeapon(player, px = 0) {
       drawPlayerWeaponArm(frontSh.x, frontSh.y, grip.x + 4 - recoil * 3, grip.y, 2.8);
       const crossCol = weaponFx._vfxCols?.length ? weaponFx._vfxCols[weaponFx._vfxCols.length - 1] : w.col;
       drawHeldCrossbow(grip.x + 6, grip.y, aim, pull, recoil, true, crossCol, weaponFx);
-    } else if (player.weapon === "sandstorm_sling") {
+    } else if (player.weapon.includes("sling")) {
       const slingSwing = shoot?.phase === "draw" ? ease(shoot.p) : shoot?.phase === "release" ? 1 - shoot.p : 0;
       const grip = { x: frontSh.x + 5 + aim * 7, y: frontSh.y + 8 - aim * 6 };
       drawPlayerWeaponArm(backSh.x, backSh.y, grip.x - 7, grip.y + 6, 2.6);
@@ -1775,7 +2044,7 @@ export function drawHeldWeapon(player, px = 0) {
       ctx.rotate(-0.35 + aim * 0.28 + slingSwing * 1.15);
       drawSlingWeaponModel(w, weaponFx, true);
       ctx.restore();
-    } else if (player.weapon === "acid_blowgun") {
+    } else if (player.weapon.includes("blowgun")) {
       const puff = shoot?.phase === "release" ? 1 - shoot.p : 0;
       const grip = { x: frontSh.x + 6 + aim * 8 + puff * 2, y: frontSh.y + 5 - aim * 5 };
       drawPlayerWeaponArm(backSh.x, backSh.y, grip.x - 11, grip.y + 2, 2.6);
@@ -1851,7 +2120,7 @@ export function drawHeldWeapon(player, px = 0) {
       ctx.restore();
     }
     ctx.save(); ctx.translate(grip.x, grip.y); ctx.rotate(rot);
-    drawWandModel(player.weapon, w.col, mScale, { cast: pulse, glow: pulse + upgCount * 0.08, fx: weaponFx });
+    drawWandModel(player.weapon, w.col, mScale, { cast: pulse, glow: pulse + upgCount * 0.08, fx: weaponFx, look: proceduralWandLook(w) });
     ctx.restore();
   }
   ctx.restore();

@@ -61,6 +61,41 @@ const WAND_LOOKS = {
 };
 const DEFAULT_WAND = { len:38, wood:"#3a2448", woodLt:"#5c3d70", trim:"#d0a0ff", gem:"#b080ff", core:"#f0e4ff", kind:"arcane" };
 
+function hexShade(hex, f) {
+  const n = parseInt((hex || "#b080ff").slice(1), 16);
+  const r = clamp(Math.round(((n >> 16) & 255) * f), 0, 255);
+  const g = clamp(Math.round(((n >> 8) & 255) * f), 0, 255);
+  const b = clamp(Math.round((n & 255) * f), 0, 255);
+  return `rgb(${r},${g},${b})`;
+}
+
+const SPELLTYPE_WAND_KIND = {
+  fireball: "cinder", waterjet: "tide", lightning: "storm",
+  meteor: "meteor", arcane: "arcane", shadow: "shadow", void: "void",
+  // Brand-new elements reuse the head shape closest to their flavor —
+  // proceduralWeapons.js's SPELL_ELEMENTS declares the same mapping as `wandKind`.
+  crystal: "arcane", blood: "shadow", sonic: "storm", plague: "cinder",
+  radiant: "meteor", gravity: "void",
+};
+
+// Procedurally generated casters aren't in WAND_LOOKS, so without this every
+// one of them rendered as the same generic arcane wand regardless of school.
+// Builds a themed look (shaft/head kind + palette) straight from the rolled
+// spellType and color so generated wands/staffs/orbs read as their element.
+export function spellTypeWandLook(spellType, col) {
+  const kind = SPELLTYPE_WAND_KIND[spellType] || "arcane";
+  const base = col || DEFAULT_WAND.trim;
+  return {
+    len: 40,
+    wood: hexShade(base, 0.24),
+    woodLt: hexShade(base, 0.48),
+    trim: base,
+    gem: base,
+    core: hexShade(base, 1.65),
+    kind,
+  };
+}
+
 // Distance from the model origin to the staff tip (model space, before scaling).
 export function wandTipLength(weaponId) {
   return (WAND_LOOKS[weaponId] || DEFAULT_WAND).len * 0.58;
@@ -351,7 +386,7 @@ function drawMagicUpgradeLayer(weaponId, look, top, bot, rank, col, t, cast) {
 }
 
 export function drawWandModel(weaponId, col, s = 1, opts = {}) {
-  const look = WAND_LOOKS[weaponId] || { ...DEFAULT_WAND, trim: col || DEFAULT_WAND.trim };
+  const look = opts.look || WAND_LOOKS[weaponId] || { ...DEFAULT_WAND, trim: col || DEFAULT_WAND.trim };
   const cast = clamp(opts.cast ?? 0, 0, 1);
   const fx = opts.fx || null;
   const rank = wandUpgradeRank(fx);

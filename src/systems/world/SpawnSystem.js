@@ -1,13 +1,13 @@
 import { CFG } from '../../config/config.js';
-import { ENEMY_TYPES, BOSS_SCHEDULE, BIOME_BOSS_TYPES, BIOME_ENEMY_POOLS } from '../../config/enemies.js?v=biomeactive1';
-import { clamp, rand, pick } from '../../util/math.js';
+import { ENEMY_TYPES, BOSS_SCHEDULE, BIOME_BOSS_TYPES, BIOME_ENEMY_POOLS } from '../../config/enemies.js?v=biomeactive4';
+import { clamp, rand, randInt, pick } from '../../util/math.js';
 import { groundY, W } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { goldCoinChunks, goldRewardAmount } from '../economy/EconomyBalance.js';
 import { bountyRaiderCount, eliteChanceBonus, enemyVitalityMultiplier, nightQuotaMetaMultiplier, portalSpawnIntervalMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { currentDifficulty } from '../infrastructure/DifficultySystem.js';
 import { currentPopCap } from '../../util/DefenseStats.js';
-import { activeBiomeId } from '../../rendering/Effects.js?v=biomeactive1';
+import { activeBiomeId } from '../../rendering/Effects.js?v=biomeactive4';
 import { BIOME_ANIMAL_POOLS, animalDef } from '../../config/animals.js';
 
 const ANIMAL_SOFT_CAP = 18;
@@ -344,7 +344,7 @@ function bountyRaiderType() {
   }
   if (d >= 5 && Math.random() < 0.28) return "siegeImp";
   if (d >= 4 && Math.random() < 0.34) return "ashPriest";
-  if (d >= 3 && Math.random() < 0.45) return "emberBrute";
+  if (d >= 3 && Math.random() < 0.45) return "brute";
   return "fireImp";
 }
 
@@ -379,6 +379,42 @@ export function portalGuardianType() {
   if ((Game.worldPhase || 1) >= 2) return "shade";
   const pool = BIOME_ENEMY_POOLS[activeBiomeId()];
   return (pool && pickPoolEnemy(pool.basic)) || "imp";
+}
+
+// Daytime portal watch: count and toughness both roll independently each
+// approach, so scouting a portal never tells the player what the next one
+// holds. Escalation tiers are mutually exclusive (one roll picks at most one
+// bonus reinforcement) to keep spikes readable instead of compounding.
+export function portalGuardianWave() {
+  const d = Game.day || 1;
+
+  if ((Game.worldPhase || 1) >= 2) {
+    const count = randInt(1, d >= 4 ? 4 : 3);
+    const types = [];
+    for (let i = 0; i < count; i++) types.push("shade");
+    const roll = Math.random();
+    if (d >= 5 && roll < 0.15) types.push("voidBrute");
+    else if (roll < 0.4) types.push("voidWraith");
+    return types;
+  }
+
+  const pool = BIOME_ENEMY_POOLS[activeBiomeId()];
+  if (!pool) return [portalGuardianType(), portalGuardianType()];
+
+  const count = randInt(1, d > 5 ? 3 : 2);
+  const types = [];
+  for (let i = 0; i < count; i++) types.push(pickPoolEnemy(pool.basic) || "imp");
+
+  const roll = Math.random();
+  if (d >= 8 && roll < 0.08) {
+    types.push(pickPoolEnemy(pool.heavy) || pickPoolEnemy(pool.special) || "imp");
+  } else if (d >= 5 && roll < 0.22) {
+    types.push(pickPoolEnemy(pool.special) || pickPoolEnemy(pool.standard) || "imp");
+  } else if (d >= 3 && roll < 0.5) {
+    types.push(pickPoolEnemy(pool.standard) || "imp");
+  }
+
+  return types;
 }
 
 function spawnBountyRaider(portal) {
@@ -562,17 +598,17 @@ function nightEnemyType() {
   if (biomeType) return biomeType;
 
   const flyingImpChance = Math.min(0.55, Math.max(0, d - 2) * 0.055 * difficultyPressure + eliteBonus * 0.85);
-  const emberBruteChance = d >= 2 ? Math.min(0.34, (d - 1) * 0.035 * difficultyPressure + eliteBonus) : eliteBonus * 0.35;
+  const bruteChance = d >= 2 ? Math.min(0.34, (d - 1) * 0.035 * difficultyPressure + eliteBonus) : eliteBonus * 0.35;
   const ashPriestChance = d >= 4 ? Math.min(0.26, (d - 3) * 0.028 * difficultyPressure + eliteBonus * 0.65) : eliteBonus * 0.25;
   // Siege imps roll in from day 4: a slow, heavily-shielded battering column.
   const siegeImpChance = d >= 4 ? Math.min(0.22, (d - 3) * 0.03 * difficultyPressure + eliteBonus * 0.5) : 0;
   // Chain imps arrive from day 3 as wall-breach support for the horde.
   const chainImpChance = d >= 3 ? Math.min(0.16, (d - 2) * 0.028 * difficultyPressure + eliteBonus * 0.4) : 0;
-  if (r < emberBruteChance) return "emberBrute";
-  if (r < emberBruteChance + ashPriestChance) return "ashPriest";
-  if (r < emberBruteChance + ashPriestChance + siegeImpChance) return "siegeImp";
-  if (r < emberBruteChance + ashPriestChance + siegeImpChance + chainImpChance) return "chainImp";
-  if (r < emberBruteChance + ashPriestChance + siegeImpChance + chainImpChance + flyingImpChance) return "fireImp";
+  if (r < bruteChance) return "brute";
+  if (r < bruteChance + ashPriestChance) return "ashPriest";
+  if (r < bruteChance + ashPriestChance + siegeImpChance) return "siegeImp";
+  if (r < bruteChance + ashPriestChance + siegeImpChance + chainImpChance) return "chainImp";
+  if (r < bruteChance + ashPriestChance + siegeImpChance + chainImpChance + flyingImpChance) return "fireImp";
   return "imp";
 }
 

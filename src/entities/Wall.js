@@ -158,3 +158,50 @@ export function overWallPlatform(w, x) {
   const layout = wallLayout(w);
   return x >= layout.walkMinX && x <= layout.walkMaxX;
 }
+
+// A wall this weak is one good hit from collapsing — defenders standing on
+// it should be falling back rather than holding position.
+export const WALL_CRITICAL_HP_FRAC = 0.25;
+
+export function wallCritical(w) {
+  return !!w && w.maxHp > 0 && w.hp / w.maxHp <= WALL_CRITICAL_HP_FRAC;
+}
+
+// The other wall slot sharing `w`'s side, or null if there isn't one.
+export function wallPartner(w, walls) {
+  if (!w) return null;
+  return walls.find(o => o !== w && o.side === w.side) || null;
+}
+
+// True when `w` is the wall slot on its side that sits closer to the base.
+// Compares raw slot positions rather than build state, so it stays
+// meaningful even after one of the pair has been destroyed.
+export function wallIsInner(w, walls) {
+  if (!w) return false;
+  const partner = wallPartner(w, walls);
+  if (!partner) return true;
+  return w.side < 0 ? w.x > partner.x : w.x < partner.x;
+}
+
+// Endpoints of the rampart bridge connecting the two wall platforms on a
+// side, once both slots are finished. The outer wall's deck slopes to the
+// inner wall's deck across the gap between them, so units can cross without
+// descending to the ground and re-climbing. Returns null unless both slots
+// on `side` are built.
+export function bridgeSpan(side, walls) {
+  const onSide = walls.filter(w => w.side === side);
+  if (onSide.length < 2) return null;
+  const [a, b] = onSide;
+  if (!wallReady(a) || !wallReady(b)) return null;
+  const inner = wallIsInner(a, walls) ? a : b;
+  const outer = inner === a ? b : a;
+  const outerLayout = wallLayout(outer);
+  const innerLayout = wallLayout(inner);
+  return {
+    inner, outer,
+    outerX: outerLayout.deckRearX,
+    outerY: outerLayout.deckHeight,
+    innerX: inner.x + inner.side * (innerLayout.renderWidth / 2 + 2),
+    innerY: innerLayout.deckHeight,
+  };
+}

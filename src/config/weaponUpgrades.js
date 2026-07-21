@@ -49,6 +49,15 @@
 // New staff-specific keys include scorchChain, geyser, stormCloud,
 // meteorFragments, runeTrap, shadowCurse, and voidScar.
 //
+// Procedural-only keys (introduced by ProceduralWeaponSystem, consumed by the
+// same shared combat code as everything else):
+//     lifeLink       – melee: heals a fraction of damage dealt as HP per hit
+//     frenzyOnHit    – melee: consecutive hits stack a decaying attack-speed buff
+//     echoShot       – ranged: chance a free, weaker echo arrow trails the shot
+//     shatterCrit    – ranged: critical hits fragment into shards that seek nearby enemies
+//     overcharge     – magic: consecutive casts escalate damage/blast radius, decays if you stop
+//     soulSiphon     – magic: chance a direct spell hit heals 1 HP
+//
 // Each upgrade may carry vfxCol: a color woven into the held weapon's glow and
 // its ambient particles, so upgrades visibly change the weapon.
 

@@ -1,13 +1,13 @@
 import { CFG } from '../../config/config.js';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive1';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive4';
 import { dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, floaty, spawnEnemy } from '../world/SpawnSystem.js?v=biomeactive1';
-import { killEnemyWithAnimation, spawnImpBlood, killEnemy } from '../../util/EnemyUtils.js?v=biomeactive1';
+import { spawnParticles, floaty, spawnEnemy } from '../world/SpawnSystem.js?v=biomeactive4';
+import { killEnemyWithAnimation, spawnImpBlood, killEnemy } from '../../util/EnemyUtils.js?v=biomeactive4';
 import { entityWallLift, wallHeight, wallReady, wallRenderWidth } from '../../entities/Wall.js';
-import { damagePlayer } from '../combat/PlayerCombat.js?v=biomeactive1';
+import { damagePlayer } from '../combat/PlayerCombat.js?v=biomeactive4';
 import { approachSpeedMult, unopposedSprintMult } from './EnemyShared.js';
 
 // All night-boss behavior lives here: the fire dragon (night 5), the magma

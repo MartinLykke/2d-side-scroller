@@ -59,6 +59,21 @@ canvas#game {
 }
 .hud-pill.big { font-size: 20px; color: var(--gold); border-color: rgba(242,193,78,0.68); }
 .hud-pill .icon { font-size: 16px; }
+
+/* Roster: who serves the crown, at a glance */
+.hud-roster {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 14px;
+  border-color: rgba(242, 193, 78, 0.3);
+}
+.hud-roster-item { display: inline-flex; align-items: center; gap: 3px; transition: opacity 0.2s, color 0.2s; }
+.hud-roster-item b { font-weight: 700; color: #e8dcbc; min-width: 8px; text-align: right; }
+.hud-roster-item.is-empty { opacity: 0.32; }
+.hud-roster-pop b { color: var(--gold); }
+.hud-roster-vagrant b { color: #9bd05a; }
+.hud-roster-sep { width: 1px; height: 13px; background: rgba(242, 193, 78, 0.28); }
 .hud-ability {
   position: relative;
   overflow: hidden;

@@ -3,13 +3,19 @@ import { clamp, dist, rand } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles } from '../world/SpawnSystem.js?v=biomeactive1';
-import { killEnemy } from '../combat/Combat.js?v=biomeactive1';
-import { killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive1';
-import { wallHeight, wallStandX, wallLayout, wallClimbX } from '../../entities/Wall.js';
+import { spawnParticles } from '../world/SpawnSystem.js?v=biomeactive4';
+import { killEnemy } from '../combat/Combat.js?v=biomeactive4';
+import { killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive4';
+import { wallHeight, wallStandX, wallLayout, wallClimbX, wallCritical } from '../../entities/Wall.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { addSkillPoints } from '../economy/SkillSystem.js';
-import { floaty, nearestEnemy, moveToward, sunsetApproaching } from './AIHelpers.js?v=biomeactive1';
+import { floaty, nearestEnemy, moveToward, sunsetApproaching, tryStartBridgeFlee, updateBridgeCross } from './AIHelpers.js?v=biomeactive4';
+
+// A wall this weak is about to collapse — guards fall back off it, but
+// (unlike archers) never flee it purely because an imp reached the top.
+function guardWallUnsafe(w) {
+  return wallCritical(w);
+}
 
 function grantGuardXP(u) {
   u.xp = (u.xp || 0) + 1;
@@ -262,6 +268,7 @@ function nearestGuardWall(side) {
   let best = null, bd = -1;
   for (const w of state.walls) {
     if (!w.commissioned || w.hp <= 0 || w.buildProgress < 1 || w.side !== side) continue;
+    if (guardWallUnsafe(w)) continue;
     const d = Math.abs(w.x - CFG.baseX);
     if (d > bd) { bd = d; best = w; }
   }
@@ -297,7 +304,12 @@ function chooseGuardTarget(u) {
 export function guardAI(u, dt) {
   if (!u.aiState) u.aiState = "patrol";
 
-  if (u.wall && u.onWall && guardHasWallSlot(u, u.wall)) {
+  if (u.bridge) {
+    // Mid-flight across a rampart bridge: nothing else runs until it lands.
+    if (!updateBridgeCross(u, dt)) return;
+  }
+
+  if (u.wall && u.onWall && guardHasWallSlot(u, u.wall) && !guardWallUnsafe(u.wall)) {
     const wall = u.wall;
     const postX = guardWallStandX(u, wall);
     const topThreat = nearestTopImpForWall(wall, u);
@@ -317,6 +329,13 @@ export function guardAI(u, dt) {
       return;
     }
     if (!clearGuardWall(u, dt)) return;
+  } else if (u.wall && u.onWall && guardWallUnsafe(u.wall)) {
+    // This wall is about to give out — fall back before it does. Guards
+    // still don't flee live imps; only structural failure sends them off.
+    clearGuardDuel(u);
+    u.combatTarget = null;
+    if (tryStartBridgeFlee(u, u.wall)) return;
+    if (!clearGuardWall(u, dt)) return;
   }
 
   const target = chooseGuardTarget(u);
@@ -325,7 +344,7 @@ export function guardAI(u, dt) {
     u.dir = Math.sign(target.x - u.x) || u.dir;
 
     const targetWall = target.stackWallRef || target.wallTopWall;
-    if (targetWall && target.type === "imp" && (target.aiState === "stacking" || target.aiState === "climbOver" || target.wallTopWall)) {
+    if (targetWall && !guardWallUnsafe(targetWall) && target.type === "imp" && (target.aiState === "stacking" || target.aiState === "climbOver" || target.wallTopWall)) {
       const slot = guardWallSlot(u, targetWall);
       const wantsTop = slot < guardWallCapacity(targetWall);
       if (!wantsTop) {

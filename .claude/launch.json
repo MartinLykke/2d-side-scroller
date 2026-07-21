@@ -222,6 +222,30 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8569"],
       "port": 8569
+    },
+    {
+      "name": "castle-council-server",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8583"],
+      "port": 8583
+    },
+    {
+      "name": "brute-death-server",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8611"],
+      "port": 8611
+    },
+    {
+      "name": "procweap-server",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8629"],
+      "port": 8629
+    },
+    {
+      "name": "wall-bridge-server",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8647"],
+      "port": 8647
     }
   ]
 }

@@ -9,19 +9,19 @@ import { Game, state } from './state.js';
 
 import { Audio } from '../systems/infrastructure/Audio.js';
 import { keys } from '../systems/input/Input.js';
-import { saveGame, hasSave, loadGame, deleteSave } from '../systems/infrastructure/SaveSystem.js?v=biomeactive1';
-import { updateSpawning, floaty, spawnParticles, spawnAnimal, planNight, spawnEnemy, portalGuardianType } from '../systems/world/SpawnSystem.js?v=biomeactive1';
+import { saveGame, hasSave, loadGame, deleteSave } from '../systems/infrastructure/SaveSystem.js?v=biomeactive4';
+import { updateSpawning, floaty, spawnParticles, spawnAnimal, planNight, spawnEnemy, portalGuardianWave } from '../systems/world/SpawnSystem.js?v=biomeactive4';
 import { updatePayment, updateCoins } from '../systems/economy/Economy.js';
-import { updateForestTrees, updateForestCamps } from '../systems/world/ForestSystem.js?v=biomeactive1';
-import { updateBuildings } from '../systems/world/OutpostSystem.js?v=biomeactive1';
-import { updateUnits, updateAssignments, updateVagrants, updateAnimals, nearestEnemy, updateCaltrops } from '../systems/ai/AI.js?v=biomevisual1';
-import { updateEnemies, updateArrows, updatePlayerAttack, updateSpells } from '../systems/combat/Combat.js?v=biomeactive1';
-import { updateFirePools } from '../systems/ai/BossAI.js?v=biomeactive1';
-import { updateDyingEnemies } from '../util/EnemyUtils.js?v=biomeactive1';
+import { updateForestTrees, updateForestCamps } from '../systems/world/ForestSystem.js?v=biomeactive4';
+import { updateBuildings } from '../systems/world/OutpostSystem.js?v=biomeactive4';
+import { updateUnits, updateAssignments, updateVagrants, updateAnimals, nearestEnemy, updateCaltrops } from '../systems/ai/AI.js?v=biomevisual4';
+import { updateEnemies, updateArrows, updatePlayerAttack, updateSpells } from '../systems/combat/Combat.js?v=biomeactive4';
+import { updateFirePools } from '../systems/ai/BossAI.js?v=biomeactive4';
+import { updateDyingEnemies } from '../util/EnemyUtils.js?v=biomeactive4';
 
-import { FX, initFX, updateFX as updateFXEffects, biomeAt } from '../rendering/Effects.js?v=biomeactive1';
-import { render, drawEntityShadows } from '../rendering/Renderer.js?v=biomevisual1';
-import { UI, DEV, baseName } from '../rendering/HUD.js?v=biomevisual1';
+import { FX, initFX, updateFX as updateFXEffects, biomeAt } from '../rendering/Effects.js?v=biomeactive4';
+import { render, drawEntityShadows } from '../rendering/Renderer.js?v=biomevisual4';
+import { UI, DEV, baseName } from '../rendering/HUD.js?v=biomevisual4';
 import { updateArcherShoot } from '../rendering/sprites/Archer.js';
 
 import { makePlayer } from '../entities/Player.js';
@@ -37,13 +37,12 @@ import { mountSpeedMult, activeMount } from '../systems/economy/MountSystem.js';
 import { upgradeBase, pickupWeapon, setBuildStations } from '../util/GameStateHelpers.js?v=biomeweapons1';
 import { currentCoinCap } from '../util/DefenseStats.js';
 import { addXP, checkUpgrade } from '../systems/economy/UpgradeSystem.js?v=biomeweapons1';
-import { newGame, buildStations } from '../systems/infrastructure/GameInit.js?v=biomeactive1';
+import { newGame, buildStations } from '../systems/infrastructure/GameInit.js?v=biomeactive4';
 import { initMeta, enterDeathHub, updateHub, updateHubTransition, renderHub, permanentDayLengthBonusSeconds } from '../systems/infrastructure/RoguelikeSystem.js';
 import { applyDifficulty } from '../systems/infrastructure/DifficultySystem.js';
 import { updateLootItems, updateWeaponPickup, updateChests, updateLootPhysics, setPickupWeapon as setLootPickupWeapon } from '../systems/economy/LootSystem.js';
-import { updateAssault, performPhaseShift } from '../systems/world/AssaultSystem.js?v=biomevisual1';
-import { updateFortifications } from '../systems/world/FortificationSystem.js?v=biomeactive1';
-import { setupInputHandlers } from '../systems/input/InputHandler.js?v=biomevisual1';
+import { updateAssault, performPhaseShift } from '../systems/world/AssaultSystem.js?v=biomevisual4';
+import { setupInputHandlers } from '../systems/input/InputHandler.js?v=biomevisual4';
 import { provide } from './services.js';
 // Profiler uses window._perf (set by HUD toggle) to avoid ES module cache issues
 
@@ -442,15 +441,14 @@ function updateCamera() {
 function updatePortals() {
   if (Game.isNight) return;
   const { portals, player } = state;
-  const guardianType = portalGuardianType();
   for (const p of portals) {
     if (p.destroyed) continue;
     if ((p.lastDayActivated||0) >= Game.day) continue;
     if (dist(player.x, p.x) < 300) {
       p.lastDayActivated = Game.day;
-      const count = 2 + (Game.day > 5 ? 1 : 0);
-      for (let i=0; i<count; i++) {
-        const guardian = spawnEnemy(guardianType, p);
+      const wave = portalGuardianWave();
+      for (const type of wave) {
+        const guardian = spawnEnemy(type, p);
         guardian.portalGuardian = true;
       }
     }
@@ -519,7 +517,6 @@ function update(dt) {
 
   if(p) p.begin("update.buildings");
   updateBuildings(dt);
-  updateFortifications(dt);
   if(p) p.end("update.buildings");
 
   if(p) p.begin("update.units");
@@ -582,7 +579,7 @@ Game.start = function(continueGame) {
   applyDifficulty(Game, diff);
   if (continueGame && hasSave()) { newGame(); loadGame(); }
   else newGame();
-  import('../rendering/Effects.js?v=biomeactive1').then(({clearTreeCache})=>clearTreeCache());
+  import('../rendering/Effects.js?v=biomeactive4').then(({clearTreeCache})=>clearTreeCache());
   Game.state="play";
   UI.startScreen.classList.add("hidden");
   UI.endScreen.classList.add("hidden");

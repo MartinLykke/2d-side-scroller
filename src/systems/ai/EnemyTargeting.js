@@ -24,7 +24,21 @@ export function topDefendersForWall(w) {
     u.hp > 0 &&
     !u.dying &&
     u.onWall &&
-    u.wall === w
+    u.wall === w &&
+    !u.bridge
+  );
+}
+
+// Any living imp that has finished climbing to the top of `w`, regardless of
+// whether it has closed to duel range yet. Used to decide whether defenders
+// should be falling back off this wall.
+export function wallTopHasLivingImp(w) {
+  return state.enemies.some(e =>
+    e.type === "imp" &&
+    e.wallTopWall === w &&
+    e.hp > 0 &&
+    !e.dying &&
+    !e.fleeing
   );
 }
 

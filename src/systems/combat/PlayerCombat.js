@@ -2,17 +2,17 @@ import { CFG } from '../../config/config.js';
 import { WEAPONS, effectiveWeapon } from '../../config/weapons.js?v=biomeweapons1';
 import { mergeUpgradeEffects } from '../../config/weaponUpgrades.js?v=biomeweapons1';
 import { ARMORS, ARMOR_RARITY_COL, armorBlockChance } from '../../config/armor.js';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive1';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive4';
 import { animalDef } from '../../config/animals.js';
 import { clamp, dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { inject } from '../../core/services.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnGoldReward, spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js?v=biomeactive1';
-import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive1';
-import { shootArrow } from './ProjectileSystem.js?v=biomeactive1';
-import { castSpell, chainLightning } from './SpellSystem.js?v=biomeactive1';
+import { spawnGoldReward, spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js?v=biomeactive4';
+import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive4';
+import { shootArrow } from './ProjectileSystem.js?v=biomeactive4';
+import { castSpell, chainLightning } from './SpellSystem.js?v=biomeactive4';
 import { startArcherShoot } from '../../rendering/sprites/Archer.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { entityWallLift } from '../../entities/Wall.js';
@@ -256,7 +256,10 @@ function updateWeaponAmbientFX(dt) {
   const { player } = state;
   if (!player.weapon || player.hp <= 0) return;
   const wBase = WEAPONS[player.weapon];
-  const amb = WEAPON_AMBIENT[player.weapon];
+  // Generated weapons aren't in the curated ambient table — fall back to a
+  // sparkle keyed off their rolled color once they're epic/legendary.
+  const amb = WEAPON_AMBIENT[player.weapon] ||
+    (wBase.generated && wBase.rarity >= 2 ? { rate: 1.4 + wBase.rarity * 0.9, cols: [wBase.col, "#ffffff"] } : null);
   const fx = mergeInnateEffects(wBase, player.weaponUpgrades);
   const upgCols = fx._vfxCols || [];
   if (!amb && !upgCols.length) return;
@@ -648,6 +651,18 @@ function meleeStrike(player, tgt, tgtIsAnimal, wBase, fx, rawDmg, playerLift) {
     spawnParticles(tgt.x, groundY - 28, 14, "#ff4040", 70, 90);
   }
   if (fx.splashFrac) splashDamage(player, tgt, crit.damage, fx.splashFrac, fx.splashR || 90, wBase.col);
+  if (fx.lifeLink && player.hp < player.maxHp) {
+    player.lifeLinkAccum = (player.lifeLinkAccum || 0) + crit.damage * fx.lifeLink;
+    if (player.lifeLinkAccum >= 1) {
+      const heal = Math.min(Math.floor(player.lifeLinkAccum), player.maxHp - player.hp);
+      player.lifeLinkAccum -= Math.floor(player.lifeLinkAccum);
+      if (heal > 0) {
+        player.hp += heal;
+        player.hpShowTimer = Math.max(player.hpShowTimer || 0, 2);
+        spawnParticles(player.x, groundY - 40, 3 + heal * 2, "#ff6a8a", 34, 55);
+      }
+    }
+  }
   if (tgt.hp <= 0) {
     const knockDir = Math.sign(tgt.x - player.x) || 1;
     if (fx.novaR) killNova(tgt.x, crit.damage, fx);
@@ -700,6 +715,7 @@ function applyArrowUpgrades(ar, fx) {
   if (fx.barrierOnKill) ar.barrierOnKill = fx.barrierOnKill;
   if (fx.bounceArrow) ar.bouncing = true;
   if (fx.chainArrow) ar.chainBounces = Math.max(ar.chainBounces || 0, fx.chainArrow);
+  if (fx.shatterCrit) ar.shatterCrit = Math.max(ar.shatterCrit || 0, Math.round(fx.shatterCrit));
   if (fx.powerArrow && Math.random() < fx.powerArrow) {
     ar.powered = true;
     ar.vx *= 1.22;
@@ -767,6 +783,17 @@ export function updatePlayerAttack(dt) {
       const beamCol = fx._vfxCols?.length ? fx._vfxCols[fx._vfxCols.length - 1] : wBase.col;
       slashWave(player, w.dmg * (fx.beamFrac || 0.8), beamCol);
     }
+    if (fx.frenzyOnHit) {
+      const now = performance.now() / 1000;
+      const prev = player.frenzy;
+      const chain = prev && now - prev.t < 2.2;
+      const n = Math.min(5, chain ? (prev.n || 0) + 1 : 1);
+      player.frenzy = { n, t: now, amt: fx.frenzyOnHit };
+      if (n >= 3) {
+        const col = fx._vfxCols?.length ? fx._vfxCols[fx._vfxCols.length - 1] : wBase.col;
+        spawnParticles(player.x, groundY - 40 - playerLift, 3, col, 30, 45);
+      }
+    }
     finishRiposte(player, tgt.x);
   } else if (wBase.type === "ranged") {
     startArcherShoot(player);
@@ -798,6 +825,21 @@ export function updatePlayerAttack(dt) {
         spawnParticles(player.x + (player.dir || 1) * 10, groundY - 34 - playerLift, 6, "#ffe9a0", 30, 50);
       }
     }
+    // Echo Shot: a trailing copy of the arrow streaks in a beat later, free of cost.
+    if (fx.echoShot && Math.random() < fx.echoShot) {
+      shootArrow(player.x, groundY - 30 - playerLift, tgt, player, player.weapon);
+      const ar3 = state.arrows[state.arrows.length - 1];
+      if (ar3 && ar3 !== ar) {
+        ar3.delay = (ar3.delay || 0) + 0.14;
+        const echoDmg = Math.max(1, w.dmg * 0.55 * playerMomentumDamageMultiplier() * riposteMult);
+        ar3.dmgMult = echoDmg;
+        ar3.dmg = Math.round(echoDmg);
+        ar3.playerShot = true;
+        ar3.isEcho = true;
+        applyArrowUpgrades(ar3, fx);
+        spawnParticles(player.x, groundY - 30 - playerLift, 4, "#ffffff", 22, 36);
+      }
+    }
     finishRiposte(player, tgt.x);
   } else {
     player.castAnim = 0.55;
@@ -808,6 +850,9 @@ export function updatePlayerAttack(dt) {
   let cooldown = w.speed;
   if (wBase.spellType === "meteor") {
     cooldown *= fx.meteorDouble ? 3.4 : 2.5; // Double Up trades tempo for a second meteor
+  }
+  if (wBase.type === "melee" && player.frenzy && performance.now() / 1000 - player.frenzy.t < 2.2) {
+    cooldown *= Math.max(0.4, 1 - player.frenzy.n * player.frenzy.amt);
   }
   if (wBase.type === "ranged" && fx.instantReload && Math.random() < fx.instantReload) {
     cooldown = 0.14;

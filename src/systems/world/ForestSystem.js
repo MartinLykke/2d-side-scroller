@@ -4,7 +4,7 @@ import { Game, state } from '../../core/state.js';
 import { groundY } from '../../core/canvas.js';
 import { Audio } from '../infrastructure/Audio.js';
 import { spawnParticles, spawnGoldReward } from './SpawnSystem.js';
-import { biomeAt, makeTree } from '../../rendering/Effects.js?v=biomeactive1';
+import { biomeAt, makeTree } from '../../rendering/Effects.js?v=biomeactive4';
 import { currentPopCap } from '../../util/DefenseStats.js';
 
 const CAMP_SPACING = 1700;
@@ -42,7 +42,7 @@ function makeForestTree(x, r = Math.random) {
     x,
     tree: makeTree(x, ancient ? 280 + r() * 100 : 170 + r() * 80, r, { harvestable: true }),
     marked: false, chopped: false, beingChopped: false,
-    chopProgress: 0,
+    chopProgress: 0, chopImpactPulse: 0,
     falling: false, fallDir: r() < 0.5 ? -1 : 1, fallAngle: 0, fallT: 0,
     lying: false, claimedBy: null, carriedBy: null,
     regrowTimer: 0,
@@ -249,6 +249,8 @@ export function updateForestTrees(dt) {
       }
       continue;
     }
+
+    if ((t.chopImpactPulse || 0) > 0) t.chopImpactPulse = Math.max(0, t.chopImpactPulse - dt * 6.5);
 
     if (!t.falling) continue;
     t.fallT = Math.min(1, (t.fallT || 0) + dt / FALL_TIME);

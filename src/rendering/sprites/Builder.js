@@ -27,6 +27,37 @@ const C = {
   pouch:   "#6a4a28",
 };
 
+function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+function easeInCubic(t) { return t * t * t; }
+function easeInOutCubic(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+
+// Chopping swing keyframes — angle/reach describe the axe hand relative to the
+// front shoulder; dip feeds the whole-body weight shift (back on the wind-up,
+// forward into the strike). Segment boundaries mirror the physical breakdown:
+// wind-up (ease-out, slow/heavy) -> strike (ease-in, fast) -> impact/recoil
+// (near-linear bounce off the wood) -> reset (ease-in-out) back to rest.
+const CHOP_KEYS = {
+  rest:   { angle: -0.55, reach: 9,    dip: 0 },
+  windup: { angle: -2.35, reach: 7,    dip: -3.2 },
+  strike: { angle: 0.55,  reach: 13,   dip: 3.4 },
+  recoil: { angle: 0.15,  reach: 10.5, dip: 1.6 },
+};
+
+function lerpPose(a, b, t) {
+  return {
+    angle: a.angle + (b.angle - a.angle) * t,
+    reach: a.reach + (b.reach - a.reach) * t,
+    dip: a.dip + (b.dip - a.dip) * t,
+  };
+}
+
+function chopPose(p) {
+  if (p < 0.40) return lerpPose(CHOP_KEYS.rest, CHOP_KEYS.windup, easeOutCubic(p / 0.40));
+  if (p < 0.52) return lerpPose(CHOP_KEYS.windup, CHOP_KEYS.strike, easeInCubic((p - 0.40) / 0.12));
+  if (p < 0.58) return lerpPose(CHOP_KEYS.strike, CHOP_KEYS.recoil, (p - 0.52) / 0.06);
+  return lerpPose(CHOP_KEYS.recoil, CHOP_KEYS.rest, easeInOutCubic((p - 0.58) / 0.42));
+}
+
 function limb(x1, y1, x2, y2, col, w) {
   ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = "round";
   ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
@@ -78,10 +109,50 @@ function drawHammer(hx, hy, a, P = C) {
   ctx.restore();
 }
 
+// Felling axe drawn from the hand outward at angle `a` (radians, 0 = +x) —
+// same handle convention as drawHammer, but a wedge blade for chopping trees.
+function drawAxe(hx, hy, a, P = C) {
+  ctx.save();
+  ctx.translate(hx, hy); ctx.rotate(a);
+  ctx.strokeStyle = P.handle; ctx.lineWidth = 2.2; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-2, 0); ctx.lineTo(9, 0); ctx.stroke();
+  ctx.lineCap = "butt";
+  ctx.fillStyle = P.head;
+  ctx.beginPath();
+  ctx.moveTo(7, -5.5); ctx.lineTo(14.5, -2.4); ctx.lineTo(14.5, 2.4); ctx.lineTo(7, 5.5);
+  ctx.lineTo(8.6, 0); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = P.headLt;
+  ctx.beginPath(); ctx.moveTo(7, -5.5); ctx.lineTo(11.3, -3.5); ctx.lineTo(8.6, -0.4); ctx.closePath(); ctx.fill();
+  if (P.detail === "frozen") {
+    ctx.fillStyle = P.trim || "#f3fbff";
+    ctx.fillRect(8.8, -3.6, 4.8, 1.3);
+  } else if (P.detail === "desert") {
+    ctx.fillStyle = P.trim || "#f1d58a";
+    ctx.fillRect(7.6, -5.9, 6.4, 1.7);
+    ctx.fillRect(7.6, 4.2, 6.4, 1.7);
+  } else if (P.detail === "swamp") {
+    ctx.strokeStyle = P.trim || "#a9ba58"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, -1.4); ctx.quadraticCurveTo(5, -5.5, 12, -2.2); ctx.stroke();
+  } else if (P.detail === "volcano") {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = P.glow || "#ff7a36"; ctx.lineWidth = 1.1;
+    ctx.beginPath(); ctx.moveTo(9, -3); ctx.lineTo(13, 2.6); ctx.stroke();
+    ctx.restore();
+  } else if (P.detail === "corrupted") {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = P.glow || "#9f68ff";
+    ctx.beginPath(); ctx.arc(12.5, 0, 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 export function drawBuilder(u) {
   const t = performance.now() / 1000;
   const moving = !!u.moving;
   const working = !!u.working && !moving;
+  const chopping = !!u.chopping && !moving;
+  const chop = chopping ? chopPose(u.chopSwing || 0) : null;
   const anim = u.anim || 0;
   const P = biomeHumanoidSkin("builder", u.x, C, unitSkinVariant(u));
 
@@ -97,9 +168,9 @@ export function drawBuilder(u) {
 
   const breathe = Math.sin(t * 1.6 + (u.x || 0) * 0.02);
   const bob = moving ? Math.abs(Math.sin(anim)) * 1.4 : breathe * 0.5 + 0.5;
-  // Working: the whole body dips into each hammer strike
-  const swingT = (Math.sin(t * 9) + 1) / 2;          // 0 = raised, 1 = struck
-  const dip = working ? swingT * 1.6 : 0;
+  // Working: side-swing hammer back and forth against a wall
+  const swingT = Math.sin(t * 6);                     // -1 = pulled back, +1 = struck
+  const dip = chop ? chop.dip * 0.55 : (working ? (swingT + 1) * 0.4 : 0);
 
   const hipY  = groundY - 17 - bob * 0.4 + dip * 0.4;
   const shY   = groundY - 29 - bob + dip;
@@ -109,7 +180,7 @@ export function drawBuilder(u) {
   const s = Math.sin(anim);
   const stride = moving ? 5.5 : 0;
   let backFoot = -3 + s * stride, frontFoot = 3 - s * stride;
-  if (working) { backFoot = -5.5; frontFoot = 4.5; }
+  if (working || chopping) { backFoot = -5.5; frontFoot = 4.5; }
   limb(-3, hipY, backFoot, groundY - 4, P.pants, 3.4);
   limb(backFoot, groundY - 4.5, backFoot + 0.6, groundY - 2, P.boots, 3.8);
   drawBoot(backFoot + 0.6, groundY, P.boots, 1.05);
@@ -242,11 +313,18 @@ export function drawBuilder(u) {
     // both hands up steadying the log on the shoulder
     limb(backSh.x, backSh.y, -3, shY - 7, P.skin, 2.8);
     limb(frontSh.x, frontSh.y, 5, shY - 6, P.skin, 2.8);
+  } else if (chopping) {
+    // full wind-up/strike/impact/reset loop, axe swung down into the trunk
+    const hand = { x: frontSh.x + Math.cos(chop.angle) * chop.reach, y: frontSh.y + Math.sin(chop.angle) * chop.reach };
+    limb(backSh.x, backSh.y, backSh.x - 1 - chop.dip * 0.5, shY + 9 + chop.dip * 0.3, P.skin, 2.8);
+    limb(frontSh.x, frontSh.y, hand.x, hand.y, P.skin, 2.8);
+    drawAxe(hand.x, hand.y, chop.angle, P);
   } else if (working) {
-    // strike arc: raised behind the head, snapping down in front
-    const a = -2.1 + swingT * 1.75;
-    const hand = { x: frontSh.x + Math.cos(a) * 9, y: frontSh.y + Math.sin(a) * 9 };
-    limb(backSh.x, backSh.y, backSh.x - 1, shY + 10, P.skin, 2.8); // off hand braced at side
+    // side chop: axe swings back and forth horizontally into the trunk
+    const a = -0.15 + swingT * 0.55;
+    const reach = 10 + swingT * 1.5;
+    const hand = { x: frontSh.x + Math.cos(a) * reach, y: frontSh.y + Math.sin(a) * reach };
+    limb(backSh.x, backSh.y, backSh.x - 1, shY + 10, P.skin, 2.8);
     limb(frontSh.x, frontSh.y, hand.x, hand.y, P.skin, 2.8);
     drawHammer(hand.x, hand.y, a, P);
   } else {

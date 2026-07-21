@@ -1,15 +1,16 @@
 import { state, Game } from '../../core/state.js';
 import { canvas, W, H } from '../../core/canvas.js';
 import { inject, provide } from '../../core/services.js';
-import { UI, DEV, closeSkillTree, openSkillTree } from '../../rendering/HUD.js?v=biomevisual1';
+import { UI, DEV, closeSkillTree, openSkillTree } from '../../rendering/HUD.js?v=biomevisual4';
 import { tryOpenShop, handleShopKeys, currentShopList, tryBuyShopItem } from '../economy/ShopSystem.js?v=biomeweapons1';
 import { tryOpenCastleUpgrades, closeCastleUpgrades, buyCastleUpgrade } from '../economy/CastleUpgradeSystem.js?v=biomeweapons1';
+import { CASTLE_UPGRADES } from '../../config/castleUpgrades.js';
 import { toggleMount } from '../economy/MountSystem.js';
 import { equipFromInventory, unequipWeapon, unequipArmor, ensureInventory } from '../economy/InventorySystem.js';
 import { applyUpgrade, checkUpgrade } from '../economy/UpgradeSystem.js?v=biomeweapons1';
-import { triggerBarrage, triggerRoyalRally } from '../ai/AI.js?v=biomeactive1';
-import { startAssault } from '../world/AssaultSystem.js?v=biomevisual1';
-import { setupDevPanel } from './DevPanel.js?v=biomeactive1';
+import { triggerBarrage, triggerRoyalRally } from '../ai/AI.js?v=biomeactive4';
+import { startAssault } from '../world/AssaultSystem.js?v=biomevisual4';
+import { setupDevPanel } from './DevPanel.js?v=biomeactive4';
 import { warpToHubPortal, snapHubToPlaza } from '../infrastructure/RoguelikeSystem.js';
 
 export function setupInputHandlers() {
@@ -89,12 +90,10 @@ function handleKeydown(e) {
   }
 
   if (Game.castleOpen) {
-    const last = 3;
-    if (k === "arrowleft")  { Game.castleIdx = Math.max(0, (Game.castleIdx || 0) - 1); e.preventDefault(); return; }
-    if (k === "arrowright") { Game.castleIdx = Math.min(last, (Game.castleIdx || 0) + 1); e.preventDefault(); return; }
-    if (k === "arrowup")    { Game.castleIdx = Math.max(0, (Game.castleIdx || 0) - 2); e.preventDefault(); return; }
-    if (k === "arrowdown")  { Game.castleIdx = Math.min(last, (Game.castleIdx || 0) + 2); e.preventDefault(); return; }
-    if (k >= "1" && k <= "4") { Game.castleIdx = Number(k) - 1; e.preventDefault(); return; }
+    const last = CASTLE_UPGRADES.length - 1;
+    if (k === "arrowleft" || k === "arrowup")   { Game.castleIdx = Math.max(0, (Game.castleIdx || 0) - 1); e.preventDefault(); return; }
+    if (k === "arrowright" || k === "arrowdown") { Game.castleIdx = Math.min(last, (Game.castleIdx || 0) + 1); e.preventDefault(); return; }
+    if (k >= "1" && k <= "9" && Number(k) - 1 <= last) { Game.castleIdx = Number(k) - 1; e.preventDefault(); return; }
     if (k === "e" || k === "enter") { buyCastleUpgrade(); e.preventDefault(); return; }
     e.preventDefault(); return;
   }

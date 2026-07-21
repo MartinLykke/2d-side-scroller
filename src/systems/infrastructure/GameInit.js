@@ -7,13 +7,12 @@ import { makeWall } from '../../entities/Wall.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { Audio } from './Audio.js';
 import { spawnParticles, populateBiomeAnimals, planNight, purchaseFloaty } from '../world/SpawnSystem.js';
-import { addForestCamp, buildForest } from '../world/ForestSystem.js?v=biomeactive1';
-import { makeBuildings, buildingCost, buildingLabel, payBuilding } from '../world/OutpostSystem.js?v=biomeactive1';
+import { addForestCamp, buildForest } from '../world/ForestSystem.js?v=biomeactive4';
+import { makeBuildings, buildingCost, buildingLabel, payBuilding } from '../world/OutpostSystem.js?v=biomeactive4';
 import { upgradeBase } from '../../util/GameStateHelpers.js?v=biomeweapons1';
 import { addXP } from '../economy/UpgradeSystem.js?v=biomeweapons1';
-import { baseName } from '../../rendering/HUD.js?v=biomevisual1';
+import { baseName } from '../../rendering/HUD.js?v=biomevisual4';
 import { applyPermanentUpgrades, applyPermanentWorldUpgrades, permanentForestCampPlans } from './RoguelikeSystem.js';
-import { fortNext, purchaseFortUpgrade } from '../world/FortificationSystem.js?v=biomeactive1';
 import { currentPopCap, wallMaxHpForLevel } from '../../util/DefenseStats.js';
 
 function missingDefenseHp() {
@@ -173,19 +172,6 @@ export function buildStations() {
       },
     });
   }
-  if (state.base.level >= 3) {
-    state.stations.push({
-      id:"runeforge", x:()=>STATIONS_X.runeforge, paid:0, instantPurchase:true,
-      cost:()=>{ const f = fortNext(); return f ? f.cost : 0; },
-      label:()=>{
-        const f = fortNext();
-        return f ? `Runeforge: ${f.name} — ${f.blurb}` : "The Runeforge is fully attuned";
-      },
-      onPaid:()=>{
-        if (purchaseFortUpgrade()) { addXP(20); Audio.build(); }
-      },
-    });
-  }
   walls.forEach(w=>{
     state.stations.push({
       id:"wall", wall:w, x:()=>w.x, paid:0, instantPurchase:true,
@@ -266,6 +252,7 @@ export function newGame() {
   state.legendaryBoss   = null;
   state.legendaryEffects= [];
   state.aegisStrikes    = [];
+  state.trebuchetShots  = [];
   state.firePools       = [];
   state.spells          = [];
   state.spellFields     = [];
@@ -276,11 +263,7 @@ export function newGame() {
   state.vagrantTimer    = 1;
   state.animalTimer     = 2;
   state.assault         = null;
-  state.fortLevel       = 0;
-  state.castleUpgrades  = { masonry: 0, garrison: 0, treasury: 0, aegis: 0 };
-  state.sigilPulseT     = 0;
-  state.sigilPulse      = 0;
-  state.sigilSpin       = 0;
+  state.castleUpgrades  = { masonry: 0, garrison: 0, treasury: 0, aegis: 0, siege: 0 };
   Game.activeBiome      = "forest";
   Game.unlockedBiomes   = ["forest"];
   Game.worldPhase       = 1;

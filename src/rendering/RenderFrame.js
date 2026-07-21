@@ -1,6 +1,6 @@
 import { W } from '../core/canvas.js';
 import { Game, state } from '../core/state.js';
-import { ENEMY_TYPES } from '../config/enemies.js?v=biomeactive1';
+import { ENEMY_TYPES } from '../config/enemies.js?v=biomeactive4';
 import {
   RENDER_BUDGETS,
   budgetDetailRank,

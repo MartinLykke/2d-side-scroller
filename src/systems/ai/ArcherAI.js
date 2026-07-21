@@ -1,21 +1,23 @@
 import { CFG } from '../../config/config.js';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive1';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive4';
 import { clamp, dist, rand } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, spawnGoldCoins } from '../world/SpawnSystem.js?v=biomeactive1';
-import { shootArrow, killEnemy } from '../combat/Combat.js?v=biomeactive1';
-import { spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive1';
+import { spawnParticles, spawnGoldCoins } from '../world/SpawnSystem.js?v=biomeactive4';
+import { shootArrow, killEnemy } from '../combat/Combat.js?v=biomeactive4';
+import { spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive4';
 import {
   wallHeight, wallStandX, wallBackDir, wallRenderWidth, wallPlatformDepth,
-  wallLayout, wallClimbX, overWallPlatform
+  wallLayout, wallClimbX, overWallPlatform, wallReady, wallCritical, wallIsInner, wallPartner
 } from '../../entities/Wall.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { addSkillPoints } from '../economy/SkillSystem.js';
+import { wallTopHasLivingImp } from './EnemyTargeting.js';
 import {
   floaty, hasSkill, nearestEnemy, nearestThreatOnSide,
-  moveToward, sunsetApproaching, nearestAnimal, nearestGroundCoin, assignFixedSide
+  moveToward, sunsetApproaching, nearestAnimal, nearestGroundCoin, assignFixedSide,
+  tryStartBridgeFlee, updateBridgeCross
 } from './AIHelpers.js?v=biomeweapons1';
 
 // ── Archer shoot ─────────────────────────────────────────────────────────
@@ -271,7 +273,7 @@ function reserveWallSlot(u, w) {
 function bestArcherWall(preferredSide, excludeUnit = null) {
   let best = null, bestScore = 1e9;
   for (const w of state.walls) {
-    if (!archerWallReady(w)) continue;
+    if (!archerWallReady(w) || archerWallUnsafe(w)) continue;
     const occ = wallOccupancy(w, excludeUnit);
     const cap = archerWallCapacity(w);
     const overflow = Math.max(0, occ - cap + 1) * 10000;
@@ -284,6 +286,34 @@ function bestArcherWall(preferredSide, excludeUnit = null) {
 
 function archerWallReady(w) {
   return !!(w && w.commissioned && w.hp > 0 && w.buildProgress >= 1 && w.level > 0);
+}
+
+// A wall is unsafe to keep manning when it's about to give out, or when an
+// imp has already summited it and there's a sturdier wall to fall back to.
+// The innermost wall on a side never counts as unsafe on imp presence alone —
+// once there's nowhere left to retreat, archers make their stand there
+// instead (see updateArcherWallMelee).
+function archerWallUnsafe(w) {
+  if (!w) return false;
+  if (wallCritical(w)) return true;
+  if (!wallTopHasLivingImp(w)) return false;
+  if (wallIsInner(w, state.walls)) return false;
+  const partner = wallPartner(w, state.walls);
+  return !!partner && wallReady(partner) && !wallCritical(partner);
+}
+
+// Any non-flying enemy close enough that fighting with the dagger makes more
+// sense than trying to loose an arrow or keep marching past it.
+function nearestContactFoe(u, range = 40) {
+  let best = null, bd = range;
+  for (const e of state.enemies) {
+    if (e.dying || e.hp <= 0 || e.fleeing) continue;
+    const t = ENEMY_TYPES[e.type];
+    if (t && t.flying) continue;
+    const d = dist(u.x, e.x);
+    if (d < bd) { bd = d; best = e; }
+  }
+  return best;
 }
 
 function clearInvalidArcherWall(u) {
@@ -444,7 +474,34 @@ function updateArcherDefense(u, dt) {
     updateGrapple(u, dt);
     return;
   }
-  if (updateArcherWallMelee(u, dt)) return;
+
+  if (u.bridge) {
+    // Mid-flight across a rampart bridge: nothing else runs until it lands.
+    if (!updateBridgeCross(u, dt)) return;
+  } else if (u.wall && u.onWall && archerWallUnsafe(u.wall)) {
+    // The wall under this archer is failing or already lost its top — abandon
+    // it. Cross the bridge to the safer wall if one connects, otherwise the
+    // reassignment below sends them down to the ground instead.
+    clearArcherMelee(u);
+    if (tryStartBridgeFlee(u, u.wall)) return;
+  } else if (updateArcherWallMelee(u, dt)) {
+    return;
+  }
+
+  // Point-blank contact always wins over shooting or marching to a post —
+  // an archer that's been caught fights back with the dagger immediately.
+  if (!u.onWall && !u.bridge) {
+    const contactFoe = nearestContactFoe(u, 40);
+    if (contactFoe) {
+      u.combatTarget = contactFoe;
+      contactFoe.combatTarget = u;
+      u.dir = Math.sign(contactFoe.x - u.x) || u.dir;
+      u.shootState = null;
+      u.shootTimer = 0;
+      archerDaggerDamageEnemy(u, contactFoe, 1, 0.58);
+      return;
+    }
+  }
 
   // Recall always wins over field combat and unfinished shots. Archers can
   // resume firing as soon as they have reached their reserved defensive post.

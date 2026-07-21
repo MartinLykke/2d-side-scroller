@@ -3,7 +3,7 @@ import { CFG } from '../../config/config.js';
 import { CASTLE_UPGRADES, CASTLE_UPGRADE_MAP } from '../../config/castleUpgrades.js';
 import { groundY } from '../../core/canvas.js';
 import { clamp, dist } from '../../util/math.js';
-import { ensureCastleUpgrades, reapplyDefenseMaxHp, currentCoinCap } from '../../util/DefenseStats.js';
+import { ensureCastleUpgrades, reapplyDefenseMaxHp, currentCoinCap, castleUpgradeUnlockLevel } from '../../util/DefenseStats.js';
 import { spawnParticles, floaty } from '../world/SpawnSystem.js';
 import { Audio } from '../infrastructure/Audio.js';
 import { addXP } from './UpgradeSystem.js?v=biomeweapons1';
@@ -57,6 +57,11 @@ export function buyCastleUpgrade(id = selectedCastleUpgrade()?.id) {
   const lvl = levels[id] || 0;
   if (lvl >= 3) {
     floaty(state.base.x, up.name + " is complete", up.col);
+    return false;
+  }
+  const unlockLevel = castleUpgradeUnlockLevel(id);
+  if ((state.base?.level || 1) < unlockLevel) {
+    floaty(state.player?.x || state.base.x, "Requires Base Level " + unlockLevel, "#ff8a6a");
     return false;
   }
   const cost = castleUpgradeCost(id);

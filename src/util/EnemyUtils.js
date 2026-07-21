@@ -1,15 +1,17 @@
-import { ENEMY_TYPES } from '../config/enemies.js?v=biomeactive1';
+import { ENEMY_TYPES } from '../config/enemies.js?v=biomeactive4';
 import { WEAPONS, BIOME_WEAPON_DROPS } from '../config/weapons.js?v=biomeweapons1';
 import { groundY } from '../core/canvas.js';
 import { Game, state } from '../core/state.js';
 import { inject } from '../core/services.js';
-import { spawnGoldReward, spawnParticles, floaty } from '../systems/world/SpawnSystem.js?v=biomeactive1';
+import { spawnGoldReward, spawnParticles, floaty } from '../systems/world/SpawnSystem.js?v=biomeactive4';
 import { Audio } from '../systems/infrastructure/Audio.js';
 import { registerEnemyKill } from '../systems/infrastructure/RoguelikeSystem.js';
-import { biomeAt } from '../rendering/Effects.js?v=biomeactive1';
+import { biomeAt } from '../rendering/Effects.js?v=biomeactive4';
+import { generateProceduralWeapon } from '../systems/economy/ProceduralWeaponSystem.js?v=procweap1';
 
 const PORTAL_GUARDIAN_WEAPON_DROP_CHANCE = 0.25;
 const PORTAL_GUARDIAN_WEAPON_RARITIES = [1, 2, 3];
+const PORTAL_GUARDIAN_PROCEDURAL_SHARE = 0.4;
 const BIOME_WEAPON_DROP_CHANCE = 0.045;
 const BIOME_WEAPON_BOSS_DROP_CHANCE = 0.28;
 const MAX_DEATH_PARTICLES = 700;
@@ -32,11 +34,11 @@ const ENEMY_DEATH_PROFILES = {
     ember: true,
     mass: 0.62,
   },
-  emberBrute: {
-    blood: ["#3a0706", "#6a1710", "#a83620"],
-    chunks: ["#2a0a08", "#5a1a10", "#8a3018"],
+  brute: {
+    blood: ["#1c1922", "#332e3c", "#4a4450"],
+    chunks: ["#25222B", "#3A3540", "#565064"],
     ember: true,
-    mass: 2.15,
+    mass: 3.4,
   },
   ashPriest: {
     blood: ["#3a070b", "#64121a", "#8a2a30"],
@@ -223,7 +225,7 @@ function chooseDeathKind(e, t, violence, tier) {
   if (t.golem) return tier >= 2 ? "golemShatter" : "golemCollapse";
   if (t.dragon) return tier >= 2 ? "dragonCrash" : "dragonFall";
   if (e.type === "fireImp") return tier >= 2 ? "wingShear" : "wingFold";
-  if (e.type === "emberBrute") return tier >= 2 ? "heavySlam" : "heavyKneel";
+  if (e.type === "brute") return tier >= 1 ? "heavySlam" : "heavyKneel";
   if (e.type === "siegeImp") return tier >= 2 ? "heavySlam" : "heavyKneel";
   if (e.type === "ashPriest") return tier >= 3 ? "ashBurst" : tier >= 1 ? "ashSpin" : "ashFold";
   if (tier >= 3) return "impBurst";
@@ -287,7 +289,14 @@ export function spawnHumanBlood(u, intensity = 1, dir = 0, y = null) {
 
 function rollPortalGuardianWeaponDrop(e) {
   if (Math.random() > PORTAL_GUARDIAN_WEAPON_DROP_CHANCE) return;
-  const candidates = Object.keys(WEAPONS).filter(id => !WEAPONS[id].biomeOnly && PORTAL_GUARDIAN_WEAPON_RARITIES.includes(WEAPONS[id].rarity));
+  if (Math.random() < PORTAL_GUARDIAN_PROCEDURAL_SHARE) {
+    const { id, def } = generateProceduralWeapon();
+    state.lootItems.push({ x: e.x, weaponId: id, dropVy: -350, dropY: groundY - 150 });
+    spawnParticles(e.x, groundY - 36, 18, def.col, 90, 120);
+    floaty(e.x, def.name, def.col, 14);
+    return;
+  }
+  const candidates = Object.keys(WEAPONS).filter(id => !WEAPONS[id].biomeOnly && !WEAPONS[id].generated && PORTAL_GUARDIAN_WEAPON_RARITIES.includes(WEAPONS[id].rarity));
   if (!candidates.length) return;
   const weaponId = candidates[Math.floor(Math.random() * candidates.length)];
   state.lootItems.push({ x: e.x, weaponId, dropVy: -350, dropY: groundY - 150 });
@@ -451,8 +460,10 @@ export function killEnemyWithAnimation(e, knockDirection = 0) {
     spawnParticles(e.x, groundY - 80, 80, t.eye, 300, 250);
   }
 
-  if (e.portalGuardian) rollPortalGuardianWeaponDrop(e);
-  rollBiomeWeaponDrop(e, t);
+  if (e.portalGuardian) {
+    rollPortalGuardianWeaponDrop(e);
+    rollBiomeWeaponDrop(e, t);
+  }
   triggerBiomeDeathEffects(e, t);
   if (e.type === "fireDragon") {
     state.lootItems.push({ x: e.x, weaponId: "meteor_tome", dropVy: -350, dropY: groundY - 150 });

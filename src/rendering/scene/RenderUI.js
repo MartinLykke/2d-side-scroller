@@ -2,7 +2,7 @@ import { clamp } from '../../util/math.js';
 import { WEAPONS, RARITY_COL, RARITY_NAME, effectiveWeapon } from '../../config/weapons.js?v=biomeweapons1';
 import { UPGRADE_TIERS } from '../../config/weaponUpgrades.js?v=biomeweapons1';
 import { ARMORS, ARMOR_RARITY_COL, ARMOR_RARITY_NAME, armorBlockChance } from '../../config/armor.js';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive1';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive4';
 import { ctx, W, H, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { inject, provide } from '../../core/services.js';
@@ -15,8 +15,9 @@ import { weaponLevel, ensureInventory } from '../../systems/economy/InventorySys
 import { currentShopList, isShopItemOwned, SHOP_COLS } from '../../systems/economy/ShopSystem.js?v=biomeweapons1';
 import { CASTLE_UPGRADES } from '../../config/castleUpgrades.js';
 import { castleUpgradeCost } from '../../systems/economy/CastleUpgradeSystem.js?v=biomeweapons1';
-import { ensureCastleUpgrades, currentPopCap, currentCoinCap, crownAegisStats } from '../../util/DefenseStats.js';
-import { drawBossPortrait } from './RenderEntities.js?v=biomeactive1';
+import { ensureCastleUpgrades, currentPopCap, currentCoinCap, crownAegisStats, trebuchetStats, castleUpgradeUnlockLevel } from '../../util/DefenseStats.js';
+import { drawBossPortrait } from './RenderEntities.js?v=biomeactive4';
+import { drawTrebuchetModel } from './RenderWorld.js?v=biomevisual4';
 
 // ---------- Shared UI helpers ----------
 const GOLD = "#f2c14e";
@@ -697,6 +698,97 @@ function castleAegisLabel() {
   return stats.damage + " dmg / " + stats.interval.toFixed(1) + "s";
 }
 
+function castleSiegeLabel() {
+  const stats = trebuchetStats();
+  if (!stats) return "offline";
+  return stats.damage + " dmg / " + stats.interval.toFixed(1) + "s" + (stats.dual ? " ×2" : "");
+}
+
+// Small crest icons for the three purely-statistical upgrades. The Ember
+// Lens gets a living beacon icon, and the Warwolf Cradle borrows the actual
+// in-world trebuchet model so its menu crest matches what rises on the wall.
+function drawMasonryIcon(col) {
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.moveTo(-16, -20); ctx.lineTo(16, -20); ctx.lineTo(16, 9); ctx.lineTo(0, 22); ctx.lineTo(-16, 9);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.35)"; ctx.lineWidth = 1.4;
+  for (const y of [-11, -1, 9]) { ctx.beginPath(); ctx.moveTo(-16, y); ctx.lineTo(16, y); ctx.stroke(); }
+  ctx.beginPath();
+  ctx.moveTo(-8, -20); ctx.lineTo(-8, -11);
+  ctx.moveTo(8, -1); ctx.lineTo(8, 9);
+  ctx.moveTo(0, 9); ctx.lineTo(0, 22);
+  ctx.stroke();
+  ctx.fillStyle = col;
+  for (const cx2 of [-12, -4, 4, 12]) ctx.fillRect(cx2 - 2.5, -26, 5, 7);
+}
+
+function drawGarrisonIcon(col) {
+  ctx.strokeStyle = "#c9bfae"; ctx.lineWidth = 2.2; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-14, 20); ctx.lineTo(10, -22); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(14, 20); ctx.lineTo(-10, -22); ctx.stroke();
+  ctx.fillStyle = "#9aa2ae";
+  ctx.beginPath(); ctx.moveTo(10, -22); ctx.lineTo(14, -16); ctx.lineTo(6, -16); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-10, -22); ctx.lineTo(-14, -16); ctx.lineTo(-6, -16); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = col;
+  ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(14, -1); ctx.lineTo(0, 10); ctx.lineTo(-14, -1); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1; ctx.stroke();
+}
+
+function drawTreasuryIcon(col) {
+  ctx.fillStyle = "#5a3a20";
+  roundedRect(-16, -4, 32, 20, 3); ctx.fill();
+  ctx.fillStyle = col;
+  roundedRect(-16, -14, 32, 12, 4); ctx.fill();
+  ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.fillRect(-16, -4, 32, 3);
+  ctx.fillStyle = "#3a2412"; roundedRect(-3, -6, 6, 8, 2); ctx.fill();
+  for (const [ox, oy] of [[-8, 14], [6, 17], [12, 9]]) {
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.arc(ox, oy, 4.4, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1; ctx.stroke();
+  }
+}
+
+function drawAegisIcon(col) {
+  const t = performance.now() / 1000;
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  const g = ctx.createRadialGradient(0, 0, 1, 0, 0, 26);
+  g.addColorStop(0, col); g.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.strokeStyle = col; ctx.lineWidth = 1.6;
+  for (let i = 0; i < 8; i++) {
+    const a = t * 0.6 + i * Math.PI / 4;
+    ctx.beginPath(); ctx.moveTo(Math.cos(a) * 10, Math.sin(a) * 10); ctx.lineTo(Math.cos(a) * 20, Math.sin(a) * 20); ctx.stroke();
+  }
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#1a1310"; ctx.beginPath(); ctx.arc(0, 0, 3.2, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawUpgradeEmblem(id, cx, cy, r, level, col, locked) {
+  ctx.save();
+  ctx.globalAlpha = locked ? 0.55 : 1;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255,255,255,0.045)"; ctx.fill();
+  ctx.strokeStyle = col; ctx.lineWidth = 1.6; ctx.stroke();
+  if (id === "siege") {
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, r - 1, 0, Math.PI * 2); ctx.clip();
+    drawTrebuchetModel(cx, cy + r * 0.62, 1, r / 66, Math.max(1, level || 1), null, performance.now() / 1000);
+    ctx.restore();
+  } else {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(r / 32, r / 32);
+    if (id === "masonry") drawMasonryIcon(col);
+    else if (id === "garrison") drawGarrisonIcon(col);
+    else if (id === "treasury") drawTreasuryIcon(col);
+    else if (id === "aegis") drawAegisIcon(col);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
 export function drawCastleUpgradeOverlay() {
   if (!Game.castleOpen) { provide('castleRects', null); return; }
   const { player, base } = state;
@@ -705,20 +797,21 @@ export function drawCastleUpgradeOverlay() {
   const levels = ensureCastleUpgrades();
   Game.castleIdx = clamp(Game.castleIdx || 0, 0, CASTLE_UPGRADES.length - 1);
 
-  const panelW = Math.min(W - 44, 820);
-  const panelH = Math.min(H - 38, 526);
+  const n = CASTLE_UPGRADES.length;
+  const panelW = Math.min(W - 40, 940);
+  const panelH = Math.min(H - 38, 560);
   const px0 = W / 2 - panelW / 2, py0 = H / 2 - panelH / 2;
   const pad = 18, gap = 12;
-  const cardW = (panelW - pad * 2 - gap) / 2;
-  const cardH = 126;
+  const cardW = (panelW - pad * 2 - gap * (n - 1)) / n;
+  const cardH = 150;
   const gridY = py0 + 118;
-  const detailY = gridY + cardH * 2 + gap + 14;
+  const dy = gridY + cardH + 14;
 
   ctx.save();
   ctx.fillStyle = "rgba(6,4,14,0.84)";
   ctx.fillRect(0, 0, W, H);
   panel(px0, py0, panelW, panelH);
-  headerBar(px0, py0, panelW - 90, "Castle Council", "[C] close  |  arrows choose  |  E buy");
+  headerBar(px0, py0, panelW - 90, "🏰 Castle Council", "[C] close  |  arrows choose  |  E buy");
   coinChip(px0 + panelW - 16, py0 + 26, player.coins);
 
   const statY = py0 + 64;
@@ -727,8 +820,9 @@ export function drawCastleUpgradeOverlay() {
     ["Pop cap", String(currentPopCap(base.level))],
     ["Gold cap", String(currentCoinCap())],
     ["Aegis", castleAegisLabel()],
+    ["Siege", castleSiegeLabel()],
   ];
-  const statW = (panelW - pad * 2 - gap * 3) / 4;
+  const statW = (panelW - pad * 2 - gap * 4) / 5;
   for (let i = 0; i < stats.length; i++) {
     const sx = px0 + pad + i * (statW + gap);
     roundedRect(sx, statY, statW, 34, 8);
@@ -737,7 +831,7 @@ export function drawCastleUpgradeOverlay() {
     ctx.textAlign = "left";
     ctx.font = "bold 9.5px Trebuchet MS"; ctx.fillStyle = "rgba(200,180,120,0.58)";
     ctx.fillText(stats[i][0].toUpperCase(), sx + 9, statY + 13);
-    ctx.font = "bold 13px Trebuchet MS"; ctx.fillStyle = i === 2 ? GOLD : PARCH;
+    ctx.font = "bold 12.5px Trebuchet MS"; ctx.fillStyle = i === 2 ? GOLD : PARCH;
     ctx.fillText(stats[i][1], sx + 9, statY + 28);
   }
 
@@ -746,77 +840,98 @@ export function drawCastleUpgradeOverlay() {
     const up = CASTLE_UPGRADES[i];
     const lvl = levels[up.id] || 0;
     const col = up.col;
-    const row = Math.floor(i / 2), colIdx = i % 2;
-    const r = {
-      x: px0 + pad + colIdx * (cardW + gap),
-      y: gridY + row * (cardH + gap),
-      w: cardW,
-      h: cardH,
-      idx: i,
-    };
+    const unlockLevel = castleUpgradeUnlockLevel(up.id);
+    const locked = base.level < unlockLevel;
+    const r = { x: px0 + pad + i * (cardW + gap), y: gridY, w: cardW, h: cardH, idx: i };
     cards.push(r);
     const selected = i === Game.castleIdx;
     const hov = inRect(m, r);
-    roundedRect(r.x, r.y, r.w, r.h, 9);
-    ctx.fillStyle = selected ? "rgba(255,220,100,0.13)" : hov ? "rgba(255,255,255,0.065)" : "rgba(255,255,255,0.035)";
+    roundedRect(r.x, r.y, r.w, r.h, 10);
+    ctx.fillStyle = locked ? "rgba(255,255,255,0.02)" : selected ? "rgba(255,220,100,0.13)" : hov ? "rgba(255,255,255,0.065)" : "rgba(255,255,255,0.035)";
     ctx.fill();
-    ctx.strokeStyle = selected ? col : hov ? col + "cc" : "rgba(180,160,110,0.28)";
-    ctx.lineWidth = selected ? 2 : 1.2;
-    roundedRect(r.x, r.y, r.w, r.h, 9); ctx.stroke();
-    if (selected) {
+    ctx.strokeStyle = locked ? "rgba(160,160,170,0.22)" : selected ? col : hov ? col + "cc" : "rgba(180,160,110,0.28)";
+    ctx.lineWidth = selected && !locked ? 2 : 1.2;
+    roundedRect(r.x, r.y, r.w, r.h, 10); ctx.stroke();
+    if (selected && !locked) {
       ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.09;
-      roundedRect(r.x, r.y, r.w, r.h, 9); ctx.fillStyle = col; ctx.fill(); ctx.restore();
+      roundedRect(r.x, r.y, r.w, r.h, 10); ctx.fillStyle = col; ctx.fill(); ctx.restore();
     }
 
-    ctx.textAlign = "left";
-    ctx.font = "bold 15px Trebuchet MS"; ctx.fillStyle = col;
-    ctx.fillText("[" + (i + 1) + "] " + up.name, r.x + 14, r.y + 24);
-    drawCastlePips(r.x + r.w - 50, r.y + 19, lvl, col);
-    ctx.font = "11px Trebuchet MS"; ctx.fillStyle = MUTED;
-    let yy = r.y + 46;
-    for (const line of wrapText(up.desc, r.w - 28, "11px Trebuchet MS").slice(0, 2)) {
-      ctx.fillText(line, r.x + 14, yy);
-      yy += 14;
+    const mx = r.x + r.w / 2;
+    drawUpgradeEmblem(up.id, mx, r.y + 44, 30, lvl, locked ? "rgba(200,195,190,0.55)" : col, locked);
+
+    ctx.textAlign = "center";
+    ctx.font = "bold 12.5px Trebuchet MS"; ctx.fillStyle = locked ? "rgba(200,195,185,0.5)" : col;
+    ctx.fillText("[" + (i + 1) + "] " + up.name, mx, r.y + 90);
+
+    if (locked) {
+      ctx.font = "10.5px Trebuchet MS"; ctx.fillStyle = "rgba(200,195,185,0.5)";
+      ctx.fillText("🔒 Base Level " + unlockLevel, mx, r.y + 108);
+    } else {
+      drawCastlePips(mx - 15, r.y + 104, lvl, col);
     }
-    const effect = lvl >= 3 ? "Complete: " + up.effects[2] : "Next: " + up.effects[lvl];
-    ctx.font = "bold 11px Trebuchet MS"; ctx.fillStyle = lvl >= 3 ? "#9bd05a" : col;
-    ctx.fillText(effect, r.x + 14, r.y + r.h - 34);
-    ctx.font = "11px Trebuchet MS";
-    ctx.fillStyle = lvl >= 3 ? "rgba(155,208,90,0.8)" : player.coins >= castleUpgradeCost(up.id) ? GOLD : "rgba(255,110,90,0.85)";
-    ctx.fillText(lvl >= 3 ? "MAX LEVEL" : castleUpgradeCost(up.id) + " gold", r.x + 14, r.y + r.h - 14);
+
+    ctx.font = "10.5px Trebuchet MS";
+    ctx.fillStyle = locked ? "rgba(200,195,185,0.35)" : lvl >= 3 ? "rgba(155,208,90,0.85)" : player.coins >= castleUpgradeCost(up.id) ? GOLD : "rgba(255,110,90,0.85)";
+    ctx.fillText(locked ? "Locked" : lvl >= 3 ? "MAX LEVEL" : castleUpgradeCost(up.id) + " gold", mx, r.y + r.h - 12);
   }
 
   ctx.strokeStyle = "rgba(210,185,130,0.2)"; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(px0 + pad, detailY - 8); ctx.lineTo(px0 + panelW - pad, detailY - 8); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(px0 + pad, dy - 8); ctx.lineTo(px0 + panelW - pad, dy - 8); ctx.stroke();
 
   const sel = CASTLE_UPGRADES[Game.castleIdx];
   const selLvl = levels[sel.id] || 0;
+  const selUnlockLevel = castleUpgradeUnlockLevel(sel.id);
+  const selLocked = base.level < selUnlockLevel;
   const nextCost = castleUpgradeCost(sel.id);
+
+  const previewR = 54;
+  const previewBoxW = previewR * 2 + 24;
+  roundedRect(px0 + pad, dy + 8, previewBoxW, 156, 12);
+  ctx.fillStyle = "rgba(255,255,255,0.03)"; ctx.fill();
+  ctx.strokeStyle = "rgba(210,185,130,0.22)"; ctx.lineWidth = 1; ctx.stroke();
+  drawUpgradeEmblem(sel.id, px0 + pad + previewBoxW / 2, dy + 8 + 78, previewR, selLvl || 1, selLocked ? "rgba(200,195,190,0.55)" : sel.col, selLocked);
+
+  const tx = px0 + pad + previewBoxW + 20;
   ctx.textAlign = "left";
-  ctx.font = "bold 17px Trebuchet MS"; ctx.fillStyle = sel.col;
-  ctx.fillText(sel.name, px0 + pad, detailY + 18);
-  ctx.font = "11px Trebuchet MS"; ctx.fillStyle = MUTED;
-  const current = selLvl > 0 ? sel.effects[selLvl - 1] : "not started";
-  const next = selLvl >= 3 ? "complete" : sel.effects[selLvl];
-  ctx.fillText("Current: " + current, px0 + pad, detailY + 40);
-  ctx.fillText("Next: " + next, px0 + pad, detailY + 58);
+  ctx.font = "bold 19px Trebuchet MS"; ctx.fillStyle = selLocked ? "rgba(210,205,195,0.6)" : sel.col;
+  ctx.fillText(sel.name, tx, dy + 30);
+  ctx.font = "11.5px Trebuchet MS"; ctx.fillStyle = MUTED;
+  const descLines = wrapText(sel.desc, px0 + panelW - pad - tx - 10, "11.5px Trebuchet MS").slice(0, 2);
+  let ty = dy + 50;
+  for (const line of descLines) { ctx.fillText(line, tx, ty); ty += 15; }
 
-  const buyRect = { x: px0 + panelW - 166, y: detailY + 12, w: 142, h: 44 };
-  const canBuy = selLvl < 3 && player.coins >= nextCost;
-  const bHov = inRect(m, buyRect);
-  roundedRect(buyRect.x, buyRect.y, buyRect.w, buyRect.h, 10);
-  ctx.fillStyle = selLvl >= 3 ? "rgba(130,130,130,0.12)"
-    : canBuy ? (bHov ? "rgba(242,193,78,0.4)" : "rgba(242,193,78,0.24)")
-    : "rgba(255,90,70,0.10)";
-  ctx.fill();
-  ctx.strokeStyle = selLvl >= 3 ? "rgba(150,150,150,0.4)" : canBuy ? GOLD : "rgba(255,110,90,0.5)";
-  ctx.lineWidth = canBuy ? 2 : 1;
-  roundedRect(buyRect.x, buyRect.y, buyRect.w, buyRect.h, 10); ctx.stroke();
-  ctx.textAlign = "center"; ctx.font = "bold 13px Trebuchet MS";
-  ctx.fillStyle = selLvl >= 3 ? "rgba(180,180,180,0.65)" : canBuy ? "#ffe9b0" : "rgba(255,140,120,0.8)";
-  ctx.fillText(selLvl >= 3 ? "COMPLETE" : "BUY  |  " + nextCost + " gold", buyRect.x + buyRect.w / 2, buyRect.y + 27);
+  let buyRect = null;
+  if (selLocked) {
+    ctx.font = "bold 13px Trebuchet MS"; ctx.fillStyle = "#ff8a6a";
+    ctx.fillText("🔒 Unlocks at Base Level " + selUnlockLevel, tx, dy + 96);
+    ctx.font = "11px Trebuchet MS"; ctx.fillStyle = MUTED;
+    ctx.fillText("Raise the castle to muster this upgrade.", tx, dy + 114);
+  } else {
+    ctx.font = "11px Trebuchet MS"; ctx.fillStyle = MUTED;
+    const current = selLvl > 0 ? sel.effects[selLvl - 1] : "not started";
+    const next = selLvl >= 3 ? "complete" : sel.effects[selLvl];
+    ctx.fillText("Current: " + current, tx, dy + 96);
+    ctx.fillText("Next: " + next, tx, dy + 114);
 
-  provide('castleRects', { cards, buy: selLvl >= 3 ? null : buyRect });
+    buyRect = { x: px0 + panelW - 166, y: dy + 132, w: 142, h: 44 };
+    const canBuy = selLvl < 3 && player.coins >= nextCost;
+    const bHov = inRect(m, buyRect);
+    roundedRect(buyRect.x, buyRect.y, buyRect.w, buyRect.h, 10);
+    ctx.fillStyle = selLvl >= 3 ? "rgba(130,130,130,0.12)"
+      : canBuy ? (bHov ? "rgba(242,193,78,0.4)" : "rgba(242,193,78,0.24)")
+      : "rgba(255,90,70,0.10)";
+    ctx.fill();
+    ctx.strokeStyle = selLvl >= 3 ? "rgba(150,150,150,0.4)" : canBuy ? GOLD : "rgba(255,110,90,0.5)";
+    ctx.lineWidth = canBuy ? 2 : 1;
+    roundedRect(buyRect.x, buyRect.y, buyRect.w, buyRect.h, 10); ctx.stroke();
+    ctx.textAlign = "center"; ctx.font = "bold 13px Trebuchet MS";
+    ctx.fillStyle = selLvl >= 3 ? "rgba(180,180,180,0.65)" : canBuy ? "#ffe9b0" : "rgba(255,140,120,0.8)";
+    ctx.fillText(selLvl >= 3 ? "COMPLETE" : "BUY  |  " + nextCost + " gold", buyRect.x + buyRect.w / 2, buyRect.y + 27);
+    if (selLvl >= 3) buyRect = null;
+  }
+
+  provide('castleRects', { cards, buy: buyRect });
   ctx.restore();
 }
 

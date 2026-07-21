@@ -100,8 +100,9 @@ export const state = {
   legendaryBoss: null,
   legendaryEffects: [],
   aegisStrikes: [],
+  trebuchetShots: [],
   firePools: [],
   beacon: null,
   assault: null, // active portal assault ({ phase, portal, ... }) or null
-  castleUpgrades: { masonry: 0, garrison: 0, treasury: 0, aegis: 0 },
+  castleUpgrades: { masonry: 0, garrison: 0, treasury: 0, aegis: 0, siege: 0 },
 };

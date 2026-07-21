@@ -3,11 +3,11 @@ import { clamp, clampCameraTarget, dist, rand, randInt } from '../../util/math.j
 import { groundY, W } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnEnemy, spawnParticles, spawnGoldReward, floaty, planNight, biomeWaveEnemyType, populateBiomeAnimals } from './SpawnSystem.js?v=biomeactive1';
-import { shootArrow } from '../combat/Combat.js?v=biomeactive1';
-import { moveToward, nearestEnemy } from '../ai/AIHelpers.js?v=biomeactive1';
-import { buildForest } from './ForestSystem.js?v=biomeactive1';
-import { activeBiomeId, nextBiomeId, setActiveBiome, clearTreeCache } from '../../rendering/Effects.js?v=biomeactive1';
+import { spawnEnemy, spawnParticles, spawnGoldReward, floaty, planNight, biomeWaveEnemyType, populateBiomeAnimals } from './SpawnSystem.js?v=biomeactive4';
+import { shootArrow } from '../combat/Combat.js?v=biomeactive4';
+import { moveToward, nearestEnemy } from '../ai/AIHelpers.js?v=biomeactive4';
+import { buildForest } from './ForestSystem.js?v=biomeactive4';
+import { activeBiomeId, nextBiomeId, setActiveBiome, clearTreeCache } from '../../rendering/Effects.js?v=biomeactive4';
 import { addXP } from '../economy/UpgradeSystem.js?v=biomeweapons1';
 
 // ── Portal assault ───────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ function defenderType() {
   const brute = Math.min(0.3, 0.06 + d * 0.02);
   const priest = d >= 3 ? Math.min(0.22, 0.04 + d * 0.015) : 0;
   const flyer = Math.min(0.35, 0.08 + d * 0.02);
-  if (r < brute) return "emberBrute";
+  if (r < brute) return "brute";
   if (r < brute + priest) return "ashPriest";
   if (r < brute + priest + flyer) return "fireImp";
   return "imp";

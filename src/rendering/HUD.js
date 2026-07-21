@@ -1,5 +1,5 @@
 import { CFG } from '../config/config.js';
-import { ENEMY_TYPES, BIOME_ENEMY_POOLS } from '../config/enemies.js?v=biomeactive1';
+import { ENEMY_TYPES, BIOME_ENEMY_POOLS } from '../config/enemies.js?v=biomeactive4';
 import { ANIMAL_TYPES, BIOME_ANIMAL_POOLS, animalDef } from '../config/animals.js';
 import { WEAPONS, RARITY_COL, RARITY_NAME } from '../config/weapons.js?v=biomeweapons1';
 import { ARMORS, ARMOR_RARITY_COL, ARMOR_RARITY_NAME } from '../config/armor.js';
@@ -7,7 +7,7 @@ import { dist, clamp, rand, clampCameraTarget } from '../util/math.js';
 import { Game, state } from '../core/state.js';
 import { inject, provide } from '../core/services.js';
 import { Audio } from '../systems/infrastructure/Audio.js';
-import { spawnEnemy, spawnFireDragon, spawnBoss, spawnBiomeBoss, planNight, floaty, spawnParticles, makeAnimal, populateBiomeAnimals } from '../systems/world/SpawnSystem.js?v=biomeactive1';
+import { spawnEnemy, spawnFireDragon, spawnBoss, spawnBiomeBoss, planNight, floaty, spawnParticles, makeAnimal, populateBiomeAnimals } from '../systems/world/SpawnSystem.js?v=biomeactive4';
 import { pick } from '../util/math.js';
 import { groundY, W } from '../core/canvas.js';
 import { ARCHER_SKILLS, ARROW_RAIN_COOLDOWN } from '../config/archerSkills.js';
@@ -23,7 +23,8 @@ import { renderBudget, renderLoad } from './RenderFrame.js';
 import { profilerEnabled, setProfilerEnabled, profilerResults, profilerFrameMs, profilerReset } from '../util/Profiler.js';
 import { canOpenCastleUpgrades } from '../systems/economy/CastleUpgradeSystem.js?v=biomeweapons1';
 import { currentCoinCap, currentPopCap, wallMaxHpForLevel } from '../util/DefenseStats.js';
-import { BIOME_DEFS, biomeAt, setActiveBiome } from './Effects.js?v=biomeactive1';
+import { BIOME_DEFS, biomeAt, setActiveBiome } from './Effects.js?v=biomeactive4';
+import { generateProceduralWeapon } from '../systems/economy/ProceduralWeaponSystem.js?v=procweap1';
 
 // ── Skill Tree ────────────────────────────────────────────────
 const BRANCH_NAMES = {
@@ -186,6 +187,14 @@ function advanceToNextDayForSkip() {
   planNight();
 }
 
+// Roster pill: one entry per unit role (plus vagrants); empty roles fade back.
+function setRosterCount(key, count, text) {
+  const el = document.getElementById("hud-roster-" + key);
+  if (!el) return;
+  el.textContent = text !== undefined ? text : count;
+  if (el.parentElement) el.parentElement.classList.toggle("is-empty", count <= 0);
+}
+
 function baseName(lvl) { return ["—","Camp","Small Village","Large Village","Castle","Fortress","Citadel","Royal Capital"][lvl]; }
 export { baseName };
 
@@ -236,17 +245,24 @@ export const UI = {
     document.getElementById("hud-coins-text").textContent = player.coins;
     document.getElementById("hud-hp-text").textContent    = "";
 
-    let arch = 0, build = 0, guards = 0;
+    let arch = 0, build = 0, guards = 0, farmers = 0;
     for (let i = 0; i < units.length; i++) {
       const r = units[i].role;
       if (r === "archer") arch++;
       else if (r === "builder") build++;
       else if (r === "guard") guards++;
+      else if (r === "farmer") farmers++;
     }
     const popCap = currentPopCap(base.level);
     document.getElementById("hud-pop-text").textContent   = (units.length + vagrants.length) + "/" + popCap;
     document.getElementById("hud-arch-text").textContent  = arch;
     document.getElementById("hud-build-text").textContent = build;
+    setRosterCount("pop", units.length + vagrants.length, (units.length + vagrants.length) + "/" + popCap);
+    setRosterCount("archer", arch);
+    setRosterCount("guard", guards);
+    setRosterCount("builder", build);
+    setRosterCount("farmer", farmers);
+    setRosterCount("vagrant", vagrants.length);
 
     let obj = "🎯 Survive as long as you can. Threat level " + (Game.threatLevel || Game.day);
     if (base.level<CFG.maxBaseLevel) obj += " · upgrade the base ("+base.level+"/"+CFG.maxBaseLevel+")";
@@ -359,7 +375,7 @@ function renderDevWeaponButtons() {
   row.innerHTML = "";
   const typeLabels = { melee: "Melee", ranged: "Ranged", magic: "Magic" };
   for (const type of ["melee", "ranged", "magic"]) {
-    const weapons = Object.entries(WEAPONS).filter(([, weapon]) => weapon.type === type);
+    const weapons = Object.entries(WEAPONS).filter(([, weapon]) => weapon.type === type && !weapon.generated);
     if (!weapons.length) continue;
     const group = document.createElement("div");
     group.className = "dev-subsection";
@@ -740,13 +756,6 @@ export const DEV = {
     floaty(state.base.x, "⬆ All walls → max level!", "#9bd05a");
   },
 
-  fortTierUp() {
-    if (Game.state!=="play") return;
-    import('../systems/world/FortificationSystem.js?v=biomeactive1').then(m => {
-      if (!m.purchaseFortUpgrade()) floaty(state.base.x, "Runeforge fully attuned", "#c9a2ff");
-    });
-  },
-
   healAll() {
     if (Game.state!=="play") return;
     state.player.hp=state.player.maxHp; state.base.hp=state.base.maxHp;
@@ -831,7 +840,7 @@ export const DEV = {
   // Dynamic import keeps HUD out of the AssaultSystem module graph
   startAssaultDev() {
     if (Game.state!=="play") return;
-    import('../systems/world/AssaultSystem.js?v=biomevisual1').then(m => m.startAssault());
+    import('../systems/world/AssaultSystem.js?v=biomevisual4').then(m => m.startAssault());
   },
 
   crackPortals() {
@@ -878,7 +887,7 @@ export const DEV = {
     const col = biome.hot ? "#ff7a36" : biome.corrupt ? "#b66bff" : biome.snow ? "#cfe6f2" : biome.deco==="desert" ? "#d8b06a" : biome.deco==="swamp" ? "#9bd05a" : "#f2c14e";
     state.enemies.length = 0;
     state.animals.length = 0;
-    import('../systems/world/ForestSystem.js?v=biomeactive1').then(({ buildForest }) => {
+    import('../systems/world/ForestSystem.js?v=biomeactive4').then(({ buildForest }) => {
       buildForest();
       populateBiomeAnimals(12, { nearX: x });
     });
@@ -921,6 +930,14 @@ export const DEV = {
   giveWeapon(weaponId) {
     if (Game.state!=="play") return;
     inject('pickupWeapon')?.(weaponId);
+  },
+
+  spawnGeneratedWeapon() {
+    if (Game.state!=="play"||!state.player) return;
+    const { id, def } = generateProceduralWeapon();
+    inject('pickupWeapon')?.(id);
+    floaty(state.player.x, "🎲 " + def.name, RARITY_COL[def.rarity], 16);
+    spawnParticles(state.player.x, groundY - 40, 16, def.col, 90, 130);
   },
 
   giveArmor(armorId) {

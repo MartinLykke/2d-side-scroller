@@ -112,7 +112,7 @@ Every module imports these directly; nothing is passed as arguments through upda
 - **Callback registration**: Modules register callbacks via functions like `setPickupWeapon()`, `setBuildStations()`, and `setAddXP()` to pass functions across modules without circular imports. `core/game.js` wires these up at startup.
 - **Window globals**: Global state and functions exposed via `window` (e.g., `window._KEYS`, `window._DEV_GOD_MODE`, `window._WEAPON_SHOP`) to avoid circular import chains. Primarily used by AI systems and the dev panel.
 - **Camera**: `Game.cam` is the world-space offset applied in the renderer. `Game.zoom` scales the viewport (0.35–2.5×, default 1.2×). All entity positions are in world space.
-- **Cache-busting imports**: modules import each other with a `?v=biomeactive1` query suffix; bump it (and the one on the `<script>` tag in `index.html`) together when forcing a cache refresh.
+- **Cache-busting imports**: modules import each other with a `?v=biomeactive4` query suffix; the `<script>` tag in `index.html` uses a separate `?v=biomevisual4` token (as do a few HUD-facing modules). Bump **both** together when forcing a cache refresh — a stale token means the browser keeps serving the old module and edits silently do nothing.
 
 ## Entities
 

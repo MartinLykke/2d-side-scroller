@@ -3,8 +3,8 @@ import { FORT_TRACK, fortHpMultAt } from '../../config/fortifications.js';
 import { groundY } from '../../core/canvas.js';
 import { rand } from '../../util/math.js';
 import { wallReady, wallHeight, wallRenderWidth } from '../../entities/Wall.js';
-import { spawnParticles, floaty } from './SpawnSystem.js?v=biomeactive1';
-import { killEnemy } from '../../util/EnemyUtils.js?v=biomeactive1';
+import { spawnParticles, floaty } from './SpawnSystem.js?v=biomeactive4';
+import { killEnemy } from '../../util/EnemyUtils.js?v=biomeactive4';
 import { Audio } from '../infrastructure/Audio.js';
 import { reapplyDefenseMaxHp } from '../../util/DefenseStats.js';
 

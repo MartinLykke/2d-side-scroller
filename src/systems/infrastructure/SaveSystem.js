@@ -2,11 +2,12 @@ import { Game, state } from '../../core/state.js';
 import { CFG, FOREST } from '../../config/config.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { spawnVagrant, planNight, populateBiomeAnimals } from '../world/SpawnSystem.js';
-import { addForestCamp, buildForest } from '../world/ForestSystem.js?v=biomeactive1';
-import { buildStations } from './GameInit.js?v=biomeactive1';
+import { addForestCamp, buildForest } from '../world/ForestSystem.js?v=biomeactive4';
+import { buildStations } from './GameInit.js?v=biomeactive4';
 import { permanentForestCampPlans } from './RoguelikeSystem.js';
 import { autoSpendSkillPoints } from '../economy/SkillSystem.js';
-import { ensureCastleUpgrades, baseMaxHpForLevel } from '../../util/DefenseStats.js';
+import { ensureCastleUpgrades, baseMaxHpForLevel, wallMaxHpForLevel } from '../../util/DefenseStats.js';
+import { isGeneratedWeaponId, exportGeneratedWeapon, restoreGeneratedWeapon } from '../economy/ProceduralWeaponSystem.js?v=procweap1';
 
 const SAVE_KEY = "ashen_reign_save_v1";
 
@@ -34,7 +35,7 @@ export function saveGame() {
       level: player.level || 1, xp: player.xp || 0,
       base: { level: base.level, hp: base.hp, maxHp: base.maxHp },
       walls: walls.map(w => ({ commissioned: w.commissioned, level: w.level, hp: w.hp, maxHp: w.maxHp, buildProgress: w.buildProgress })),
-      buildings: (state.buildings || []).map(b => ({ built: b.built, level: b.level })),
+      buildings: (state.buildings || []).map(b => ({ type: b.type, x: b.x, built: b.built, level: b.level })),
       chests: (state.chests || []).map(ch => ({
         x: ch.x,
         lootGold: ch.lootGold,
@@ -57,7 +58,6 @@ export function saveGame() {
       vagrants: vagrants.length,
       farm: state.farmBuilt,
       farmLevel: state.farmLevel,
-      fortLevel: state.fortLevel || 0,
       castleUpgrades: ensureCastleUpgrades(),
       archerSkillPoints: state.archerSkillPoints || 0,
       archerSkills: state.archerSkills || [],
@@ -65,6 +65,20 @@ export function saveGame() {
       guardSkillPoints: state.guardSkillPoints || 0,
       guardSkills: state.guardSkills || [],
     };
+    // Procedurally generated weapons only live in the runtime WEAPONS table,
+    // so any one currently equipped, stashed, or sitting in a chest needs its
+    // definition snapshotted too, or a reload would leave a dangling id.
+    const generatedIds = new Set();
+    if (isGeneratedWeaponId(snap.weapon)) generatedIds.add(snap.weapon);
+    for (const it of snap.inventory) if (it.kind === "weapon" && isGeneratedWeaponId(it.weaponId)) generatedIds.add(it.weaponId);
+    for (const ch of snap.chests) if (isGeneratedWeaponId(ch.weaponId)) generatedIds.add(ch.weaponId);
+    if (generatedIds.size) {
+      snap.generatedWeapons = {};
+      for (const id of generatedIds) {
+        const data = exportGeneratedWeapon(id);
+        if (data) snap.generatedWeapons[id] = data;
+      }
+    }
     localStorage.setItem(SAVE_KEY, JSON.stringify(snap));
   } catch (e) {}
 }
@@ -79,6 +93,12 @@ export function loadGame() {
   try {
     const snap = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (!snap) return false;
+
+    // Re-register any procedurally generated weapons before anything below
+    // reads player.weapon / inventory / chests, which may reference them.
+    if (snap.generatedWeapons) {
+      for (const id in snap.generatedWeapons) restoreGeneratedWeapon(id, snap.generatedWeapons[id]);
+    }
 
     Game.day = snap.day; Game.time = snap.time; Game.treeSeed = snap.treeSeed;
     Game.activeBiome = snap.activeBiome || "forest";
@@ -117,14 +137,27 @@ export function loadGame() {
     player.lastMountId = player.mountId;
     player.level = snap.level || 1;
     player.xp = snap.xp || 0;
-    state.fortLevel = snap.fortLevel || 0;
     state.castleUpgrades = snap.castleUpgrades || {};
     ensureCastleUpgrades();
     base.level = snap.base.level;
     base.maxHp = baseMaxHpForLevel(base.level);
-    base.hp = Number.isFinite(snap.base.hp) ? Math.max(0, snap.base.hp) : base.maxHp;
-    walls.forEach((w, i) => { const s = snap.walls[i]; if (s) Object.assign(w, s); });
-    if (snap.buildings) snap.buildings.forEach((s, i) => { if (state.buildings[i]) Object.assign(state.buildings[i], s); });
+    base.hp = Number.isFinite(snap.base.hp) ? Math.max(0, Math.min(base.maxHp, snap.base.hp)) : base.maxHp;
+    walls.forEach((w, i) => {
+      const s = snap.walls[i];
+      if (!s) return;
+      Object.assign(w, s);
+      w.maxHp = wallMaxHpForLevel(w.level);
+      w.hp = Math.max(0, Math.min(w.maxHp, w.hp));
+    });
+    if (snap.buildings) snap.buildings.forEach((s, i) => {
+      // Current saves identify slots explicitly. Legacy saves were positional:
+      // only their first two slots were lumber camps, so removed defense
+      // buildings must not spill into permanent-upgrade building entries.
+      const target = s.type
+        ? state.buildings.find(b => b.type === s.type && (!Number.isFinite(s.x) || b.x === s.x))
+        : (i < 2 && state.buildings[i]?.type === "lumber" ? state.buildings[i] : null);
+      if (target) Object.assign(target, { built: !!s.built, level: s.level || 0 });
+    });
     if (Array.isArray(snap.chests)) {
       state.chests = snap.chests
         .filter(ch => ch && Number.isFinite(ch.x))

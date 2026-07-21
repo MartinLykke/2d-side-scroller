@@ -40,6 +40,16 @@
         <div id="hud-weapon" class="hud-pill">⚔ <span id="hud-weapon-text">No weapon</span></div>
         <div id="hud-armor" class="hud-pill">🛡 <span id="hud-armor-text">No armor</span></div>
         <div id="hud-pop" class="hud-pill">👥 <span id="hud-pop-text">0</span> · 🏹 <span id="hud-arch-text">0</span> · 🔨 <span id="hud-build-text">0</span></div>
+        <div id="hud-roster" class="hud-pill hud-roster">
+          <span class="hud-roster-item hud-roster-pop" title="Subjects / population cap">👥 <b id="hud-roster-pop">0/8</b></span>
+          <span class="hud-roster-sep"></span>
+          <span class="hud-roster-item" data-role="archer"  title="Archers">🏹 <b id="hud-roster-archer">0</b></span>
+          <span class="hud-roster-item" data-role="guard"   title="Guards">🛡️ <b id="hud-roster-guard">0</b></span>
+          <span class="hud-roster-item" data-role="builder" title="Builders">🔨 <b id="hud-roster-builder">0</b></span>
+          <span class="hud-roster-item" data-role="farmer"  title="Farmers">🌾 <b id="hud-roster-farmer">0</b></span>
+          <span class="hud-roster-sep"></span>
+          <span class="hud-roster-item hud-roster-vagrant" data-role="vagrant" title="Vagrants waiting to be recruited">🧍 <b id="hud-roster-vagrant">0</b></span>
+        </div>
         <div id="hud-arrow-rain" class="hud-pill hud-ability hidden">
           <span id="hud-arrow-rain-fill" class="hud-ability-fill"></span>
           <span class="hud-ability-key">Q</span>
@@ -167,7 +177,6 @@
       <button class="dev-btn" data-dev="upgradeBase">Upg. Base ⬆</button>
       <button class="dev-btn dev-danger" data-dev="maxBase">Max Base 🏰</button>
       <button class="dev-btn dev-danger" data-dev="maxWalls">Max Vægge 🧱</button>
-      <button class="dev-btn" data-dev="fortTier">Fort +1 🔮</button>
     </div>
   </details>
 
@@ -193,7 +202,8 @@
       <div class="dev-button-grid">
         <button class="dev-btn" data-dev="imp">Imp</button>
         <button class="dev-btn" data-dev="fireImp">Flyv. Imp</button>
-        <button class="dev-btn" data-dev="emberBrute">Brute</button>
+        <button class="dev-btn" data-dev="emberBrute">Ember Brute</button>
+        <button class="dev-btn" data-dev="brute">Brute</button>
         <button class="dev-btn" data-dev="ashPriest">Præst</button>
         <button class="dev-btn" data-dev="siegeImp">Siege</button>
         <button class="dev-btn" data-dev="chainImp">Chain</button>
@@ -248,6 +258,7 @@
       
       <!-- Dynamiske knapper, som dit script tilføjer til -->
       <div class="dev-button-grid" style="margin-top:4px;">
+        <button class="dev-btn" data-dev="generateWeapon">🎲 Generér Våben</button>
         <div id="dev-weapon-buttons" style="display:contents;">
           <button class="dev-btn dev-danger" data-dev="dropWeapon">Smid Våben</button>
         </div>
@@ -277,6 +288,6 @@
     </div>
   </div>
 
-  <script type="module" src="src/core/game.js?v=biomevisual1"></script>
+  <script type="module" src="src/core/game.js?v=biomevisual4"></script>
 </body>
 </html>

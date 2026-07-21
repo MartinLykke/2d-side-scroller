@@ -2,7 +2,6 @@
 // baseDmg  = damage dealt to the base per hit (falls back to dmg)
 // meleeDmg = damage dealt to the player on a direct melee hit
 export const BIOME_BOSS_TYPES = {
-  forest: "forestStalker",
   frozen: "skadiWrath",
   desert: "duneBroodmother",
   swamp: "sunkenBehemoth",
@@ -12,10 +11,10 @@ export const BIOME_BOSS_TYPES = {
 
 export const BIOME_ENEMY_POOLS = {
   forest: {
-    basic: "greedlet",
-    standard: "maskedGreed",
-    special: "floater",
-    heavy: "breeder",
+    basic: "imp",
+    standard: "fireImp",
+    special: ["chainImp", "brute", "ashPriest"],
+    heavy: "siegeImp",
   },
   frozen: {
     basic: "frostSprite",
@@ -38,7 +37,7 @@ export const BIOME_ENEMY_POOLS = {
   volcano: {
     basic: ["imp", "ashFiend"],
     standard: ["fireImp", "magmaGargoyle"],
-    special: ["chainImp", "emberBrute", "ashPriest"],
+    special: ["chainImp", "brute", "ashPriest"],
     heavy: ["siegeImp", "obsidianJuggernaut"],
   },
   corrupted: {
@@ -141,11 +140,19 @@ export const ENEMY_TYPES = {
     reward: 14, dmg: 19, baseDmg: 7, meleeDmg: 3, biome: "corrupted",
     noKnockback: true, coinShock: true,
   },
-  emberBrute: {
-    name: "Ember Brute", hp: 45, speed: 46, w: 50, color: "#5a1a10", eye: "#ff8a30",
-    reward: 7, dmg: 11, meleeDmg: 2, biome: "volcano",
-    charger: true, chargeMin: 5, chargeMax: 8, chargeRangeMin: 140, chargeRangeMax: 420,
-    stomper: true, stompMin: 4.5, stompMax: 7, stompRadius: 95,
+  brute: {
+    // The rig is authored large for smooth procedural curves, then rendered at
+    // 60%. w/visualH match that world-space footprint for hits and UI markers.
+    name: "Brute", hp: 140, speed: 30, w: 46, visualH: 150, renderScale: 0.60,
+    color: "#932319", eye: "#ff6a1e",
+    reward: 12, dmg: 24, baseDmg: 8, meleeDmg: 4,
+    // Reaches are measured from the Brute's centre. wallReach is added to the
+    // wall's half-width, allowing the fists to connect with its near face.
+    meleeReach: 74, wallReach: 58, baseReach: 94,
+    structureAttackDuration: 1.3, structureAttackCadence: 2.15,
+    charger: true, chargeMin: 6, chargeMax: 9, chargeRangeMin: 160, chargeRangeMax: 380,
+    stomper: true, stompMin: 5, stompMax: 8, stompRadius: 84,
+    noKnockback: true,
   },
   ashPriest: {
     name: "Ash Priest", hp: 14, speed: 110, w: 34, color: "#412225", eye: "#ffc060",

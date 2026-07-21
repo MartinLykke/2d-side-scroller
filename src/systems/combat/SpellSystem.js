@@ -5,9 +5,9 @@ import { dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, floaty, critFloaty, spawnGoldReward } from '../world/SpawnSystem.js?v=biomeactive1';
-import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive1';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive1';
+import { spawnParticles, floaty, critFloaty, spawnGoldReward } from '../world/SpawnSystem.js?v=biomeactive4';
+import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive4';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive4';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { entityWallLift } from '../../entities/Wall.js';
 import { playerMountLift } from '../economy/MountSystem.js';
@@ -74,6 +74,16 @@ function payWeaponCastCost(player, fx, col) {
   }
   floaty(player.x, "Needs coin or life", col, 12);
   return false;
+}
+
+// Soul Siphon: a chance for a direct spell hit to draw back a sliver of life.
+function trySoulSiphon(player, chance, col) {
+  if (!chance || !player || player.hp <= 0 || player.hp >= player.maxHp) return;
+  if (Math.random() >= chance) return;
+  player.hp = Math.min(player.maxHp, player.hp + 1);
+  player.hpShowTimer = Math.max(player.hpShowTimer || 0, 2);
+  spawnParticles(player.x, groundY - 40, 6, col || "#ff6a8a", 40, 70);
+  floaty(player.x, "+1❤", "#ff9ab0");
 }
 
 // Spell damage against a bear (bears live in state.animals, not enemies).
@@ -423,6 +433,21 @@ function updateSpellFields(dt) {
         detonateRuneField(f, i);
         continue;
       }
+    } else if (f.type === "expandring") {
+      f.r += (f.maxR / f.maxLife) * dt;
+      const band = 24;
+      for (const e of enemiesNearX(f.x, f.r + band)) {
+        if (f.hit.has(e)) continue;
+        if (Math.abs(e.x - f.x) < f.r - band) continue; // hasn't reached it yet
+        f.hit.add(e);
+        spellDamageEnemy(e, f.dmg, f.col, { particleCount: 7, spread: 44 });
+        const et = ENEMY_TYPES[e.type] || {};
+        if (!et.noKnockback) e.knock = (e.knock || 0) + Math.sign(e.x - f.x || 1) * 150;
+      }
+      if (Math.random() < dt * 24) {
+        const a = Math.random() < 0.5 ? -1 : 1;
+        spawnParticles(f.x + a * f.r, groundY - 8, 1, f.col, 16, 34);
+      }
     }
     if (f.life <= 0) {
       if (f.type === "rune") detonateRuneField(f, i);
@@ -491,6 +516,8 @@ function spawnSplitOrbs(sp, x, y) {
       dmg: Math.max(1, Math.round(sp.dmg * 0.4)),
       life: 1.5,
       col: sp.col,
+      palette: sp.palette,
+      core: sp.core,
       aoeRadius: Math.max(30, (sp.aoeRadius || 60) * 0.5),
       age: 0,
       isSplitOrb: true,
@@ -555,15 +582,368 @@ export function chainLightning(x, dmg, bounces) {
   }
 }
 
+// ---------- Procedural spell recipe system (generated staffs) ----------
+// Everything below is reached only via wBase.spellRecipe (set exclusively by
+// ProceduralWeaponSystem.js). Curated weapons never touch this code.
+
+function paletteCols(sp) {
+  return sp.palette || [sp.col];
+}
+
+// Per-flourish extra trail texture — audio for the cast itself lives in
+// Audio.spellFlourish, called once from castProceduralSpell.
+function flourishTrailFX(sp) {
+  const cols = paletteCols(sp);
+  switch (sp.flourish) {
+    case "haze":
+      if (Math.random() < 0.5) spawnParticles(sp.x + rand(-4, 4), sp.y + rand(-4, 4), 1, cols[cols.length - 1], 10, 34);
+      break;
+    case "heartbeat": {
+      const pulse = (Math.sin((sp.age || 0) * 6) + 1) / 2;
+      if (pulse > 0.82 && Math.random() < 0.6) spawnParticles(sp.x, sp.y, 2, cols[0], 16 + pulse * 12, 22);
+      break;
+    }
+    case "sparks":
+      if (Math.random() < 0.55) spawnParticles(sp.x + rand(-3, 3), sp.y + rand(-3, 3), 1, "#ffffff", 18, 10);
+      break;
+    case "motes": {
+      const a = (sp.age || 0) * 6.5;
+      spawnParticles(sp.x + Math.cos(a) * 7, sp.y + Math.sin(a) * 7, 1, cols[1] || cols[0], 6, 18);
+      break;
+    }
+    // "hum" is a pure audio flourish — no extra particles.
+  }
+}
+
+function paletteSpellTrail(sp) {
+  const cols = paletteCols(sp);
+  if (Math.random() < 0.7) spawnParticles(sp.x, sp.y, 1, cols[0], 13, 12);
+  if (Math.random() < 0.32) spawnParticles(sp.x, sp.y, 1, cols[1] || cols[0], 8, 16);
+  if (Math.random() < 0.18) spawnParticles(sp.x, sp.y, 1, sp.core || "#ffffff", 6, 20);
+  flourishTrailFX(sp);
+}
+
+function paletteSpellImpact(sp, x, y) {
+  const cols = paletteCols(sp);
+  spawnParticles(x, y, 16, cols[0], 90, 110);
+  spawnParticles(x, y, 8, cols[1] || cols[0], 55, 90);
+  spawnParticles(x, y, 5, sp.core || "#ffffff", 35, 100);
+  Game.screenShake = Math.max(Game.screenShake, 0.28);
+}
+
+function paletteGroundImpact(sp) {
+  const cols = paletteCols(sp);
+  spawnParticles(sp.x, groundY - 8, 20, cols[0], 100, 120);
+  spawnParticles(sp.x, groundY - 8, 10, cols[1] || cols[0], 65, 100);
+  Game.screenShake = Math.max(Game.screenShake, 0.36);
+}
+
+// Per-frame position update for a recipe spell: applies its Travel behavior
+// (and, for the Orbiting Darts form, a decaying spiral wobble) on top of a
+// flat gravity arc.
+function applyProceduralMotion(sp, dt) {
+  let boost = 1;
+  if (sp.behavior === "accel") boost = 1 + Math.min(1.8, (sp.age || 0) * 1.1);
+  sp.x += sp.vx * dt * boost;
+  sp.y += sp.vy * dt * boost;
+  sp.vy += 260 * dt;
+
+  if (sp.behavior === "sine") {
+    const lateral = Math.cos((sp.age || 0) * 10) * 320;
+    sp.x += -(sp.dirY || 0) * lateral * dt;
+    sp.y += (sp.dirX || 0) * lateral * dt;
+  } else if (sp.behavior === "boomerang") {
+    if (!sp.boomeranged && (sp.age || 0) > (sp.totalLife || sp.life) * 0.42) {
+      sp.vx *= -1.15; sp.vy *= -1.15;
+      sp.boomeranged = true;
+      spawnParticles(sp.x, sp.y, 10, sp.col, 40, 60);
+    }
+  } else if (sp.behavior === "blink") {
+    sp.blinkTimer = (sp.blinkTimer ?? 0) - dt;
+    if (sp.blinkTimer <= 0) {
+      sp.blinkTimer = 0.11;
+      sp.x += (sp.dirX || 0) * 70;
+      sp.y += (sp.dirY || 0) * 70;
+      spawnParticles(sp.x, sp.y, 6, sp.col, 30, 40);
+    }
+  }
+
+  if (sp.form === "darts") {
+    const amp = Math.max(0, 1 - (sp.age || 0) / (sp.totalLife || sp.life)) * 260;
+    const wobble = Math.sin((sp.age || 0) * 14 + (sp.dartPhase || 0)) * amp;
+    sp.x += -(sp.dirY || 0) * wobble * dt;
+    sp.y += (sp.dirX || 0) * wobble * dt;
+  }
+}
+
+function genericChainJump(x, dmg, col, bounces, exclude = null) {
+  if (bounces <= 0) return;
+  let nearest = null, nd = 260;
+  for (const e of state.enemies) {
+    if (e === exclude || e.fleeing || e.dying || e.hp <= 0) continue;
+    const d = dist(e.x, x);
+    if (d < nd && d > 6) { nd = d; nearest = e; }
+  }
+  if (!nearest) return;
+  const y = targetImpactY(nearest);
+  spawnParticles((x + nearest.x) / 2, y, 10, col, 70, 80);
+  spawnParticles(nearest.x, y, 6, "#ffffff", 40, 60);
+  spellDamageEnemy(nearest, dmg, col, { particleCount: 8, spread: 55 });
+  if (nearest.hp > 0) genericChainJump(nearest.x, dmg * 0.7, col, bounces - 1, nearest);
+}
+
+function genericShockwave(x, r, col, dmg) {
+  let hit = 0;
+  for (const e of enemiesNearX(x, r)) {
+    const et = ENEMY_TYPES[e.type] || {};
+    if (!et.noKnockback) e.knock = (e.knock || 0) + Math.sign(e.x - x || 1) * 260;
+    spellDamageEnemy(e, Math.max(1, dmg * 0.3), col, { particleCount: 5, spread: 40 });
+    hit++;
+  }
+  spawnParticles(x, groundY - 14, 16, col, r * 0.7, 100);
+  state.legendaryEffects.push({ type: "ring", x, radius: r, life: 0.4, totalLife: 0.4, col, width: 5 });
+  if (hit) Audio.hit();
+  Game.screenShake = Math.max(Game.screenShake, hit ? 0.3 : 0.16);
+}
+
+function spawnExpandingRing(sp, x, y) {
+  const maxR = Math.max(90, (sp.aoeRadius || 70) * 2.2);
+  const life = 0.75;
+  ensureSpellFields().push({
+    type: "expandring",
+    x, y: Math.min(y, groundY - 10),
+    r: 0, maxR, life, maxLife: life,
+    dmg: Math.max(1, Math.round(sp.dmg * 0.8)),
+    col: paletteCols(sp)[0],
+    hit: new Set(),
+  });
+  spawnParticles(x, Math.min(y, groundY - 10), 14, paletteCols(sp)[0], 40, 90);
+}
+
+// What happens when a recipe spell lands (its Impact axis). Ring-form spells
+// bypass this entirely — their "impact" IS the expanding ring.
+function triggerProceduralImpact(sp, x, y) {
+  const r = Math.max(sp.aoeRadius || 60, 50);
+  const col = paletteCols(sp)[0];
+  switch (sp.impact) {
+    case "shrapnel": {
+      const n = 3 + (sp.upgradeRank >= 3 ? 2 : 0);
+      for (let i = 0; i < n; i++) {
+        const t = n === 1 ? 0 : (i / (n - 1)) * 2 - 1;
+        state.spells.push({
+          x, y: Math.min(y, groundY - 30),
+          vx: t * rand(150, 230) + rand(-30, 30), vy: -rand(180, 300),
+          spellType: sp.spellType, dmg: Math.max(1, Math.round(sp.dmg * 0.35)),
+          life: 1.1, col, palette: sp.palette, core: sp.core,
+          aoeRadius: Math.max(24, r * 0.35), age: 0, isFragment: true,
+        });
+      }
+      spawnParticles(x, y, 14, col, 70, 100);
+      break;
+    }
+    case "gravity":
+      spawnPlayerSpellPool(x, Math.max(46, r * 0.55), 2.6, { kind: "void", pull: true, dmg: Math.max(1, Math.round(sp.dmg * 0.2)), col });
+      Game.screenShake = Math.max(Game.screenShake, 0.28);
+      break;
+    case "puddle":
+      spawnPlayerSpellPool(x, Math.max(40, r * 0.5), 3.4, { kind: "acid", dmg: 1, burnDmg: 1, col });
+      break;
+    case "chain":
+      genericChainJump(x, Math.max(1, sp.dmg * 0.6), col, 2);
+      break;
+    case "shockwave":
+      genericShockwave(x, r, col, sp.dmg);
+      break;
+  }
+}
+
+function findBounceTarget(sp, exclude) {
+  let best = null, bd = 260;
+  for (const e of state.enemies) {
+    if (e === exclude || e.fleeing || e.dying || e.hp <= 0) continue;
+    if (sp._hitEnemies && sp._hitEnemies.has(e)) continue;
+    const d = dist(e.x, sp.x);
+    if (d < bd) { bd = d; best = e; }
+  }
+  return best;
+}
+
+// Resolves a recipe spell striking an enemy. Returns true if the spell
+// should be removed (most forms), false to keep it flying (Bouncing Orb).
+function resolveProceduralEnemyHit(sp, e, ey, et) {
+  const dmg = Math.max(1, Math.round(sp.dmg));
+  e.hp -= dmg; e.flash = 0.14; Audio.hit();
+  spawnImpBlood(e, 1 + dmg * 0.08, ey);
+  if (!et.noKnockback) e.knock = (e.knock || 0) + Math.sign(e.x - sp.x || 1) * 140;
+  if (sp.soulSiphon) trySoulSiphon(state.player, sp.soulSiphon, sp.upgradeCol || paletteCols(sp)[0]);
+  spellEnemyImpact(sp, e.x, ey);
+  applySpellField(sp, e.x, ey);
+  if (e.hp <= 0 && !e.dying) killEnemy(e);
+
+  if (sp.form === "orb" && sp.bounceLeft > 0) {
+    if (!sp._hitEnemies) sp._hitEnemies = new Set();
+    sp._hitEnemies.add(e);
+    const next = findBounceTarget(sp, e);
+    if (next) {
+      sp.bounceLeft--;
+      const nEy = targetImpactY(next);
+      const ang = Math.atan2(nEy - sp.y, next.x - sp.x);
+      const speed = Math.max(220, Math.hypot(sp.vx, sp.vy));
+      sp.vx = Math.cos(ang) * speed;
+      sp.vy = Math.sin(ang) * speed;
+      sp.dirX = Math.cos(ang); sp.dirY = Math.sin(ang);
+      sp.dmg = Math.max(1, sp.dmg * 0.8);
+      return false;
+    }
+  }
+
+  if (sp.form === "ring") spawnExpandingRing(sp, e.x, ey);
+  else triggerProceduralImpact(sp, e.x, ey);
+  return true;
+}
+
+// Piercing Beam form resolves instantly — no traveling projectile at all.
+function resolveBeamCast(player, wBase, tgt, fx, baseDmg, aoeR, castOrigin, palette, core, upgradeCol, upgradeRank, recipe) {
+  const dir = Math.sign(tgt.x - player.x) || player.dir || 1;
+  const range = Math.max(220, wBase.range || 320);
+  const beamY = targetImpactY(tgt);
+  const startX = castOrigin.x, endX = castOrigin.x + dir * range;
+  const lo = Math.min(startX, endX), hi = Math.max(startX, endX);
+  for (let i = 0; i <= 16; i++) {
+    const p = i / 16;
+    const px = startX + (endX - startX) * p, py = castOrigin.y + (beamY - castOrigin.y) * p;
+    spawnParticles(px, py, 1, palette[0], 8, 10);
+    if (Math.random() < 0.4) spawnParticles(px, py, 1, core, 6, 14);
+  }
+  const riderSp = {
+    spellType: wBase.spellType, col: palette[0], palette, core, aoeRadius: aoeR,
+    burnDps: fx.spellBurn || 0, frostS: fx.spellFrost || 0, firePool: !!fx.firePool,
+    pull: !!fx.singularity, scorchChain: fx.scorchChain || 0, geyser: fx.geyser || 0,
+    runeTrap: fx.runeTrap || 0, shadowCurse: fx.shadowCurse || 0, voidScar: fx.voidScar || 0,
+    dmg: baseDmg, upgradeCol, upgradeRank,
+  };
+  let hits = 0;
+  for (const e of state.enemies) {
+    if (e.fleeing || e.dying || e.hp <= 0) continue;
+    if (e.x < lo || e.x > hi) continue;
+    const ey = targetImpactY(e);
+    const dmg = Math.max(1, Math.round(baseDmg * (hits === 0 ? 1 : 0.7)));
+    spellDamageEnemy(e, dmg, palette[0], { y: ey, particleCount: 8, spread: 55 });
+    applySpellField(riderSp, e.x, ey);
+    if (fx.soulSiphon) trySoulSiphon(player, fx.soulSiphon, upgradeCol || palette[0]);
+    hits++;
+  }
+  if (hits > 0) {
+    Game.screenShake = Math.max(Game.screenShake, 0.3);
+    Audio.hit();
+    triggerProceduralImpact({ dmg: baseDmg, aoeRadius: aoeR, impact: recipe.impact, palette, core, upgradeRank }, endX, beamY);
+  }
+  spawnParticles(endX, beamY, 14, palette[0], 60, 90);
+}
+
+function castProceduralSpell(player, wBase, tgt, fx, ctx) {
+  const { ew, dmgMult, aoeR, castOrigin, upgradeCol, upgradeRank } = ctx;
+  const recipe = wBase.spellRecipe;
+  const palette = wBase.spellPalette || [wBase.col];
+  const core = wBase.spellCore || "#ffffff";
+  const baseDmg = ew.dmg * dmgMult;
+  const targetY = targetImpactY(tgt);
+
+  Audio.spell();
+  Audio.spellFlourish(recipe.flourish, wBase.spellPitch || 500);
+  castBurstFX(wBase, castOrigin.x, castOrigin.y, player.dir || 1, 0);
+
+  if (recipe.form === "beam") {
+    resolveBeamCast(player, wBase, tgt, fx, baseDmg, aoeR, castOrigin, palette, core, upgradeCol, upgradeRank, recipe);
+    return;
+  }
+
+  const spd = 360;
+  const dx = tgt.x - castOrigin.x, dy = targetY - castOrigin.y;
+  const dirLen = Math.hypot(dx, dy) || 1;
+  const dirX = dx / dirLen, dirY = dy / dirLen;
+  const flightTime = Math.max(0.12, dirLen / spd);
+  const vx = dx / flightTime, vy = (dy - 0.5 * 260 * flightTime * flightTime) / flightTime;
+
+  const baseSpell = {
+    spellType: wBase.spellType, col: wBase.col, palette, core,
+    aoeRadius: aoeR, age: 0,
+    form: recipe.form, behavior: recipe.behavior, impact: recipe.impact, flourish: recipe.flourish,
+    soulSiphon: fx.soulSiphon || 0,
+    // Same upgrade riders the legacy path honors (spellBurn, spellFrost,
+    // firePool, singularity, splitOrbs, scorchChain, geyser, runeTrap,
+    // shadowCurse, voidScar) — applied via applySpellField on every hit so
+    // themed unique upgrades stay meaningful on a recipe-driven staff too.
+    burnDps: fx.spellBurn || 0,
+    frostS: fx.spellFrost || 0,
+    firePool: !!fx.firePool,
+    split: fx.splitOrbs || 0,
+    pull: !!fx.singularity,
+    scorchChain: fx.scorchChain || 0,
+    geyser: fx.geyser || 0,
+    runeTrap: fx.runeTrap || 0,
+    shadowCurse: fx.shadowCurse || 0,
+    voidScar: fx.voidScar || 0,
+    upgradeCol, upgradeRank,
+  };
+
+  if (recipe.form === "darts") {
+    const speed = Math.hypot(vx, vy);
+    const baseAng = Math.atan2(vy, vx);
+    for (let i = 0; i < 3; i++) {
+      const ang = baseAng + (i - 1) * 0.3;
+      state.spells.push({
+        ...baseSpell,
+        x: castOrigin.x, y: castOrigin.y,
+        vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed,
+        dirX: Math.cos(ang), dirY: Math.sin(ang),
+        dmg: Math.max(1, baseDmg * 0.45),
+        life: flightTime + 0.6,
+        totalLife: flightTime + 0.6,
+        dartPhase: i * 2.4,
+      });
+    }
+    return;
+  }
+
+  const spell = {
+    ...baseSpell,
+    x: castOrigin.x, y: castOrigin.y, vx, vy, dirX, dirY,
+    dmg: baseDmg,
+    life: flightTime + 0.7,
+    totalLife: flightTime + 0.7,
+    bounceLeft: recipe.form === "orb" ? (2 + (upgradeRank >= 3 ? 2 : upgradeRank >= 2 ? 1 : 0)) : 0,
+  };
+  state.spells.push(spell);
+}
+
 export function castSpell(player, wBase, tgt) {
   const ew = effectiveWeapon(player.weapon, player.weaponUpgrades || []);
   const fx = mergeInnateEffects(wBase, player.weaponUpgrades || []);
   if (!payWeaponCastCost(player, fx, wBase.col)) return;
-  const dmgMult = permanentDamageMultiplier() * playerMomentumDamageMultiplier() * playerRiposteDamageMultiplier(player);
-  const aoeR = (wBase.aoeRadius || 0) + (ew.range - wBase.range) * 0.2 + (fx.aoeBonus || 0);
+  let overchargeMult = 1;
+  if (fx.overcharge) {
+    const now = performance.now() / 1000;
+    const prev = player.spellOvercharge;
+    const chain = prev && prev.weapon === player.weapon && now - prev.t < 3.2;
+    const n = Math.min(4, chain ? (prev.n || 0) + 1 : 1);
+    player.spellOvercharge = { weapon: player.weapon, n, t: now };
+    overchargeMult = 1 + (n - 1) * fx.overcharge;
+    if (n >= 2) floaty(player.x, "Overcharge x" + n, wBase.col, 12);
+  }
+  const dmgMult = permanentDamageMultiplier() * playerMomentumDamageMultiplier() * playerRiposteDamageMultiplier(player) * overchargeMult;
+  const aoeR = ((wBase.aoeRadius || 0) + (ew.range - wBase.range) * 0.2 + (fx.aoeBonus || 0)) * (1 + (overchargeMult - 1) * 0.6);
   const castOrigin = playerTomeCastOrigin(player);
   const upgradeCol = fx._vfxCols?.length ? fx._vfxCols[fx._vfxCols.length - 1] : null;
   const upgradeRank = fx._tierRank || 0;
+
+  // Generated staffs carry a full 5-axis spell recipe (element/form/behavior/
+  // impact/flourish) and are routed entirely away from the hand-tuned
+  // spellType switch below — curated weapons never set spellRecipe.
+  if (wBase.spellRecipe) {
+    castProceduralSpell(player, wBase, tgt, fx, { ew, dmgMult, aoeR, castOrigin, upgradeCol, upgradeRank });
+    return;
+  }
 
   const tgtIsBear = tgt.type === "bear" && state.animals.includes(tgt);
 
@@ -579,6 +959,7 @@ export function castSpell(player, wBase, tgt) {
       Audio.spell();
       spawnImpBlood(tgt, 1 + ew.dmg * 0.07, enemyY);
     }
+    if (fx.soulSiphon) trySoulSiphon(player, fx.soulSiphon, upgradeCol || wBase.col);
     spellEnemyImpact({ spellType: "lightning" }, tgt.x, enemyY);
 
     let currentX = tgt.x + rand(-20, 20);
@@ -705,6 +1086,7 @@ export function castSpell(player, wBase, tgt) {
     shadowCurse: fx.shadowCurse || 0,
     voidScar: fx.voidScar || 0,
     meteorFragments: fx.meteorFragments || 0,
+    soulSiphon: fx.soulSiphon || 0,
     upgradeCol,
     upgradeRank,
   };
@@ -752,17 +1134,36 @@ export function updateSpells(dt) {
   const { spells, enemies } = state;
   for (let i = spells.length - 1; i >= 0; i--) {
     const sp = spells[i];
-    sp.x += sp.vx * dt;
-    sp.y += sp.vy * dt;
     sp.age = (sp.age || 0) + dt;
-    const grav = spellGravity(sp.spellType);
-    sp.vy += grav * dt;
+    if (sp.form) {
+      applyProceduralMotion(sp, dt);
+    } else {
+      sp.x += sp.vx * dt;
+      sp.y += sp.vy * dt;
+      const grav = spellGravity(sp.spellType);
+      sp.vy += grav * dt;
+    }
     sp.life -= dt;
 
     spellTrail(sp);
 
     const hitGround = sp.y > groundY - 8;
     if (sp.life <= 0 || hitGround) {
+      if (sp.form) {
+        if (hitGround) {
+          if (sp.form === "ring") {
+            spawnExpandingRing(sp, sp.x, groundY - 8);
+            applySpellField(sp, sp.x, groundY - 20);
+          } else if (sp.aoeRadius > 0) {
+            spellGroundImpact(sp);
+            triggerProceduralImpact(sp, sp.x, groundY - 8);
+            applySpellField(sp, sp.x, groundY - 20);
+            Audio.explosion();
+          }
+        }
+        spells.splice(i, 1);
+        continue;
+      }
       if (sp.aoeRadius > 0 && hitGround) {
         if (sp.spellType === "meteor") meteorCrashImpact(sp, sp.x, groundY - 8);
         else spellGroundImpact(sp);
@@ -779,7 +1180,12 @@ export function updateSpells(dt) {
       const et = ENEMY_TYPES[e.type];
       const ey = targetImpactY(e);
       if (dist(sp.x, e.x) < et.w * 0.75 && Math.abs(sp.y - ey) < 44) {
+        if (sp.form) {
+          hit = resolveProceduralEnemyHit(sp, e, ey, et);
+          break;
+        }
         e.hp -= sp.dmg; e.flash = 0.14; Audio.hit();
+        if (sp.soulSiphon) trySoulSiphon(state.player, sp.soulSiphon, sp.upgradeCol || sp.col);
         if (sp.spellType === "meteor") {
           meteorCrashImpact(sp, e.x, ey);
           if (sp.aoeRadius > 0) {
@@ -825,6 +1231,7 @@ function spellTrail(sp) {
   if (sp.upgradeCol && Math.random() < (sp.upgradeRank >= 3 ? 0.85 : 0.55)) {
     spawnParticles(sp.x, sp.y, 1, sp.upgradeCol, 14 + (sp.upgradeRank || 1) * 4, 14);
   }
+  if (sp.palette) { paletteSpellTrail(sp); return; }
   switch (sp.spellType) {
     case "fireball":
       if (Math.random() < 0.7) spawnParticles(sp.x, sp.y, 1, "#ff6a20", 12, 10);
@@ -872,6 +1279,11 @@ function spellTrail(sp) {
 // Burst of magic at the caster's hands, flavored per school.
 function castBurstFX(wBase, x, y, dirX = 1, dirY = 0) {
   spawnParticles(x, y, 10, wBase.col, 50, 70);
+  if (wBase.spellPalette) {
+    spawnParticles(x, y, 6, wBase.spellPalette[1] || wBase.col, 40, 80);
+    spawnParticles(x, y, 3, wBase.spellCore || "#ffffff", 25, 90);
+    return;
+  }
   switch (wBase.spellType) {
     case "fireball":  spawnParticles(x, y, 5, "#ffcc60", 35, 60); break;
     case "waterjet":  spawnWaterBurst(x, y, 8, dirX, dirY, 0.55); break;
@@ -890,6 +1302,7 @@ function castBurstFX(wBase, x, y, dirX = 1, dirY = 0) {
 }
 
 function spellEnemyImpact(sp, x, y) {
+  if (sp.palette) { paletteSpellImpact(sp, x, y); return; }
   switch (sp.spellType) {
     case "fireball":
       spawnParticles(x, y, 14, "#ff6a20", 80, 100);
@@ -940,6 +1353,7 @@ function spellEnemyImpact(sp, x, y) {
 }
 
 function spellGroundImpact(sp) {
+  if (sp.palette) { paletteGroundImpact(sp); return; }
   switch (sp.spellType) {
     case "fireball":
       spawnParticles(sp.x, groundY - 8, 16, "#ff6a20", 90, 100);

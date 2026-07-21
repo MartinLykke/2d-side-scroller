@@ -208,6 +208,7 @@ export function drawUnits() {
     else if (u.role==="guard")   { body="#3a4a5a"; head="#b09a7a"; }
     let wallLift = u.dying ? Math.max(0, -(u.deathFy || 0)) : entityWallLift(u);
     if (!u.dying && u.grapple) wallLift = u.grappleLiftY || 0;
+    if (!u.dying && u.bridge) wallLift = u.bridgeLiftY || 0;
 
     const shadowAlpha = u.role === "archer" && state.archerSkills.includes("master_shadows") && Game.isNight && (u.smokeReveal || 0) <= 0 ? 0.32 : 1;
     ctx.save();
@@ -297,4 +298,4 @@ export function drawUnits() {
   }
 }
 
-export { drawAnimals } from '../sprites/Animals.js?v=biomevisual1';
+export { drawAnimals } from '../sprites/Animals.js?v=biomevisual4';

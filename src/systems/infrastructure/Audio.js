@@ -555,6 +555,36 @@ export const Audio = {
     this._osc(40, 0.8, 'sine', 0.15, { attack: 0.1, decay: 0.3, sustain: 0.4 });
   },
 
+  // Procedural staff cast flourish — one of five textures (haze/hum/
+  // heartbeat/sparks/motes), pitched by the rolled element's voice.
+  spellFlourish(kind, pitch = 500) {
+    if (!this.ctx || !this.enabled) return;
+    switch (kind) {
+      case "haze":
+        this._noise(0.3, 0.08, 'bandpass', pitch * 0.8, 1.4, this.reverbNode);
+        this._pitchOsc(pitch * 0.6, pitch * 1.3, 0.35, 'sine', 0.03);
+        break;
+      case "hum":
+        this._osc(pitch, 0.4, 'sine', 0.07, { attack: 0.05, decay: 0.2, sustain: 0.6 });
+        this._osc(pitch * 1.5, 0.3, 'sine', 0.03, { attack: 0.08 });
+        break;
+      case "heartbeat":
+        this._pitchOsc(pitch * 0.25, pitch * 0.15, 0.1, 'sine', 0.14);
+        setTimeout(() => { if (this.ctx && this.enabled) this._pitchOsc(pitch * 0.22, pitch * 0.12, 0.09, 'sine', 0.1); }, 140);
+        break;
+      case "sparks":
+        for (let i = 0; i < 4; i++) {
+          setTimeout(() => { if (this.ctx && this.enabled) this._noise(0.03, 0.05, 'highpass', pitch * (1 + Math.random()), 6); }, i * 35);
+        }
+        break;
+      case "motes":
+        this._osc(pitch, 0.1, 'sine', 0.05, { attack: 0.01 });
+        setTimeout(() => { if (this.ctx && this.enabled) this._osc(pitch * 1.25, 0.1, 'sine', 0.04); }, 60);
+        setTimeout(() => { if (this.ctx && this.enabled) this._osc(pitch * 1.5, 0.12, 'sine', 0.035); }, 120);
+        break;
+    }
+  },
+
   // --- Ambient control ---
 
   setNight(isNight) {

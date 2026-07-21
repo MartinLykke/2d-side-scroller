@@ -1,17 +1,16 @@
 import { CFG, BUILDING_SLOTS } from '../../config/config.js';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive1';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive4';
 import { dist, rand } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { floaty, spawnGoldReward, spawnParticles } from './SpawnSystem.js?v=biomeactive1';
+import { floaty, spawnGoldReward, spawnParticles } from './SpawnSystem.js?v=biomeactive4';
 import { addXP } from '../economy/UpgradeSystem.js?v=biomeweapons1';
-import { killEnemy } from '../../util/EnemyUtils.js?v=biomeactive1';
-import { crownAegisStats } from '../../util/DefenseStats.js';
+import { killEnemy } from '../../util/EnemyUtils.js?v=biomeactive4';
+import { crownAegisStats, trebuchetStats, murderHoleStats, warDrumStats, hoardBurstStats } from '../../util/DefenseStats.js';
 import { makeUnit } from '../../entities/Unit.js';
 
-// Buildings unlocked by base upgrades: watchtowers, lumber camps, the healing
-// shrine and (at base level 6) ballista emplacements. Forest slots must be
+// Free-standing buildings unlocked by base upgrades. Forest slots must be
 // cleared of trees before building.
 
 export function makeBuildings() {
@@ -19,10 +18,6 @@ export function makeBuildings() {
     ...s, built: false, level: 0, timer: 0, fireFlash: 0,
     cleared: !s.needsClearing,
   }));
-}
-
-export function towerHeight(lvl) {
-  return [0, 112, 138, 164][lvl] || 112;
 }
 
 // True when no standing tree blocks the spot.
@@ -38,26 +33,12 @@ export function areaCleared(x, r = CFG.clearRadius) {
 export function buildingCost(b) {
   if (state.base.level < b.unlock) return 0;
   if (!b.cleared) return 0;
-  if (b.type === "tower")  return b.level >= 3 ? 0 : CFG.towerCosts[b.level];
   if (b.type === "lumber") return b.built ? 0 : CFG.lumberCost;
-  if (b.type === "shrine") return b.built ? 0 : CFG.shrineCost;
-  if (b.type === "ballista") return b.level >= 2 ? 0 : CFG.ballistaCosts[b.level];
   return 0;
 }
 
 export function buildingLabel(b) {
-  if (b.type === "tower") {
-    if (!b.built) return "Build watchtower (shoots enemies on its own)";
-    if (b.level < 3) return `Upgrade watchtower (lvl ${b.level}→${b.level + 1})`;
-    return "Watchtower (max level)";
-  }
   if (b.type === "lumber") return "Build lumber camp (bonus gold per log)";
-  if (b.type === "shrine") return "Build shrine (heals nearby)";
-  if (b.type === "ballista") {
-    if (!b.built) return "Build ballista (heavy piercing bolts)";
-    if (b.level < 2) return `Upgrade ballista (lvl ${b.level}→${b.level + 1})`;
-    return "Ballista (max level)";
-  }
   if (b.type === "kennel") return "Ember kennel (keeps hounds nearby)";
   if (b.type === "trap_foundry") return "Trap foundry (lays snap traps)";
   if (b.type === "raven_roost") return "Omen roost (harasses elite enemies)";
@@ -66,81 +47,71 @@ export function buildingLabel(b) {
 }
 
 export function payBuilding(b) {
-  if (b.type === "tower") {
-    b.built = true; b.level++;
-    addXP(b.level === 1 ? 20 : 15);
-  } else if (b.type === "lumber") {
+  if (b.type === "lumber") {
     b.built = true; b.level = 1;
     addXP(15);
-  } else if (b.type === "shrine") {
-    b.built = true; b.level = 1;
-    addXP(20);
-  } else if (b.type === "ballista") {
-    b.built = true; b.level++;
-    addXP(b.level === 1 ? 25 : 20);
   }
   spawnParticles(b.x, groundY - 30, 14, "#e8d8a8", 60, 80);
   Audio.build();
 }
 
-function updateTower(b, dt) {
-  b.fireFlash = Math.max(0, b.fireFlash - dt);
-  b.timer -= dt;
-  if (b.timer > 0) return;
-  let best = null, bd = CFG.towerRange;
-  for (const e of state.enemies) {
-    if (e.fleeing || e.dying) continue;
-    const d = dist(e.x, b.x);
-    if (d < bd) { bd = d; best = e; }
+// Murder Holes: machicolations along the gatehouse dump boiling oil on any
+// foe that reaches the door, scorching and slowing everyone caught beneath.
+function updateMurderHoles(dt) {
+  const base = state.base;
+  const stats = murderHoleStats();
+  if (!base || !stats) return;
+  base.oilTimer = (base.oilTimer || 0) - dt;
+  if (base.oilTimer > 0) return;
+  const caught = state.enemies.filter(e => !e.fleeing && !e.dying && Math.abs(e.x - base.x) <= stats.range);
+  if (!caught.length) { base.oilTimer = 0.4; return; }
+  base.oilPourT = performance.now() / 1000;
+  for (const e of caught) {
+    e.hp -= stats.damage; e.flash = 0.15;
+    e.slow = Math.max(e.slow || 0, stats.slowDuration);
+    floaty(e.x, "-" + stats.damage + " 🔥", "#f2a230");
+    spawnParticles(e.x, groundY - 16, 5, "#5a3a1e", 45, 40);
+    if (e.hp <= 0) killEnemy(e);
   }
-  if (!best) { b.timer = 0.2; return; }
-  const y = groundY - towerHeight(b.level) + 4;
-  const et = ENEMY_TYPES[best.type];
-  const ty = et && et.flying ? groundY + (best.fy || -80) : groundY - 24;
-  const dx = best.x - b.x, dy = ty - y;
-  const ft = Math.max(0.3, Math.hypot(dx, dy) / 430);
-  state.arrows.push({
-    x: b.x, y,
-    vx: dx / ft,
-    vy: (dy - 0.5 * 420 * ft * ft) / ft,
-    target: best, life: ft + 0.4, hitKind: "enemy",
-    dmgMult: b.level >= 2 ? 2 : 1,
-    fireArrow: b.level >= 3,
-  });
-  Audio.bow();
-  b.fireFlash = 0.15;
-  b.timer = [0, 1.8, 1.4, 1.0][b.level] || 1.8;
+  spawnParticles(base.x - 154, groundY - 60, 8, "#cfae7a", 55, 60);
+  spawnParticles(base.x + 154, groundY - 60, 8, "#cfae7a", 55, 60);
+  Audio.hit();
+  base.oilTimer = stats.interval;
 }
 
-// Ballista emplacement: slow, but launches a massive piercing bolt at the
-// toughest enemy in range (it exists to bring down dragons).
-function updateBallista(b, dt) {
-  b.fireFlash = Math.max(0, b.fireFlash - dt);
-  b.timer -= dt;
-  if (b.timer > 0) return;
-  let best = null;
-  for (const e of state.enemies) {
-    if (e.fleeing || e.dying) continue;
-    if (dist(e.x, b.x) > CFG.ballistaRange) continue;
-    if (!best || e.hp > best.hp) best = e;
-  }
-  if (!best) { b.timer = 0.25; return; }
-  const y = groundY - 52;
-  const et = ENEMY_TYPES[best.type];
-  const ty = et && et.flying ? groundY + (best.fy || -80) : groundY - 24;
-  const dx = best.x - b.x, dy = ty - y;
-  const ft = Math.max(0.3, Math.hypot(dx, dy) / 520);
-  state.arrows.push({
-    x: b.x, y,
-    vx: dx / ft,
-    vy: (dy - 0.5 * 420 * ft * ft) / ft,
-    target: best, life: ft + 0.5, hitKind: "enemy",
-    ballista: true, pierce: 3,
-    dmgMult: b.level >= 2 ? 8 : 5,
-  });
-  Audio.bow();
-  b.fireFlash = 0.2;
-  b.timer = b.level >= 2 ? 2.2 : 3.0;
+// War Drums: a drum tower beats a war rhythm that spurs the whole garrison
+// (units already get this fervor from the Royal Rally ability — the drums
+// just grant it automatically, on a timer, without pulling anyone home).
+function updateWarDrums(dt) {
+  const base = state.base;
+  const stats = warDrumStats();
+  if (!base || !stats) return;
+  base.drumTimer = (base.drumTimer || 0) - dt;
+  if (base.drumTimer > 0) return;
+  const roused = state.units.filter(u => u.hp > 0 && !u.dying);
+  if (!roused.length) { base.drumTimer = 1.2; return; }
+  base.drumBeatT = performance.now() / 1000;
+  for (const u of roused) u.rallyBoostT = Math.max(u.rallyBoostT || 0, stats.duration);
+  floaty(base.x, "War Drums! (" + roused.length + ")", "#9bd05a");
+  spawnParticles(base.x, groundY - 100, 14, "#9bd05a", 90, 70);
+  Audio.horn();
+  base.drumTimer = stats.interval;
+}
+
+// Greedwyrm's Hoard: the coiled wyrm atop the vault periodically can't help
+// itself and spits a mouthful of coin out onto the castle steps.
+function updateHoardBurst(dt) {
+  const base = state.base;
+  const stats = hoardBurstStats();
+  if (!base || !stats) return;
+  base.hoardTimer = (base.hoardTimer || 0) - dt;
+  if (base.hoardTimer > 0) return;
+  base.hoardBurstT = performance.now() / 1000;
+  const amount = stats.gold + Math.floor((Game.day || 1) / 3);
+  spawnGoldReward(base.x, amount, "passive", { spreadX: 26, fromY: groundY - 70, vx: 40, vyMin: 160, vyMax: 300 });
+  spawnParticles(base.x, groundY - 78, 12, "#f2c14e", 80, 90);
+  Audio.chest();
+  base.hoardTimer = stats.interval;
 }
 
 // Crown Aegis: the Royal Capital gets it for free, while the castle's Ember
@@ -193,20 +164,82 @@ function updateCrownAegis(dt) {
   base.aegisTimer = aegis.interval;
 }
 
-function updateShrine(b, dt) {
-  if (Math.random() < dt * 5) spawnParticles(b.x + rand(-22, 22), groundY - rand(12, 46), 1, "#8fd8ff", 8, 26);
-  b.timer += dt;
-  if (b.timer < CFG.shrineHealTime) return;
-  b.timer = 0;
-  let healed = false;
-  const p = state.player;
-  if (p && p.hp < p.maxHp && dist(p.x, b.x) < CFG.shrineRange) {
-    p.hp++; floaty(p.x, "+❤ Shrine", "#8fd8ff"); healed = true;
+// Warwolf Cradle: a wall-mounted trebuchet lobs boulders at the toughest
+// enemy still approaching the base. The strongest rank hurls one boulder
+// down each flank at once, echoing the two-portal layout of the map.
+function trebuchetPickTarget(range, side) {
+  let best = null;
+  for (const e of state.enemies) {
+    if (e.fleeing || e.dying) continue;
+    const dx = e.x - state.base.x;
+    if (side < 0 && dx > 0) continue;
+    if (side > 0 && dx < 0) continue;
+    if (Math.abs(dx) > range) continue;
+    if (!best || e.hp > best.hp) best = e;
   }
-  for (const u of state.units) {
-    if (u.hp < u.maxHp && dist(u.x, b.x) < CFG.shrineRange) { u.hp = Math.min(u.maxHp, u.hp + 1); healed = true; }
+  return best;
+}
+
+function launchTrebuchetShot(base, stats, target) {
+  const side = target.x >= base.x ? 1 : -1;
+  const bt = ENEMY_TYPES[target.type];
+  const ey = bt && bt.flying ? groundY + (target.fy || -80) : groundY - 24;
+  const now = performance.now() / 1000;
+  state.trebuchetShots.push({
+    x1: base.x + side * 96, y1: groundY - 150,
+    x2: target.x, y2: ey,
+    born: now, life: stats.travelTime,
+    dmg: stats.damage, splash: stats.splashDamage, radius: stats.radius,
+    side, seed: Math.random() * 100,
+    impacted: false, impactAt: 0,
+  });
+  base.trebuchetFireT = now;
+  base.trebuchetSide = side;
+}
+
+function applyTrebuchetImpact(s) {
+  spawnParticles(s.x2, s.y2, 8, "#6b5a46", 55, 60);
+  spawnParticles(s.x2, s.y2, 18, "#cfae7a", 110, 130);
+  Game.screenShake = Math.max(Game.screenShake, 0.45);
+  Audio.hit();
+  for (const e of state.enemies) {
+    if (e.fleeing || e.dying) continue;
+    const d = Math.abs(e.x - s.x2);
+    if (d > s.radius) continue;
+    const dmg = d < 26 ? s.dmg : s.splash;
+    e.hp -= dmg; e.flash = 0.15;
+    floaty(e.x, "-" + dmg + " 🪨", "#cfae7a");
+    if (e.hp <= 0) killEnemy(e);
   }
-  if (healed) spawnParticles(b.x, groundY - 32, 12, "#bfefff", 40, 70);
+}
+
+function updateTrebuchetShots() {
+  const now = performance.now() / 1000;
+  for (const s of state.trebuchetShots) {
+    if (s.impacted || now - s.born < s.life) continue;
+    s.impacted = true;
+    s.impactAt = now;
+    applyTrebuchetImpact(s);
+  }
+  for (let i = state.trebuchetShots.length - 1; i >= 0; i--) {
+    const s = state.trebuchetShots[i];
+    if (s.impacted && now - s.impactAt > 0.6) state.trebuchetShots.splice(i, 1);
+  }
+}
+
+function updateTrebuchet(dt) {
+  const base = state.base;
+  const stats = trebuchetStats();
+  updateTrebuchetShots();
+  if (!base || !stats) return;
+  base.trebuchetTimer = (base.trebuchetTimer || 0) - dt;
+  if (base.trebuchetTimer > 0) return;
+  const targets = stats.dual
+    ? [trebuchetPickTarget(stats.range, -1), trebuchetPickTarget(stats.range, 1)].filter(Boolean)
+    : [trebuchetPickTarget(stats.range, 0)].filter(Boolean);
+  if (!targets.length) { base.trebuchetTimer = 0.4; return; }
+  for (const target of targets) launchTrebuchetShot(base, stats, target);
+  base.trebuchetTimer = stats.interval;
 }
 
 function updateKennel(b, dt) {
@@ -325,13 +358,14 @@ export function updateBuildings(dt) {
 
   for (const b of state.buildings) {
     if (!b.built) continue;
-    if (b.type === "tower") updateTower(b, dt);
-    else if (b.type === "shrine") updateShrine(b, dt);
-    else if (b.type === "ballista") updateBallista(b, dt);
-    else if (b.type === "kennel") updateKennel(b, dt);
+    if (b.type === "kennel") updateKennel(b, dt);
     else if (b.type === "trap_foundry") updateTrapFoundry(b, dt);
     else if (b.type === "raven_roost") updateRavenRoost(b, dt);
     else if (b.type === "market_cart") updateMarketCart(b, dt);
   }
+  updateMurderHoles(dt);
+  updateWarDrums(dt);
+  updateHoardBurst(dt);
   updateCrownAegis(dt);
+  updateTrebuchet(dt);
 }

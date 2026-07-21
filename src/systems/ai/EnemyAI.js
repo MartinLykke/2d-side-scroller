@@ -1,16 +1,16 @@
 import { CFG } from '../../config/config.js';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive1';
+import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive4';
 import { clamp, lerp, dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { inject } from '../../core/services.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, floaty, critFloaty, spawnEnemy } from '../world/SpawnSystem.js?v=biomeactive1';
-import { meleeHitPlayer, damagePlayer } from '../combat/PlayerCombat.js?v=biomeactive1';
-import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive1';
-import { fortOnWallStruck } from '../world/FortificationSystem.js?v=biomeactive1';
+import { spawnParticles, floaty, critFloaty, spawnEnemy } from '../world/SpawnSystem.js?v=biomeactive4';
+import { meleeHitPlayer, damagePlayer } from '../combat/PlayerCombat.js?v=biomeactive4';
+import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive4';
 import { wallHeight, wallReady, wallRenderWidth, entityWallLift } from '../../entities/Wall.js';
-import { updateBoss, dropRiderFromDragon, spawnFirePool } from './BossAI.js?v=biomeactive1';
+import { updateBoss, dropRiderFromDragon, spawnFirePool } from './BossAI.js?v=biomeactive4';
+import { updateBruteRig } from '../../rendering/sprites/Brute.js?v=biomeactive4';
 
 const IMP_STACK_STEP = 18;
 const IMP_ATTACH_RANGE = 34;
@@ -178,6 +178,9 @@ function updateEnemyGait(e, dt) {
   // site that set attackAnim didn't declare one, so attackPose's progress is
   // always measured against the real length (never a per-renderer guess).
   if ((e.attackAnim || 0) > (e.attackDur || 0) + 1e-4) e.attackDur = e.attackAnim;
+  // The brute carries a stateful procedural rig; tick it here (with every other
+  // enemy) so culling can never stall its gait mid-stride.
+  if (e.type === "brute") updateBruteRig(e, dt);
 }
 
 // Begin an attack: sets the countdown AND records its full duration + shape so
@@ -186,7 +189,50 @@ function updateEnemyGait(e, dt) {
 //   kind    optional pose label ("bash" | "swipe" | "spit" | "lob" | "slam" | …)
 //   impact  0..1 point in the strike where the blow lands (default in EnemyRig)
 //   max     when true, don't shorten an already-longer strike in progress
+// The brute owns a richer strike vocabulary than the generic bash/swipe pair,
+// and alternates variations so consecutive blows never replay the same motion.
+// Remapping here keeps every call site generic — no per-type branches upstream.
+const BRUTE_KINDS = {
+  bash:  ["bruteWallSmash", "bruteWallSmash"], // horizontal structure strike
+  swipe: ["bruteSweep", "bruteHammer"], // players and friendly units
+  lob:   ["bruteThrow", "bruteThrow"],
+};
+function bruteAttackKind(e, kind) {
+  const pair = BRUTE_KINDS[kind];
+  if (!pair) return kind;
+  e._bruteAlt = (e._bruteAlt || 0) ^ 1;
+  return pair[e._bruteAlt];
+}
+
+// Pick a Brute's variation when its windup begins, not when the hit lands.
+// The renderer can then coil into the same pose family that will actually
+// strike, avoiding the visible sweep-to-hammer snap at the end of a telegraph.
+function prepareEnemyAttack(e, kind) {
+  if (e.type !== "brute") return kind;
+  const resolved = bruteAttackKind(e, kind);
+  e._preparedAttackFamily = kind;
+  e._preparedAttackKind = resolved;
+  e.attackKind = resolved;
+  return resolved;
+}
+
+function clearPreparedEnemyAttack(e) {
+  delete e._preparedAttackFamily;
+  delete e._preparedAttackKind;
+}
+
 function startEnemyAttack(e, dur, { kind = "swipe", impact, max = false } = {}) {
+  if (e.type === "brute") {
+    if (e._preparedAttackFamily === kind && e._preparedAttackKind) {
+      kind = e._preparedAttackKind;
+      clearPreparedEnemyAttack(e);
+    } else {
+      kind = bruteAttackKind(e, kind);
+    }
+    // Never begin the next telegraph while the previous pose is still easing
+    // through its recovery frames.
+    e.attackCd = Math.max(e.attackCd || 0, dur);
+  }
   e.attackAnim = max ? Math.max(e.attackAnim || 0, dur) : dur;
   e.attackDur = dur;
   e.attackKind = kind;
@@ -249,13 +295,31 @@ function impStackDropBypassesWall(e, wall) {
 // clearly instead of flashing through the generic pose. This only stretches the
 // *visual* strike window (attackDur); attack cadence (attackCd) is unchanged.
 const SWING_MULT = {
-  emberBrute: 2.6, voidBrute: 2.6,
+  brute: 4.6,
+  voidBrute: 2.6,
   amalgam: 2.4, obsidianJuggernaut: 2.4, murkAbomination: 2.3,
   iceGolem: 2.2, behemothScorpion: 2.2, breeder: 2.1,
   maskedGreed: 1.5,
 };
 function swingMult(e) {
   return SWING_MULT[e.type] || 1;
+}
+
+// Most enemies are tiny enough that the historical centre-distance thresholds
+// work. The Brute is pose-driven, though: its hands reach far beyond its feet,
+// so engagement must use the authored reach instead of forcing its centre on
+// top of the target before it is allowed to swing.
+function meleeReach(e, t, fallback) {
+  return e.type === "brute" ? (t.meleeReach || 74) : fallback;
+}
+
+function wallAttackRange(e, t, wall) {
+  if (e.type !== "brute") return 30;
+  return Math.max(30, wallRenderWidth(wall) * 0.5 + (t.wallReach || 58));
+}
+
+function baseAttackRange(e, t) {
+  return e.type === "brute" ? (t.baseReach || 94) : 70;
 }
 
 function setImpState(e, next) {
@@ -508,7 +572,6 @@ function killWall(w) {
 }
 
 // Shared wall-chipping attack: crit roll, hit feedback and collapse check.
-// Runeforge wards retaliate against the attacker when one is provided.
 function damageWall(wall, baseDmg, particleCount = 3, attacker = null) {
   const attackerType = attacker ? ENEMY_TYPES[attacker.type] : null;
   if ((attacker?.blindedHits || 0) > 0) {
@@ -536,7 +599,6 @@ function damageWall(wall, baseDmg, particleCount = 3, attacker = null) {
   }
   if (crit.isCrit) critFloaty(wall.x, crit.damage);
   Audio.hit();
-  if (attacker) fortOnWallStruck(wall, attacker, crit.damage);
   if (wall.hp <= 0) killWall(wall);
   if (attackerType?.explodeOnWall && attacker && !attacker.dying) {
     spawnFirePool(attacker.x, 58, 3.8);
@@ -544,6 +606,71 @@ function damageWall(wall, baseDmg, particleCount = 3, attacker = null) {
     attacker.hp = 0;
     killEnemy(attacker);
   }
+}
+
+function clearBruteStructureAttack(e, recover = true) {
+  e._bruteStructureTarget = null;
+  e._bruteStructureKind = null;
+  e._bruteStructureHit = false;
+  if (recover) changeState(e, "recovery", 0.55);
+}
+
+function bruteStructureTargetAlive(target, kind) {
+  if (!target) return false;
+  if (kind === "wall") return target.commissioned && target.hp > 0;
+  return target.hp > 0;
+}
+
+// Stateful structure strike for the Brute. Damage lands halfway through the
+// horizontal smash instead of at animation start, and the whole strike plus
+// recovery completes before another can begin. This prevents the old 0.7s
+// restart loop that repeatedly snapped the wall animation back to frame zero.
+function updateBruteStructureAttack(e, t, target, kind) {
+  const duration = t.structureAttackDuration || 1.3;
+  const cadence = Math.max(duration + 0.55, t.structureAttackCadence || 2.15);
+  const active = e._bruteStructureTarget === target && e._bruteStructureKind === kind;
+
+  if (active) {
+    const remaining = Math.max(0, e.attackAnim || 0);
+    const progress = clamp(1 - remaining / duration, 0, 1);
+    if (!e._bruteStructureHit && progress >= 0.52) {
+      const reach = kind === "wall" ? wallAttackRange(e, t, target) : baseAttackRange(e, t);
+      // Small forgiveness keeps a moving/knocked target from dodging after the
+      // fists have visibly entered its face, while still rejecting true misses.
+      if (bruteStructureTargetAlive(target, kind) && dist(e.x, target.x) <= reach + 18) {
+        if (kind === "wall") {
+          damageWall(target, t.dmg, 6, e);
+        } else {
+          const crit = applyCrit(t.baseDmg ?? t.dmg, CFG.critChance, CFG.critMultiplier);
+          target.hp = Math.max(0, target.hp - crit.damage);
+          target.flash = 0.2;
+          spawnParticles(target.x + rand(-30, 30), groundY - 42, 7, "#ff6a4a", 48, 42);
+          if (crit.isCrit) critFloaty(target.x, crit.damage);
+          else floaty(target.x, "-" + crit.damage, "#ff6a4a");
+          Audio.hit();
+        }
+      }
+      e._bruteStructureHit = true;
+    }
+
+    if (remaining <= 0) clearBruteStructureAttack(e);
+    return true;
+  }
+
+  if (!bruteStructureTargetAlive(target, kind)) return false;
+  if (e.aiState === "recovery") {
+    if (e.stateTimer > 0) return true;
+    changeState(e, "chasing", 0);
+  }
+  if (e.attackCd <= 0) {
+    e._bruteStructureTarget = target;
+    e._bruteStructureKind = kind;
+    e._bruteStructureHit = false;
+    e.attackCd = cadence;
+    changeState(e, "attacking", 0);
+    startEnemyAttack(e, duration, { kind: "bash", impact: 0.52 });
+  }
+  return true;
 }
 
 function shootEnemyFireball(e, t, target) {
@@ -1734,7 +1861,14 @@ export function updateEnemies(dt) {
 
     if (!baseType) { enemies.splice(i, 1); continue; }
     const t = scaledEnemyType(e, baseType);
-    if (e.dying) continue;
+    if (e.dying) {
+      // The brute's rig is otherwise only ticked by updateEnemyGait, which is
+      // skipped for dying enemies below — without this it would freeze mid-pose
+      // the instant it died, and the ragdoll transform in RenderEntities would
+      // just rotate that frozen pose rather than let the body collapse.
+      if (e.type === "brute") updateBruteRig(e, dt);
+      continue;
+    }
     initEnemyAI(e);
     updateEnemyGait(e, dt);
     if (e.emberWard > 0) e.emberWard = Math.max(0, e.emberWard - dt);
@@ -1953,7 +2087,7 @@ export function updateEnemies(dt) {
         }
       }
 
-      if (t.stomper && !e.charging && e.stompCd <= 0) {
+      if (t.stomper && !e.charging && e.stompCd <= 0 && !(e.type === "brute" && e._bruteStructureTarget)) {
         e.stompCd = rand(t.stompMin, t.stompMax);
         const radius = t.stompRadius || 90;
         let hitSomething = false;
@@ -1971,11 +2105,15 @@ export function updateEnemies(dt) {
             hitSomething = true;
           }
         }
-        for (const w of state.walls) {
-          if (!w.commissioned || w.hp <= 0) continue;
-          if (dist(e.x, w.x) < radius) { damageWall(w, t.dmg * 0.35, 4, e); hitSomething = true; }
+        // A ground shockwave remains an anti-personnel move for the Brute. It
+        // no longer substitutes for visibly punching a wall or the base.
+        if (e.type !== "brute") {
+          for (const w of state.walls) {
+            if (!w.commissioned || w.hp <= 0) continue;
+            if (dist(e.x, w.x) < radius) { damageWall(w, t.dmg * 0.35, 4, e); hitSomething = true; }
+          }
         }
-        if (hitSomething || dist(e.x, base.x) < radius) {
+        if (hitSomething || (e.type !== "brute" && dist(e.x, base.x) < radius)) {
           e.stompFlash = 0.35;
           Game.screenShake = Math.max(Game.screenShake || 0, 0.35);
           spawnParticles(e.x, groundY - 6, 20, "#ff6a20", 140, 90);
@@ -2001,6 +2139,13 @@ export function updateEnemies(dt) {
 
     if (e.type === "imp" && updateImp(e, t, dt)) continue;
 
+    // Finish an already-committed Brute structure strike even if the impact
+    // destroys the wall and wallAt() stops returning it on the following tick.
+    if (e.type === "brute" && e._bruteStructureTarget) {
+      updateBruteStructureAttack(e, t, e._bruteStructureTarget, e._bruteStructureKind);
+      continue;
+    }
+
     const side = e.x < CFG.baseX ? -1 : 1;
     const wall = wallAt(side, e.x);
     const stackDropBypassesWall = e.type === "imp" && impStackDropBypassesWall(e, wall);
@@ -2016,8 +2161,12 @@ export function updateEnemies(dt) {
       floaty(wall.x, "Burrow!", "#d8b46a", 13);
       continue;
     }
-    if (wall && e.type !== "imp" && dist(e.x, wall.x) < 30 && !stackDropBypassesWall) {
+    if (wall && e.type !== "imp" && dist(e.x, wall.x) < wallAttackRange(e, t, wall) && !stackDropBypassesWall) {
       e.dir = Math.sign(wall.x - e.x) || e.dir;
+      if (e.type === "brute") {
+        updateBruteStructureAttack(e, t, wall, "wall");
+        continue;
+      }
       if (e.attackCd <= 0 && e.aiState !== "recovery") {
         changeState(e, "attacking", 0.5);
         e.attackCd = 0.7; startEnemyAttack(e, 0.22 * swingMult(e), { kind: "bash", impact: 0.22 });
@@ -2044,6 +2193,7 @@ export function updateEnemies(dt) {
 
     if (e.aggroPlayer) {
       const d = dist(e.x, player.x);
+      const reach = meleeReach(e, t, 30);
 
       e.dir = Math.sign(player.x - e.x) || e.dir;
 
@@ -2054,23 +2204,25 @@ export function updateEnemies(dt) {
       } else if (e.aiState === "attacking") {
         // Windup phase: stop moving, wait before attacking
         if (e.stateTimer <= 0) {
-          if (d < 30 && playerCombatLift() <= 4 && player.invuln <= 0 && !inject('godMode')) {
+          if (d <= reach + 8 && playerCombatLift() <= 4 && player.invuln <= 0 && !inject('godMode')) {
             const hadCoins = player.coins > 0;
             if (meleeHitPlayer(e, t, 230) && hadCoins) e.carry++;
             changeState(e, "recovery", 0.4);
             e.attackCd = 1;
             startEnemyAttack(e, 0.25 * swingMult(e), { kind: "swipe" });
           } else {
+            clearPreparedEnemyAttack(e);
             changeState(e, "chasing", 0);
           }
         }
       } else {
         // Chasing phase: move towards player
         const chaseMult = debuffSpeedMult(e);
-        if (d > 24) e.x += e.dir * t.speed * 1.4 * chaseMult * dt;
+        if (d > reach * 0.82) e.x += e.dir * t.speed * 1.4 * chaseMult * dt;
 
         // Transition to attacking when close enough
-        if (d < 30 && e.attackCd <= 0) {
+        if (d <= reach && e.attackCd <= 0) {
+          prepareEnemyAttack(e, "swipe");
           changeState(e, "attacking", 0.45 + Math.random() * 0.2);
         }
       }
@@ -2088,12 +2240,18 @@ export function updateEnemies(dt) {
     }
     if (e.aggroUnit) {
       const d = dist(e.x, e.aggroUnit.x);
+      const reach = meleeReach(e, t, 40);
       e.dir = Math.sign(e.aggroUnit.x - e.x) || e.dir;
 
       if (e.aiState === "recovery") {
         if (e.stateTimer <= 0) changeState(e, "chasing", 0);
       } else if (e.aiState === "attacking") {
         if (e.stateTimer <= 0) {
+          if (d > reach + 10) {
+            clearPreparedEnemyAttack(e);
+            changeState(e, "chasing", 0);
+            continue;
+          }
           changeState(e, "recovery", 0.4);
           e.attackCd = 0.8; startEnemyAttack(e, 0.22 * swingMult(e), { kind: "swipe" });
           const crit = applyCrit(2, CFG.critChance, CFG.critMultiplier);
@@ -2105,16 +2263,21 @@ export function updateEnemies(dt) {
         }
       } else {
         const unitChaseMult = debuffSpeedMult(e);
-        if (d > 32) e.x += e.dir * t.speed * 1.3 * unitChaseMult * dt;
-        if (d < 40 && e.attackCd <= 0) {
+        if (d > reach * 0.82) e.x += e.dir * t.speed * 1.3 * unitChaseMult * dt;
+        if (d <= reach && e.attackCd <= 0) {
+          prepareEnemyAttack(e, "swipe");
           changeState(e, "attacking", 0.4 + Math.random() * 0.2);
         }
       }
       continue;
     }
 
-    if (dist(e.x, base.x) < 70) {
+    if (dist(e.x, base.x) < baseAttackRange(e, t)) {
       e.dir = Math.sign(base.x - e.x) || e.dir;
+      if (e.type === "brute") {
+        updateBruteStructureAttack(e, t, base, "base");
+        continue;
+      }
       if (e.attackCd <= 0 && e.aiState !== "recovery") {
         changeState(e, "attacking", 0.4);
         e.attackCd = 0.9; startEnemyAttack(e, 0.22 * swingMult(e), { kind: "bash", impact: 0.22 });

@@ -841,7 +841,7 @@ function layerTreeForBiome(t, b) {
 
 export function drawTreeLayer(trees, factor, depthDark, swayAmp, alpha=1) {
   const dark=darkness(), haze=hazeColor(dark), off=Game.cam*factor;
-  const lowDetailLayer = factor < 0.7;
+  const lowDetailLayer = factor <= 0.7;
   const cameraBiome = biomeAt(Game.cam + W / 2);
   if (alpha<1) { ctx.save(); ctx.globalAlpha=alpha; }
   for (let i = 0; i < trees.length; i++) {

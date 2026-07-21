@@ -1,27 +1,39 @@
 export const CASTLE_UPGRADES = [
   {
     id: "masonry",
-    name: "Mason's Rise",
+    name: "Murder Holes",
     col: "#d8c49a",
     costs: [35, 72, 120],
-    desc: "Thicker curtain walls, buttresses and an armored gate raise castle HP.",
-    effects: ["+45 castle HP", "+95 castle HP", "+155 castle HP"],
+    desc: "Machicolations along the gatehouse pour scalding oil on anything that reaches your door, while thicker walls shrug off more punishment.",
+    effects: [
+      "+45 castle HP · scalding oil scorches and slows foes at the gate",
+      "+95 castle HP · hotter oil, wider scald radius",
+      "+155 castle HP · the cauldrons never stop boiling",
+    ],
   },
   {
     id: "garrison",
-    name: "Garrison Wings",
+    name: "War Drums",
     col: "#9bd05a",
     costs: [32, 68, 112],
-    desc: "New barracks and drill yards let the crown field a larger army.",
-    effects: ["+4 population cap", "+9 population cap", "+15 population cap"],
+    desc: "A drum tower musters more subjects to the banner and beats a war rhythm that spurs your whole garrison to fight faster.",
+    effects: [
+      "+4 population cap · periodic war-drum fervor for your subjects",
+      "+9 population cap · drums beat faster and the fervor lasts longer",
+      "+15 population cap · the garrison never misses a beat",
+    ],
   },
   {
     id: "treasury",
-    name: "Treasury Vault",
+    name: "Greedwyrm's Hoard",
     col: "#f2c14e",
     costs: [28, 58, 98],
-    desc: "Secure vaults and tax offices let the monarch carry more gold.",
-    effects: ["+60 gold carry cap", "+140 gold carry cap", "+240 gold carry cap"],
+    desc: "A hoard-wyrm coils atop the vault, carrying more gold and occasionally spitting up a burst of coin for the crown.",
+    effects: [
+      "+60 gold carry cap · the hoard occasionally overflows",
+      "+140 gold carry cap · bigger, more frequent overflow",
+      "+240 gold carry cap · the wyrm showers you in gold",
+    ],
   },
   {
     id: "aegis",
@@ -30,6 +42,19 @@ export const CASTLE_UPGRADES = [
     costs: [46, 88, 145],
     desc: "Focuses the crown flame into a castle smite before the Royal Capital awakens.",
     effects: ["castle smite online", "wider, faster smites", "royal-grade firestorm"],
+  },
+  {
+    id: "siege",
+    name: "Warwolf Cradle",
+    col: "#9aa5ad",
+    unlockLevel: 5,
+    costs: [60, 115, 185],
+    desc: "A wall-mounted trebuchet crew, drilled to lob boulders at the horde before it reaches the gate.",
+    effects: [
+      "Lobs a boulder at the deadliest approaching foe every few seconds",
+      "Reinforced cradle: heavier stones, faster winch, wider blast",
+      "Twin-arm cradle: hurls a boulder down each flank at once",
+    ],
   },
 ];
 
