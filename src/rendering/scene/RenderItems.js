@@ -73,11 +73,10 @@ function drawArrowBranchCoating(ar, t, alpha = 1) {
   ctx.restore();
 }
 
-export function drawCoins(mineLayer = false) {
+export function drawCoins() {
   const t=performance.now();
   const view = visibleWorldBounds(80);
   for (const c of state.coins) {
-    if (!!c.mine !== mineLayer) continue;
     if (c.x < view.left || c.x > view.right) continue;
     const v = c.value || 1;
     // Tier look: 1 = small gold, 5 = larger amber with rim, 10+ = big pale-gold with glow ring

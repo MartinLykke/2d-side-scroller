@@ -286,7 +286,7 @@ function detonateAshFireball(ar) {
   let hit = false;
 
   for (const u of units) {
-    if (u.hp <= 0 || u.dying || u.mine) continue;
+    if (u.hp <= 0 || u.dying) continue;
     const uy = unitBlastY(u);
     if (!inAshBlast(ar, u.x, uy, blastY, radius)) continue;
     u.hp -= dmg;
@@ -299,7 +299,7 @@ function detonateAshFireball(ar) {
     hit = true;
   }
 
-  if (player && player.hp > 0 && !Game.inMine) {
+  if (player && player.hp > 0) {
     const py = playerBlastY(player);
     if (inAshBlast(ar, player.x, py, blastY, radius)) {
       const dealt = damagePlayer(dmg, { knock: Math.sign(player.x - ar.x || 1) * 210 });
@@ -691,7 +691,7 @@ export function updateArrows(dt) {
       }
     }
 
-    if (!hit && ar.hitKind === "player" && !Game.inMine) {
+    if (!hit && ar.hitKind === "player") {
       const playerY = playerBlastY(player);
       const hitRadius = ar.ashFireball ? (ar.radius || 54) : 18;
       const hitHeight = ar.ashFireball ? 62 : 50;
@@ -709,7 +709,7 @@ export function updateArrows(dt) {
 
     if (!hit && ar.hitKind === "unit") {
       for (const u of units) {
-        if (u.hp <= 0 || u.dying || u.mine) continue;
+        if (u.hp <= 0 || u.dying) continue;
         const uy = unitBlastY(u);
         const hitHeight = ar.ashFireball ? 62 : 46;
         if (dist(ar.x, u.x) < (ar.radius || 22) && Math.abs(ar.y - uy) < hitHeight) {
@@ -739,7 +739,7 @@ export function updateArrows(dt) {
         if (base.hp < 0) base.hp = 0;
       }
       for (const u of units) {
-        if (u.hp <= 0 || u.dying || u.mine) continue;
+        if (u.hp <= 0 || u.dying) continue;
         if (dist(ar.x, u.x) < r * 0.7) {
           u.hp -= 1; u.panic = 1;
           u.knock = (u.knock || 0) + Math.sign(u.x - ar.x || 1) * 130;

@@ -70,7 +70,6 @@ export function shopTierUnlocked() {
 }
 
 export function tryOpenShop() {
-  if (Game.inMine) return;
   const shopSt = state.stations.find(s => s.id === "shop");
   if (shopSt && state.base.level >= 2 && dist(state.player.x, shopSt.x()) < 100) {
     Game.shopOpen = !Game.shopOpen;
@@ -82,7 +81,7 @@ export function tryOpenShop() {
 export function updateShop() {
   if (!Game.shopOpen) return;
   const shopSt = state.stations.find(s => s.id === "shop");
-  if (!shopSt || Game.inMine || state.base.level < 2 ||
+  if (!shopSt || state.base.level < 2 ||
       dist(state.player.x, shopSt.x()) > SHOP_CLOSE_RANGE) {
     Game.shopOpen = false;
   }

@@ -1,17 +1,17 @@
 import { dist } from '../../util/math.js';
-import { Game, state } from '../../core/state.js';
+import { state } from '../../core/state.js';
 import { wallHeight } from '../../entities/Wall.js';
 import { playerCombatLift } from './EnemyShared.js';
 
 export function fireImpTarget(e, range) {
   let best = null, bd = range;
   const player = state.player;
-  if (player && player.hp > 0 && !Game.inMine) {
+  if (player && player.hp > 0) {
     const d = dist(e.x, player.x);
     if (d < bd) { bd = d; best = player; }
   }
   for (const u of state.units) {
-    if (u.hp <= 0 || u.dying || u.mine) continue;
+    if (u.hp <= 0 || u.dying) continue;
     const d = dist(e.x, u.x);
     if (d < bd) { bd = d; best = u; }
   }
@@ -46,7 +46,7 @@ export function nearestGroundDefenderForImp(e, range = 220) {
   let best = null, bd = range;
   let bestOther = null, bod = range;
   for (const u of state.units) {
-    if (u.hp <= 0 || u.dying || u.mine) continue;
+    if (u.hp <= 0 || u.dying) continue;
     const d = dist(e.x, u.x);
     if (u.role === "guard") { if (d < bd) { bd = d; best = u; } }
     else if (!u.onWall) { if (d < bod) { bod = d; bestOther = u; } }
@@ -69,12 +69,12 @@ export function wallTopImpForWall(w, except = null) {
 export function ashPriestTarget(e, range) {
   let best = null, bd = range;
   const player = state.player;
-  if (player && player.hp > 0 && !Game.inMine) {
+  if (player && player.hp > 0) {
     const d = dist(e.x, player.x);
     if (d < bd) { bd = d; best = player; }
   }
   for (const u of state.units) {
-    if (u.hp <= 0 || u.dying || u.mine) continue;
+    if (u.hp <= 0 || u.dying) continue;
     const d = dist(e.x, u.x);
     if (d < bd) { bd = d; best = u; }
   }

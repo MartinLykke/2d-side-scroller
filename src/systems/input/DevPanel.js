@@ -77,7 +77,6 @@ export function setupDevPanel() {
   bind('[data-dev="unitBuilder"]', () => DEV.spawnUnit('builder'));
   bind('[data-dev="unitFarmer"]',  () => DEV.spawnUnit('farmer'));
   bind('[data-dev="unitGuard"]',   () => DEV.spawnUnit('guard'));
-  bind('[data-dev="unitMiner"]',   () => DEV.spawnUnit('miner'));
 
   // Level units
   bind('[data-dev="archerLvl1"]',    () => DEV.levelUpUnits('archer', 1));

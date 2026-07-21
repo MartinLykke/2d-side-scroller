@@ -177,7 +177,6 @@ function drawPowerCharge(u, lift) {
 export function drawUnits() {
   const view = visibleWorldBounds(220);
   for (const u of state.units) {
-    if (u.mine) continue; // miners are drawn by the mine scene
     if (u.x < view.left || u.x > view.right) continue;
     let body="#3a3550", head="#caa483", tool=null;
     if (u.role==="archer")  { body="#2f5040"; tool="bow"; }

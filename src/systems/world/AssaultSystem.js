@@ -59,7 +59,7 @@ function dismountUnit(u) {
 }
 
 export function startAssault() {
-  if (Game.state !== "play" || Game.inMine || !state.player) return;
+  if (Game.state !== "play" || !state.player) return;
   const px = state.player.x;
   if (state.assault) {
     floaty(px, "The assault is already underway!", "#cfe6f2");
@@ -311,7 +311,6 @@ export function performPhaseShift() {
     player.x = CFG.baseX;
     player.knock = 0;
     player.invuln = Math.max(player.invuln || 0, 1.4);
-    Game.inMine = false;
     Game.cam = clampCameraTarget(CFG.baseX - W / 2, CFG.worldWidth, W, Game.zoom || 1);
 
     for (const u of state.units) {
@@ -360,7 +359,6 @@ export function performPhaseShift() {
   player.x = CFG.baseX;
   player.knock = 0;
   player.invuln = Math.max(player.invuln || 0, 1.4);
-  Game.inMine = false;
   Game.cam = clampCameraTarget(CFG.baseX - W / 2, CFG.worldWidth, W, Game.zoom || 1);
 
   for (const u of state.units) {

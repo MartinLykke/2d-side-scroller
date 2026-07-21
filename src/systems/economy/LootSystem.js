@@ -1,4 +1,4 @@
-import { state, Game } from '../../core/state.js';
+import { state } from '../../core/state.js';
 import { groundY } from '../../core/canvas.js';
 import { dist, rand } from '../../util/math.js';
 import { keys } from '../input/Input.js';
@@ -19,7 +19,7 @@ export function updateLootItems(dt) {
       it.despawnTimer = (it.despawnTimer || 0) + dt;
       if (it.despawnTimer >= 10) { lootItems.splice(i,1); continue; }
     }
-    if (!Game.inMine && dist(it.x,player.x)<50) {
+    if (dist(it.x,player.x)<50) {
       if (!player.weapon || keys["f"]) {
         if (pickupWeaponFn) pickupWeaponFn(it.weaponId, it.upgrades);
         lootItems.splice(i,1);
@@ -53,7 +53,7 @@ export function updateChests(dt) {
         spawnParticles(ch.x, groundY - 24, 20, "#f2c14e", 120, 150);
         chests.splice(i, 1);
       }
-    } else if (!Game.inMine && dist(ch.x, player.x) < 64 && keys['f']) {
+    } else if (dist(ch.x, player.x) < 64 && keys['f']) {
       ch.open = true;
       Audio.chest();
     }

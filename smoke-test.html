@@ -191,7 +191,7 @@ async function testFactoriesAndServices() {
 
   try {
     const { makeUnit } = await import("./src/entities/Unit.js");
-    for (const role of ["archer", "builder", "farmer", "guard", "miner"]) {
+    for (const role of ["archer", "builder", "farmer", "guard"]) {
       const u = makeUnit(role, 4500);
       log(`Unit: ${role}`, u.role === role && Number.isFinite(u.x), `hp=${u.hp}`);
     }

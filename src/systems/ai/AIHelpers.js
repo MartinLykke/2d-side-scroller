@@ -70,7 +70,7 @@ export function nearestGroundCoin(x, range) {
   const BASE_COIN_ZONE = 640;
   let best = null, bd = range;
   for (const c of state.coins) {
-    if (!c.settled || c.mine) continue;
+    if (!c.settled) continue;
     if (state.player && dist(c.x, state.player.x) < 90) continue;
     if (Math.abs(c.x - CFG.baseX) < BASE_COIN_ZONE) continue;
     const d = dist(x, c.x);

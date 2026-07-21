@@ -27,7 +27,7 @@ Press `P` to open the dev panel. It exposes:
   - The Hollow / phase 2 (shade, void wraith, hollow brute, void titan, null seraph)
   - Biome bosses (forest stalker, skadi's wrath, dune broodmother, sunken behemoth, ignited core, void mind-flayer)
   - Assault & phases (start assault, crack portals, begin biome shift)
-  - Units (archer, builder, farmer, guard, miner)
+  - Units (archer, builder, farmer, guard)
   - Wildlife (deer, rabbit, duck, bear)
 - **Progression**: archer/guard level ups, +5 skill points, unlock all archer skills
 - **Player loadout**: death hub, weapon grants + drop, armor grants + remove, mount grants + dismount
@@ -42,7 +42,7 @@ The `DEV` object is defined in `src/rendering/HUD.js` and exposed on `window`.
 
 ### Core loop
 
-1. **Day phase** — explore, recruit units, build/upgrade walls and buildings, buy weapons, fell trees, dig the mine
+1. **Day phase** — explore, recruit units, build/upgrade walls and buildings, buy weapons, fell trees
 2. **Night phase** — enemies spawn from portals, attack base and walls; player and units fight back
 3. **Break a portal (G)** — march your army on a portal; destroying it shifts the world to the **next biome** (new palette, new enemy roster, new biome boss and weapon drops). After the final biome, the next break triggers **the Hollow** (phase 2)
 4. **Between runs** — on death, earn embers based on performance; spend on permanent upgrades in the hub
@@ -54,7 +54,6 @@ The `DEV` object is defined in `src/rendering/HUD.js` and exposed on `window`.
 - Four wall slots (2 per side) around base
 - Dense biome flora across the map except near the base; trees can be felled to clear building slots
 - Camps spawn in the forest with vagrants that can be rescued
-- A mine can be dug beneath the base (base lvl 3); miners work the underground layer
 
 ### Biomes
 
@@ -86,7 +85,7 @@ Chosen on the start screen (Easy / Normal / Hard). Profiles in `src/config/diffi
 
 **Shared state** lives in `src/core/state.js` as two exported objects:
 - `Game` — singleton game-clock and UI flags (day, phase, menus open, camera, zoom, `activeBiome`, `worldPhase`, etc.)
-- `state` — all mutable entity arrays (player, units, enemies, coins, walls, loot items, buildings, mine veins, etc.)
+- `state` — all mutable entity arrays (player, units, enemies, coins, walls, loot items, buildings, etc.)
 
 Every module imports these directly; nothing is passed as arguments through update calls.
 
@@ -99,7 +98,7 @@ Every module imports these directly; nothing is passed as arguments through upda
 | `src/entities/` | Factory functions: `Player.js`, `Unit.js`, `Wall.js` |
 | `src/systems/ai/` | Unit AI (`AI.js`), enemy behavior (`EnemyAI.js`), per-role AIs (`ArcherAI`, `GuardAI`, `BuilderAI`, `FarmerAI`, `BossAI`, `ImpCombatAI`, `AIHelpers`) |
 | `src/systems/combat/` | Combat orchestrator (`Combat.js`), player attacks (`PlayerCombat.js`), arrows (`ProjectileSystem.js`), spells (`SpellSystem.js`) |
-| `src/systems/world/` | Spawning (`SpawnSystem.js`), forests (`ForestSystem.js`), outposts/buildings (`OutpostSystem.js`), mine (`MineSystem.js`), portal assault + biome shift (`AssaultSystem.js`), fortifications (`FortificationSystem.js`) |
+| `src/systems/world/` | Spawning (`SpawnSystem.js`), forests (`ForestSystem.js`), outposts/buildings (`OutpostSystem.js`), portal assault + biome shift (`AssaultSystem.js`), fortifications (`FortificationSystem.js`) |
 | `src/systems/economy/` | Payments (`Economy.js`), shops (`ShopSystem.js`), loot (`LootSystem.js`), upgrades/leveling (`UpgradeSystem.js`), mounts (`MountSystem.js`), castle upgrades (`CastleUpgradeSystem.js`) |
 | `src/systems/input/` | Keyboard state (`Input.js`), event listeners (`InputHandler.js`), dev panel (`DevPanel.js`) |
 | `src/systems/infrastructure/` | Save/load (`SaveSystem.js`), audio (`Audio.js`), game init (`GameInit.js`), roguelike meta + leaderboard (`RoguelikeSystem.js`) |
@@ -124,14 +123,13 @@ Every module imports these directly; nothing is passed as arguments through upda
 - Regen +1 HP/7s when not in combat (boosted by roguelike upgrades).
 - Invulnerability 0.9s after hit.
 
-### Units (5 roles)
+### Units (4 roles)
 | Role | HP | Cost | Unlock | Behavior |
 |------|----|------|--------|----------|
 | Archer | 6 | 4🪙 | — | Ranged; stand on walls; named; own XP/level; skill tree |
 | Builder | 5 | 3🪙 | — | Fell marked trees, carry logs to base for gold |
 | Farmer | 5 | — | Base lvl 2 | Passive gold generation; 1 spawned per farm upgrade |
 | Guard | 8 | 8🪙 | Base lvl 3 | Melee; patrol and engage; skill tree |
-| Miner | 5 | 5🪙 | Base lvl 3 (mine built) | Lives on the underground mine layer; digs gold veins |
 
 ### Enemies — phase 1 core roster
 | Type | HP | Notes |
@@ -196,7 +194,7 @@ If the portal falls: celebration, march home, then a flash transition (`Game.pha
 |-------|------|-----|----------|---------|
 | 1 | Camp | 60 | 8 | — |
 | 2 | Small Village | 90 | 16 | Shop, farm, hammer, lumber camps |
-| 3 | Large Village | 130 | 26 | Towers, shrine, guards, Runeforge, mine |
+| 3 | Large Village | 130 | 26 | Towers, shrine, guards, Runeforge |
 | 4 | Castle | 180 | 40 | Free lumber, +1 player max HP, repair station |
 | 5 | Fortress | 250 | 52 | — |
 | 6 | Citadel | 330 | 66 | Ballista emplacements |
@@ -205,16 +203,13 @@ If the portal falls: celebration, march home, then a flash transition (`Game.pha
 Max level is `CFG.maxBaseLevel`. From level 4 on, the base station prioritizes repairs over the next upgrade.
 
 ### Stations
-Payment-gated purchases: hold ↓/S near a station. Payment rate accelerates with hold time (1→2→6 coins/tick). Coins refund if player walks away before completing. Stations are rebuilt on each base upgrade via `buildStations()` in `GameInit.js`. Station x-positions are in `STATIONS_X` (`config.js`): bow, hammer, farm, shop, guard, mine, runeforge.
+Payment-gated purchases: hold ↓/S near a station. Payment rate accelerates with hold time (1→2→6 coins/tick). Coins refund if player walks away before completing. Stations are rebuilt on each base upgrade via `buildStations()` in `GameInit.js`. Station x-positions are in `STATIONS_X` (`config.js`): bow, hammer, farm, shop, guard, runeforge.
 
 ### Walls (4 slots, levels 1–5)
 Health scales 45→320 HP (`CFG.wallHp`). Cost 5🪙 to raise; upgrades 11→18→28→44🪙 (`CFG.wallUpgradeCosts`). Archers stand on walls with capacity per level.
 
 ### The Runeforge (fortifications)
 A linear arcane upgrade track bought at the runeforge obelisk (unlocks at base lvl 3). Six tiers in `src/config/fortifications.js` (`FORT_TRACK`), purchased in order: Ember Wards → Stoneskin Masonry (+25% wall/base HP) → Frost Wards → Greater Ember Wards → Crown Sigil (damage ring) → Bulwark of the Ancients (+50% defense HP, walls reflect damage). `fortHpMultAt()` supplies the HP multiplier; logic in `FortificationSystem.js`.
-
-### The Mine
-Built for `CFG.mineCost` at base lvl 3. A separate underground layer beneath the base (`MINE` in `config.js`); `Game.inMine` toggles the rendered scene. Recruit **miners** (5🪙) who dig gold veins (`MineSystem.js`); the mine expands outward as frontier veins are exhausted. Miners stop when too much loose gold is uncollected.
 
 ### Buildings (7 slots)
 | Building | Count | Cost | Unlock | Effect |
@@ -239,7 +234,7 @@ On level-up the player picks from 3 random upgrades (`src/config/weaponUpgrades.
 ### Mounts
 - 3 mounts (`src/config/mounts.js`) sold in the shop's Stable tab: Dun Pony (+35% speed), Chestnut Courser (+65%), Ember Warhorse (+100%)
 - A mount multiplies walk and sprint speed and raises the rider by its `lift` (px). The steed draws inside the player's render transform (`Renderer.js`), so the body and held weapon ride it automatically; arrow/spell spawn origins add `playerMountLift()` (`src/systems/economy/MountSystem.js`)
-- Owned mounts toggle ride/stable in the shop or with H in the field; no riding in the mine or while climbing walls
+- Owned mounts toggle ride/stable in the shop or with H in the field; no riding while climbing walls
 - Hitboxes are unchanged while mounted (the mount is speed + visuals only)
 - Ownership and the ridden mount persist in the save
 
@@ -269,7 +264,7 @@ The hub also shows a **leaderboard** of past runs (`RoguelikeSystem.js`, `record
 
 ## Save system
 
-Auto-saves every 5 seconds to localStorage (`kingdom_embers_save_v1`). Saves full game state: clock, player, base, walls, buildings, units, vagrants, forest trees, farm, skill points, mine, fortifications, `activeBiome` / `unlockedBiomes` / `worldPhase`. Continue button on start screen if save exists.
+Auto-saves every 5 seconds to localStorage (`kingdom_embers_save_v1`). Saves full game state: clock, player, base, walls, buildings, units, vagrants, forest trees, farm, skill points, fortifications, `activeBiome` / `unlockedBiomes` / `worldPhase`. Continue button on start screen if save exists.
 
 ## Controls
 

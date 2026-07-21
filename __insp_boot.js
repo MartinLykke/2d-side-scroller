@@ -53,7 +53,7 @@ async function setup() {
     state.enemies.length = 0;
     for (let i = 0; i < N; i++) sp.spawnEnemy(type, { x: cx + (i - (N - 1) / 2) * spacing });
     state.enemies.forEach((e, i) => applyPose(e, poses[i]));
-    Game.inMine = false; Game.cam = cx - CV.W / 2;
+    Game.cam = cx - CV.W / 2;
     R.render();
     const S = c.width / CV.W, zoom = Game.zoom;
     const halfSpan = ((N - 1) / 2) * spacing * zoom + (opts.margin || 95);

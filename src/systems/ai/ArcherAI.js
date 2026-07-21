@@ -495,7 +495,7 @@ function dropArcherGoldToPlayer(u) {
 // ── Separation ───────────────────────────────────────────────────────────
 function separateFromArchers(u, dt) {
   for (const o of state.units) {
-    if (o === u || o.role !== "archer" || o.onWall || o.mine) continue;
+    if (o === u || o.role !== "archer" || o.onWall) continue;
     const d = o.x - u.x;
     if (Math.abs(d) < 46) u.x -= (Math.sign(d) || (state.units.indexOf(u) > state.units.indexOf(o) ? 1 : -1)) * 42 * dt;
   }

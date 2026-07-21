@@ -222,7 +222,7 @@ function golemShockwave(e, t) {
     damagePlayer(t.meleeDmg || 2, { knock: Math.sign(player.x - e.x || 1) * 300 });
   }
   for (const u of state.units) {
-    if (u.hp <= 0 || u.dying || u.onWall || u.mine) continue;
+    if (u.hp <= 0 || u.dying || u.onWall) continue;
     if (dist(e.x, u.x) < GOLEM_SHOCK_RANGE) {
       u.hp -= 2;
       u.panic = 1;
@@ -239,7 +239,7 @@ function golemSlamTarget(e, includeWalls = true) {
     }
   }
   if (dist(e.x, base.x) < GOLEM_SLAM_RANGE + 20) return { kind: "base", obj: base };
-  if (player && player.hp > 0 && !Game.inMine && (player.jumpH || 0) + entityWallLift(player) <= 20 && dist(e.x, player.x) < GOLEM_SLAM_RANGE - 14) return { kind: "player", obj: player };
+  if (player && player.hp > 0 && (player.jumpH || 0) + entityWallLift(player) <= 20 && dist(e.x, player.x) < GOLEM_SLAM_RANGE - 14) return { kind: "player", obj: player };
   return null;
 }
 
@@ -494,7 +494,7 @@ function pushBossRing(x, radius, col, life = 0.65, width = 6) {
 }
 
 function activeUnits(role = null) {
-  return state.units.filter(u => u.hp > 0 && !u.dying && !u.mine && (!role || u.role === role));
+  return state.units.filter(u => u.hp > 0 && !u.dying && (!role || u.role === role));
 }
 
 function stunArchersNear(x, radius, duration, col, damage = 0) {
@@ -511,7 +511,7 @@ function stunArchersNear(x, radius, duration, col, damage = 0) {
 
 function rootBuildersInsideBase(duration) {
   for (const u of activeUnits()) {
-    if (u.role !== "builder" && u.role !== "farmer" && u.role !== "miner") continue;
+    if (u.role !== "builder" && u.role !== "farmer") continue;
     if (Math.abs(u.x - CFG.baseX) > 760) continue;
     u.rooted = Math.max(u.rooted || 0, duration);
     u.panic = Math.max(u.panic || 0, 0.8);
@@ -837,7 +837,7 @@ function updateBehemothSuction(e, t, dt) {
   }
 
   const p = state.player;
-  if (p && p.hp > 0 && !Game.inMine && dist(p.x, e.x) < radius && (p.jumpH || 0) + entityWallLift(p) <= 45) {
+  if (p && p.hp > 0 && dist(p.x, e.x) < radius && (p.jumpH || 0) + entityWallLift(p) <= 45) {
     p.x += Math.sign(e.x - p.x || 1) * Math.min(155 * dt, dist(p.x, e.x) * 0.08);
   }
 
@@ -1050,7 +1050,7 @@ function updateBiomeWallAttack(e, t, dt) {
 
 function biomeBossMeleePlayer(e, t) {
   const p = state.player;
-  if (!p || p.hp <= 0 || Game.inMine || e.biomeMeleeCd > 0) return false;
+  if (!p || p.hp <= 0 || e.biomeMeleeCd > 0) return false;
   const reach = t.w * 0.55 + 38;
   if (dist(e.x, p.x) > reach) return false;
   if ((p.jumpH || 0) + entityWallLift(p) > (t.flying ? 130 : 55)) return false;
@@ -1071,7 +1071,7 @@ function hoverBiomeBoss(e, t, dt) {
 function moveBiomeBoss(e, t, dt) {
   const wallAhead = golemWallAhead(e);
   const p = state.player;
-  const playerNearby = p && p.hp > 0 && !Game.inMine && dist(e.x, p.x) < (t.flying ? 720 : 560);
+  const playerNearby = p && p.hp > 0 && dist(e.x, p.x) < (t.flying ? 720 : 560);
   let targetX = wallAhead ? golemWallStandX(wallAhead, t) : state.base.x;
   if (playerNearby && (!wallAhead || dist(e.x, p.x) < dist(e.x, wallAhead.x) - 80)) targetX = p.x;
 
@@ -1152,7 +1152,7 @@ function updateBiomeBoss(e, t, dt) {
 
   const p = state.player;
   const canSpecial = e.specialCd <= 0
-    && (Math.abs(e.x - state.base.x) < 1650 || (p && !Game.inMine && dist(e.x, p.x) < 850));
+    && (Math.abs(e.x - state.base.x) < 1650 || (p && dist(e.x, p.x) < 850));
   if (canSpecial) startBiomeCast(e, t);
 }
 
@@ -1286,7 +1286,7 @@ function voidTitanShockwave(e, t) {
     player.rooted = Math.max(player.rooted || 0, 0.35);
   }
   for (const u of state.units) {
-    if (u.hp <= 0 || u.dying || u.onWall || u.mine) continue;
+    if (u.hp <= 0 || u.dying || u.onWall) continue;
     if (dist(e.x, u.x) < VOID_TITAN_SHOCK_RANGE) {
       u.hp -= 2;
       u.panic = 1;
@@ -1317,10 +1317,10 @@ function releaseVoidTitanSlam(e, t) {
 function releaseVoidTitanRifts(e) {
   const targets = [];
   const player = state.player;
-  if (player && player.hp > 0 && !Game.inMine && Math.abs(player.x - state.base.x) < 900) {
+  if (player && player.hp > 0 && Math.abs(player.x - state.base.x) < 900) {
     targets.push(player.x);
   }
-  const activeUnits = state.units.filter(u => u.hp > 0 && !u.dying && !u.mine && Math.abs(u.x - state.base.x) < 760);
+  const activeUnits = state.units.filter(u => u.hp > 0 && !u.dying && Math.abs(u.x - state.base.x) < 760);
   if (activeUnits.length) targets.push(activeUnits[Math.floor(Math.random() * activeUnits.length)].x);
   while (targets.length < (e.enraged ? 4 : 3)) {
     targets.push(state.base.x + rand(-340, 340));
@@ -1582,12 +1582,12 @@ function seraphPulse(e, t) {
     if (wallReady(w) && dist(x, w.x) < r * 0.85) damageVoidWall(w, t.dmg * 0.28, "#8a5aff");
   }
   const player = state.player;
-  if (player && player.hp > 0 && !Game.inMine && dist(x, player.x) < r
+  if (player && player.hp > 0 && dist(x, player.x) < r
       && (player.jumpH || 0) + entityWallLift(player) <= 85) {
     damagePlayer(1, { knock: Math.sign(x - player.x || 1) * 190 });
   }
   for (const u of state.units) {
-    if (u.hp <= 0 || u.dying || u.mine) continue;
+    if (u.hp <= 0 || u.dying) continue;
     if (dist(x, u.x) < r) {
       u.hp -= 2;
       u.panic = 1;
@@ -1763,12 +1763,12 @@ export function updateFirePools(dt) {
           e.slow = Math.max(e.slow || 0, 0.3);
         }
       } else {
-        if (player && player.hp > 0 && !Game.inMine && dist(p.x, player.x) < p.r * 1.15
+        if (player && player.hp > 0 && dist(p.x, player.x) < p.r * 1.15
             && (player.jumpH || 0) + entityWallLift(player) <= 45) {
           player.x += Math.sign(p.x - player.x || 1) * Math.min(70 * dt, Math.abs(p.x - player.x) * 0.08);
         }
         for (const u of state.units) {
-          if (u.hp <= 0 || u.dying || u.mine || u.onWall) continue;
+          if (u.hp <= 0 || u.dying || u.onWall) continue;
           if (dist(p.x, u.x) < p.r * 1.1) u.x += Math.sign(p.x - u.x || 1) * Math.min(55 * dt, Math.abs(p.x - u.x) * 0.08);
         }
       }
@@ -1809,7 +1809,7 @@ export function updateFirePools(dt) {
             player.mudSlow = Math.max(player.mudSlow || 0, 0.6);
           }
           for (const u of state.units) {
-            if (u.hp <= 0 || u.dying || u.onWall || u.mine) continue;
+            if (u.hp <= 0 || u.dying || u.onWall) continue;
             if (dist(p.x, u.x) < p.r) {
               u.panic = Math.max(u.panic || 0, 0.4);
               u.cooldown = Math.max(u.cooldown || 0, 0.22);
@@ -1822,7 +1822,7 @@ export function updateFirePools(dt) {
           if (damagePlayer(p.dmg || 1) !== null) spawnParticles(player.x, groundY - 40, 7, poolCol, 60, 80);
         }
         for (const u of state.units) {
-          if (u.hp <= 0 || u.dying || u.onWall || u.mine) continue;
+          if (u.hp <= 0 || u.dying || u.onWall) continue;
           if (dist(p.x, u.x) < p.r) {
             u.hp -= p.dmg || 1;
             u.panic = 1;

@@ -13,7 +13,6 @@ export const CASTLE_MENU_RANGE = 155;
 export function canOpenCastleUpgrades() {
   return !!(
     Game.state === "play" &&
-    !Game.inMine &&
     state.base &&
     state.player &&
     state.base.level >= 4 &&

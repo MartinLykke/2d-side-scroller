@@ -1,5 +1,5 @@
 import { state, Game } from '../../core/state.js';
-import { CFG, WALL_SLOTS, PORTALS, STATIONS_X, MINE } from '../../config/config.js';
+import { CFG, WALL_SLOTS, PORTALS, STATIONS_X } from '../../config/config.js';
 import { groundY } from '../../core/canvas.js';
 import { rand, randInt, clamp } from '../../util/math.js';
 import { makePlayer } from '../../entities/Player.js';
@@ -13,7 +13,6 @@ import { upgradeBase } from '../../util/GameStateHelpers.js?v=biomeweapons1';
 import { addXP } from '../economy/UpgradeSystem.js?v=biomeweapons1';
 import { baseName } from '../../rendering/HUD.js?v=biomevisual1';
 import { applyPermanentUpgrades, applyPermanentWorldUpgrades, permanentForestCampPlans } from './RoguelikeSystem.js';
-import { initMineVeins } from '../world/MineSystem.js';
 import { fortNext, purchaseFortUpgrade } from '../world/FortificationSystem.js?v=biomeactive1';
 import { currentPopCap, wallMaxHpForLevel } from '../../util/DefenseStats.js';
 
@@ -187,36 +186,6 @@ export function buildStations() {
       },
     });
   }
-  if (state.base.level >= 3 && !state.mineBuilt) {
-    state.stations.push({
-      id:"mine", x:()=>STATIONS_X.mine, paid:0, instantPurchase:true,
-      cost:()=>CFG.mineCost,
-      label:()=>"Build mine (dig for gold beneath the castle)",
-      onPaid:()=>{
-        state.mineBuilt = true;
-        initMineVeins();
-        addXP(20);
-        Audio.build();
-        buildStations();
-      },
-    });
-  }
-  if (state.mineBuilt) {
-    state.stations.push({
-      id:"miner", mineLayer:true, x:()=>MINE.stationX, paid:0, instantPurchase:true,
-      cost:()=> state.units.length + state.vagrants.length >= currentPopCap() ? 0 : CFG.minerCost,
-      label:()=> state.units.length + state.vagrants.length >= currentPopCap()
-        ? "Population cap reached"
-        : `Recruit miner (${CFG.minerCost}🪙) – digs for gold`,
-      onPaid:()=>{
-        if (state.units.length + state.vagrants.length >= currentPopCap()) return;
-        const u = makeUnit("miner", MINE.stationX + rand(-20, 20));
-        u.transform = 0.55;
-        state.units.push(u);
-        Audio.recruit();
-      },
-    });
-  }
   walls.forEach(w=>{
     state.stations.push({
       id:"wall", wall:w, x:()=>w.x, paid:0, instantPurchase:true,
@@ -306,15 +275,12 @@ export function newGame() {
   state.lastPaidStation = null;
   state.vagrantTimer    = 1;
   state.animalTimer     = 2;
-  state.mineBuilt       = false;
-  state.mineVeins       = [];
   state.assault         = null;
   state.fortLevel       = 0;
   state.castleUpgrades  = { masonry: 0, garrison: 0, treasury: 0, aegis: 0 };
   state.sigilPulseT     = 0;
   state.sigilPulse      = 0;
   state.sigilSpin       = 0;
-  Game.inMine           = false;
   Game.activeBiome      = "forest";
   Game.unlockedBiomes   = ["forest"];
   Game.worldPhase       = 1;

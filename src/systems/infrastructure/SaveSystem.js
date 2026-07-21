@@ -3,7 +3,6 @@ import { CFG, FOREST } from '../../config/config.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { spawnVagrant, planNight, populateBiomeAnimals } from '../world/SpawnSystem.js';
 import { addForestCamp, buildForest } from '../world/ForestSystem.js?v=biomeactive1';
-import { initMineVeins } from '../world/MineSystem.js';
 import { buildStations } from './GameInit.js?v=biomeactive1';
 import { permanentForestCampPlans } from './RoguelikeSystem.js';
 import { autoSpendSkillPoints } from '../economy/SkillSystem.js';
@@ -60,10 +59,6 @@ export function saveGame() {
       farmLevel: state.farmLevel,
       fortLevel: state.fortLevel || 0,
       castleUpgrades: ensureCastleUpgrades(),
-      mineBuilt: state.mineBuilt,
-      mineActiveLeft: state.mineActiveLeft,
-      mineActiveRight: state.mineActiveRight,
-      mineVeins: (state.mineVeins || []).map(v => ({ x: v.x, ore: v.ore, respawnT: v.respawnT })),
       archerSkillPoints: state.archerSkillPoints || 0,
       archerSkills: state.archerSkills || [],
       arrowRainCd: state.arrowRainCd || 0,
@@ -142,29 +137,23 @@ export function loadGame() {
           market: !!ch.market,
         }));
     }
-    state.units = snap.units.map(s => {
-      const u = makeUnit(s.role, s.x);
-      if (s.archerName) u.archerName = s.archerName;
-      if (s.level) u.level = s.level;
-      if (s.xp) u.xp = s.xp;
-      if (u.role === "hound") {
-        const kennel = state.buildings.find(b => b.type === "kennel" && b.built);
-        u.homeX = Number.isFinite(s.homeX) ? s.homeX : (kennel ? kennel.x : u.x);
-      }
-      return u;
-    });
+    state.units = snap.units
+      .filter(s => ["archer", "builder", "farmer", "guard", "hound", "peasant"].includes(s.role))
+      .map(s => {
+        const u = makeUnit(s.role, s.x);
+        if (s.archerName) u.archerName = s.archerName;
+        if (s.level) u.level = s.level;
+        if (s.xp) u.xp = s.xp;
+        if (u.role === "hound") {
+          const kennel = state.buildings.find(b => b.type === "kennel" && b.built);
+          u.homeX = Number.isFinite(s.homeX) ? s.homeX : (kennel ? kennel.x : u.x);
+        }
+        return u;
+      });
     state.vagrants = [];
     for (let i = 0; i < (snap.vagrants || 0); i++) spawnVagrant();
     state.farmBuilt = snap.farm;
     state.farmLevel = snap.farmLevel || (snap.farm ? 1 : 0);
-    state.mineBuilt = !!snap.mineBuilt;
-    Game.inMine = false; // always resurface on load
-    if (state.mineBuilt) {
-      initMineVeins();
-      if (snap.mineActiveLeft) state.mineActiveLeft = snap.mineActiveLeft;
-      if (snap.mineActiveRight) state.mineActiveRight = snap.mineActiveRight;
-      if (snap.mineVeins) snap.mineVeins.forEach((s, i) => { if (state.mineVeins[i]) Object.assign(state.mineVeins[i], s); });
-    }
     state.archerSkillPoints = snap.archerSkillPoints || 0;
     // smoke_bomb was replaced by hunters_mark; migrate old saves
     state.archerSkills = (snap.archerSkills || []).map(id => id === "smoke_bomb" ? "hunters_mark" : id);
@@ -173,7 +162,7 @@ export function loadGame() {
     state.guardSkills = snap.guardSkills || [];
     autoSpendSkillPoints();
     Game.threatLevel = Math.max(1, snap.day || 1);
-    buildStations(); // stations depend on base level / mine, which were just restored
+    buildStations(); // stations depend on the restored base level
     planNight();
     return true;
   } catch (e) { return false; }

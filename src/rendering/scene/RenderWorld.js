@@ -431,8 +431,8 @@ export function drawPonds(dark) {
 
     // ---- wading ripples: anything walking through the shallow water ----
     const waders = [];
-    if (state.player && !Game.inMine) waders.push(state.player);
-    for (const u of state.units) if (!u.mine) waders.push(u);
+    if (state.player) waders.push(state.player);
+    for (const u of state.units) waders.push(u);
     for (const v of state.vagrants) waders.push(v);
     for (const e of state.enemies) if (!e.fy || e.fy >= -4) waders.push(e);
     for (const a of state.animals) if (a.alive && a.type !== "duck" && !(a.fy < 0)) waders.push(a);
@@ -780,8 +780,8 @@ export function drawEntityShadows() {
   const view = visibleWorldBounds(160);
   const seen = x => x >= view.left && x <= view.right;
   const budget = renderBudget();
-  if (player && !Game.inMine && seen(player.x)) groundShadow(player.x,22,0.24);
-  for (const u of units)   { if (!u.mine && seen(u.x)) groundShadow(u.x,11,0.2); }
+  if (player && seen(player.x)) groundShadow(player.x,22,0.24);
+  for (const u of units)   { if (seen(u.x)) groundShadow(u.x,11,0.2); }
   for (const v of vagrants) { if (seen(v.x)) groundShadow(v.x,11,0.2); }
   let enemyShadowIndex = 0;
   for (const e of enemies)  {
@@ -4026,8 +4026,6 @@ export function drawStations() {
   }
   if (state.base && state.base.level >= 2 && seen(STATIONS_X.shop)) drawShopBuilding(STATIONS_X.shop);
   if (state.base && state.base.level >= 3 && seen(STATIONS_X.guard)) drawGuardStation(STATIONS_X.guard);
-  if (state.base && state.base.level >= 3 && !state.mineBuilt && seen(STATIONS_X.mine)) drawBuildMarker(STATIONS_X.mine, "#d8b46a");
-  if (state.mineBuilt && seen(STATIONS_X.mine)) drawMineEntrance(STATIONS_X.mine);
   if (state.base && state.base.level >= 3 && seen(STATIONS_X.runeforge)) drawRuneforge(STATIONS_X.runeforge);
 }
 
@@ -4097,32 +4095,6 @@ function drawRuneforge(x) {
   }
   ctx.restore();
   drawStationIcon(x, "🔮");
-}
-
-function drawMineEntrance(x) {
-  ctx.save();
-  // earth mound with a dark, framed opening
-  ctx.fillStyle="#4a4038";
-  ctx.beginPath(); ctx.moveTo(x-46,groundY); ctx.quadraticCurveTo(x,groundY-70,x+46,groundY); ctx.closePath(); ctx.fill();
-  ctx.fillStyle="#3a322c";
-  ctx.beginPath(); ctx.moveTo(x-32,groundY); ctx.quadraticCurveTo(x,groundY-54,x+32,groundY); ctx.closePath(); ctx.fill();
-  ctx.fillStyle="#0c0a10";
-  ctx.beginPath(); ctx.moveTo(x-15,groundY); ctx.lineTo(x-15,groundY-24); ctx.quadraticCurveTo(x,groundY-40,x+15,groundY-24); ctx.lineTo(x+15,groundY); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle="#6a4a28"; ctx.lineWidth=4; ctx.lineCap="round";
-  ctx.beginPath(); ctx.moveTo(x-18,groundY); ctx.lineTo(x-18,groundY-27); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x+18,groundY); ctx.lineTo(x+18,groundY-27); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x-22,groundY-27); ctx.lineTo(x+22,groundY-27); ctx.stroke();
-  // ladder disappearing into the dark
-  ctx.strokeStyle="#8a6a3a"; ctx.lineWidth=2;
-  ctx.beginPath(); ctx.moveTo(x-5,groundY-18); ctx.lineTo(x-5,groundY); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x+5,groundY-18); ctx.lineTo(x+5,groundY); ctx.stroke();
-  for (let r=0;r<3;r++) { ctx.beginPath(); ctx.moveTo(x-5,groundY-15+r*6); ctx.lineTo(x+5,groundY-15+r*6); ctx.stroke(); }
-  // warm lantern glow rising from below
-  const g=ctx.createRadialGradient(x,groundY-8,2,x,groundY-8,26);
-  g.addColorStop(0,"rgba(255,180,80,0.35)"); g.addColorStop(1,"rgba(255,140,40,0)");
-  ctx.fillStyle=g; ctx.fillRect(x-26,groundY-40,52,40);
-  ctx.restore();
-  drawStationIcon(x, "⛏");
 }
 
 // ---------- Unlockable buildings (watchtower, lumber camp, shrine) ----------

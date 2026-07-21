@@ -1,4 +1,4 @@
-import { CFG, MINE } from '../config/config.js';
+import { CFG } from '../config/config.js';
 import { ENEMY_TYPES, BIOME_ENEMY_POOLS } from '../config/enemies.js?v=biomeactive1';
 import { ANIMAL_TYPES, BIOME_ANIMAL_POOLS, animalDef } from '../config/animals.js';
 import { WEAPONS, RARITY_COL, RARITY_NAME } from '../config/weapons.js?v=biomeweapons1';
@@ -316,12 +316,11 @@ export const UI = {
     }
 
     let near=null, nd=CFG.payRange;
-    for (const s of stations) { if (!!s.mineLayer!==Game.inMine) continue; const c=s.cost(); if (c<=0) continue; const d=dist(player.x,s.x()); if (d<nd) { nd=d; near=s; } }
-    const vagNear=!Game.inMine&&state.vagrants.find(v=>dist(player.x,v.x)<46&&Math.abs(v.vx)<1);
-    const lootNear=!Game.inMine&&state.lootItems&&state.lootItems.find(it=>dist(player.x,it.x)<50);
+    for (const s of stations) { const c=s.cost(); if (c<=0) continue; const d=dist(player.x,s.x()); if (d<nd) { nd=d; near=s; } }
+    const vagNear=state.vagrants.find(v=>dist(player.x,v.x)<46&&Math.abs(v.vx)<1);
+    const lootNear=state.lootItems&&state.lootItems.find(it=>dist(player.x,it.x)<50);
     const shopSt=stations.find(s=>s.id==="shop");
-    const nearShop=!Game.inMine&&shopSt&&state.base.level>=2&&dist(player.x,shopSt.x())<100;
-    const mineLadderNear=state.mineBuilt&&dist(player.x,MINE.entranceX)<70;
+    const nearShop=shopSt&&state.base.level>=2&&dist(player.x,shopSt.x())<100;
     const nearCastleUpgrades=canOpenCastleUpgrades();
     if (near) {
       this.prompt.classList.remove("hidden");
@@ -329,11 +328,6 @@ export const UI = {
       const action=near.instantPurchase ? "press \u2193/S" : "hold \u2193/S";
       const castleHint=near.id==="base"&&nearCastleUpgrades ? ` &nbsp;<span class="hold">C: castle upgrades</span>` : "";
       this.prompt.innerHTML=`${near.label()} &nbsp;<span class="cost">${near.cost()}\u{1FA99}</span>${prog} &nbsp;<span class="hold">${action}</span>${castleHint}`;
-    } else if (mineLadderNear) {
-      this.prompt.classList.remove("hidden");
-      this.prompt.innerHTML=Game.inMine
-        ? `Climb out of the mine &nbsp;<span class="hold">press F</span>`
-        : `⛏ Go down into the mine &nbsp;<span class="hold">press F</span>`;
     } else if (vagNear) {
       this.prompt.classList.remove("hidden");
       this.prompt.innerHTML=`Recruit subject &nbsp;<span class="cost">1🪙</span> &nbsp;<span class="hold">hold ↓/S</span>`;
@@ -348,7 +342,7 @@ export const UI = {
     } else if (nearCastleUpgrades && !Game.castleOpen) {
       this.prompt.classList.remove("hidden");
       this.prompt.innerHTML=`Castle upgrades &nbsp;<span class="hold">press C</span>`;
-    } else if (!Game.inMine && !state.assault && (Game.worldPhase || 1) === 1 && !Game.isNight
+    } else if (!state.assault && (Game.worldPhase || 1) === 1 && !Game.isNight
         && state.portals.some(p => !p.destroyed && dist(player.x, p.x) < 520)) {
       this.prompt.classList.remove("hidden");
       this.prompt.innerHTML=`⚔ Sound the war horn — send the army against this portal &nbsp;<span class="hold">press G</span>`;
@@ -642,7 +636,7 @@ export const DEV = {
     appendDevStat(fragment, "FX", fxCount);
     appendDevStat(fragment, "Render", `${budget.level} ${Math.round(load.fps || 0)}/${Math.round(load.targetFps || Game.targetFps || 144)}fps ${Math.round(load.score || 0)}`);
     appendDevStat(fragment, "Top Costs", top3);
-    appendDevStat(fragment, "Pos", Game.inMine ? "mine" : Math.round(player.x || 0));
+    appendDevStat(fragment, "Pos", Math.round(player.x || 0));
     appendDevStat(fragment, "Speed", `${this.speedMult}x`);
     el.replaceChildren(fragment);
   },
@@ -863,7 +857,6 @@ export const DEV = {
     if (!biome) return;
     setActiveBiome(id, { reseed: true });
     const x = CFG.baseX;
-    Game.inMine = false;
     state.assault = null;
     Game.phaseTransition = null;
     Game.worldPhase = 1;
@@ -963,19 +956,15 @@ export const DEV = {
 
   spawnUnit(role) {
     if (Game.state!=="play") return;
-    if (role === "miner" && !state.mineBuilt) {
-      floaty(state.base.x, "Build the mine first (base lvl 3)", "#ff8a6a");
-      return;
-    }
     const popCap = currentPopCap();
     if (state.units.length + state.vagrants.length >= popCap) {
       floaty(state.base.x,"Population cap reached","#ff8a6a");
       return;
     }
-    const x = role === "miner" ? MINE.stationX + pick([-1, 1]) * 30 : state.base.x + pick([-1, 1]) * 120;
+    const x = state.base.x + pick([-1, 1]) * 120;
     const u = makeUnit(role, x);
     state.units.push(u);
-    const roleNames = { archer: "🏹 Archer", builder: "🔨 Builder", farmer: "🌾 Farmer", guard: "🛡 Guard", miner: "⛏ Miner" };
+    const roleNames = { archer: "🏹 Archer", builder: "🔨 Builder", farmer: "🌾 Farmer", guard: "🛡 Guard" };
     floaty(state.base.x, roleNames[role] + " born!", "#9bd05a");
   },
 

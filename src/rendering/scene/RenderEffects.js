@@ -327,13 +327,12 @@ export function drawAegisStrikes() {
   }
 }
 
-export function drawParticles(mineLayer = false) {
+export function drawParticles() {
   const view = visibleWorldBounds(120);
   const particles = state.particles || [];
   const every = Math.max(1, renderBudget().particlesEvery || 1);
   for (let i = 0; i < particles.length; i += every) {
     const p = particles[i];
-    if (!!p.mine !== mineLayer) continue;
     if (p.x < view.left || p.x > view.right) continue;
     const alpha = p.fly ? 1 : (p.maxLife ? clamp(p.life / p.maxLife, 0, 1) : clamp(p.life * 1.5, 0, 1));
     ctx.globalAlpha = alpha * (p.alpha ?? 1);
@@ -374,12 +373,11 @@ export function drawParticles(mineLayer = false) {
   ctx.globalAlpha=1;
 }
 
-export function drawFloats(mineLayer = false) {
+export function drawFloats() {
   ctx.textAlign="center";
   let lastSz = 0;
   const view = visibleWorldBounds(180);
   for (const f of state.floatTexts) {
-    if (!!f.mine !== mineLayer) continue;
     if (f.x < view.left || f.x > view.right) continue;
     const sz = f.size || 15;
     ctx.globalAlpha=clamp(f.life,0,1);

@@ -16,7 +16,6 @@ import { drawVagrants, drawUnits, drawAnimals } from './scene/RenderUnits.js?v=b
 import { drawCoins, drawGoldCollectors, drawArrows, drawLootItems, drawChests, drawGroundBows, drawGroundHammers } from './scene/RenderItems.js?v=biomeweapons1';
 import { drawCaltrops, drawPoisonShots, drawFirePools, drawSpellFields, drawLegendaryEffects, drawAegisStrikes, drawParticles, drawFloats, drawSpells, drawCampLight } from './scene/RenderEffects.js?v=biomeactive1';
 import { drawWeaponPickupOverlay, drawInventoryOverlay, drawShopOverlay, drawCastleUpgradeOverlay, drawUpgradeMenu, drawXpBar, drawLegendaryIntro, drawOneSidedAnnounce } from './scene/RenderUI.js?v=biomeactive1';
-import { drawMineCutaway } from './scene/RenderMine.js';
 import { drawHeart } from './DrawHelpers.js?v=biomeweapons1';
 import { beginRenderFrame } from './RenderFrame.js';
 // Profiler uses window._perf (set by HUD toggle)
@@ -373,7 +372,7 @@ export function render() {
   ctx.translate(W/2+_skx, groundY+_sky); ctx.scale(zoom,zoom); ctx.translate(-W/2-Game.cam,-groundY);
 
   if(p) p.begin("draw.terrain");
-  drawGroundTexture(dark); drawGroundDeco(dark); drawPonds(dark); drawMineCutaway(drawPlayer, dark); drawForestCamps(dark); drawForestTrees(dark); drawWildBirds();
+  drawGroundTexture(dark); drawGroundDeco(dark); drawPonds(dark); drawForestCamps(dark); drawForestTrees(dark); drawWildBirds();
   if(p) p.end("draw.terrain");
 
   if(p) p.begin("draw.structures");
@@ -383,7 +382,7 @@ export function render() {
 
   if(p) p.begin("draw.entities");
   drawAnimals(); drawVagrants(); drawCaltrops(); drawFirePools(); drawSpellFields(); drawUnits(); drawEnemies(dark); drawLegendaryEffects();
-  if (!Game.inMine) drawPlayer(dark);
+  drawPlayer(dark);
   if(p) p.end("draw.entities");
 
   if(p) p.begin("draw.fx");

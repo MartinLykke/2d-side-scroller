@@ -1,11 +1,10 @@
-import { Game, state } from '../../core/state.js';
+import { state } from '../../core/state.js';
 import { MOUNTS } from '../../config/mounts.js';
 import { groundY } from '../../core/canvas.js';
 import { spawnParticles, floaty } from '../world/SpawnSystem.js';
 import { Audio } from '../infrastructure/Audio.js';
 
 // Owned mounts live on player.mounts (ids); the ridden one is player.mountId.
-// Mounts are stabled underground: no riding (or lift) inside the mine.
 
 export function playerOwnsMount(mountId) {
   return (state.player?.mounts || []).includes(mountId);
@@ -13,7 +12,7 @@ export function playerOwnsMount(mountId) {
 
 // The mount the player is visibly riding right now, or null.
 export function activeMount(p = state.player) {
-  if (!p || !p.mountId || Game.inMine) return null;
+  if (!p || !p.mountId) return null;
   if (p.climbingWall) return null; // the horse waits below while you climb
   return MOUNTS[p.mountId] || null;
 }
@@ -51,7 +50,7 @@ export function acquireMount(mountId) {
 // last mount ridden (H key).
 export function toggleMount(mountId = null) {
   const p = state.player;
-  if (!p || Game.inMine) return;
+  if (!p) return;
   p.mounts = p.mounts || [];
   if (mountId === null) mountId = p.mountId || p.lastMountId || p.mounts[p.mounts.length - 1];
   if (!mountId || !p.mounts.includes(mountId)) return;

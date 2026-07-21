@@ -57,13 +57,6 @@ export const CFG = {
   shrineCost: 18,
   shrineRange: 190,
   shrineHealTime: 3.5,
-  // Mine (unlocked at base level 3): underground gold digging below the base
-  mineCost: 24,
-  minerCost: 5,
-  minerInterval: 3.5,     // seconds of digging per gold coin
-  mineVeinOre: 6,         // coins per vein before it is exhausted
-  mineMaxLooseCoins: 80,  // miners stop digging when this much gold lies uncollected
-  mineExpandStep: 170,    // how far a tunnel wall pushes out when its vein is exhausted
   repairAllCost: 14,
   reinforceCostBase: 26,
   reinforceCostPerDay: 2,
@@ -90,24 +83,7 @@ export const STATIONS_X = {
   farm:   CFG.baseX - 480,
   shop:   CFG.baseX + 445, // between the two right wall slots (mirrors the farm on the left)
   guard:  CFG.baseX + 220,
-  mine:   CFG.baseX - 250,
   runeforge: CFG.baseX - 550, // between the left walls and the farm
-};
-
-// Underground mine below the base. Shares the surface x-coordinate space and
-// ground line — only the rendered scene differs. The ladder sits at the same
-// x as the surface entrance.
-export const MINE = {
-  left:  CFG.baseX - 660,
-  right: CFG.baseX + 660,
-  // The mine starts as one small chamber around the entrance/station and
-  // widens outward (see MineSystem.expandMine) as the frontier veins embedded
-  // in its end walls are dug out, up to left/right above.
-  startLeft:  STATIONS_X.mine - 90,
-  startRight: CFG.baseX - 40 + 110,
-  entranceX: STATIONS_X.mine,
-  stationX:  CFG.baseX - 40,
-  depth: 136, // mine floor sits this far below the surface ground line
 };
 
 export const WALL_SLOTS = [

@@ -1,7 +1,7 @@
 import { CFG } from '../../config/config.js';
 import { dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
-import { Game, state } from '../../core/state.js';
+import { state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
 import { spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js';
 import { meleeHitPlayer } from '../combat/PlayerCombat.js?v=biomeweapons1';
@@ -163,7 +163,7 @@ export function updateImpAttack(e, t, dt) {
 
 export function updateImpPlayerCombat(e, t, dt) {
   const player = state.player;
-  if (!player || player.hp <= 0 || Game.inMine || e.wallTopWall || e.aiState === "climbOver" || e.aiState === "stacking" || e.aiState === "stackQueue") return false;
+  if (!player || player.hp <= 0 || e.wallTopWall || e.aiState === "climbOver" || e.aiState === "stacking" || e.aiState === "stackQueue") return false;
   if (playerCombatLift() > 20) return false;
   const d = dist(e.x, player.x);
   const near = d < 130 && e.carry === 0;

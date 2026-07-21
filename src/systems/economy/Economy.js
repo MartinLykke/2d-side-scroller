@@ -13,7 +13,6 @@ function flyingCoin(fromX, toX) {
     x: fromX, y: groundY - 60, vx: 0, vy: 0, life: 0.32,
     color: "#f2c14e", size: 3,
     toX, fromX, fromY: groundY - 60, toY: groundY - 50, t: 0, fly: true,
-    mine: Game.inMine,
   });
 }
 
@@ -52,7 +51,6 @@ export function updatePayment(dt) {
 
   let near = null, nd = CFG.payRange;
   for (const s of stations) {
-    if (!!s.mineLayer !== Game.inMine) continue; // stations only reachable on the player's layer
     const c = s.cost();
     if (c <= 0) continue;
     const d = dist(player.x, s.x());
@@ -61,8 +59,7 @@ export function updatePayment(dt) {
 
   if (state.lastPaidStation && state.lastPaidStation !== near && state.lastPaidStation.paid > 0) {
     for (let i = 0; i < state.lastPaidStation.paid; i++) {
-      const c = spawnCoin(state.lastPaidStation.x() + rand(-20, 20), 1, groundY - 20, rand(-30, 30), rand(-160, -80));
-      c.mine = !!state.lastPaidStation.mineLayer;
+      spawnCoin(state.lastPaidStation.x() + rand(-20, 20), 1, groundY - 20, rand(-30, 30), rand(-160, -80));
     }
     state.lastPaidStation.paid = 0;
   }
@@ -126,7 +123,7 @@ function seedCollectorFallback(index) {
 function nearestCollectorCoin(collector, range, claimed) {
   let best = null, bd = range;
   for (const c of state.coins) {
-    if (!c.settled || c.mine || claimed.has(c)) continue;
+    if (!c.settled || claimed.has(c)) continue;
     const d = dist(collector.x, c.x);
     if (d < bd) { bd = d; best = c; }
   }
@@ -156,7 +153,7 @@ function updateGoldCollectors(dt) {
     w.sparkleT = Math.max(0, (w.sparkleT || 0) - dt);
     w.flash = Math.max(0, (w.flash || 0) - dt);
 
-    if (w.target && (!coins.includes(w.target) || !w.target.settled || w.target.mine || claimed.has(w.target))) {
+    if (w.target && (!coins.includes(w.target) || !w.target.settled || claimed.has(w.target))) {
       w.target = null;
     }
 
@@ -201,7 +198,6 @@ export function updateCoins(dt) {
       c.x  += (c.vx || 0) * dt;
       if (c.y >= groundY) { c.y = groundY; c.vy = 0; c.vx = 0; c.settled = true; }
     }
-    if (!!c.mine !== Game.inMine) continue; // only pick up coins on the player's layer
     const d = dist(c.x, player.x);
     const magnetRange = playerCoinMagnetRange();
     const coinCap = currentCoinCap();
@@ -219,9 +215,9 @@ export function updateCoins(dt) {
     }
     // Archers scoop up coins they walk past (out of the player's magnet range),
     // then hand the gold to the player when nearby (see dropArcherGoldToPlayer)
-    if (c.settled && !c.mine) {
+    if (c.settled) {
       for (const u of state.units) {
-        if (u.role !== "archer" || u.hp <= 0 || u.dying || u.mine) continue;
+        if (u.role !== "archer" || u.hp <= 0 || u.dying) continue;
         if (dist(c.x, u.x) < 26) {
           u.gold = (u.gold || 0) + c.value;
           coins.splice(i, 1);

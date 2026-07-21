@@ -11,7 +11,6 @@ import { killEnemyWithAnimation, spawnImpBlood, spawnHumanBlood } from '../../ut
 import { wallHeight, wallStandX, wallBackDir, wallRenderWidth, wallPlatformDepth, overWallPlatform, entityWallLift } from '../../entities/Wall.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { nearestChoppableTree, chopTree, nearestLog, deliverLog, pondAt, nearestPond } from '../world/ForestSystem.js?v=biomeactive1';
-import { minerAI } from '../world/MineSystem.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { addSkillPoints } from '../economy/SkillSystem.js';
 import { archerAI as archerRoleAI } from './ArcherAI.js?v=biomeactive1';
@@ -586,7 +585,7 @@ function archerAI(u, dt) {
 // stacking on a single pixel
 function separateFromArchers(u, dt) {
   for (const o of state.units) {
-    if (o === u || o.role !== "archer" || o.onWall || o.mine) continue;
+    if (o === u || o.role !== "archer" || o.onWall) continue;
     const d = o.x - u.x;
     if (Math.abs(d) < 46) u.x -= (Math.sign(d) || (state.units.indexOf(u) > state.units.indexOf(o) ? 1 : -1)) * 42 * dt;
   }
@@ -1231,7 +1230,6 @@ const AI_HANDLERS = {
   farmer:  farmerRoleAI,
   peasant: peasantAI,
   guard:   guardRoleAI,
-  miner:   minerAI,
   hound:   houndAI,
 };
 
@@ -1280,7 +1278,7 @@ function updateUnitBuffTimers(u, dt) {
 }
 
 function rallyUnitHome(u, dt) {
-  if ((u.rallyHomeT || 0) <= 0 || u.mine) return false;
+  if ((u.rallyHomeT || 0) <= 0) return false;
   const target = u.rallyTargetX ?? CFG.baseX;
   if (dist(u.x, CFG.baseX) <= (CFG.rallyHomeRadius || 320)) return false;
   u.panic = 0;
@@ -1378,7 +1376,7 @@ export function updateUnits(dt) {
       u.moving = false;
       continue;
     }
-    if ((u.rooted || 0) > 0 && (u.role === "builder" || u.role === "farmer" || u.role === "miner")) {
+    if ((u.rooted || 0) > 0 && (u.role === "builder" || u.role === "farmer")) {
       u.vx = 0;
       u.shootState = null;
       u.moving = false;
@@ -1438,7 +1436,7 @@ export function triggerRoyalRally() {
   let rallied = 0;
   const spread = 180;
   for (const u of state.units) {
-    if (u.hp <= 0 || u.dying || u.mine) continue;
+    if (u.hp <= 0 || u.dying) continue;
     const side = u.x < CFG.baseX ? -1 : 1;
     u.rallyHomeT = CFG.rallyDuration || 4.8;
     u.rallyBoostT = (CFG.rallyDuration || 4.8) + 1.2;
@@ -1620,7 +1618,7 @@ const BASE_COIN_ZONE = 640; // outermost wall slot is baseX ± 620
 function nearestGroundCoin(x, range) {
   let best = null, bd = range;
   for (const c of state.coins) {
-    if (!c.settled || c.mine) continue;
+    if (!c.settled) continue;
     if (state.player && dist(c.x, state.player.x) < 90) continue;
     if (Math.abs(c.x - CFG.baseX) < BASE_COIN_ZONE) continue;
     const d = dist(x, c.x);
@@ -1975,7 +1973,7 @@ function bearResolveStrike(a) {
   if (dist(target.x, a.x) > BEAR_REACH + 18) return; // prey slipped out of the arc
 
   if (target === player) {
-    if (player.hp <= 0 || Game.inMine) return;
+    if (player.hp <= 0) return;
     // The swipe only reaches so high — an airborne player is out of range
     if ((player.jumpH || 0) + entityWallLift(player) > BEAR_AIR_REACH) return;
     damagePlayer(1, { knock: Math.sign(player.x - a.x) * 190 });
@@ -2030,9 +2028,9 @@ function updateBear(a, dt) {
   // Sight: wider once already aggroed so victims can't juke it easily
   const sight = a.state === "chase" ? 430 : 320;
   let target = null, td = sight;
-  if (player && player.hp > 0 && !Game.inMine && !(player.onWall && player.wall && activeBearWall(player.wall))) { const d = dist(player.x, a.x); if (d < td) { td = d; target = player; } }
+  if (player && player.hp > 0 && !(player.onWall && player.wall && activeBearWall(player.wall))) { const d = dist(player.x, a.x); if (d < td) { td = d; target = player; } }
   for (const u of units) {
-    if (u.mine || (u.onWall && u.wall && activeBearWall(u.wall))) continue;
+    if (u.onWall && u.wall && activeBearWall(u.wall)) continue;
     const d = dist(u.x, a.x);
     if (d < td) { td = d; target = u; }
   }

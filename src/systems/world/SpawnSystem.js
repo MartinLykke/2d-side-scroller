@@ -97,7 +97,6 @@ export function spawnGoldCoins(x, amount, opts = {}) {
       rand(-(opts.vx || 80), opts.vx || 80),
       rand(-(opts.vyMax || 260), -(opts.vyMin || 120))
     );
-    if (opts.mine) c.mine = true;
   }
 }
 
@@ -581,7 +580,7 @@ export function updateSpawning(dt) {
   state.animalTimer -= dt;
   if (state.animalTimer <= 0) {
     state.animalTimer = rand(3, 6);
-    if (!Game.isNight && !Game.inMine) {
+    if (!Game.isNight) {
       const focusX = animalFocusX();
       spawnAnimal({
         near: nearbyAnimalCount(focusX, NEAR_ANIMAL_RADIUS) < NEAR_ANIMAL_TARGET || Math.random() < 0.75,

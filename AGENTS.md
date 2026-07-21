@@ -122,7 +122,7 @@ Enemies spawn from portals, advance toward base, stack on walls. Flee at dawn.
 |-------|------|-----|----------|---------|
 | 1 | Camp | 60 | 8 | — |
 | 2 | Small Village | 90 | 16 | Shop, farm, hammer, lumber camps |
-| 3 | Large Village | 130 | 26 | Towers, shrine, guards, mine |
+| 3 | Large Village | 130 | 26 | Towers, shrine, guards |
 | 4 | Castle | 180 | 40 | Free lumber, +1 player max HP, repair station |
 | 5 | Fortress | 250 | 52 | — |
 | 6 | Citadel | 330 | 66 | Ballista emplacements |

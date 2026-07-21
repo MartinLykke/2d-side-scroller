@@ -1,7 +1,7 @@
 import { CFG } from '../../config/config.js';
 import { clamp, lerp, dist, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
-import { Game, state } from '../../core/state.js';
+import { state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
 import { spawnParticles, critFloaty } from '../world/SpawnSystem.js';
 import { wallReady, wallRenderWidth, entityWallLift } from '../../entities/Wall.js';
@@ -36,9 +36,9 @@ export function approachSpeedMult(distToBase) {
 
 export function unopposedSprintMult(e) {
   const { player, units } = state;
-  if (!Game.inMine && dist(e.x, player.x) < UNOPPOSED_RANGE) return 1;
+  if (dist(e.x, player.x) < UNOPPOSED_RANGE) return 1;
   for (const u of units) {
-    if (u.hp <= 0 || u.dying || u.mine) continue;
+    if (u.hp <= 0 || u.dying) continue;
     if (dist(e.x, u.x) < UNOPPOSED_RANGE) return 1;
   }
   return UNOPPOSED_SPRINT_MULT;

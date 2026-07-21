@@ -73,9 +73,9 @@ const UNOPPOSED_RANGE = 260;
 const UNOPPOSED_SPRINT_MULT = 2.4;
 function unopposedSprintMult(e) {
   const { player, units } = state;
-  if (!Game.inMine && dist(e.x, player.x) < UNOPPOSED_RANGE) return 1;
+  if (dist(e.x, player.x) < UNOPPOSED_RANGE) return 1;
   for (const u of units) {
-    if (u.hp <= 0 || u.dying || u.mine) continue;
+    if (u.hp <= 0 || u.dying) continue;
     if (dist(e.x, u.x) < UNOPPOSED_RANGE) return 1;
   }
   return UNOPPOSED_SPRINT_MULT;
@@ -423,7 +423,7 @@ function nearestGroundDefenderForImp(e, range = 220) {
   let best = null, bd = range;
   let bestOther = null, bod = range;
   for (const u of state.units) {
-    if (u.hp <= 0 || u.dying || u.mine) continue;
+    if (u.hp <= 0 || u.dying) continue;
     const d = dist(e.x, u.x);
     if (u.role === "guard") { if (d < bd) { bd = d; best = u; } }
     else if (!u.onWall) { if (d < bod) { bod = d; bestOther = u; } }
@@ -575,12 +575,12 @@ function shootEnemyFireball(e, t, target) {
 function fireImpTarget(e, range) {
   let best = null, bd = range;
   const player = state.player;
-  if (player && player.hp > 0 && !Game.inMine) {
+  if (player && player.hp > 0) {
     const d = dist(e.x, player.x);
     if (d < bd) { bd = d; best = player; }
   }
   for (const u of state.units) {
-    if (u.hp <= 0 || u.dying || u.mine) continue;
+    if (u.hp <= 0 || u.dying) continue;
     const d = dist(e.x, u.x);
     if (d < bd) { bd = d; best = u; }
   }
@@ -719,7 +719,7 @@ function updateImpAttack(e, t, dt) {
 
 function updateImpPlayerCombat(e, t, dt) {
   const player = state.player;
-  if (!player || player.hp <= 0 || Game.inMine || e.wallTopWall || e.aiState === "climbOver" || e.aiState === "stacking" || e.aiState === "stackQueue" || e.aiState === "climbChain") return false;
+  if (!player || player.hp <= 0 || e.wallTopWall || e.aiState === "climbOver" || e.aiState === "stacking" || e.aiState === "stackQueue" || e.aiState === "climbChain") return false;
   if (playerCombatLift() > 20) return false;
   const d = dist(e.x, player.x);
   const near = d < 130 && e.carry === 0;
@@ -894,12 +894,12 @@ function ashTargetY(target) {
 function ashPriestTarget(e, range) {
   let best = null, bd = range;
   const player = state.player;
-  if (player && player.hp > 0 && !Game.inMine) {
+  if (player && player.hp > 0) {
     const d = dist(e.x, player.x);
     if (d < bd) { bd = d; best = player; }
   }
   for (const u of state.units) {
-    if (u.hp <= 0 || u.dying || u.mine) continue;
+    if (u.hp <= 0 || u.dying) continue;
     const d = dist(e.x, u.x);
     if (d < bd) { bd = d; best = u; }
   }
@@ -1017,11 +1017,11 @@ function ashPriestBurst(e, t) {
   e.attackAnim = 0.42;
   let hit = false;
   const player = state.player;
-  if (player && player.hp > 0 && !Game.inMine && dist(e.x, player.x) < radius && playerCombatLift() <= 24) {
+  if (player && player.hp > 0 && dist(e.x, player.x) < radius && playerCombatLift() <= 24) {
     if (damagePlayer(1, { knock: Math.sign(player.x - e.x || 1) * 230 }) !== null) hit = true;
   }
   for (const u of state.units) {
-    if (u.hp <= 0 || u.dying || u.mine || u.onWall) continue;
+    if (u.hp <= 0 || u.dying || u.onWall) continue;
     if (dist(e.x, u.x) < radius) {
       const crit = applyCrit(1, CFG.critChance, CFG.critMultiplier);
       u.hp -= crit.damage;
@@ -1156,7 +1156,7 @@ function updateImp(e, t, dt) {
   if ((e.aiState === "advance" || !e.aiState) && e.carry === 0) {
     let b = null, bd = 150;
     for (const u of state.units) {
-      if (u.hp <= 0 || u.dying || u.onWall || u.mine) continue;
+      if (u.hp <= 0 || u.dying || u.onWall) continue;
       if (impDefenderBlockedByWall(e, u)) continue;
       const d = dist(e.x, u.x);
       if (d < bd) { bd = d; b = u; }
@@ -1826,14 +1826,14 @@ export function updateEnemies(dt) {
       }
       e.dir = Math.sign(base.x - e.x) || e.dir;
       e.x += e.dir * t.speed * unopposedSprintMult(e) * approachSpeedMult(Math.abs(base.x - e.x)) * dt;
-      if (!Game.inMine && e.shootCd !== undefined && e.shootCd <= 0 && dist(e.x, player.x) < 380) {
+      if (e.shootCd !== undefined && e.shootCd <= 0 && dist(e.x, player.x) < 380) {
         const arrowY = groundY + (e.fy || -80);
         state.arrows.push({ x: e.x, y: arrowY, vx: Math.sign(player.x - e.x) * 320, vy: 180, target: {x: player.x}, life: 1.5, hitKind: "player" });
         e.shootCd = 2.2;
         startEnemyAttack(e, 0.34, { kind: "cast", impact: 0.18 });
         Audio.bow();
       }
-      if (!Game.inMine && dist(e.x, player.x) < 28 && Math.abs((groundY + (e.fy || -80)) - (groundY - 50 - playerCombatLift())) < 72 && e.attackCd <= 0) {
+      if (dist(e.x, player.x) < 28 && Math.abs((groundY + (e.fy || -80)) - (groundY - 50 - playerCombatLift())) < 72 && e.attackCd <= 0) {
         if (damagePlayer(1) !== null) { e.attackCd = 1.5; e.fleeing = true; }
       }
       continue;
@@ -1929,7 +1929,7 @@ export function updateEnemies(dt) {
         e.chargeT = (e.chargeT || 0) + dt;
         e.x += e.chargeDir * t.speed * 3.2 * dt;
         if (Math.random() < 0.6) spawnParticles(e.x - e.chargeDir * 10, groundY - 6, 2, "#ff6a20", 40, 40);
-        const hitPlayer = !Game.inMine && dist(e.x, player.x) < 34 && player.invuln <= 0 && !inject('godMode');
+        const hitPlayer = dist(e.x, player.x) < 34 && player.invuln <= 0 && !inject('godMode');
         if (hitPlayer) {
           meleeHitPlayer(e, { ...t, meleeDmg: (t.meleeDmg || 1) + 1 }, 340);
           e.charging = false;
@@ -1939,7 +1939,7 @@ export function updateEnemies(dt) {
           e.charging = false;
           changeState(e, "recovery", 0.3);
         }
-      } else if (t.charger && !Game.inMine && !e.fleeing && e.chargeCd <= 0 && e.aiState !== "recovery") {
+      } else if (t.charger && !e.fleeing && e.chargeCd <= 0 && e.aiState !== "recovery") {
         const d = dist(e.x, player.x);
         if (d > t.chargeRangeMin && d < t.chargeRangeMax) {
           e.charging = true;
@@ -1957,11 +1957,11 @@ export function updateEnemies(dt) {
         e.stompCd = rand(t.stompMin, t.stompMax);
         const radius = t.stompRadius || 90;
         let hitSomething = false;
-        if (!Game.inMine && dist(e.x, player.x) < radius && playerCombatLift() <= 20) {
+        if (dist(e.x, player.x) < radius && playerCombatLift() <= 20) {
           if (damagePlayer(t.meleeDmg || 1, { knock: Math.sign(player.x - e.x || 1) * 260 }) !== null) hitSomething = true;
         }
         for (const u of units) {
-          if (u.hp <= 0 || u.dying || u.mine || u.onWall) continue;
+          if (u.hp <= 0 || u.dying || u.onWall) continue;
           if (dist(e.x, u.x) < radius) {
             const crit = applyCrit(2, CFG.critChance, CFG.critMultiplier);
             u.hp -= crit.damage; u.panic = 1;
@@ -2030,11 +2030,10 @@ export function updateEnemies(dt) {
       e.aggroUnit = null;
     }
 
-    if (!Game.inMine && dist(e.x, player.x) < 280 && e.carry === 0) {
+    if (dist(e.x, player.x) < 280 && e.carry === 0) {
       e.aggroPlayer = true;
       e.aggroTimer = 6;
     }
-    if (Game.inMine) e.aggroPlayer = false;
 
     if (e.aggroTimer > 0)
       e.aggroTimer -= dt;
@@ -2084,7 +2083,7 @@ export function updateEnemies(dt) {
     if (e.type === "imp") e.aggroUnit = null;
     if (!e.aggroUnit && e.type !== "imp") {
       let best = null, bd = 200;
-      for (const u of units) { if (u.mine) continue; const d = dist(e.x, u.x); if (d < bd) { bd = d; best = u; } }
+      for (const u of units) { const d = dist(e.x, u.x); if (d < bd) { bd = d; best = u; } }
       if (best) e.aggroUnit = best;
     }
     if (e.aggroUnit) {
@@ -2130,7 +2129,7 @@ export function updateEnemies(dt) {
     }
 
 
-    if (!Game.inMine && t.rangedShoot && e.poisonCd <= 0 && dist(e.x, player.x) < t.shootRange && e.aiState !== "recovery") {
+    if (t.rangedShoot && e.poisonCd <= 0 && dist(e.x, player.x) < t.shootRange && e.aiState !== "recovery") {
       const launchY = groundY - t.w * 0.7;
       const dx = player.x - e.x;
       const flightT = 1.4;

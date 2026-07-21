@@ -61,13 +61,13 @@ function estimateRenderLoad(baseView) {
     if (e.dying) enemyWeight += 0.6;
   }
 
-  const units = countVisibleX(state.units, left, right, u => !u.mine);
+  const units = countVisibleX(state.units, left, right);
   const vagrants = countVisibleX(state.vagrants, left, right);
   const animals = countVisibleX(state.animals, left, right, a => a.alive);
   const arrows = countVisibleX(state.arrows, left, right);
-  const coins = countVisibleX(state.coins, left, right, c => !c.mine);
-  const particles = countVisibleX(state.particles, left, right, p => !p.mine);
-  const floats = countVisibleX(state.floatTexts, left, right, f => !f.mine);
+  const coins = countVisibleX(state.coins, left, right);
+  const particles = countVisibleX(state.particles, left, right);
+  const floats = countVisibleX(state.floatTexts, left, right);
   const spells = countVisibleX(state.spells, left, right);
 
   const entities = enemies + units + vagrants + animals + arrows + coins + spells;

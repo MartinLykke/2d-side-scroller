@@ -37,7 +37,6 @@ export const Game = {
   hubTransitionT: 0,
   hubTransitionFromX: 0,
   runStartAnim: 0,
-  inMine: false,
   killStreak: 0,
   killStreakTimer: 0,
   momentumLevel: 0,
@@ -103,10 +102,6 @@ export const state = {
   aegisStrikes: [],
   firePools: [],
   beacon: null,
-  mineBuilt: false,
-  mineVeins: [],
-  mineActiveLeft: 0,
-  mineActiveRight: 0,
   assault: null, // active portal assault ({ phase, portal, ... }) or null
   castleUpgrades: { masonry: 0, garrison: 0, treasury: 0, aegis: 0 },
 };

@@ -1,7 +1,7 @@
 "use strict";
 
 // ---------- Bootstrap ----------
-import { CFG, WALL_SLOTS, PORTALS, STATIONS_X, MINE, FOREST } from '../config/config.js';
+import { CFG, WALL_SLOTS, PORTALS, STATIONS_X, FOREST } from '../config/config.js';
 import { ARMORS } from '../config/armor.js';
 import { clamp, clampCameraTarget, dist, lerp, rand, randInt, pick } from '../util/math.js';
 import { canvas, ctx, W, H, groundY, resize } from './canvas.js';
@@ -13,7 +13,6 @@ import { saveGame, hasSave, loadGame, deleteSave } from '../systems/infrastructu
 import { updateSpawning, floaty, spawnParticles, spawnAnimal, planNight, spawnEnemy, portalGuardianType } from '../systems/world/SpawnSystem.js?v=biomeactive1';
 import { updatePayment, updateCoins } from '../systems/economy/Economy.js';
 import { updateForestTrees, updateForestCamps } from '../systems/world/ForestSystem.js?v=biomeactive1';
-import { updateMine } from '../systems/world/MineSystem.js';
 import { updateBuildings } from '../systems/world/OutpostSystem.js?v=biomeactive1';
 import { updateUnits, updateAssignments, updateVagrants, updateAnimals, nearestEnemy, updateCaltrops } from '../systems/ai/AI.js?v=biomevisual1';
 import { updateEnemies, updateArrows, updatePlayerAttack, updateSpells } from '../systems/combat/Combat.js?v=biomeactive1';
@@ -168,7 +167,7 @@ function grantNightClearReward() {
 }
 
 function startPlayerDodge(player, move) {
-  if (Game.inMine || player.onWall || (player.wallClimbT || 0) > 0.02) return false;
+  if (player.onWall || (player.wallClimbT || 0) > 0.02) return false;
   if ((player.jumpH || 0) > 1 || (player.jumpVy || 0) > 0) return false;
   if ((player.dodgeCd || 0) > 0 || (player.dodgeT || 0) > 0) return false;
 
@@ -220,7 +219,7 @@ function grantDodgeRiposte(player, enemy) {
 }
 
 function checkDodgeRiposte(player) {
-  if (player.dodgeNearMiss || Game.inMine) return;
+  if (player.dodgeNearMiss) return;
   const range = CFG.dodgeRiposteRange || 76;
   for (const e of state.enemies) {
     if (e.fleeing || e.dying || e.hp <= 0) continue;
@@ -242,14 +241,6 @@ function nearestPlayerWallAccess(player) {
 }
 
 function updatePlayerWallClimb(player, dt, upHeld, downHeld) {
-  if (Game.inMine) {
-    player.wall = null;
-    player.onWall = false;
-    player.wallClimbT = 0;
-    player.climbingWall = false;
-    return false;
-  }
-
   const accessWall = nearestPlayerWallAccess(player);
   const oldWall = wallReady(player.wall) ? player.wall : null;
   const oldT = player.wallClimbT || (player.onWall ? 1 : 0);
@@ -338,8 +329,7 @@ function updatePlayer(dt) {
     if (move!==0) player.dir=move;
   }
 
-  if (Game.inMine) player.x=clamp(player.x+player.vx*dt, state.mineActiveLeft+24, state.mineActiveRight-24);
-  else player.x=clamp(player.x+player.vx*dt, 120, CFG.worldWidth-120);
+  player.x=clamp(player.x+player.vx*dt, 120, CFG.worldWidth-120);
   if (dodging) checkDodgeRiposte(player);
 
   const strideTarget = dodging ? 20 : move!==0 ? (sprint?16:10) : 0;
@@ -353,9 +343,7 @@ function updatePlayer(dt) {
   // translating the whole body here doubled the motion and caused sub-pixel shimmer.
   player.bob*=Math.exp(-9*dt);
   if (player.knock) {
-    const minX = Game.inMine ? state.mineActiveLeft + 24 : 120;
-    const maxX = Game.inMine ? state.mineActiveRight - 24 : CFG.worldWidth - 120;
-    player.x=clamp(player.x+player.knock*dt,minX,maxX);
+    player.x=clamp(player.x+player.knock*dt,120,CFG.worldWidth-120);
     player.knock*=0.86;
     if (Math.abs(player.knock)<6) player.knock=0;
   }
@@ -365,8 +353,6 @@ function updatePlayer(dt) {
   }
   player.jumpH += player.jumpVy * dt;
   player.jumpVy -= 1400 * dt;
-  // low tunnel ceiling: cap the jump while underground
-  if (Game.inMine && player.jumpH > 46) { player.jumpH = 46; if (player.jumpVy > 0) player.jumpVy = 0; }
   if (player.jumpH <= 0) { player.jumpH = 0; if (player.jumpVy < 0) player.jumpVy = 0; }
   if (player.invuln>0) player.invuln-=dt;
   if (player.hurt>0) player.hurt-=dt;
@@ -448,8 +434,6 @@ function updateMomentum(dt) {
 }
 
 function updateCamera() {
-  // keep the mine floor on screen while the player is underground
-  if (Game.inMine && Game.zoom > 1.25) Game.zoom = 1.25;
   const zoom = Game.zoom;
   const target=clampCameraTarget(state.player.x-W/2, CFG.worldWidth, W, zoom);
   Game.cam+=(target-Game.cam)*0.12;
@@ -476,7 +460,6 @@ function updatePortals() {
 function checkEndConditions() {
   const { base, player } = state;
   if (base.hp<=0 && Game.state==="play") {
-    Game.inMine=false;
     Game.state="defeat-pan";
     Game.defeatText="Your castle was razed to the ground. Darkness swallows the kingdom.";
     Game.defeatPanTimer=0;
@@ -487,7 +470,6 @@ function checkEndConditions() {
     return;
   }
   if (player.hp<=0 && Game.state==="play") {
-    Game.inMine=false;
     Game.state="player-death";
     Game.deathTimer=0;
     Game.defeatText="The monarch fell in battle, and the crown rolled into the dirt. The kingdom is lost.";
@@ -534,10 +516,6 @@ function update(dt) {
   updateForestTrees(dt);
   updateForestCamps(dt);
   if(p) p.end("update.forest");
-
-  if(p) p.begin("update.mine");
-  updateMine(dt);
-  if(p) p.end("update.mine");
 
   if(p) p.begin("update.buildings");
   updateBuildings(dt);

@@ -8,7 +8,6 @@ const SOURCE_MULTIPLIERS = {
   hunt: 0.75,
   passive: 0.68,
   lumber: 0.7,
-  mine: 0.62,
 };
 
 export function expectedGoldForDay(day = Game.day || 1) {
@@ -26,7 +25,7 @@ export function goldPressureMultiplier(source = "enemy") {
   else if (playerCoins > expected * 1.6) mult = 0.62;
   else if (playerCoins > expected) mult = 0.82;
 
-  if (source === "passive" || source === "lumber" || source === "mine") {
+  if (source === "passive" || source === "lumber") {
     if (playerCoins > expected) mult *= 0.72;
     if (playerCoins > expected * 2) mult *= 0.72;
   }

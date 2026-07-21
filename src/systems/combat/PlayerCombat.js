@@ -254,7 +254,7 @@ function triggerHeatBurst(player, primary, damage, fx, col) {
 
 function updateWeaponAmbientFX(dt) {
   const { player } = state;
-  if (!player.weapon || Game.inMine || player.hp <= 0) return;
+  if (!player.weapon || player.hp <= 0) return;
   const wBase = WEAPONS[player.weapon];
   const amb = WEAPON_AMBIENT[player.weapon];
   const fx = mergeInnateEffects(wBase, player.weaponUpgrades);
@@ -291,7 +291,7 @@ function updateArmorPassiveFX(dt) {
 
   const armor = player.armor ? ARMORS[player.armor] : null;
   const amb = armor?.ability?.ambient;
-  if (!amb || Game.inMine) return;
+  if (!amb) return;
 
   const lift = entityWallLift(player) + (player.jumpH || 0) + playerMountLift(player);
   if (Math.random() < amb.rate * dt) {
@@ -368,10 +368,10 @@ function armorBlockBurst(player, armor, lift) {
 // Central player-damage entry point: applies armor (block chance + heavy-hit
 // shaving), i-frames, hurt flash, knockback and feedback. Returns the damage
 // actually dealt (0 = the armor blocked the hit), or null when the player
-// can't be hit right now (mine, i-frames, god mode, already dead).
+// can't be hit right now (i-frames, god mode, already dead).
 export function damagePlayer(rawDmg, opts = {}) {
   const { player } = state;
-  if (Game.inMine || player.hp <= 0 || player.invuln > 0 || inject('godMode')) return null;
+  if (player.hp <= 0 || player.invuln > 0 || inject('godMode')) return null;
   const armor = player.armor ? ARMORS[player.armor] : null;
   const def = armor ? (armor.defense || 0) : 0;
   let dmg = Math.max(1, Math.round(rawDmg - def / 3));
@@ -720,7 +720,6 @@ export function updatePlayerAttack(dt) {
   updateWeaponAmbientFX(dt);
   updateArmorPassiveFX(dt);
   if (!player.weapon) return;
-  if (Game.inMine) { if (player.swing > 0) player.swing -= dt; player.attackCd -= dt; return; }
   if (player.weapon === "short_bow" && (player.weaponUpgrades || []).some(u => u.id === "ice_explosion")) {
     player.iceNovaCd = (player.iceNovaCd || 0) - dt;
     if (player.iceNovaCd <= 0) {

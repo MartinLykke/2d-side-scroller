@@ -8,7 +8,6 @@ import { toggleMount } from '../economy/MountSystem.js';
 import { equipFromInventory, unequipWeapon, unequipArmor, ensureInventory } from '../economy/InventorySystem.js';
 import { applyUpgrade, checkUpgrade } from '../economy/UpgradeSystem.js?v=biomeweapons1';
 import { triggerBarrage, triggerRoyalRally } from '../ai/AI.js?v=biomeactive1';
-import { tryToggleMine } from '../world/MineSystem.js';
 import { startAssault } from '../world/AssaultSystem.js?v=biomevisual1';
 import { setupDevPanel } from './DevPanel.js?v=biomeactive1';
 import { warpToHubPortal, snapHubToPlaza } from '../infrastructure/RoguelikeSystem.js';
@@ -120,12 +119,6 @@ function handleKeydown(e) {
   if (k === "u") {
     if (!e.repeat) DEV.triggerWeaponUpgrade();
     e.preventDefault(); return;
-  }
-  if (k === "f" && !Game.inventoryOpen && !Game.shopOpen) {
-    if (tryToggleMine()) { e.preventDefault(); return; }
-  }
-  if ((k === "arrowdown" || k === "s") && !e.repeat && !Game.inventoryOpen && !Game.shopOpen) {
-    if (tryToggleMine()) { e.preventDefault(); return; }
   }
   if (k === "n" && !Game.inventoryOpen && !Game.shopOpen) { UI.skipToDusk(); e.preventDefault(); return; }
   if (k === "h" && !e.repeat && !Game.inventoryOpen && !Game.shopOpen) toggleMount();
