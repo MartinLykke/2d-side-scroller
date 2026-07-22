@@ -32,34 +32,32 @@ export const WEAPONS = {
   dragons_bow:   { name:"Dragon's Bow",       type:"ranged", dmg:9,  speed:1.2,  range:500, rarity:4, col:"#ff9922" },
   void_tome:     { name:"Void Staff",   type:"magic",  dmg:6,  speed:2.8,  range:460, rarity:4, col:"#e0a0ff", spellType:"void",      aoeRadius:90 },
 
-  // --- Biome enemy drops ---
-  splinter_bow:      { name:"Splinter Bow",         type:"ranged", dmg:4,  speed:1.25, range:390, rarity:3, col:"#8fd05a", biomeOnly:true, biome:"forest", innate:{ splinterCount:3, splinterRadius:145, splinterDmgFrac:0.45 } },
-  lumberjack_axe:    { name:"Lumberjack's Hatchet", type:"melee",  dmg:6,  speed:1.25, range:66,  rarity:2, col:"#b8884e", biomeOnly:true, biome:"forest", innate:{ splashFrac:0.24, splashR:78, alwaysCleave:true, knockBonus:60 } },
+  // --- Arcanum staffs: casting schools with bespoke projectiles ---
+  // Each one drives a hand-written branch in SpellSystem.js (see the
+  // "Arcanum staffs" section there) rather than the shared ballistic path.
+  bramble_staff:   { name:"Thornroot Stave",   type:"magic", dmg:3, speed:1.15, range:325, rarity:2, col:"#7fc24a", spellType:"bramble",     aoeRadius:58 },
+  prism_staff:     { name:"Prism Spire",       type:"magic", dmg:3, speed:1.0,  range:355, rarity:2, col:"#8fe8ff", spellType:"prism",       aoeRadius:44 },
+  plague_staff:    { name:"Miasma Censer",     type:"magic", dmg:4, speed:1.5,  range:330, rarity:3, col:"#a8d84a", spellType:"spore",       aoeRadius:74 },
+  gravity_staff:   { name:"Nullstone Scepter", type:"magic", dmg:4, speed:1.7,  range:390, rarity:3, col:"#7a3aff", spellType:"gravitywell", aoeRadius:96 },
+  sanguine_staff:  { name:"Sanguine Rod",      type:"magic", dmg:3, speed:1.15, range:335, rarity:3, col:"#c0102a", spellType:"leech",       aoeRadius:34 },
+  resonance_staff: { name:"Choirbell Staff",   type:"magic", dmg:5, speed:1.45, range:470, rarity:4, col:"#e8f8ff", spellType:"resonance",   aoeRadius:46 },
 
-  icicle_spear:      { name:"Icicle Lance",         type:"melee",  dmg:6,  speed:1.05, range:112, rarity:3, col:"#bfefff", biomeOnly:true, biome:"frozen", innate:{ frostHit:2.4, rootHit:0.18, shatter:2 } },
-  blizzard_chime:    { name:"Blizzard Chime",       type:"magic",  dmg:2,  speed:1.7,  range:330, rarity:3, col:"#d8f8ff", biomeOnly:true, biome:"frozen", spellType:"waterjet", aoeRadius:72, innate:{ spellFrost:2.4, geyser:0.65, frostAura:0.45, frostAuraRadius:175 } },
-
-  cactus_whip:       { name:"Cactus Whip",          type:"melee",  dmg:4,  speed:0.85, range:118, rarity:3, col:"#6fba46", biomeOnly:true, biome:"desert", innate:{ poisonHit:3.5, poisonDmg:1, slowHit:0.7, alwaysCleave:true } },
-  sandstorm_sling:   { name:"Sandstorm Sling",      type:"ranged", dmg:4,  speed:1.15, range:360, rarity:3, col:"#d8b46a", biomeOnly:true, biome:"desert", innate:{ sandBlind:2, sandBlindRadius:90, slowHit:0.8 } },
-
-  acid_blowgun:      { name:"Acid Blowgun",         type:"ranged", dmg:3,  speed:0.65, range:335, rarity:3, col:"#7fe05a", biomeOnly:true, biome:"swamp", innate:{ poisonArrow:4.2, poisonDmg:1, slowHit:0.35 } },
-  gator_hammer:      { name:"Gator Maul",           type:"melee",  dmg:9,  speed:2.05, range:60,  rarity:3, col:"#6d8a42", biomeOnly:true, biome:"swamp", innate:{ knockBonus:260, splashFrac:0.35, splashR:105, execute:0.12 } },
-
-  obsidian_brand:    { name:"Obsidian Brand",       type:"melee",  dmg:7,  speed:0.95, range:74,  rarity:4, col:"#ff6a28", biomeOnly:true, biome:"volcano", innate:{ burnHit:1, heatStacks:5, heatBurstRadius:125, heatBurstFrac:0.75 } },
-  magma_mortar:      { name:"Magma Mortar",         type:"magic",  dmg:5,  speed:2.4,  range:360, rarity:4, col:"#ff7a2a", biomeOnly:true, biome:"volcano", spellType:"meteor", aoeRadius:92, innate:{ spellBurn:2, firePool:true, meteorFragments:1 } },
-
-  shadow_scythe:     { name:"Shadow Scythe",        type:"melee",  dmg:8,  speed:1.2,  range:88,  rarity:4, col:"#8c4cff", biomeOnly:true, biome:"corrupted", innate:{ healOnKill:0.45, slowHit:1.0, splashFrac:0.22, splashR:95 } },
-  possessed_heart:   { name:"Possessed Heart",      type:"magic",  dmg:7,  speed:1.55, range:430, rarity:4, col:"#c45cff", biomeOnly:true, biome:"corrupted", spellType:"void", aoeRadius:78, innate:{ singularity:true, voidScar:1, castGoldCost:1, castHpCost:1 } },
+  // --- Autonomous foci: staffs that choose their own targets ---
+  // `autoTarget` replaces the usual "hit whatever is closest" rule in
+  // PlayerCombat's target picker; each one also drives its own casting school
+  // in SpellSystem.js. `note` is the behavior line shown in the tooltip.
+  rupture_shard:   { name:"The Rupture Shard",       type:"magic", dmg:3, speed:0.5,  range:560, rarity:3, col:"#c46bff", spellType:"fracture", aoeRadius:56, autoTarget:"chaos",
+                     note:"Fires at random enemies anywhere in reach; every blast drags their neighbours inward." },
+  gale_staff:      { name:"Gale-Staff of Aerion",    type:"magic", dmg:2, speed:2.2,  range:440, rarity:2, col:"#8fd8ff", spellType:"gale",     aoeRadius:78, autoTarget:"highest",
+                     note:"Erupts beneath the highest enemy in the lane and hurls it into the sky." },
+  bastion_scepter: { name:"The Bastion Scepter",     type:"magic", dmg:7, speed:0.45, range:700, rarity:3, col:"#f0b855", spellType:"bastion",  aoeRadius:64, autoTarget:"gate",
+                     note:"Silent in the field. Near your own gates it hammers whatever stands closest to them." },
+  hive_scepter:    { name:"The Hive-King's Scepter", type:"magic", dmg:2, speed:1.0,  range:400, rarity:4, col:"#9ef0b8", spellType:"larva",    aoeRadius:30, autoTarget:"stride",
+                     note:"Sheds a soul-larva every few paces you walk. What a larva kills hatches and fights for you." },
 };
 
-export const BIOME_WEAPON_DROPS = {
-  forest: ["splinter_bow", "lumberjack_axe"],
-  frozen: ["icicle_spear", "blizzard_chime"],
-  desert: ["cactus_whip", "sandstorm_sling"],
-  swamp: ["acid_blowgun", "gator_hammer"],
-  volcano: ["obsidian_brand", "magma_mortar"],
-  corrupted: ["shadow_scythe", "possessed_heart"],
-};
+// How far from the base gates the Bastion Scepter will answer at all.
+export const BASTION_GUARD_RANGE = 430;
 
 export const RARITY_COL  = ["#c8c8c8","#9bd05a","#6ab4ff","#bb55ff","#f2c14e"];
 export const RARITY_NAME = ["Common","Uncommon","Rare","Epic","Legendary"];

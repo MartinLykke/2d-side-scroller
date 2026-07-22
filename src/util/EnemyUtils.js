@@ -1,19 +1,14 @@
 import { ENEMY_TYPES } from '../config/enemies.js?v=biomeactive4';
-import { WEAPONS, BIOME_WEAPON_DROPS } from '../config/weapons.js?v=biomeweapons1';
+import { WEAPONS } from '../config/weapons.js?v=biomeweapons1';
 import { groundY } from '../core/canvas.js';
 import { Game, state } from '../core/state.js';
 import { inject } from '../core/services.js';
 import { spawnGoldReward, spawnParticles, floaty } from '../systems/world/SpawnSystem.js?v=biomeactive4';
 import { Audio } from '../systems/infrastructure/Audio.js';
 import { registerEnemyKill } from '../systems/infrastructure/RoguelikeSystem.js';
-import { biomeAt } from '../rendering/Effects.js?v=biomeactive4';
-import { generateProceduralWeapon } from '../systems/economy/ProceduralWeaponSystem.js?v=procweap1';
 
 const PORTAL_GUARDIAN_WEAPON_DROP_CHANCE = 0.25;
 const PORTAL_GUARDIAN_WEAPON_RARITIES = [1, 2, 3];
-const PORTAL_GUARDIAN_PROCEDURAL_SHARE = 0.4;
-const BIOME_WEAPON_DROP_CHANCE = 0.045;
-const BIOME_WEAPON_BOSS_DROP_CHANCE = 0.28;
 const MAX_DEATH_PARTICLES = 700;
 
 const DEFAULT_DEATH_PROFILE = {
@@ -62,6 +57,12 @@ const ENEMY_DEATH_PROFILES = {
     chunks: ["#351008", "#7a1408", "#d64a20"],
     ember: true,
     mass: 5.2,
+  },
+  pyreTyrant: {
+    blood: ["#32060a", "#7a1412", "#d94720"],
+    chunks: ["#0d0b10", "#27202a", "#7a2418", "#ff6a20"],
+    ember: true,
+    mass: 5.6,
   },
   magmaGolem: {
     gore: false,
@@ -128,7 +129,7 @@ function pushDeathParticle(p) {
 function deathImpactY(e, t, y = null) {
   if (y !== null && y !== undefined) return y;
   const fy = e?.fy || 0;
-  const h = (t?.dragon || t?.voidSeraph) ? t.w * 0.35 : (t?.golem || t?.voidTitan) ? t.w * 0.56 : Math.min(54, (t?.w || 24) * 0.78);
+  const h = (t?.dragon || t?.voidSeraph) ? t.w * 0.35 : (t?.golem || t?.voidTitan) ? t.w * 0.56 : t?.pyreTyrant ? t.w * 0.72 : Math.min(54, (t?.w || 24) * 0.78);
   return groundY + fy - h;
 }
 
@@ -220,6 +221,7 @@ function violenceTier(violence) {
 }
 
 function chooseDeathKind(e, t, violence, tier) {
+  if (t.pyreTyrant) return tier >= 2 ? "heavySlam" : "heavyKneel";
   if (t.voidTitan) return tier >= 2 ? "golemShatter" : "golemCollapse";
   if (t.voidSeraph) return tier >= 2 ? "dragonCrash" : "wingShear";
   if (t.golem) return tier >= 2 ? "golemShatter" : "golemCollapse";
@@ -289,35 +291,10 @@ export function spawnHumanBlood(u, intensity = 1, dir = 0, y = null) {
 
 function rollPortalGuardianWeaponDrop(e) {
   if (Math.random() > PORTAL_GUARDIAN_WEAPON_DROP_CHANCE) return;
-  if (Math.random() < PORTAL_GUARDIAN_PROCEDURAL_SHARE) {
-    const { id, def } = generateProceduralWeapon();
-    state.lootItems.push({ x: e.x, weaponId: id, dropVy: -350, dropY: groundY - 150 });
-    spawnParticles(e.x, groundY - 36, 18, def.col, 90, 120);
-    floaty(e.x, def.name, def.col, 14);
-    return;
-  }
-  const candidates = Object.keys(WEAPONS).filter(id => !WEAPONS[id].biomeOnly && !WEAPONS[id].generated && PORTAL_GUARDIAN_WEAPON_RARITIES.includes(WEAPONS[id].rarity));
+  const candidates = Object.keys(WEAPONS).filter(id => PORTAL_GUARDIAN_WEAPON_RARITIES.includes(WEAPONS[id].rarity));
   if (!candidates.length) return;
   const weaponId = candidates[Math.floor(Math.random() * candidates.length)];
   state.lootItems.push({ x: e.x, weaponId, dropVy: -350, dropY: groundY - 150 });
-}
-
-function rollBiomeWeaponDrop(e, t) {
-  const biome = biomeAt(e.x);
-  const pool = BIOME_WEAPON_DROPS[biome?.id] || null;
-  if (!pool || !pool.length) return;
-  const chance = t?.boss ? BIOME_WEAPON_BOSS_DROP_CHANCE : BIOME_WEAPON_DROP_CHANCE;
-  if (Math.random() > chance) return;
-  const owned = new Set();
-  if (state.player?.weapon) owned.add(state.player.weapon);
-  for (const it of state.player?.inventory || []) if (it.kind === "weapon") owned.add(it.weaponId);
-  const candidates = pool.filter(id => WEAPONS[id] && !owned.has(id));
-  const dropPool = candidates.length ? candidates : pool.filter(id => WEAPONS[id]);
-  if (!dropPool.length) return;
-  const weaponId = dropPool[Math.floor(Math.random() * dropPool.length)];
-  state.lootItems.push({ x: e.x, weaponId, dropVy: -350, dropY: groundY - 150 });
-  spawnParticles(e.x, groundY - 36, 18, WEAPONS[weaponId].col, 90, 120);
-  floaty(e.x, biome.name + " relic", WEAPONS[weaponId].col, 14);
 }
 
 export function spawnImpBlood(e, intensity = 1, y = null) {
@@ -462,7 +439,6 @@ export function killEnemyWithAnimation(e, knockDirection = 0) {
 
   if (e.portalGuardian) {
     rollPortalGuardianWeaponDrop(e);
-    rollBiomeWeaponDrop(e, t);
   }
   triggerBiomeDeathEffects(e, t);
   if (e.type === "fireDragon") {
@@ -470,6 +446,9 @@ export function killEnemyWithAnimation(e, knockDirection = 0) {
   }
   if (e.type === "magmaGolem") {
     state.lootItems.push({ x: e.x, weaponId: "sunblade", dropVy: -350, dropY: groundY - 150 });
+  }
+  if (e.type === "pyreTyrant") {
+    state.lootItems.push({ x: e.x, weaponId: "flame_sword", dropVy: -350, dropY: groundY - 150 });
   }
   if (e.type === "voidTitan") {
     state.lootItems.push({ x: e.x, weaponId: "void_bow", dropVy: -350, dropY: groundY - 150 });

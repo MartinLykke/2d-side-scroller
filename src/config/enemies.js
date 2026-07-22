@@ -2,6 +2,7 @@
 // baseDmg  = damage dealt to the base per hit (falls back to dmg)
 // meleeDmg = damage dealt to the player on a direct melee hit
 export const BIOME_BOSS_TYPES = {
+  forest: "forestStalker",
   frozen: "skadiWrath",
   desert: "duneBroodmother",
   swamp: "sunkenBehemoth",
@@ -182,6 +183,12 @@ export const ENEMY_TYPES = {
     ramWindup: 0.72, ramInterval: 1.55, ramRange: 58,
   },
   fireDragon: { name: "Fire Dragon", hp: 320, speed: 88, w: 120, color: "#7a1408", eye: "#ffd060", reward: 70, dmg: 14, meleeDmg: 2, biome: "volcano", flying: true, boss: true, dragon: true, noKnockback: true, shootInterval: 2.6, attackName: "Fire Breath" },
+  pyreTyrant: {
+    name: "Vaelgor, the Pyre Tyrant", hp: 1380, speed: 58, w: 116, visualH: 166,
+    color: "#17131a", eye: "#fff0a0", reward: 185, dmg: 29, baseDmg: 15, meleeDmg: 3,
+    biome: "volcano", boss: true, legendary: true, apexBoss: true, pyreTyrant: true,
+    noKnockback: true, fireImmune: true, shootInterval: 7.2, attackName: "Crownfire Cataclysm",
+  },
   magmaGolem: {
     name: "Magma Colossus", hp: 650, speed: 40, w: 130, color: "#3a2a26", eye: "#ffb040",
     reward: 130, dmg: 24, meleeDmg: 2, biome: "volcano",
@@ -192,6 +199,7 @@ export const ENEMY_TYPES = {
     name: "The Great Horned Stalker", hp: 720, speed: 56, w: 128, color: "#2d3f28", eye: "#b66bff",
     reward: 120, dmg: 22, baseDmg: 12, meleeDmg: 2,
     boss: true, legendary: true, biomeBoss: true, biome: "forest", forestStalker: true, noKnockback: true,
+    bossRound: 4, spawnDistance: 940,
     shootInterval: 6.8, attackName: "Nature's Reclamation",
   },
   skadiWrath: {
@@ -282,4 +290,5 @@ export const ENEMY_TYPES = {
 export const BOSS_SCHEDULE = {
   3: "fireDragon",
   6: "magmaGolem",
+  9: "pyreTyrant",
 };

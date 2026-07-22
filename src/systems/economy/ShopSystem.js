@@ -36,6 +36,13 @@ export const WEAPON_SHOP = [
   { weaponId: 'meteor_tome',   price: 36, tier: 4 },
   { weaponId: 'arcane_tome',   price: 52, tier: 5 },
   { weaponId: 'shadow_tome',   price: 50, tier: 5 },
+  // Arcanum staffs
+  { weaponId: 'bramble_staff',  price: 26, tier: 3 },
+  { weaponId: 'prism_staff',    price: 29, tier: 3 },
+  { weaponId: 'plague_staff',   price: 44, tier: 4 },
+  { weaponId: 'sanguine_staff', price: 46, tier: 4 },
+  { weaponId: 'gravity_staff',  price: 56, tier: 5 },
+  { weaponId: 'resonance_staff',price: 74, tier: 6 },
 ];
 
 export const ARMOR_SHOP = [

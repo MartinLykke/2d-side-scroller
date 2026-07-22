@@ -433,10 +433,13 @@ function spawnBountyRaider(portal) {
 function biomeBossPortal(type, fallback = null) {
   const t = ENEMY_TYPES[type];
   if (!t?.biome) return fallback || pick(state.portals);
-  if (fallback) return fallback;
+  if (fallback && !t.biomeBoss) return fallback;
 
-  const side = pick([-1, 1]);
-  const spread = t.flying ? 900 : 760;
+  // Biome bosses emerge from their home terrain instead of walking in from a
+  // distant portal. Preserve a selected wave side, but pull the spawn point
+  // into the forest/biome band around the base for a readable entrance.
+  const side = fallback?.side || pick([-1, 1]);
+  const spread = t.spawnDistance || (t.flying ? 900 : 760);
   return { x: clamp(CFG.baseX + side * spread, 900, CFG.worldWidth - 900), side };
 }
 
@@ -457,6 +460,15 @@ const BOSS_RIGGERS = {
     Game.screenShake = Math.max(Game.screenShake || 0, 0.4);
     spawnParticles(portal.x, groundY - 20, 30, "#ff6a20", 160, 180);
     spawnParticles(portal.x, groundY - 10, 18, "#6b5a45", 200, 120);
+  },
+  pyreTyrant(tyrant, portal) {
+    tyrant.dir = portal.side > 0 ? -1 : 1;
+    tyrant.pyrePillarCd = rand(2.4, 3.6);
+    tyrant.pyreDashCd = rand(4.2, 5.4);
+    Game.screenShake = Math.max(Game.screenShake || 0, 0.46);
+    spawnParticles(portal.x, groundY - 78, 42, "#ff5a18", 190, 240);
+    spawnParticles(portal.x, groundY - 112, 22, "#fff0a0", 110, 260);
+    spawnParticles(portal.x, groundY - 16, 20, "#17131a", 210, 105);
   },
   voidTitan(titan, portal) {
     titan.dir = portal.side > 0 ? -1 : 1;
@@ -584,8 +596,13 @@ function nightEnemyType() {
     return "shade";
   }
   if (Game.nightSpawned === 0) {
+    // Apex bosses claim their scheduled night in every biome. Earlier legacy
+    // bosses remain fallbacks so biome guardians keep their normal cadence.
+    const scheduledBoss = BOSS_SCHEDULE[d];
+    if (scheduledBoss && ENEMY_TYPES[scheduledBoss]?.apexBoss) return scheduledBoss;
     const biomeBoss = BIOME_BOSS_TYPES[activeBiomeId()];
-    if (d >= 3 && biomeBoss) return biomeBoss;
+    const bossRound = ENEMY_TYPES[biomeBoss]?.bossRound;
+    if (biomeBoss && (bossRound == null ? d >= 3 : d === bossRound)) return biomeBoss;
     if (BOSS_SCHEDULE[d]) return BOSS_SCHEDULE[d];
   }
   // Second boss slot: legacy ember bosses only; biome bosses are tied to the

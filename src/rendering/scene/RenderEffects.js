@@ -208,6 +208,118 @@ export function drawSpellFields() {
         const y2 = groundY - 6 + Math.sin(a) * f.r * 0.11;
         ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
       }
+    } else if (f.type === "bramble") {
+      // a thicket that shoulders up out of the soil, then lashes
+      const grow = clamp(f.sprout || 0, 0, 1);
+      const lash = clamp(1 - (f.lashT || 0) / 0.55, 0, 1);
+      ctx.globalAlpha = 0.32 * fade;
+      ctx.fillStyle = "#1e3010";
+      ctx.beginPath(); ctx.ellipse(f.x, groundY - 3, f.r * grow, f.r * 0.18 * grow, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.lineCap = "round"; ctx.lineJoin = "round";
+      const vines = Math.max(4, Math.round(f.r / 9));
+      for (let k = 0; k < vines; k++) {
+        const seed = f.ph + k * 1.7;
+        const bx = f.x + Math.sin(seed) * f.r * 0.85;
+        const h = (16 + Math.abs(Math.cos(seed * 1.7)) * 26) * grow;
+        const sway = Math.sin(T * 2.4 + seed) * 4 + lash * Math.sin(T * 22 + seed) * 7;
+        ctx.globalAlpha = (0.75 + lash * 0.25) * fade;
+        ctx.strokeStyle = k % 3 === 0 ? "#4f7a2a" : "#2f4a18";
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.moveTo(bx, groundY - 2);
+        ctx.quadraticCurveTo(bx + sway * 0.5, groundY - h * 0.6, bx + sway, groundY - h);
+        ctx.stroke();
+        // thorns along the vine
+        ctx.strokeStyle = f.col || "#7fc24a";
+        ctx.lineWidth = 1.1;
+        for (let s = 1; s <= 2; s++) {
+          const p = s / 3;
+          const tx = bx + sway * p * p, ty = groundY - h * p;
+          const side = s % 2 ? 1 : -1;
+          ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(tx + side * 5, ty - 3); ctx.stroke();
+        }
+      }
+      ctx.lineCap = "butt"; ctx.lineJoin = "miter";
+      if (lash > 0.7) {
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = (lash - 0.7) * 1.4 * fade;
+        const lg = ctx.createRadialGradient(f.x, groundY - 20, 4, f.x, groundY - 20, f.r);
+        lg.addColorStop(0, "rgba(200,224,112,0.55)"); lg.addColorStop(1, "rgba(79,122,42,0)");
+        ctx.fillStyle = lg;
+        ctx.beginPath(); ctx.ellipse(f.x, groundY - 20, f.r, f.r * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+      }
+    } else if (f.type === "spore") {
+      // a low, roiling bank of contagion
+      ctx.globalAlpha = 0.3 * fade;
+      const cg = ctx.createRadialGradient(f.x, f.y, 6, f.x, f.y, f.r);
+      cg.addColorStop(0, "rgba(200,224,112,0.62)");
+      cg.addColorStop(0.45, "rgba(127,191,58,0.42)");
+      cg.addColorStop(1, "rgba(40,64,20,0)");
+      ctx.fillStyle = cg;
+      ctx.beginPath(); ctx.ellipse(f.x, f.y, f.r, f.r * 0.62, 0, 0, Math.PI * 2); ctx.fill();
+      for (let k = 0; k < 5; k++) {
+        const a = f.ph + k * 1.26 + T * 0.5;
+        const px = f.x + Math.cos(a) * f.r * 0.6;
+        const py = f.y + Math.sin(a * 1.3) * f.r * 0.3;
+        ctx.globalAlpha = 0.16 * fade;
+        ctx.fillStyle = k % 2 ? "#7fbf3a" : "#5a7a2a";
+        ctx.beginPath(); ctx.arc(px, py, f.r * (0.26 + 0.06 * Math.sin(T * 2 + k)), 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 0.22 * fade;
+      ctx.fillStyle = "#3a5a1a";
+      ctx.beginPath(); ctx.ellipse(f.x, groundY - 3, f.r * 0.85, f.r * 0.13, 0, 0, Math.PI * 2); ctx.fill();
+    } else if (f.type === "well") {
+      // a hole in the light, hauling the lane inward
+      const wind = clamp(1 - f.life / (f.maxLife || 1), 0, 1);
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.5;
+      for (let k = 0; k < 4; k++) {
+        const rp = ((T * 1.4 + k * 0.25) % 1);
+        ctx.globalAlpha = 0.45 * (1 - rp) * fade;
+        ctx.strokeStyle = k % 2 ? f.col || "#c8a0ff" : "#7a3aff";
+        ctx.lineWidth = 1.4 + wind * 1.6;
+        const rr = f.r * (1 - rp * 0.85);
+        ctx.beginPath(); ctx.ellipse(f.x, f.y, rr, rr * 0.42, T * 0.6, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 1;
+      const core = 12 + wind * 10;
+      const wg = ctx.createRadialGradient(f.x, f.y, 1, f.x, f.y, core * 2.4);
+      wg.addColorStop(0, "rgba(0,0,0,1)");
+      wg.addColorStop(0.45, "rgba(24,10,48,0.92)");
+      wg.addColorStop(1, "rgba(58,26,90,0)");
+      ctx.fillStyle = wg;
+      ctx.beginPath(); ctx.arc(f.x, f.y, core * 2.4, 0, Math.PI * 2); ctx.fill();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.6 + wind * 0.4;
+      ctx.strokeStyle = "#c8a0ff"; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(f.x, f.y, core * (0.9 + 0.05 * Math.sin(T * 9 + f.ph)), 0, Math.PI * 2); ctx.stroke();
+    } else if (f.type === "leech") {
+      // the leech itself, plus the thread of stolen blood running home
+      const p = state.player;
+      if (p) {
+        ctx.globalAlpha = 0.32 * fade;
+        ctx.strokeStyle = "#7a0a1a"; ctx.lineWidth = 1.4;
+        ctx.setLineDash([3, 6]);
+        ctx.lineDashOffset = -T * 26;
+        ctx.beginPath();
+        ctx.moveTo(f.x, f.y);
+        ctx.quadraticCurveTo((f.x + p.x) / 2, Math.min(f.y, groundY - 70) - 18, p.x, groundY - 34);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      const beat = 1 + Math.sin(T * 9 + f.ph) * 0.16;
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = "#7a0a1a";
+      ctx.beginPath(); ctx.ellipse(f.x, f.y, 7 * beat, 5.5 * beat, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = f.col || "#ff5060";
+      ctx.beginPath(); ctx.ellipse(f.x - 1, f.y - 1, 3.4 * beat, 2.6 * beat, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.35 * fade;
+      const bg2 = ctx.createRadialGradient(f.x, f.y, 1, f.x, f.y, 18);
+      bg2.addColorStop(0, "rgba(255,90,100,0.8)"); bg2.addColorStop(1, "rgba(120,10,26,0)");
+      ctx.fillStyle = bg2;
+      ctx.beginPath(); ctx.arc(f.x, f.y, 18, 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
   }
@@ -699,6 +811,139 @@ export function drawSpells() {
         }
         ctx.restore();
         ctx.fillStyle="#ffffff"; ctx.beginPath(); ctx.arc(0,0,3,0,Math.PI*2); ctx.fill();
+        break;
+      }
+      // ---- Arcanum staff projectiles ----
+      case "bramble": {
+        // a bristling seed pod, tumbling end over end
+        ctx.rotate(sp.spin || 0);
+        ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.5;
+        const bg = ctx.createRadialGradient(0, 0, 2, 0, 0, 20);
+        bg.addColorStop(0, "rgba(155,208,90,0.85)"); bg.addColorStop(1, "rgba(60,110,30,0)");
+        ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        ctx.fillStyle = "#2f4a18";
+        ctx.beginPath(); ctx.ellipse(0, 0, 9, 6.5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "#4f7a2a"; ctx.lineWidth = 2; ctx.lineCap = "round";
+        for (let k = 0; k < 7; k++) {
+          const a = k * (Math.PI * 2 / 7);
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(a) * 6, Math.sin(a) * 4.5);
+          ctx.lineTo(Math.cos(a) * 13, Math.sin(a) * 10);
+          ctx.stroke();
+        }
+        ctx.lineCap = "butt";
+        ctx.fillStyle = "#9bd05a";
+        ctx.beginPath(); ctx.ellipse(-2, -1.5, 3, 2, -0.5, 0, Math.PI * 2); ctx.fill();
+        break;
+      }
+      case "prism": {
+        // a slow, spinning shard splitting the light around it
+        ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.7;
+        const pg = ctx.createRadialGradient(0, 0, 1, 0, 0, 26);
+        pg.addColorStop(0, "rgba(255,255,255,0.95)"); pg.addColorStop(0.4, "rgba(143,232,255,0.5)"); pg.addColorStop(1, "rgba(58,122,144,0)");
+        ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI * 2); ctx.fill();
+        // rainbow spokes cast off the facets
+        for (let k = 0; k < 3; k++) {
+          ctx.globalAlpha = 0.28 + 0.14 * Math.sin(t * 8 + k);
+          ctx.strokeStyle = ["#ff7ad8", "#8fe8ff", "#fff0a0"][k];
+          ctx.lineWidth = 2;
+          const a = (sp.spin || 0) * 0.6 + k * 2.1;
+          ctx.beginPath(); ctx.moveTo(Math.cos(a) * 8, Math.sin(a) * 8); ctx.lineTo(Math.cos(a) * 30, Math.sin(a) * 30); ctx.stroke();
+        }
+        ctx.restore();
+        ctx.rotate(sp.spin || 0);
+        ctx.fillStyle = "#cdf3ff";
+        ctx.beginPath(); ctx.moveTo(0, -11); ctx.lineTo(7, 0); ctx.lineTo(0, 11); ctx.lineTo(-7, 0); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(3, 0); ctx.lineTo(0, 5); ctx.lineTo(-3, 0); ctx.closePath(); ctx.fill();
+        break;
+      }
+      case "refract": {
+        // a hard little lance of split light
+        ctx.rotate(Math.atan2(sp.vy, sp.vx));
+        ctx.save(); ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = 0.55;
+        ctx.strokeStyle = "#8fe8ff"; ctx.lineWidth = 5; ctx.lineCap = "round";
+        ctx.beginPath(); ctx.moveTo(-26, 0); ctx.lineTo(12, 0); ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.8;
+        ctx.beginPath(); ctx.moveTo(-20, 0); ctx.lineTo(13, 0); ctx.stroke();
+        ctx.lineCap = "butt";
+        ctx.restore();
+        break;
+      }
+      case "spore": {
+        // a censer flask trailing sour smoke, tumbling as it falls
+        ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.4;
+        const sg = ctx.createRadialGradient(0, 0, 2, 0, 0, 22);
+        sg.addColorStop(0, "rgba(200,224,112,0.8)"); sg.addColorStop(1, "rgba(58,90,26,0)");
+        ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(0, 0, 22, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        ctx.rotate(sp.spin || 0);
+        ctx.fillStyle = "#3a3a30";
+        ctx.beginPath(); ctx.ellipse(0, 0, 8, 9, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#7fbf3a";
+        ctx.beginPath(); ctx.ellipse(0, 2, 6, 6, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#c8e070";
+        ctx.beginPath(); ctx.ellipse(-1.5, 0.5, 2.4, 2.2, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#5a4a32";
+        ctx.fillRect(-2.5, -11, 5, 4);
+        break;
+      }
+      case "gravitywell": {
+        // a lightless core with everything around it bending inward
+        ctx.save(); ctx.globalCompositeOperation = "lighter";
+        for (let k = 0; k < 3; k++) {
+          const rp = ((age * 2.2 + k * 0.33) % 1);
+          ctx.globalAlpha = 0.5 * (1 - rp);
+          ctx.strokeStyle = k % 2 ? "#c8a0ff" : "#7a3aff";
+          ctx.lineWidth = 1.6;
+          ctx.beginPath(); ctx.ellipse(0, 0, 26 * (1 - rp) + 4, (26 * (1 - rp) + 4) * 0.45, t * 0.8, 0, Math.PI * 2); ctx.stroke();
+        }
+        ctx.restore();
+        const vg = ctx.createRadialGradient(0, 0, 1, 0, 0, 16);
+        vg.addColorStop(0, "rgba(0,0,0,1)"); vg.addColorStop(0.55, "rgba(20,8,40,0.9)"); vg.addColorStop(1, "rgba(58,26,90,0)");
+        ctx.fillStyle = vg; ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#050308";
+        ctx.beginPath(); ctx.arc(0, 0, 5.5, 0, Math.PI * 2); ctx.fill();
+        break;
+      }
+      case "leech": {
+        // a fat blood-drop with a barbed snout, pulsing as it hunts
+        const pulse = 1 + Math.sin(t * 14) * 0.12;
+        ctx.rotate(Math.atan2(sp.vy, sp.vx));
+        ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.45;
+        const lg = ctx.createRadialGradient(0, 0, 1, 0, 0, 20);
+        lg.addColorStop(0, "rgba(255,80,96,0.9)"); lg.addColorStop(1, "rgba(122,10,26,0)");
+        ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        ctx.fillStyle = "#7a0a1a";
+        ctx.beginPath(); ctx.ellipse(-2, 0, 9 * pulse, 6.5 * pulse, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#c0102a";
+        ctx.beginPath(); ctx.ellipse(-3, -1, 5.5 * pulse, 3.6 * pulse, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#ff8a90";
+        ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(13, -1.6); ctx.lineTo(13, 1.6); ctx.closePath(); ctx.fill();
+        break;
+      }
+      case "resonance": {
+        // a struck note rolling down the lane as a column of ringing arcs
+        ctx.save(); ctx.globalCompositeOperation = "lighter";
+        const face = Math.sign(sp.vx) || 1;
+        for (let k = 0; k < 4; k++) {
+          const ph = (age * 3 + k * 0.25) % 1;
+          ctx.globalAlpha = 0.5 * (1 - ph) + 0.12;
+          ctx.strokeStyle = k % 2 ? "#ffffff" : "#a8d8ff";
+          ctx.lineWidth = 3.2 - k * 0.5;
+          const w = 10 + ph * 22, h = 44 + ph * 22;
+          ctx.beginPath();
+          ctx.ellipse(-face * ph * 26, 0, w, h, 0, -Math.PI * 0.42, Math.PI * 0.42);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 0.75;
+        ctx.strokeStyle = "#e8f8ff"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(0, 0, 8, 48 + Math.sin(t * 12) * 3, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
         break;
       }
       default: {

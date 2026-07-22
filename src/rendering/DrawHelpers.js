@@ -55,46 +55,15 @@ const WAND_LOOKS = {
   arcane_tome:    { len:44, wood:"#4a3a72", woodLt:"#7a62b3", trim:"#d19aff", gem:"#b080ff", core:"#f0e4ff", kind:"arcane" },
   shadow_tome:    { len:42, wood:"#1a1322", woodLt:"#382348", trim:"#9b4bd6", gem:"#8822cc", core:"#e8d0ff", kind:"shadow" },
   void_tome:      { len:46, wood:"#0b0812", woodLt:"#2a1638", trim:"#e0a0ff", gem:"#07050d", core:"#e0a0ff", kind:"void" },
-  blizzard_chime: { len:42, wood:"#c8d8e8", woodLt:"#f0fbff", trim:"#bfefff", gem:"#d8f8ff", core:"#ffffff", kind:"storm" },
-  magma_mortar:   { len:46, wood:"#221715", woodLt:"#5a3324", trim:"#ff7a2a", gem:"#2a1814", core:"#ffd060", kind:"meteor" },
-  possessed_heart:{ len:38, wood:"#160a22", woodLt:"#3d1b5c", trim:"#c45cff", gem:"#24102f", core:"#f0c8ff", kind:"void" },
+  // Arcanum staffs — each carries its own head shape and shaft treatment.
+  bramble_staff:  { len:44, wood:"#3a2a16", woodLt:"#6b5028", trim:"#7fc24a", gem:"#4f7a2a", core:"#c8e070", kind:"thorn" },
+  prism_staff:    { len:46, wood:"#b9c9d2", woodLt:"#f2fbff", trim:"#8fe8ff", gem:"#cdf3ff", core:"#ffffff", kind:"prism" },
+  plague_staff:   { len:46, wood:"#2e2a1c", woodLt:"#5c5230", trim:"#a8d84a", gem:"#7fbf3a", core:"#d8ff9a", kind:"censer" },
+  gravity_staff:  { len:48, wood:"#0d0a14", woodLt:"#2b1a44", trim:"#7a3aff", gem:"#050308", core:"#c8a0ff", kind:"nullstone" },
+  sanguine_staff: { len:40, wood:"#cdc4b4", woodLt:"#f2ece0", trim:"#c0102a", gem:"#7a0a1a", core:"#ff8a90", kind:"sanguine" },
+  resonance_staff:{ len:46, wood:"#4a4238", woodLt:"#8a7c66", trim:"#e8f8ff", gem:"#c8b878", core:"#ffffff", kind:"bell" },
 };
 const DEFAULT_WAND = { len:38, wood:"#3a2448", woodLt:"#5c3d70", trim:"#d0a0ff", gem:"#b080ff", core:"#f0e4ff", kind:"arcane" };
-
-function hexShade(hex, f) {
-  const n = parseInt((hex || "#b080ff").slice(1), 16);
-  const r = clamp(Math.round(((n >> 16) & 255) * f), 0, 255);
-  const g = clamp(Math.round(((n >> 8) & 255) * f), 0, 255);
-  const b = clamp(Math.round((n & 255) * f), 0, 255);
-  return `rgb(${r},${g},${b})`;
-}
-
-const SPELLTYPE_WAND_KIND = {
-  fireball: "cinder", waterjet: "tide", lightning: "storm",
-  meteor: "meteor", arcane: "arcane", shadow: "shadow", void: "void",
-  // Brand-new elements reuse the head shape closest to their flavor —
-  // proceduralWeapons.js's SPELL_ELEMENTS declares the same mapping as `wandKind`.
-  crystal: "arcane", blood: "shadow", sonic: "storm", plague: "cinder",
-  radiant: "meteor", gravity: "void",
-};
-
-// Procedurally generated casters aren't in WAND_LOOKS, so without this every
-// one of them rendered as the same generic arcane wand regardless of school.
-// Builds a themed look (shaft/head kind + palette) straight from the rolled
-// spellType and color so generated wands/staffs/orbs read as their element.
-export function spellTypeWandLook(spellType, col) {
-  const kind = SPELLTYPE_WAND_KIND[spellType] || "arcane";
-  const base = col || DEFAULT_WAND.trim;
-  return {
-    len: 40,
-    wood: hexShade(base, 0.24),
-    woodLt: hexShade(base, 0.48),
-    trim: base,
-    gem: base,
-    core: hexShade(base, 1.65),
-    kind,
-  };
-}
 
 // Distance from the model origin to the staff tip (model space, before scaling).
 export function wandTipLength(weaponId) {
@@ -119,6 +88,54 @@ function drawWandShaft(look, top, bot) {
     ctx.beginPath(); ctx.moveTo(0.5, bot); ctx.lineTo(-1.2, bot * 0.3); ctx.lineTo(1, top * 0.45); ctx.lineTo(-0.4, top + 1.5); ctx.stroke();
     ctx.strokeStyle = look.trim; ctx.lineWidth = 0.8; ctx.globalAlpha = 0.85;
     ctx.beginPath(); ctx.moveTo(-0.4, bot * 0.5); ctx.lineTo(0.6, bot * 0.15); ctx.moveTo(0.2, top * 0.55); ctx.lineTo(-0.6, top * 0.75); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.lineCap = "butt";
+    return;
+  }
+  if (look.kind === "thorn") {
+    // a living branch, still bent the way it grew, studded with thorns
+    ctx.lineCap = "round";
+    ctx.strokeStyle = look.wood; ctx.lineWidth = 3.6;
+    ctx.beginPath(); ctx.moveTo(0.8, bot); ctx.bezierCurveTo(-2, bot * 0.35, 2.2, top * 0.45, -0.4, top + 2); ctx.stroke();
+    ctx.strokeStyle = look.woodLt; ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.moveTo(0.2, bot - 2); ctx.bezierCurveTo(-2.4, bot * 0.35, 1.6, top * 0.45, -0.8, top + 3); ctx.stroke();
+    ctx.strokeStyle = look.trim; ctx.lineWidth = 1;
+    for (let k = 0; k < 4; k++) {
+      const p = 0.18 + k * 0.2;
+      const y = bot + (top - bot) * p;
+      const x = Math.sin(p * 4.4) * 1.6;
+      const side = k % 2 ? 1 : -1;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + side * 3.6, y - 2.4); ctx.stroke();
+    }
+    ctx.lineCap = "butt";
+    return;
+  }
+  if (look.kind === "censer") {
+    // a shepherd's crook the censer swings from
+    ctx.lineCap = "round";
+    ctx.strokeStyle = look.wood; ctx.lineWidth = 3.2;
+    ctx.beginPath(); ctx.moveTo(0, bot); ctx.lineTo(0, top + 4); ctx.stroke();
+    ctx.strokeStyle = look.woodLt; ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.moveTo(-0.5, bot - 1); ctx.lineTo(-0.5, top + 5); ctx.stroke();
+    ctx.strokeStyle = look.wood; ctx.lineWidth = 2.6;
+    ctx.beginPath(); ctx.moveTo(0, top + 4); ctx.quadraticCurveTo(0, top - 3, 5.5, top - 2.5); ctx.stroke();
+    ctx.lineCap = "butt";
+    return;
+  }
+  if (look.kind === "sanguine") {
+    // a jointed length of bone, bound at the knuckles
+    ctx.lineCap = "round";
+    ctx.strokeStyle = look.wood; ctx.lineWidth = 3.6;
+    ctx.beginPath(); ctx.moveTo(0, bot); ctx.lineTo(0, top + 2); ctx.stroke();
+    ctx.strokeStyle = look.woodLt; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-0.5, bot - 2); ctx.lineTo(-0.5, top + 3); ctx.stroke();
+    ctx.fillStyle = look.wood;
+    for (let k = 0; k < 3; k++) {
+      const y = bot - 3 - k * (bot - top) * 0.3;
+      ctx.beginPath(); ctx.ellipse(0, y, 2.6, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.strokeStyle = "#5a1018"; ctx.lineWidth = 0.9; ctx.globalAlpha = 0.75;
+    ctx.beginPath(); ctx.moveTo(-1, top * 0.6); ctx.lineTo(0.8, top * 0.3); ctx.stroke();
     ctx.globalAlpha = 1;
     ctx.lineCap = "butt";
     return;
@@ -279,6 +296,200 @@ function drawWandHead(look, top, t, cast) {
       ctx.beginPath(); ctx.arc(Math.cos(oa) * 6, top - 6 + Math.sin(oa) * 6 * 0.4, 1.1, 0, Math.PI * 2); ctx.fill();
       break;
     }
+    case "thorn": {
+      // a woven briar knot cradling a seed-heart, leaves still on it
+      const breathe = 1 + Math.sin(t * 2.1) * 0.06;
+      ctx.strokeStyle = look.wood; ctx.lineWidth = 2.2;
+      ctx.beginPath(); ctx.arc(0, top - 5, 5.2, Math.PI * 0.15, Math.PI * 1.75); ctx.stroke();
+      ctx.strokeStyle = look.trim; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(0, top - 5, 5.2, Math.PI * 0.3, Math.PI * 1.6); ctx.stroke();
+      // thorns bristling off the knot
+      ctx.strokeStyle = look.woodLt; ctx.lineWidth = 1.2;
+      for (let k = 0; k < 5; k++) {
+        const a = -Math.PI * 0.5 + (k - 2) * 0.62;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * 5, top - 5 + Math.sin(a) * 5);
+        ctx.lineTo(Math.cos(a) * 9.5, top - 5 + Math.sin(a) * 9.5);
+        ctx.stroke();
+      }
+      ctx.save(); ctx.translate(0, top - 5); ctx.scale(breathe, breathe);
+      ctx.fillStyle = look.gem;
+      ctx.beginPath(); ctx.ellipse(0, 0, 3.4, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = look.core;
+      ctx.beginPath(); ctx.ellipse(-0.6, -0.8, 1.3, 1.8, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      // a leaf that turns in the wind
+      ctx.fillStyle = look.trim;
+      ctx.save(); ctx.translate(4.8, top - 1); ctx.rotate(Math.sin(t * 1.6) * 0.5 - 0.5);
+      ctx.beginPath(); ctx.ellipse(2.4, 0, 3, 1.4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      break;
+    }
+    case "prism": {
+      // a floating shard splitting the light into a small fan
+      const spin = t * 1.1;
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.35 + cast * 0.4;
+      for (let k = 0; k < 3; k++) {
+        ctx.strokeStyle = ["#ff7ad8", "#8fe8ff", "#fff0a0"][k];
+        ctx.lineWidth = 1.3;
+        const a = -0.9 + k * 0.42;
+        ctx.beginPath();
+        ctx.moveTo(0, top - 6);
+        ctx.lineTo(Math.cos(a) * 13, top - 6 + Math.sin(a) * 13);
+        ctx.stroke();
+      }
+      ctx.restore();
+      // the setting: two slim prongs
+      ctx.strokeStyle = look.woodLt; ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.moveTo(-2.4, top + 1.5); ctx.lineTo(-1.6, top - 3); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(2.4, top + 1.5); ctx.lineTo(1.6, top - 3); ctx.stroke();
+      ctx.save(); ctx.translate(0, top - 6 + Math.sin(t * 2.6) * 0.9); ctx.rotate(spin);
+      ctx.fillStyle = look.gem;
+      ctx.beginPath(); ctx.moveTo(0, -5.4); ctx.lineTo(4.4, 3); ctx.lineTo(-4.4, 3); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = look.core;
+      ctx.beginPath(); ctx.moveTo(0, -2.6); ctx.lineTo(2, 1.4); ctx.lineTo(-2, 1.4); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 0.6; ctx.globalAlpha = 0.8;
+      ctx.beginPath(); ctx.moveTo(0, -5.4); ctx.lineTo(0, 3); ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.restore();
+      break;
+    }
+    case "censer": {
+      // a brazier swinging on its chain, breathing spores
+      const swing = Math.sin(t * 1.9) * 0.42 - cast * 0.5;
+      const hangX = 5.5, hangY = top - 2.5;
+      ctx.save();
+      ctx.translate(hangX, hangY);
+      ctx.rotate(swing);
+      ctx.strokeStyle = "#6a6250"; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, 5.5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-1.6, 1); ctx.lineTo(-1.2, 5.5); ctx.moveTo(1.6, 1); ctx.lineTo(1.2, 5.5); ctx.stroke();
+      // the bowl
+      ctx.fillStyle = "#4a4432";
+      ctx.beginPath();
+      ctx.moveTo(-4, 5.5); ctx.lineTo(4, 5.5); ctx.lineTo(2.8, 10.5); ctx.lineTo(-2.8, 10.5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = look.gem;
+      ctx.beginPath(); ctx.ellipse(0, 5.6, 3.6, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = look.core;
+      ctx.beginPath(); ctx.ellipse(-0.8, 5.4, 1.4, 0.7, 0, 0, Math.PI * 2); ctx.fill();
+      // vent slots
+      ctx.strokeStyle = look.trim; ctx.lineWidth = 0.7; ctx.globalAlpha = 0.85;
+      ctx.beginPath(); ctx.moveTo(-2, 7.4); ctx.lineTo(-1.2, 7.4); ctx.moveTo(1.2, 8.2); ctx.lineTo(2, 8.2); ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.restore();
+      // smoke curling up out of the bowl
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      for (let k = 0; k < 3; k++) {
+        const p = (t * 0.5 + k * 0.33) % 1;
+        ctx.globalAlpha = (1 - p) * 0.4;
+        ctx.fillStyle = k % 2 ? look.trim : "#5a7a2a";
+        ctx.beginPath();
+        ctx.arc(hangX + Math.sin(t * 2 + k * 2) * 2.4, hangY + 4 - p * 14, 1 + p * 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+      break;
+    }
+    case "nullstone": {
+      // a broken ring holding something that eats its own light
+      const wob = Math.sin(t * 1.7) * 0.2;
+      ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.3 + cast * 0.4;
+      for (let k = 0; k < 2; k++) {
+        ctx.strokeStyle = look.core; ctx.lineWidth = 0.9;
+        ctx.beginPath(); ctx.ellipse(0, top - 6, 9 + k * 3.5, (9 + k * 3.5) * 0.42, t * 0.8 + k, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.restore();
+      ctx.strokeStyle = look.woodLt; ctx.lineWidth = 2.2;
+      ctx.beginPath(); ctx.arc(0, top - 6, 6.4, Math.PI * 0.22 + wob, Math.PI * 1.78 + wob); ctx.stroke();
+      ctx.strokeStyle = look.trim; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.arc(0, top - 6, 6.4, Math.PI * 0.3 + wob, Math.PI * 1.7 + wob); ctx.stroke();
+      // the stone itself: a hole rather than an object
+      const ng = ctx.createRadialGradient(0, top - 6, 0.5, 0, top - 6, 5.5);
+      ng.addColorStop(0, "#000000");
+      ng.addColorStop(0.6, "#0b0616");
+      ng.addColorStop(1, "rgba(58,26,90,0)");
+      ctx.fillStyle = ng;
+      ctx.beginPath(); ctx.arc(0, top - 6, 5.5, 0, Math.PI * 2); ctx.fill();
+      // debris falling in
+      ctx.fillStyle = look.core;
+      for (let k = 0; k < 3; k++) {
+        const p = (t * 0.9 + k * 0.34) % 1;
+        const a = k * 2.1 + t * 1.4;
+        const rr = 11 * (1 - p) + 1.5;
+        ctx.globalAlpha = 0.3 + (1 - p) * 0.5;
+        ctx.beginPath(); ctx.arc(Math.cos(a) * rr, top - 6 + Math.sin(a) * rr * 0.45, 0.8, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case "sanguine": {
+      // finger-bones clutching a vial that never stops beating
+      const beat = 1 + Math.sin(t * 5.2) * 0.09 + cast * 0.12;
+      ctx.strokeStyle = look.woodLt; ctx.lineWidth = 1.6;
+      for (const s of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(s * 1.8, top + 2);
+        ctx.quadraticCurveTo(s * 5, top - 2, s * 2.6, top - 8.5);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#2a2018";
+      ctx.beginPath(); ctx.ellipse(0, top - 1.5, 2.6, 1.4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.save(); ctx.translate(0, top - 5.5); ctx.scale(beat, beat);
+      // glass
+      ctx.fillStyle = "rgba(230,240,255,0.32)";
+      ctx.beginPath(); ctx.ellipse(0, 0, 3.6, 4.6, 0, 0, Math.PI * 2); ctx.fill();
+      // blood inside, sloshing
+      ctx.fillStyle = look.gem;
+      ctx.beginPath(); ctx.ellipse(0, 1 + Math.sin(t * 3) * 0.3, 2.9, 3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = look.trim;
+      ctx.beginPath(); ctx.ellipse(-0.6, 1.2, 1.5, 1.6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = look.core;
+      ctx.beginPath(); ctx.arc(-1.3, -0.6, 0.7, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      // a bead running down the shaft
+      ctx.fillStyle = look.trim; ctx.globalAlpha = 0.85;
+      ctx.beginPath(); ctx.arc(1.6, top + 1 + ((t * 5) % 4), 0.8, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case "bell": {
+      // a small choir bell under a yoke, still ringing from the last cast
+      const swing = Math.sin(t * 3.1) * 0.14 + cast * 0.3;
+      ctx.strokeStyle = look.woodLt; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-5, top - 1); ctx.lineTo(5, top - 1); ctx.stroke();
+      ctx.strokeStyle = look.wood; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(-4.6, top - 1); ctx.lineTo(-4.6, top + 2); ctx.moveTo(4.6, top - 1); ctx.lineTo(4.6, top + 2); ctx.stroke();
+      ctx.save();
+      ctx.translate(0, top - 1);
+      ctx.rotate(swing);
+      ctx.fillStyle = look.gem;
+      ctx.beginPath();
+      ctx.moveTo(-1.6, 0.5);
+      ctx.bezierCurveTo(-2, 5, -4.6, 6.4, -5, 8.6);
+      ctx.lineTo(5, 8.6);
+      ctx.bezierCurveTo(4.6, 6.4, 2, 5, 1.6, 0.5);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = look.woodLt;
+      ctx.beginPath(); ctx.ellipse(0, 8.6, 5, 1.3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = look.core; ctx.lineWidth = 0.7; ctx.globalAlpha = 0.7;
+      ctx.beginPath(); ctx.moveTo(-3.4, 6.6); ctx.bezierCurveTo(-2.4, 4.6, 2.4, 4.6, 3.4, 6.6); ctx.stroke();
+      ctx.globalAlpha = 1;
+      // clapper
+      ctx.fillStyle = "#3a3630";
+      ctx.beginPath(); ctx.arc(Math.sin(t * 6.2) * 1.8, 8.2, 1.2, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      // the note hanging in the air
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      for (let k = 0; k < 2; k++) {
+        const p = (t * 0.9 + k * 0.5) % 1;
+        ctx.globalAlpha = (1 - p) * (0.28 + cast * 0.5);
+        ctx.strokeStyle = look.trim; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.ellipse(0, top + 5, 6 + p * 12, (6 + p * 12) * 0.75, 0, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.restore();
+      break;
+    }
   }
   ctx.lineCap = "butt"; ctx.lineJoin = "miter";
 }
@@ -304,9 +515,121 @@ function drawWandOrbit(cx, cy, rx, ry, count, col, t, opts = {}) {
   ctx.restore();
 }
 
+// Enchantment layers for the arcanum staffs: the school's own idiom, growing
+// from a whisper at epic to something visibly alive at legendary.
+function drawArcanumUpgradeLayer(kind, look, top, bot, legendary, col, t) {
+  switch (kind) {
+    case "thorn": {
+      // new growth spiralling up the branch, budding at legendary
+      ctx.globalAlpha = 0.45 + 0.15 * Math.sin(t * 2.6);
+      ctx.strokeStyle = col; ctx.lineWidth = legendary ? 1.5 : 0.9;
+      ctx.beginPath();
+      for (let i = 0; i <= 16; i++) {
+        const p = i / 16;
+        const y = bot - p * (bot - top + 4);
+        const x = Math.sin(p * Math.PI * 3 + t * 1.4) * (legendary ? 3.4 : 2.2);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      for (let k = 0; k < (legendary ? 5 : 3); k++) {
+        const p = (t * 0.35 + k * 0.28) % 1;
+        ctx.globalAlpha = (1 - p) * 0.5;
+        ctx.fillStyle = k % 2 ? "#c8e070" : col;
+        ctx.beginPath(); ctx.ellipse(Math.sin(k * 2 + t) * 6, top - 2 - p * 14, 1.4, 0.8, p * 3, 0, Math.PI * 2); ctx.fill();
+      }
+      break;
+    }
+    case "prism": {
+      // the shard throws a full spectrum once it is truly awake
+      const rays = legendary ? 7 : 4;
+      for (let k = 0; k < rays; k++) {
+        const a = t * 0.5 + k * (Math.PI * 2 / rays);
+        ctx.globalAlpha = 0.2 + 0.2 * Math.sin(t * 4 + k);
+        ctx.strokeStyle = ["#ff7ad8", "#8fe8ff", "#fff0a0", "#a0ffc8"][k % 4];
+        ctx.lineWidth = legendary ? 1.3 : 0.8;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * 5, top - 6 + Math.sin(a) * 5);
+        ctx.lineTo(Math.cos(a) * (legendary ? 19 : 13), top - 6 + Math.sin(a) * (legendary ? 19 : 13));
+        ctx.stroke();
+      }
+      break;
+    }
+    case "censer": {
+      // the smoke thickens into a proper miasma and sinks down the shaft
+      ctx.globalAlpha = legendary ? 0.4 : 0.26;
+      const mg = ctx.createRadialGradient(5.5, top + 2, 1, 5.5, top + 2, legendary ? 20 : 13);
+      mg.addColorStop(0, col);
+      mg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = mg;
+      ctx.beginPath(); ctx.arc(5.5, top + 2, legendary ? 20 : 13, 0, Math.PI * 2); ctx.fill();
+      for (let k = 0; k < (legendary ? 6 : 3); k++) {
+        const p = (t * 0.55 + k * 0.19) % 1;
+        ctx.globalAlpha = (1 - p) * 0.34;
+        ctx.fillStyle = k % 2 ? "#5a7a2a" : col;
+        ctx.beginPath(); ctx.arc(5.5 + Math.sin(t * 1.7 + k) * 4, top + 4 + p * 16, 1.2 + p * 2.4, 0, Math.PI * 2); ctx.fill();
+      }
+      break;
+    }
+    case "nullstone": {
+      // the horizon widens and starts bending the shaft's own light
+      ctx.globalAlpha = legendary ? 0.4 : 0.24;
+      ctx.strokeStyle = col; ctx.lineWidth = legendary ? 1.4 : 0.9;
+      for (let k = 0; k < (legendary ? 4 : 2); k++) {
+        ctx.beginPath();
+        ctx.ellipse(0, top - 6, 9 + k * 4.2, 4 + k * 1.5, t * 0.7 + k, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      const g = ctx.createRadialGradient(0, top - 6, 1, 0, top - 6, legendary ? 20 : 13);
+      g.addColorStop(0, "#020106");
+      g.addColorStop(0.45, "rgba(60,20,120,0.72)");
+      g.addColorStop(1, "rgba(122,58,255,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(0, top - 6, legendary ? 18 : 11, 0, Math.PI * 2); ctx.fill();
+      drawWandOrbit(0, top - 6, legendary ? 16 : 11, legendary ? 7 : 5, legendary ? 8 : 5, col, t, { size: 1, alpha: 0.7, speed: legendary ? 2.9 : 2 });
+      break;
+    }
+    case "sanguine": {
+      // the vial's pulse runs down the bone as a heartbeat
+      const beat = (Math.sin(t * 5.2) + 1) * 0.5;
+      ctx.globalAlpha = 0.3 + beat * (legendary ? 0.42 : 0.24);
+      ctx.strokeStyle = col; ctx.lineWidth = legendary ? 1.6 : 1;
+      ctx.beginPath(); ctx.moveTo(0, top + 2); ctx.lineTo(0, bot - 2); ctx.stroke();
+      for (let k = 0; k < (legendary ? 4 : 2); k++) {
+        const p = (t * 0.75 + k * 0.3) % 1;
+        ctx.globalAlpha = (1 - p) * 0.55;
+        ctx.fillStyle = k % 2 ? "#ff8a90" : col;
+        ctx.beginPath(); ctx.arc(Math.sin(k * 2.2 + t * 2) * 2.4, top - 3 + p * (bot - top), 1 + (1 - p), 0, Math.PI * 2); ctx.fill();
+      }
+      if (legendary) drawWandOrbit(0, top - 5, 11, 6, 4, col, t, { size: 1.1, alpha: 0.5, speed: 2.4 });
+      break;
+    }
+    case "bell": {
+      // the bell never stops ringing once it has been properly tuned
+      for (let k = 0; k < (legendary ? 4 : 2); k++) {
+        const p = (t * (legendary ? 1.2 : 0.8) + k * 0.28) % 1;
+        ctx.globalAlpha = (1 - p) * (legendary ? 0.5 : 0.3);
+        ctx.strokeStyle = k % 2 ? "#ffffff" : col;
+        ctx.lineWidth = legendary ? 1.3 : 0.9;
+        ctx.beginPath();
+        ctx.ellipse(0, top + 5, 7 + p * (legendary ? 22 : 14), (7 + p * (legendary ? 22 : 14)) * 0.72, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      break;
+    }
+  }
+}
+
 function drawMagicUpgradeLayer(weaponId, look, top, bot, rank, col, t, cast) {
   if (rank < 2) return;
   const legendary = rank >= 3;
+  const arcanumKinds = ["thorn", "prism", "censer", "nullstone", "sanguine", "bell"];
+  if (arcanumKinds.includes(look.kind)) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    drawArcanumUpgradeLayer(look.kind, look, top, bot, legendary, col, t);
+    ctx.restore();
+    return;
+  }
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   if (weaponId === "fire_tome") {
@@ -386,7 +709,7 @@ function drawMagicUpgradeLayer(weaponId, look, top, bot, rank, col, t, cast) {
 }
 
 export function drawWandModel(weaponId, col, s = 1, opts = {}) {
-  const look = opts.look || WAND_LOOKS[weaponId] || { ...DEFAULT_WAND, trim: col || DEFAULT_WAND.trim };
+  const look = WAND_LOOKS[weaponId] || { ...DEFAULT_WAND, trim: col || DEFAULT_WAND.trim };
   const cast = clamp(opts.cast ?? 0, 0, 1);
   const fx = opts.fx || null;
   const rank = wandUpgradeRank(fx);

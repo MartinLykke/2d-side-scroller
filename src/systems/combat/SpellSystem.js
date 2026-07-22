@@ -399,6 +399,7 @@ function detonateRuneField(f, idx) {
 
 function updateSpellFields(dt) {
   updateShadowCurses(dt);
+  updateArcanumStatuses(dt);
   const fields = state.spellFields;
   if (!fields || !fields.length) return;
   for (let i = fields.length - 1; i >= 0; i--) {
@@ -448,10 +449,87 @@ function updateSpellFields(dt) {
         const a = Math.random() < 0.5 ? -1 : 1;
         spawnParticles(f.x + a * f.r, groundY - 8, 1, f.col, 16, 34);
       }
+    } else if (f.type === "bramble") {
+      f.sprout = Math.min(1, (f.sprout || 0) + dt * 3.5);
+      if (Math.random() < dt * 7) spawnParticles(f.x + rand(-f.r, f.r) * 0.8, groundY - rand(2, 20), 1, "#4f7a2a", 12, 32);
+      f.lashT -= dt;
+      if (f.lashT <= 0 && f.sprout >= 1) {
+        f.lashT = 0.55;
+        let lashed = 0;
+        for (const e of enemiesNearX(f.x, f.r)) {
+          spellDamageEnemy(e, f.dmg, f.col, { particleCount: 6, spread: 42 });
+          e.slow = Math.max(e.slow || 0, 0.55 + f.slow);
+          if (f.root && Math.random() < f.root) e.rooted = Math.max(e.rooted || 0, 1.2);
+          lashed++;
+        }
+        if (lashed) {
+          if (f.siphon) trySoulSiphon(state.player, f.siphon, f.col);
+          spawnParticles(f.x, groundY - 28, 6 + lashed * 2, "#9bd05a", f.r * 0.7, 95);
+          Audio.hit();
+        }
+      }
+    } else if (f.type === "spore") {
+      f.x += (f.drift || 0) * dt;
+      f.y = Math.min(f.y - 5 * dt, groundY - 34);
+      if (Math.random() < dt * 16) spawnParticles(f.x + rand(-f.r, f.r) * 0.75, f.y + rand(-22, 26), 1, "#7fbf3a", 14, 34);
+      f.tick -= dt;
+      if (f.tick <= 0) {
+        f.tick = 0.75;
+        for (const e of enemiesNearX(f.x, f.r)) {
+          spellDamageEnemy(e, f.dmg, f.col, { particleCount: 4, spread: 30, float: false });
+          infectEnemy(e, f);
+        }
+      }
+    } else if (f.type === "well") {
+      // haul everything inside the horizon toward the core
+      for (const e of enemiesNearX(f.x, f.r * 1.15)) {
+        if (ENEMY_TYPES[e.type]?.noKnockback) continue;
+        e.x += Math.sign(f.x - e.x || 1) * Math.min(150 * f.pull * dt, Math.abs(f.x - e.x) * 0.12);
+        if (f.root) e.rooted = Math.max(e.rooted || 0, 0.25);
+        else e.slow = Math.max(e.slow || 0, 0.45);
+      }
+      if (Math.random() < dt * 30) {
+        const a = rand(0, Math.PI * 2), rr = f.r * rand(0.5, 1.1);
+        spawnParticles(f.x + Math.cos(a) * rr, f.y + Math.sin(a) * rr * 0.5, 1, f.col, 10, 40);
+      }
+      f.tick -= dt;
+      if (f.tick <= 0) {
+        f.tick = 0.32;
+        for (const e of enemiesNearX(f.x, f.r)) spellDamageEnemy(e, f.dmg, f.col, { particleCount: 3, spread: 26, float: false });
+      }
+    } else if (f.type === "leech") {
+      const h = f.host;
+      if (!h || h.fleeing || h.dying || h.hp <= 0) {
+        const next = f.jumps > 0 ? nearestEnemyTo(f.x, 240, h) : null;
+        if (next) {
+          f.jumps--;
+          f.host = next;
+          f.life = Math.min(f.maxLife, f.life + 1.2);
+          spawnParticles((f.x + next.x) / 2, targetImpactY(next), 10, "#c0102a", 60, 70);
+          floaty(next.x, "Leapt", f.col, 11);
+        } else {
+          f.life = 0;
+        }
+      } else {
+        f.x = h.x;
+        f.y = targetImpactY(h) - 6;
+        if (Math.random() < dt * 11) spawnParticles(f.x + rand(-7, 7), f.y + rand(-7, 7), 1, "#c0102a", 14, 26);
+        f.tick -= dt;
+        if (f.tick <= 0) {
+          f.tick = 0.55;
+          spellDamageEnemy(h, f.dmg, f.col, { y: f.y, particleCount: 5, spread: 34 });
+          if (f.heal) trySoulSiphon(state.player, f.heal, f.col);
+        }
+      }
     }
     if (f.life <= 0) {
       if (f.type === "rune") detonateRuneField(f, i);
-      else fields.splice(i, 1);
+      else if (f.type === "well") {
+        implodeGravityWell(f);
+        // Dying Star: the collapse comes twice
+        if (f.repeat) { f.repeat = false; f.crush *= 0.6; f.life = f.maxLife = 0.55; f.tick = 0.32; }
+        else fields.splice(i, 1);
+      } else fields.splice(i, 1);
     }
   }
 }
@@ -917,6 +995,1055 @@ function castProceduralSpell(player, wBase, tgt, fx, ctx) {
   state.spells.push(spell);
 }
 
+// ---------- Arcanum staffs: hand-built casting schools ----------
+// Six curated staffs whose projectiles behave nothing like the shared
+// ballistic path: a seeding thorn pod, a refracting crystal shard, a
+// contagion flask, an anchored gravity well, a clinging blood leech and a
+// travelling bell wave. castArcanumSpell spawns them, updateArcanumSpell
+// drives them per frame. Every impact still funnels through applySpellField,
+// so the generic magic upgrades (burn, frost, rune traps, split orbs…) keep
+// working on them exactly as they do on the older staffs.
+
+const ARCANUM_SPELLS = new Set([
+  "bramble", "prism", "refract", "spore", "gravitywell", "leech", "resonance",
+  "fracture", "gale", "bastion", "larva",
+]);
+
+function nearestEnemyTo(x, maxD = 300, exclude = null) {
+  let best = null, bd = maxD;
+  for (const e of state.enemies) {
+    if (e === exclude || e.fleeing || e.dying || e.hp <= 0) continue;
+    const d = dist(e.x, x);
+    if (d < bd) { bd = d; best = e; }
+  }
+  return best;
+}
+
+// What a flying arcanum projectile is touching right now: an enemy, a bear,
+// or nothing. `exclude` lets piercing rays skip what they already bit.
+function arcanumContact(sp, exclude = null, yTol = 44, wScale = 0.75) {
+  for (const e of state.enemies) {
+    if (e.fleeing || e.dying || e.hp <= 0) continue;
+    if (exclude && exclude.has(e)) continue;
+    const et = ENEMY_TYPES[e.type] || {};
+    const ey = targetImpactY(e);
+    if (dist(sp.x, e.x) < (et.w || 22) * wScale && Math.abs(sp.y - ey) < yTol) return { e, ey, et };
+  }
+  for (const a of state.animals) {
+    if (a.type !== "bear" || !a.alive || a.dying) continue;
+    const ay = groundY + (a.fy || 0) - 34;
+    if (dist(sp.x, a.x) < 40 && Math.abs(sp.y - ay) < 56) return { bear: a, ey: ay };
+  }
+  return null;
+}
+
+// Shared "this projectile just landed on something" resolution.
+function arcanumStrike(sp, hit, dmg, col, opts = {}) {
+  const x = hit.e ? hit.e.x : hit.bear.x;
+  const y = hit.ey;
+  if (hit.bear) {
+    damageBear(hit.bear, dmg, col);
+  } else {
+    spellDamageEnemy(hit.e, dmg, col, { y, particleCount: opts.particles ?? 8, spread: opts.spread ?? 52 });
+    const knock = opts.knock ?? 120;
+    if (knock && !(hit.et || {}).noKnockback) hit.e.knock = (hit.e.knock || 0) + Math.sign(hit.e.x - sp.x || 1) * knock;
+  }
+  if (sp.soulSiphon) trySoulSiphon(state.player, sp.soulSiphon, sp.upgradeCol || col);
+  spellEnemyImpact(sp, x, y);
+  applySpellField(sp, x, y);
+  Audio.hit();
+  return { x, y };
+}
+
+function ballisticVelocity(fromX, fromY, toX, toY, speed, grav) {
+  const dx = toX - fromX, dy = toY - fromY;
+  const flight = Math.max(0.12, Math.hypot(dx, dy) / speed);
+  return { vx: dx / flight, vy: (dy - 0.5 * grav * flight * flight) / flight, flight };
+}
+
+// ----- Thornroot Stave: a seed pod that sprouts lashing thorn thickets -----
+
+function spawnBramblePatch(sp, x, opts = {}) {
+  const life = (opts.life ?? 3.4) + (sp.brambleLife || 0);
+  ensureSpellFields().push({
+    type: "bramble",
+    x,
+    r: opts.r ?? Math.max(46, sp.aoeRadius || 58),
+    dmg: Math.max(1, sp.dmg * (opts.dmgFrac ?? 0.42) * (1 + (sp.brambleLash || 0))),
+    root: sp.brambleRoot || 0,
+    slow: sp.slowHit || 0,
+    siphon: sp.soulSiphon || 0,
+    col: sp.upgradeCol || "#7fc24a",
+    life, maxLife: life,
+    lashT: 0.3,
+    sprout: 0,
+    ph: rand(0, 6),
+  });
+  spawnParticles(x, groundY - 12, opts.burst ?? 14, "#4f7a2a", 70, 90);
+  spawnParticles(x, groundY - 22, Math.round((opts.burst ?? 14) * 0.5), "#9bd05a", 55, 120);
+}
+
+function updateBramblePod(sp, dt) {
+  sp.x += sp.vx * dt;
+  sp.y += sp.vy * dt;
+  sp.vy += 340 * dt;
+  sp.spin = (sp.spin || 0) + dt * 7;
+  // seedlings drop out of the pod as it flies and take root behind it
+  if (sp.seeds > 0) {
+    sp.seedT = (sp.seedT || 0) - dt;
+    if (sp.seedT <= 0) {
+      sp.seedT = 0.15;
+      sp.seeds--;
+      spawnBramblePatch(sp, sp.x, { r: 34, life: 2, dmgFrac: 0.2, burst: 5 });
+    }
+  }
+  const hit = arcanumContact(sp);
+  const grounded = sp.y > groundY - 10;
+  if (hit || grounded || sp.life <= 0) {
+    const x = hit ? arcanumStrike(sp, hit, sp.dmg, "#9bd05a", { knock: 90 }).x : sp.x;
+    if (!hit) { spellGroundImpact(sp); applySpellField(sp, x, groundY - 20); }
+    spawnBramblePatch(sp, x);
+    if (sp.brambleTwin) spawnBramblePatch(sp, x + (sp.vx >= 0 ? 1 : -1) * 95, { r: 42, dmgFrac: 0.32 });
+    Audio.explosion();
+    return true;
+  }
+  return false;
+}
+
+// ----- Prism Spire: a shard that splinters into piercing rays -----
+
+function spawnRefractRay(sp, x, y, ang, dmg, canSplit) {
+  const spd = 660;
+  state.spells.push({
+    x, y,
+    vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+    spellType: "refract", arcanum: true,
+    dmg: Math.max(1, dmg),
+    life: 0.42, age: 0,
+    col: "#d8f8ff",
+    aoeRadius: 0,
+    canSplit,
+    _hit: new Set(),
+    burnDps: sp.burnDps, frostS: sp.frostS, firePool: sp.firePool,
+    pull: sp.pull, runeTrap: sp.runeTrap, voidScar: sp.voidScar,
+    soulSiphon: sp.soulSiphon,
+    upgradeCol: sp.upgradeCol, upgradeRank: sp.upgradeRank,
+  });
+}
+
+function refractShard(sp, x, y) {
+  const n = Math.max(2, 3 + (sp.refractRays || 0));
+  const base = Math.atan2(sp.vy, sp.vx);
+  for (let i = 0; i < n; i++) {
+    const t = n === 1 ? 0 : (i / (n - 1)) * 2 - 1;
+    spawnRefractRay(sp, x, y, base + t * 1.45, sp.dmg * 0.45, !!sp.refractSplit);
+  }
+  state.legendaryEffects.push({ type: "ring", x, radius: 46, life: 0.3, totalLife: 0.3, col: "#d8f8ff", width: 3 });
+  spawnParticles(x, y, 16, "#8fe8ff", 95, 115);
+  spawnParticles(x, y, 8, "#ffffff", 55, 130);
+  Audio.spell();
+}
+
+function updatePrismShard(sp, dt) {
+  sp.x += sp.vx * dt;
+  sp.y += sp.vy * dt;
+  sp.vy += 110 * dt;
+  sp.spin = (sp.spin || 0) + dt * 9;
+  const hit = arcanumContact(sp);
+  if (hit) {
+    const at = arcanumStrike(sp, hit, sp.dmg, "#d8f8ff", { knock: 70 });
+    refractShard(sp, at.x, at.y);
+    return true;
+  }
+  if (sp.y > groundY - 8 || sp.life <= 0) {
+    spellGroundImpact(sp);
+    refractShard(sp, sp.x, Math.min(sp.y, groundY - 16));
+    return true;
+  }
+  return false;
+}
+
+function updateRefractRay(sp, dt) {
+  sp.x += sp.vx * dt;
+  sp.y += sp.vy * dt;
+  if (!sp._hit) sp._hit = new Set();
+  const hit = arcanumContact(sp, sp._hit, 38, 0.85);
+  if (hit) {
+    if (hit.e) sp._hit.add(hit.e);
+    arcanumStrike(sp, hit, sp.dmg, "#d8f8ff", { knock: 40, particles: 6, spread: 38 });
+    // Kaleidoscope: the ray bends again the moment it bites
+    if (sp.canSplit && !sp.hasSplit) {
+      sp.hasSplit = true;
+      const ang = Math.atan2(sp.vy, sp.vx);
+      spawnRefractRay(sp, sp.x, sp.y, ang - 0.55, sp.dmg * 0.6, false);
+      spawnRefractRay(sp, sp.x, sp.y, ang + 0.55, sp.dmg * 0.6, false);
+    }
+  }
+  if (sp.y > groundY - 6) {
+    spawnParticles(sp.x, groundY - 8, 6, "#d8f8ff", 45, 70);
+    return true;
+  }
+  return sp.life <= 0;
+}
+
+// ----- Miasma Censer: a spore flask that seeds a spreading contagion -----
+
+function burstSporeCloud(sp, x, y, scale = 1) {
+  const life = (3.8 + (sp.sporeLife || 0)) * scale;
+  ensureSpellFields().push({
+    type: "spore",
+    x, y: Math.min(y, groundY - 34),
+    r: Math.max(44, (sp.aoeRadius || 74) * scale),
+    dmg: Math.max(1, sp.dmg * 0.3),
+    plagueDmg: 1 + (sp.plagueDmg || 0),
+    slow: sp.sporeSlow || 0,
+    spread: sp.sporeSpread || 0,
+    bloom: !!sp.sporeBloom,
+    col: sp.upgradeCol || "#a8d84a",
+    life, maxLife: life,
+    tick: 0.3,
+    drift: rand(-9, 9),
+    ph: rand(0, 6),
+  });
+  spawnParticles(x, y, Math.round(22 * scale), "#7fbf3a", 90, 110);
+  spawnParticles(x, y, Math.round(12 * scale), "#c8e070", 60, 130);
+  Audio.explosion();
+  Game.screenShake = Math.max(Game.screenShake, 0.2 * scale);
+}
+
+function infectEnemy(e, f) {
+  e.poison = Math.max(e.poison || 0, 3.6);
+  e.poisonTick = Math.min(e.poisonTick || 1, 0.5);
+  e.poisonDmg = Math.max(e.poisonDmg || 0, f.plagueDmg || 1);
+  e.plague = Math.max(e.plague || 0, 4.5);
+  e.plagueDmg = f.plagueDmg || 1;
+  e.plagueSpread = Math.max(e.plagueSpread || 0, f.spread || 0);
+  e.plagueBloom = e.plagueBloom || !!f.bloom;
+  e.plagueR = Math.max(e.plagueR || 0, (f.r || 60) * 0.55);
+  e.plagueCol = f.col;
+  if (f.slow) e.slow = Math.max(e.slow || 0, f.slow);
+}
+
+function updateSporeFlask(sp, dt) {
+  sp.x += sp.vx * dt;
+  sp.y += sp.vy * dt;
+  sp.vy += 460 * dt;
+  sp.spin = (sp.spin || 0) + dt * 8;
+  const hit = arcanumContact(sp);
+  const grounded = sp.y > groundY - 10;
+  if (hit || grounded || sp.life <= 0) {
+    const at = hit ? arcanumStrike(sp, hit, sp.dmg, "#a8d84a", { knock: 70 }) : { x: sp.x, y: groundY - 30 };
+    if (!hit) { spellGroundImpact(sp); applySpellField(sp, sp.x, groundY - 20); }
+    burstSporeCloud(sp, at.x, at.y);
+    return true;
+  }
+  return false;
+}
+
+// Contagion between bodies, plus the burst a plagued corpse leaves behind.
+function updatePlagueContagion(dt) {
+  for (const e of state.enemies) {
+    if (!(e.plague > 0)) continue;
+    if (e.dying || e.hp <= 0) {
+      if (e.plagueBloom && !e.plagueBloomed) {
+        e.plagueBloomed = true;
+        burstSporeCloud({
+          aoeRadius: e.plagueR || 50, dmg: (e.plagueDmg || 1) * 2,
+          sporeSpread: e.plagueSpread || 0, sporeBloom: true,
+          plagueDmg: (e.plagueDmg || 1) - 1, upgradeCol: e.plagueCol,
+        }, e.x, targetImpactY(e), 0.62);
+      }
+      e.plague = 0;
+      continue;
+    }
+    e.plague -= dt;
+    if (Math.random() < dt * 6) spawnParticles(e.x + rand(-8, 8), targetImpactY(e) + rand(-12, 6), 1, "#7fbf3a", 14, 26);
+    if (e.plagueSpread > 0) {
+      e.plagueSpreadT = (e.plagueSpreadT || rand(0.4, 1.1)) - dt;
+      if (e.plagueSpreadT <= 0) {
+        e.plagueSpreadT = 1.1;
+        for (const ne of enemiesNearX(e.x, 95)) {
+          if (ne === e || ne.plague > 0) continue;
+          if (Math.random() > e.plagueSpread) continue;
+          infectEnemy(ne, { plagueDmg: e.plagueDmg, spread: e.plagueSpread, bloom: e.plagueBloom, r: e.plagueR, col: e.plagueCol });
+          spawnParticles((e.x + ne.x) / 2, targetImpactY(ne), 7, "#a8d84a", 40, 60);
+          floaty(ne.x, "Infected", e.plagueCol || "#a8d84a", 11);
+          break; // the plague only jumps to one neighbour per tick
+        }
+      }
+    }
+    if (e.plague <= 0) e.plague = 0;
+  }
+}
+
+// ----- Nullstone Scepter: a core that anchors, hauls the wave in, implodes -----
+
+function anchorGravityWell(sp, x, y) {
+  const life = 1.35 + (sp.wellDuration || 0);
+  ensureSpellFields().push({
+    type: "well",
+    x, y: Math.min(y, groundY - 26),
+    r: Math.max(70, sp.aoeRadius || 96),
+    dmg: Math.max(1, sp.dmg * 0.22),
+    crush: sp.dmg * (1.5 + (sp.wellCrush || 0)),
+    pull: 1 + (sp.wellPull || 0),
+    root: !!sp.wellRoot,
+    repeat: !!sp.wellRepeat,
+    rider: sp,
+    col: sp.upgradeCol || "#c8a0ff",
+    life, maxLife: life,
+    tick: 0.32,
+    ph: rand(0, 6),
+  });
+  spawnParticles(x, y, 18, "#7a3aff", 70, 90);
+  spawnParticles(x, y, 8, "#c8a0ff", 40, 120);
+  Audio.spell();
+  Game.screenShake = Math.max(Game.screenShake, 0.22);
+}
+
+function implodeGravityWell(f) {
+  const dmg = Math.max(1, f.crush);
+  let hit = 0;
+  for (const e of enemiesNearX(f.x, f.r)) {
+    const et = ENEMY_TYPES[e.type] || {};
+    spellDamageEnemy(e, dmg, f.col, { particleCount: 10, spread: 72 });
+    if (!et.noKnockback) e.knock = (e.knock || 0) + Math.sign(e.x - f.x || 1) * 320;
+    hit++;
+  }
+  if (f.rider) applySpellField(f.rider, f.x, f.y);
+  state.legendaryEffects.push({ type: "ring", x: f.x, radius: f.r, life: 0.45, totalLife: 0.45, col: f.col, width: 6 });
+  spawnParticles(f.x, f.y, 26, "#7a3aff", 135, 145);
+  spawnParticles(f.x, f.y, 14, "#ffffff", 85, 165);
+  spawnParticles(f.x, groundY - 8, 16, "#3a1a5a", 120, 60);
+  if (hit) { floaty(f.x, "Collapse x" + hit, f.col); Audio.explosion(); }
+  Game.screenShake = Math.max(Game.screenShake, 0.55);
+}
+
+function updateNullstoneCore(sp, dt) {
+  sp.x += sp.vx * dt;
+  sp.y += sp.vy * dt;
+  sp.travel = (sp.travel || 0) + Math.hypot(sp.vx, sp.vy) * dt;
+  const hit = arcanumContact(sp);
+  if (hit || sp.travel >= sp.reach || sp.y > groundY - 14 || sp.life <= 0) {
+    const at = hit ? arcanumStrike(sp, hit, sp.dmg * 0.5, "#c8a0ff", { knock: 0, particles: 6 }) : { x: sp.x, y: sp.y };
+    anchorGravityWell(sp, at.x, Math.min(at.y, groundY - 26));
+    return true;
+  }
+  return false;
+}
+
+// ----- Sanguine Rod: a homing leech that clings on and drains -----
+
+function attachLeech(sp, host) {
+  const life = 3 + (sp.leechLife || 0);
+  ensureSpellFields().push({
+    type: "leech",
+    host,
+    x: host.x, y: targetImpactY(host) - 6,
+    r: 0,
+    dmg: Math.max(1, sp.dmg * (0.32 + (sp.leechDmg || 0))),
+    heal: sp.leechHeal || 0,
+    jumps: sp.leechJumps || 0,
+    col: sp.upgradeCol || "#ff5060",
+    life, maxLife: life,
+    tick: 0.5,
+    ph: rand(0, 6),
+  });
+  spawnParticles(host.x, targetImpactY(host), 12, "#c0102a", 55, 70);
+  floaty(host.x, "Latched", "#ff8a90", 11);
+}
+
+function updateLeechOrb(sp, dt) {
+  // steer toward whatever is closest — the leech wants a host, not a lane
+  const tgt = nearestEnemyTo(sp.x, 460);
+  if (tgt) {
+    const want = Math.atan2(targetImpactY(tgt) - sp.y, tgt.x - sp.x);
+    const cur = Math.atan2(sp.vy, sp.vx);
+    let d = want - cur;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    const spd = Math.hypot(sp.vx, sp.vy) || 320;
+    const a = cur + Math.sign(d) * Math.min(Math.abs(d), 6 * dt);
+    sp.vx = Math.cos(a) * spd;
+    sp.vy = Math.sin(a) * spd;
+  } else {
+    sp.vy += 150 * dt;
+  }
+  sp.x += sp.vx * dt;
+  sp.y += sp.vy * dt;
+  const hit = arcanumContact(sp);
+  if (hit) {
+    arcanumStrike(sp, hit, sp.dmg, "#ff5060", { knock: 60 });
+    if (hit.e && !hit.e.dying && hit.e.hp > 0) attachLeech(sp, hit.e);
+    return true;
+  }
+  if (sp.y > groundY - 8 || sp.life <= 0) {
+    spawnParticles(sp.x, Math.min(sp.y, groundY - 8), 10, "#7a0a1a", 55, 60);
+    return true;
+  }
+  return false;
+}
+
+// ----- Choirbell Staff: a struck note that rolls through the lane -----
+
+function shatterResonance(sp, e, depth = 0) {
+  const ey = targetImpactY(e);
+  e.resonance = 0;
+  e.resonanceT = 0;
+  const dmg = Math.max(2, sp.dmg * 1.9);
+  spellDamageEnemy(e, dmg, "#ffffff", { y: ey, particleCount: 16, spread: 95 });
+  state.legendaryEffects.push({ type: "ring", x: e.x, radius: 92, life: 0.38, totalLife: 0.38, col: "#e8f8ff", width: 4 });
+  spawnParticles(e.x, ey, 18, "#e8f8ff", 110, 120);
+  floaty(e.x, "Shatter!", "#ffffff", 14);
+  Audio.explosion();
+  Game.screenShake = Math.max(Game.screenShake, 0.34);
+  for (const ne of enemiesNearX(e.x, 92)) {
+    if (ne === e) continue;
+    const net = ENEMY_TYPES[ne.type] || {};
+    spellDamageEnemy(ne, Math.max(1, sp.dmg * 0.5), "#e8f8ff", { particleCount: 5, spread: 40 });
+    if (!net.noKnockback) ne.knock = (ne.knock || 0) + Math.sign(ne.x - e.x || 1) * 210 * (sp.force || 1);
+    // Carillon of Ruin: the note carries into everything still standing
+    if (sp.chorus && depth < 2) addResonance(sp, ne, 1, depth + 1);
+  }
+}
+
+function addResonance(sp, e, n = 1, depth = 0) {
+  if (!e || e.dying || e.hp <= 0 || e.fleeing) return;
+  e.resonance = (e.resonance || 0) + n;
+  e.resonanceT = 3.5;
+  spawnParticles(e.x, targetImpactY(e) - 14, 2 + e.resonance * 2, "#e8f8ff", 26, 46);
+  if (e.resonance >= (sp.needed || 3)) shatterResonance(sp, e, depth);
+  else floaty(e.x, "♪".repeat(e.resonance), "#a8d8ff", 11);
+}
+
+function updateResonanceWave(sp, dt) {
+  sp.x += sp.vx * dt;
+  sp.travel = (sp.travel || 0) + Math.abs(sp.vx) * dt;
+  if (!sp._hit) sp._hit = new Set();
+  for (const e of state.enemies) {
+    if (e.fleeing || e.dying || e.hp <= 0 || sp._hit.has(e)) continue;
+    const et = ENEMY_TYPES[e.type] || {};
+    if (Math.abs(e.x - sp.x) > (et.w || 22) * 0.7 + 12) continue;
+    sp._hit.add(e);
+    // sound doesn't care how high a thing flies — every body in the column rings
+    const ey = targetImpactY(e);
+    arcanumStrike(sp, { e, ey, et }, sp.dmg, "#e8f8ff", { knock: 95 * (sp.force || 1), particles: 7 });
+    addResonance(sp, e, 1);
+  }
+  if (Math.random() < dt * 20) spawnParticles(sp.x + rand(-6, 6), groundY - rand(20, 96), 1, "#e8f8ff", 18, 34);
+  if (sp.travel >= sp.reach || sp.life <= 0) {
+    // Echo Chamber: the note rebounds and sweeps back the way it came
+    if (sp.echo && !sp.echoed) {
+      sp.echoed = true;
+      sp.vx *= -1;
+      sp.travel = 0;
+      sp.life = Math.max(sp.life, 1.5);
+      sp._hit = new Set();
+      spawnParticles(sp.x, groundY - 60, 16, "#e8f8ff", 70, 100);
+      Audio.spell();
+      return false;
+    }
+    spawnParticles(sp.x, groundY - 55, 10, "#a8d8ff", 55, 80);
+    return true;
+  }
+  return false;
+}
+
+function updateResonanceDecay(dt) {
+  for (const e of state.enemies) {
+    if (!(e.resonanceT > 0)) continue;
+    e.resonanceT -= dt;
+    if (e.resonanceT <= 0) { e.resonance = 0; e.resonanceT = 0; }
+    else if (Math.random() < dt * 3) spawnParticles(e.x + rand(-9, 9), targetImpactY(e) - 16, 1, "#a8d8ff", 12, 26);
+  }
+}
+
+// ----- The Rupture Shard: chaotic bolts that pick their own victims -----
+// The shard never aims. Every bolt is flung at a body chosen at random, and
+// each impact folds space inward — so the more of the horde is on screen, the
+// more reliably the chaos both connects and herds the wave into a clump.
+
+function randomLiveEnemy(x, maxD, exclude = null) {
+  const pool = [];
+  for (const e of state.enemies) {
+    if (e === exclude || e.fleeing || e.dying || e.hp <= 0) continue;
+    if (dist(e.x, x) > maxD) continue;
+    pool.push(e);
+  }
+  return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+}
+
+// The micro-shockwave every blast leaves behind: neighbours slide toward the
+// point of impact. This is the whole reason to keep the screen full.
+function quantumRupture(sp, x, y) {
+  const strength = 1 + (sp.rupturePull || 0);
+  const r = Math.max(70, sp.aoeRadius || 56) * (1 + (sp.rupturePull || 0) * 0.3);
+  const col = sp.upgradeCol || "#c46bff";
+  let caught = 0;
+  for (const e of enemiesNearX(x, r)) {
+    if (ENEMY_TYPES[e.type]?.noKnockback) continue;
+    const dx = x - e.x;
+    if (Math.abs(dx) < 5) continue;
+    e.x += Math.sign(dx) * Math.min(Math.abs(dx) * 0.38 * strength, 72 * strength);
+    e.slow = Math.max(e.slow || 0, 0.3);
+    caught++;
+  }
+  state.legendaryEffects.push({ type: "ring", x, radius: r, life: 0.26, totalLife: 0.26, col, width: 2 + strength });
+  spawnParticles(x, y, 10 + caught * 2, "#c46bff", r * 0.7, 105);
+  spawnParticles(x, y, 5, "#ffffff", 32, 135);
+  if (caught >= 2) floaty(x, "Fracture x" + caught, "#e0a0ff", 12);
+}
+
+function spawnRuptureRift(sp, x, y) {
+  const life = 0.85 + (sp.rift || 0) * 0.4;
+  ensureSpellFields().push({
+    type: "rift",
+    x, y: Math.min(y, groundY - 28),
+    r: Math.max(58, (sp.aoeRadius || 56) * 0.95),
+    dmg: Math.max(1, sp.dmg * 0.4),
+    burst: Math.max(2, sp.dmg * (1 + (sp.rift || 0) * 0.55)),
+    pull: 1 + (sp.rupturePull || 0),
+    col: sp.upgradeCol || "#c46bff",
+    life, maxLife: life,
+    tick: 0.24,
+    ph: rand(0, 6),
+  });
+  spawnParticles(x, y, 12, "#7a2aff", 62, 95);
+}
+
+function burstRuptureRift(f) {
+  for (const e of enemiesNearX(f.x, f.r)) {
+    spellDamageEnemy(e, f.burst, f.col, { particleCount: 9, spread: 66 });
+    if (!ENEMY_TYPES[e.type]?.noKnockback) e.knock = (e.knock || 0) + Math.sign(e.x - f.x || 1) * 240;
+  }
+  state.legendaryEffects.push({ type: "ring", x: f.x, radius: f.r * 1.15, life: 0.34, totalLife: 0.34, col: f.col, width: 5 });
+  spawnParticles(f.x, f.y, 22, "#c46bff", 120, 135);
+  spawnParticles(f.x, f.y, 10, "#ffffff", 70, 160);
+  Audio.explosion();
+  Game.screenShake = Math.max(Game.screenShake, 0.32);
+}
+
+function splinterFracture(sp, x, y) {
+  for (let i = 0; i < 2; i++) {
+    const ang = rand(0, Math.PI * 2);
+    state.spells.push({
+      ...sp,
+      x, y,
+      vx: Math.cos(ang) * 470, vy: Math.sin(ang) * 470,
+      dmg: Math.max(1, sp.dmg * 0.5),
+      mark: randomLiveEnemy(x, 560, sp.mark),
+      life: 1.1,
+      cascade: 0, splinter: false, rift: 0,
+      _hit: new Set(),
+    });
+  }
+  spawnParticles(x, y, 12, "#ff7ad8", 72, 125);
+}
+
+function updateFractureBolt(sp, dt) {
+  const mark = sp.mark && !sp.mark.dying && !sp.mark.fleeing && sp.mark.hp > 0 ? sp.mark : null;
+  sp.mark = mark || randomLiveEnemy(sp.x, 620);
+  const spd = Math.hypot(sp.vx, sp.vy) || 520;
+  if (sp.mark) {
+    // it steers at its victim, but never in a straight line — the shard's aim
+    // is a suggestion the bolt keeps arguing with
+    const want = Math.atan2(targetImpactY(sp.mark) - sp.y, sp.mark.x - sp.x);
+    const cur = Math.atan2(sp.vy, sp.vx);
+    let d = want - cur;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    const a = cur + Math.sign(d) * Math.min(Math.abs(d), 9 * dt) + rand(-0.2, 0.2);
+    sp.vx = Math.cos(a) * spd;
+    sp.vy = Math.sin(a) * spd;
+  }
+  sp.jitterX = rand(-3.5, 3.5); // render-only tremor
+  sp.jitterY = rand(-3.5, 3.5);
+  sp.x += sp.vx * dt;
+  sp.y += sp.vy * dt;
+  if (!sp._hit) sp._hit = new Set();
+  const hit = arcanumContact(sp, sp._hit, 46);
+  if (hit) {
+    if (hit.e) sp._hit.add(hit.e);
+    const at = arcanumStrike(sp, hit, sp.dmg, "#c46bff", { knock: 0, particles: 10, spread: 62 });
+    quantumRupture(sp, at.x, at.y);
+    if (sp.rift) spawnRuptureRift(sp, at.x, at.y);
+    if (sp.splinter) splinterFracture(sp, at.x, at.y);
+    // Cascade Failure: it simply picks someone else and keeps going
+    if (sp.cascade > 0) {
+      const next = randomLiveEnemy(sp.x, 620, hit.e || null);
+      if (next) {
+        sp.cascade--;
+        sp.mark = next;
+        sp.dmg = Math.max(1, sp.dmg * 0.78);
+        sp.life = Math.max(sp.life, 0.9);
+        spawnParticles(sp.x, sp.y, 9, "#ff7ad8", 58, 115);
+        return false;
+      }
+    }
+    return true;
+  }
+  if (sp.y > groundY - 8 || sp.life <= 0) {
+    spellGroundImpact(sp);
+    const gy = Math.min(sp.y, groundY - 16);
+    applySpellField(sp, sp.x, gy);
+    quantumRupture(sp, sp.x, gy);
+    if (sp.rift) spawnRuptureRift(sp, sp.x, gy);
+    return true;
+  }
+  return false;
+}
+
+// ----- Gale-Staff of Aerion: a burst of wind under whatever flies highest -----
+// Barely damages anything. It takes the enemy furthest off the ground and puts
+// it much further off the ground, and everything it clips on the way up goes
+// with it — the whole payoff is the walk back down.
+
+const GALE_GRAVITY = 1150;
+
+// `galeH` is height above wherever the body was standing. Enemy AI rewrites
+// e.fy every frame, but spells update after enemies, so re-asserting it here
+// wins; on landing we write the base height back once and let the AI have it.
+function loftEnemy(e, power, sp, depth = 0) {
+  if (!e || e.dying || e.fleeing || e.hp <= 0) return false;
+  const col = sp.upgradeCol || "#8fd8ff";
+  if (ENEMY_TYPES[e.type]?.noKnockback) {
+    // too heavy to lift — it just gets battered where it stands
+    spellDamageEnemy(e, Math.max(1, sp.dmg * 0.9), col, { particleCount: 8, spread: 52 });
+    spawnParticles(e.x, targetImpactY(e), 10, "#d8f8ff", 74, 95);
+    return false;
+  }
+  if ((e.galeH || 0) > 6) return false; // already up there
+  e.galeBase = e.fy || 0;
+  e.galeH = 1;
+  e.galeVy = power;
+  e.galePeak = 0;
+  e.galeDmg = sp.dmg;
+  e.galeShear = sp.galeShear || 0;
+  e.galeSlam = sp.galeSlam || 0;
+  e.galeCol = col;
+  e.galeDepth = depth;
+  e.galeShearT = 0.25;
+  e.rooted = Math.max(e.rooted || 0, 0.2);
+  spawnParticles(e.x, groundY - 10, 12, "#d8f8ff", 62, 135);
+  if (depth === 0) floaty(e.x, "Airborne!", "#8fd8ff", 12);
+  return true;
+}
+
+function galeLanding(e) {
+  const col = e.galeCol || "#8fd8ff";
+  const fall = e.galePeak || 0;
+  e.fy = e.galeBase || 0;
+  e.galeH = 0;
+  e.galeVy = 0;
+  e.rooted = Math.max(e.rooted || 0, 0.45); // dazed where it lands
+  spawnParticles(e.x, groundY - 6, 14, "#c8b89a", 92, 62);
+  spawnParticles(e.x, groundY - 12, 8, col, 62, 95);
+  Audio.hit();
+  const impact = Math.max(1, (e.galeDmg || 2) * (0.4 + Math.min(1.6, fall / 190)) * (1 + (e.galeSlam || 0)));
+  // Skybreaker: the ground gives out under the landing
+  if (e.galeSlam) {
+    Game.screenShake = Math.max(Game.screenShake, 0.3);
+    state.legendaryEffects.push({ type: "ring", x: e.x, radius: 96, life: 0.32, totalLife: 0.32, col, width: 4 });
+    for (const ne of enemiesNearX(e.x, 96)) {
+      if (ne === e) continue;
+      spellDamageEnemy(ne, Math.max(1, impact * 0.5), col, { particleCount: 5, spread: 42 });
+      if (ENEMY_TYPES[ne.type]?.noKnockback) continue;
+      ne.knock = (ne.knock || 0) + Math.sign(ne.x - e.x || 1) * 190;
+      ne.rooted = Math.max(ne.rooted || 0, 0.5);
+    }
+  }
+  e.galeShear = 0; e.galeSlam = 0; e.galePeak = 0;
+  spellDamageEnemy(e, impact, col, { particleCount: 8, spread: 56 });
+}
+
+function updateGaleLofts(dt) {
+  for (const e of state.enemies) {
+    if (!(e.galeH > 0)) continue;
+    if (e.dying || e.fleeing || e.hp <= 0) { e.galeH = 0; e.galeVy = 0; continue; }
+    e.galeVy -= GALE_GRAVITY * dt;
+    e.galeH += e.galeVy * dt;
+    e.galePeak = Math.max(e.galePeak || 0, e.galeH);
+    // anything it clips on the way up is carried along with it
+    if (e.galeVy > 80 && (e.galeDepth || 0) < 2) {
+      for (const ne of enemiesNearX(e.x, 34)) {
+        if (ne === e || (ne.galeH || 0) > 6) continue;
+        loftEnemy(ne, e.galeVy * 0.72, {
+          dmg: e.galeDmg, galeShear: e.galeShear, galeSlam: e.galeSlam, upgradeCol: e.galeCol,
+        }, (e.galeDepth || 0) + 1);
+      }
+    }
+    // Razor Wind: the air has edges
+    if (e.galeShear > 0) {
+      e.galeShearT = (e.galeShearT || 0.25) - dt;
+      if (e.galeShearT <= 0) {
+        e.galeShearT = 0.3;
+        spellDamageEnemy(e, Math.max(1, (e.galeDmg || 2) * 0.35 * e.galeShear), e.galeCol, {
+          y: groundY + (e.galeBase || 0) - e.galeH, particleCount: 4, spread: 32, float: false,
+        });
+      }
+    }
+    if (e.galeH <= 0) { galeLanding(e); continue; }
+    e.fy = (e.galeBase || 0) - e.galeH;
+    e.rooted = Math.max(e.rooted || 0, 0.12); // nothing walks while it is off the ground
+    if (Math.random() < dt * 14) spawnParticles(e.x + rand(-11, 11), groundY + e.fy + rand(-6, 16), 1, "#d8f8ff", 24, 42);
+  }
+}
+
+function eruptGale(sp, x) {
+  const power = 470 + (sp.galeForce || 0) * 300;
+  const r = Math.max(56, sp.aoeRadius || 78);
+  const col = sp.upgradeCol || "#8fd8ff";
+  let lifted = 0;
+  for (const e of enemiesNearX(x, r)) if (loftEnemy(e, power * rand(0.86, 1.1), sp)) lifted++;
+  // Updraft: the column keeps blowing after the burst
+  if (sp.galeCyclone) {
+    const life = 1.6 + sp.galeCyclone;
+    ensureSpellFields().push({
+      type: "updraft",
+      x, y: groundY - 70,
+      r: r * 0.85,
+      dmg: sp.dmg,
+      power: power * 0.8,
+      shear: sp.galeShear || 0,
+      slam: sp.galeSlam || 0,
+      col,
+      life, maxLife: life,
+      tick: 0.35,
+      ph: rand(0, 6),
+    });
+  }
+  state.legendaryEffects.push({ type: "ring", x, radius: r, life: 0.3, totalLife: 0.3, col, width: 3 });
+  spawnParticles(x, groundY - 8, 24, "#d8f8ff", r, 150);
+  spawnParticles(x, groundY - 4, 12, "#c8b89a", r * 0.8, 70);
+  Audio.explosion();
+  Game.screenShake = Math.max(Game.screenShake, lifted ? 0.24 : 0.12);
+  if (lifted > 1) floaty(x, "Gale x" + lifted, col, 13);
+}
+
+function updateGaleLance(sp, dt) {
+  sp.x += sp.vx * dt;
+  sp.y += sp.vy * dt;
+  if (Math.random() < dt * 45) spawnParticles(sp.x + rand(-16, 16), sp.y + rand(-18, 18), 1, "#d8f8ff", 28, 44);
+  const reached = sp.vx >= 0 ? sp.x >= sp.destX : sp.x <= sp.destX;
+  if (reached || sp.life <= 0) {
+    eruptGale(sp, sp.x);
+    // Eye of Aerion: a second storm opens under the next body still standing
+    if (sp.galeTwin) {
+      const second = highestEnemyNear(sp.x, 420, 90);
+      if (second) eruptGale({ ...sp, galeTwin: false }, second.x);
+    }
+    return true;
+  }
+  return false;
+}
+
+// The body furthest off the ground within reach, ignoring anything already
+// lofted or standing too close to `x` to count as a second target.
+function highestEnemyNear(x, maxD, minSep = 0) {
+  let best = null, bestY = Infinity, bd = Infinity;
+  for (const e of state.enemies) {
+    if (e.fleeing || e.dying || e.hp <= 0 || (e.galeH || 0) > 6) continue;
+    const d = dist(e.x, x);
+    if (d > maxD || d < minSep) continue;
+    const y = targetImpactY(e);
+    if (y < bestY - 1 || (Math.abs(y - bestY) <= 1 && d < bd)) { bestY = y; bd = d; best = e; }
+  }
+  return best;
+}
+
+// ----- The Bastion Scepter: a last line, and nothing else -----
+// Refuses to fire away from the gates (that check lives in the target picker).
+// Inside the ring it drops explosive masonry on whatever is nearest the base,
+// and always shoves the wreckage outward rather than into your walls.
+
+function bastionBurst(sp, x, y) {
+  const col = sp.upgradeCol || "#ffd88a";
+  const r = Math.max(52, sp.aoeRadius || 64) * (1 + (sp.quake || 0) * 0.35);
+  let slain = 0;
+  for (const e of enemiesNearX(x, r)) {
+    const before = e.hp;
+    spellDamageEnemy(e, Math.max(1, sp.dmg * 0.62), col, { particleCount: 6, spread: 48 });
+    if (before > 0 && e.hp <= 0) slain++;
+    if (ENEMY_TYPES[e.type]?.noKnockback) continue;
+    e.knock = (e.knock || 0) + Math.sign(e.x - CFG.baseX || 1) * (150 + (sp.quake || 0) * 130);
+    if (sp.quake && Math.random() < 0.5) e.rooted = Math.max(e.rooted || 0, 1.1);
+  }
+  state.legendaryEffects.push({ type: "ring", x, radius: r, life: 0.28, totalLife: 0.28, col, width: 2 + (sp.quake || 0) * 2 });
+  spawnParticles(x, y, 16, "#b8a488", r * 0.8, 90);
+  spawnParticles(x, y, 9, col, r * 0.6, 120);
+  Audio.explosion();
+  Game.screenShake = Math.max(Game.screenShake, 0.2 + (sp.quake || 0) * 0.15);
+  // Hearth Eternal: the watchfire feeds on what dies in front of it
+  if (sp.ward && slain) {
+    const base = state.base;
+    if (base && base.hp < base.maxHp) {
+      base.hp = Math.min(base.maxHp, base.hp + slain);
+      base.flash = 0.3;
+      floaty(base.x, "+" + slain + " gate", "#ffe9a0", 13);
+      spawnParticles(base.x, groundY - 60, 12, "#ffd88a", 70, 110);
+    }
+    const p = state.player;
+    if (p) {
+      p.invuln = Math.max(p.invuln || 0, 0.55);
+      spawnParticles(p.x, groundY - 42, 10, "#fff0c0", 50, 95);
+    }
+  }
+}
+
+function updateBastionStone(sp, dt) {
+  sp.x += sp.vx * dt;
+  sp.y += sp.vy * dt;
+  sp.vy += 420 * dt;
+  sp.spin = (sp.spin || 0) + dt * (sp.vx >= 0 ? 7 : -7);
+  const hit = arcanumContact(sp);
+  const grounded = sp.y > groundY - 10;
+  if (hit || grounded || sp.life <= 0) {
+    const at = hit
+      ? arcanumStrike(sp, hit, sp.dmg, "#ffd88a", { knock: 120 })
+      : { x: sp.x, y: groundY - 18 };
+    if (!hit) { spellGroundImpact(sp); applySpellField(sp, at.x, at.y); }
+    bastionBurst(sp, at.x, at.y);
+    return true;
+  }
+  return false;
+}
+
+// ----- The Hive-King's Scepter: kiting as a resource -----
+// Larvae are shed by walking (see updateHiveStride in PlayerCombat). A larva
+// rots and slows its host; when the host dies — by any hand — it hatches into
+// something that fights for you for a few seconds.
+
+function attachSoulLarva(sp, host) {
+  const life = 7 + (sp.hatchLife || 0);
+  ensureSpellFields().push({
+    type: "larva",
+    host,
+    x: host.x, y: targetImpactY(host) - 8,
+    r: 0,
+    dmg: Math.max(1, sp.dmg * (0.28 + (sp.larvaVenom || 0) * 0.16)),
+    slow: 0.35 + (sp.larvaVenom || 0) * 0.2,
+    hunger: sp.larvaHunger || 0,
+    swarm: !!sp.larvaSwarm,
+    hatchLife: sp.hatchLife || 0,
+    bite: Math.max(1, sp.dmg * (0.75 + (sp.hatchLife || 0) * 0.12)),
+    col: sp.upgradeCol || "#9ef0b8",
+    life, maxLife: life,
+    tick: 0.6,
+    ph: rand(0, 6),
+  });
+  host.slow = Math.max(host.slow || 0, 0.35 + (sp.larvaVenom || 0) * 0.2);
+  spawnParticles(host.x, targetImpactY(host), 12, "#9ef0b8", 52, 78);
+  floaty(host.x, "Painted", "#c8ffd8", 11);
+}
+
+function hatchSoulMinion(f, x) {
+  const life = 5 + (f.hatchLife || 0);
+  const kind = Math.random() < 0.5 ? "imp" : "beetle";
+  ensureSpellFields().push({
+    type: "hatchling",
+    x, y: groundY - 18,
+    r: 0,
+    kind,
+    dmg: Math.max(1, f.bite || 2),
+    dir: Math.random() < 0.5 ? -1 : 1,
+    col: f.col || "#9ef0b8",
+    life, maxLife: life,
+    tick: 0.2,
+    lunge: 0,
+    anim: rand(0, 6),
+    ph: rand(0, 6),
+  });
+  spawnParticles(x, groundY - 24, 16, f.col || "#9ef0b8", 72, 115);
+  spawnParticles(x, groundY - 24, 8, "#ffffff", 42, 135);
+  Audio.spell();
+}
+
+function updateLarvaOrb(sp, dt) {
+  const mark = sp.mark && !sp.mark.dying && !sp.mark.fleeing && sp.mark.hp > 0 ? sp.mark : null;
+  sp.mark = mark || nearestEnemyTo(sp.x, 520);
+  if (sp.mark) {
+    const want = Math.atan2(targetImpactY(sp.mark) - sp.y, sp.mark.x - sp.x);
+    const cur = Math.atan2(sp.vy, sp.vx);
+    let d = want - cur;
+    while (d > Math.PI) d -= Math.PI * 2;
+    while (d < -Math.PI) d += Math.PI * 2;
+    const spd = Math.hypot(sp.vx, sp.vy) || 300;
+    const a = cur + Math.sign(d) * Math.min(Math.abs(d), 7 * dt);
+    sp.vx = Math.cos(a) * spd;
+    sp.vy = Math.sin(a) * spd + Math.sin((sp.age || 0) * 14) * 26; // it swims rather than flies
+  } else {
+    sp.vy += 180 * dt;
+  }
+  sp.x += sp.vx * dt;
+  sp.y += sp.vy * dt;
+  const hit = arcanumContact(sp);
+  if (hit) {
+    arcanumStrike(sp, hit, Math.max(1, sp.dmg * 0.4), "#9ef0b8", { knock: 20, particles: 6, spread: 34 });
+    if (hit.e && !hit.e.dying && hit.e.hp > 0) attachSoulLarva(sp, hit.e);
+    return true;
+  }
+  if (sp.y > groundY - 8 || sp.life <= 0) {
+    spawnParticles(sp.x, Math.min(sp.y, groundY - 8), 8, "#4fbf7a", 48, 60);
+    return true;
+  }
+  return false;
+}
+
+export function updateArcanumStatuses(dt) {
+  updatePlagueContagion(dt);
+  updateResonanceDecay(dt);
+  updateGaleLofts(dt);
+}
+
+// Per-frame driver. Returns true when the projectile is spent.
+function updateArcanumSpell(sp, dt) {
+  switch (sp.spellType) {
+    case "bramble":     return updateBramblePod(sp, dt);
+    case "prism":       return updatePrismShard(sp, dt);
+    case "refract":     return updateRefractRay(sp, dt);
+    case "spore":       return updateSporeFlask(sp, dt);
+    case "gravitywell": return updateNullstoneCore(sp, dt);
+    case "leech":       return updateLeechOrb(sp, dt);
+    case "resonance":   return updateResonanceWave(sp, dt);
+    case "fracture":    return updateFractureBolt(sp, dt);
+    case "gale":        return updateGaleLance(sp, dt);
+    case "bastion":     return updateBastionStone(sp, dt);
+    case "larva":       return updateLarvaOrb(sp, dt);
+  }
+  return true;
+}
+
+function castArcanumSpell(player, wBase, tgt, fx, ctx) {
+  const { ew, dmgMult, aoeR, castOrigin, upgradeCol, upgradeRank } = ctx;
+  const dmg = ew.dmg * dmgMult;
+  const targetY = targetImpactY(tgt);
+  const dir = Math.sign(tgt.x - player.x) || player.dir || 1;
+
+  // Every arcanum projectile carries the same generic upgrade riders the
+  // older staffs do, so applySpellField can resolve them on impact.
+  const base = {
+    arcanum: true,
+    spellType: wBase.spellType,
+    col: wBase.col,
+    dmg,
+    aoeRadius: aoeR,
+    age: 0,
+    burnDps: fx.spellBurn || 0,
+    frostS: fx.spellFrost || 0,
+    firePool: !!fx.firePool,
+    split: fx.splitOrbs || 0,
+    pull: !!fx.singularity,
+    scorchChain: fx.scorchChain || 0,
+    geyser: fx.geyser || 0,
+    runeTrap: fx.runeTrap || 0,
+    shadowCurse: fx.shadowCurse || 0,
+    voidScar: fx.voidScar || 0,
+    soulSiphon: fx.soulSiphon || 0,
+    upgradeCol, upgradeRank,
+  };
+
+  const shots = [];
+  const push = (extra) => shots.push({ ...base, ...extra });
+
+  switch (wBase.spellType) {
+    case "bramble": {
+      const b = ballisticVelocity(castOrigin.x, castOrigin.y, tgt.x, targetY, 400, 340);
+      push({
+        x: castOrigin.x, y: castOrigin.y, vx: b.vx, vy: b.vy,
+        life: b.flight + 1.2,
+        seeds: 2 + (fx.brambleSeeds || 0), seedT: 0.12,
+        brambleLife: fx.brambleLife || 0, brambleLash: fx.brambleLash || 0,
+        brambleRoot: fx.brambleRoot || 0, brambleTwin: !!fx.brambleTwin,
+        slowHit: fx.slowHit || 0,
+      });
+      break;
+    }
+    case "prism": {
+      const b = ballisticVelocity(castOrigin.x, castOrigin.y, tgt.x, targetY, 560, 110);
+      push({
+        x: castOrigin.x, y: castOrigin.y, vx: b.vx, vy: b.vy,
+        life: b.flight + 0.8,
+        refractRays: fx.refractRays || 0, refractSplit: !!fx.refractSplit,
+      });
+      break;
+    }
+    case "spore": {
+      const b = ballisticVelocity(castOrigin.x, castOrigin.y, tgt.x, targetY, 380, 460);
+      push({
+        x: castOrigin.x, y: castOrigin.y, vx: b.vx, vy: b.vy,
+        life: b.flight + 1.1,
+        sporeLife: fx.sporeLife || 0, sporeSpread: 0.25 + (fx.sporeSpread || 0),
+        sporeSlow: fx.sporeSlow || 0, plagueDmg: fx.plagueDmg || 0, sporeBloom: !!fx.sporeBloom,
+      });
+      break;
+    }
+    case "gravitywell": {
+      const dx = tgt.x - castOrigin.x, dy = targetY - 40 - castOrigin.y;
+      const len = Math.max(60, Math.hypot(dx, dy));
+      push({
+        x: castOrigin.x, y: castOrigin.y,
+        vx: (dx / len) * 620, vy: (dy / len) * 620,
+        reach: len, life: len / 620 + 0.6,
+        wellDuration: fx.wellDuration || 0, wellPull: fx.wellPull || 0,
+        wellCrush: fx.wellCrush || 0, wellRoot: !!fx.wellRoot, wellRepeat: !!fx.wellRepeat,
+      });
+      break;
+    }
+    case "leech": {
+      const n = 1 + (fx.leechSwarm || 0);
+      const baseAng = Math.atan2(targetY - castOrigin.y, tgt.x - castOrigin.x);
+      for (let i = 0; i < n; i++) {
+        const off = n === 1 ? 0 : ((i / (n - 1)) * 2 - 1) * 0.5;
+        push({
+          x: castOrigin.x, y: castOrigin.y,
+          vx: Math.cos(baseAng + off) * 340, vy: Math.sin(baseAng + off) * 340,
+          dmg: dmg * (n > 1 ? 0.62 : 1),
+          life: 2.4,
+          leechHeal: fx.leechHeal || 0, leechDmg: fx.leechDmg || 0,
+          leechLife: fx.leechLife || 0, leechJumps: 1 + (fx.leechJumps || 0),
+        });
+      }
+      break;
+    }
+    case "resonance": {
+      push({
+        x: castOrigin.x + dir * 14, y: groundY - 62,
+        vx: dir * 330, vy: 0,
+        reach: ew.range + 70, life: 2.6,
+        needed: Math.max(1, 3 - (fx.resonanceTune || 0)),
+        force: 1 + (fx.waveForce || 0),
+        echo: !!fx.waveEcho, chorus: !!fx.chorusShatter,
+        _hit: new Set(),
+      });
+      break;
+    }
+  }
+
+  // Echoing casts release a weaker second projectile (the bell wave has its
+  // own rebound instead, so it sits this one out).
+  if (fx.spellEcho && wBase.spellType !== "resonance" && shots.length && Math.random() < fx.spellEcho) {
+    const lead = shots[0];
+    shots.push({
+      ...lead,
+      _hit: undefined,
+      x: lead.x - dir * 16, y: lead.y - 9,
+      vx: lead.vx * 0.92 + rand(-30, 30), vy: lead.vy * 0.9 - 55,
+      dmg: Math.max(1, lead.dmg * 0.55),
+      aoeRadius: Math.max(22, aoeR * 0.65),
+      isEcho: true,
+    });
+    spawnParticles(castOrigin.x, castOrigin.y, 8, upgradeCol || wBase.col, 42, 75);
+  }
+
+  for (const s of shots) {
+    if (s._hit === undefined) delete s._hit;
+    state.spells.push(s);
+  }
+  castBurstFX(wBase, castOrigin.x, castOrigin.y, dir, 0);
+  Audio.spell();
+  Audio.arcanumCast(wBase.spellType);
+}
+
 export function castSpell(player, wBase, tgt) {
   const ew = effectiveWeapon(player.weapon, player.weaponUpgrades || []);
   const fx = mergeInnateEffects(wBase, player.weaponUpgrades || []);
@@ -942,6 +2069,12 @@ export function castSpell(player, wBase, tgt) {
   // spellType switch below — curated weapons never set spellRecipe.
   if (wBase.spellRecipe) {
     castProceduralSpell(player, wBase, tgt, fx, { ew, dmgMult, aoeR, castOrigin, upgradeCol, upgradeRank });
+    return;
+  }
+
+  // The arcanum staffs each drive their own projectile school.
+  if (ARCANUM_SPELLS.has(wBase.spellType)) {
+    castArcanumSpell(player, wBase, tgt, fx, { ew, dmgMult, aoeR, castOrigin, upgradeCol, upgradeRank });
     return;
   }
 
@@ -1135,6 +2268,12 @@ export function updateSpells(dt) {
   for (let i = spells.length - 1; i >= 0; i--) {
     const sp = spells[i];
     sp.age = (sp.age || 0) + dt;
+    if (sp.arcanum) {
+      sp.life -= dt;
+      spellTrail(sp);
+      if (updateArcanumSpell(sp, dt)) spells.splice(i, 1);
+      continue;
+    }
     if (sp.form) {
       applyProceduralMotion(sp, dt);
     } else {
@@ -1273,6 +2412,34 @@ function spellTrail(sp) {
       if (Math.random() < 0.4) spawnParticles(sp.x, sp.y, 1, "#550088", 20, 8);
       if (Math.random() < 0.2) spawnParticles(sp.x, sp.y, 1, "#ffffff", 8, 16);   // star flecks
       break;
+    case "bramble":
+      if (Math.random() < 0.6) spawnParticles(sp.x, sp.y, 1, "#4f7a2a", 12, 16);
+      if (Math.random() < 0.35) spawnParticles(sp.x, sp.y, 1, "#9bd05a", 8, 22);  // shed leaves
+      if (Math.random() < 0.2) spawnParticles(sp.x, sp.y, 1, "#c8e070", 6, 26);   // drifting pollen
+      break;
+    case "prism":
+      if (Math.random() < 0.55) spawnParticles(sp.x, sp.y, 1, "#8fe8ff", 10, 18);
+      if (Math.random() < 0.3) spawnParticles(sp.x, sp.y, 1, "#ffffff", 5, 24);   // caught light
+      break;
+    case "refract":
+      spawnParticles(sp.x, sp.y, 1, "#d8f8ff", 4, 10);
+      if (Math.random() < 0.4) spawnParticles(sp.x, sp.y, 1, "#ffffff", 3, 14);
+      break;
+    case "spore":
+      if (Math.random() < 0.7) spawnParticles(sp.x, sp.y, 1, "#7fbf3a", 14, 20);
+      if (Math.random() < 0.3) spawnParticles(sp.x, sp.y, 1, "#3a5a1a", 18, 14);  // sour smoke
+      break;
+    case "gravitywell":
+      if (Math.random() < 0.75) spawnParticles(sp.x, sp.y, 1, "#3a1a5a", 16, 10);
+      if (Math.random() < 0.35) spawnParticles(sp.x, sp.y, 1, "#7a3aff", 10, 20);
+      break;
+    case "leech":
+      if (Math.random() < 0.7) spawnParticles(sp.x, sp.y, 1, "#c0102a", 12, 14);
+      if (Math.random() < 0.3) spawnParticles(sp.x, sp.y, 1, "#ff5060", 7, 20);   // arterial spray
+      break;
+    case "resonance":
+      // the wave's own ripples are drawn per-frame in updateResonanceWave
+      break;
   }
 }
 
@@ -1297,6 +2464,31 @@ function castBurstFX(wBase, x, y, dirX = 1, dirY = 0) {
     case "void":
       spawnParticles(x, y, 6, "#ddaaff", 40, 70);
       spawnParticles(x, y, 3, "#ffffff", 25, 80);
+      break;
+    case "bramble":
+      spawnParticles(x, y, 6, "#9bd05a", 34, 60);
+      spawnParticles(x, y, 3, "#c8e070", 22, 75);
+      break;
+    case "prism":
+      spawnParticles(x, y, 6, "#8fe8ff", 38, 70);
+      spawnParticles(x, y, 4, "#ffffff", 22, 85);
+      break;
+    case "spore":
+      spawnParticles(x, y, 7, "#7fbf3a", 38, 55);
+      spawnParticles(x, y, 3, "#3a5a1a", 26, 40);
+      break;
+    case "gravitywell":
+      spawnParticles(x, y, 7, "#7a3aff", 36, 65);
+      spawnParticles(x, y, 3, "#c8a0ff", 20, 80);
+      Game.screenShake = Math.max(Game.screenShake, 0.1);
+      break;
+    case "leech":
+      spawnParticles(x, y, 6, "#c0102a", 34, 55);
+      spawnParticles(x, y, 3, "#ff5060", 20, 70);
+      break;
+    case "resonance":
+      spawnParticles(x, y, 8, "#e8f8ff", 48, 80);
+      spawnParticles(x, y, 4, "#ffffff", 26, 95);
       break;
   }
 }
@@ -1346,6 +2538,41 @@ function spellEnemyImpact(sp, x, y) {
       spawnParticles(x, y, 8, "#550088", 80, 80);
       Game.screenShake = Math.max(Game.screenShake, 0.5);
       break;
+    case "bramble":
+      spawnParticles(x, y, 14, "#4f7a2a", 75, 95);
+      spawnParticles(x, y, 8, "#9bd05a", 55, 110);
+      Game.screenShake = Math.max(Game.screenShake, 0.16);
+      break;
+    case "prism":
+      spawnParticles(x, y, 14, "#8fe8ff", 85, 105);
+      spawnParticles(x, y, 8, "#ffffff", 45, 130);
+      Game.screenShake = Math.max(Game.screenShake, 0.2);
+      break;
+    case "refract":
+      spawnParticles(x, y, 7, "#d8f8ff", 45, 70);
+      spawnParticles(x, y, 3, "#ffffff", 25, 95);
+      break;
+    case "spore":
+      spawnParticles(x, y, 14, "#7fbf3a", 80, 90);
+      spawnParticles(x, y, 8, "#c8e070", 50, 110);
+      spawnParticles(x, y, 5, "#3a5a1a", 60, 55);
+      Game.screenShake = Math.max(Game.screenShake, 0.18);
+      break;
+    case "gravitywell":
+      spawnParticles(x, y, 14, "#3a1a5a", 70, 80);
+      spawnParticles(x, y, 8, "#7a3aff", 45, 110);
+      Game.screenShake = Math.max(Game.screenShake, 0.2);
+      break;
+    case "leech":
+      spawnParticles(x, y, 14, "#c0102a", 70, 85);
+      spawnParticles(x, y, 7, "#ff5060", 45, 100);
+      Game.screenShake = Math.max(Game.screenShake, 0.16);
+      break;
+    case "resonance":
+      spawnParticles(x, y, 14, "#e8f8ff", 85, 115);
+      spawnParticles(x, y, 6, "#ffffff", 45, 140);
+      Game.screenShake = Math.max(Game.screenShake, 0.22);
+      break;
     default:
       spawnParticles(x, y, 8, sp.col, 70, 90);
       break;
@@ -1387,6 +2614,30 @@ function spellGroundImpact(sp) {
       spawnParticles(sp.x, groundY - 8, 18, "#ddaaff", 80, 140);
       spawnParticles(sp.x, groundY - 8, 12, "#ffffff", 50, 120);
       Game.screenShake = Math.max(Game.screenShake, 0.7);
+      break;
+    case "bramble":
+      spawnParticles(sp.x, groundY - 8, 18, "#4f7a2a", 95, 90);
+      spawnParticles(sp.x, groundY - 8, 10, "#6d4a24", 70, 60);   // torn-up soil
+      Game.screenShake = Math.max(Game.screenShake, 0.22);
+      break;
+    case "prism":
+      spawnParticles(sp.x, groundY - 8, 16, "#8fe8ff", 100, 120);
+      spawnParticles(sp.x, groundY - 8, 8, "#ffffff", 60, 140);
+      Game.screenShake = Math.max(Game.screenShake, 0.24);
+      break;
+    case "spore":
+      spawnParticles(sp.x, groundY - 8, 20, "#7fbf3a", 100, 95);
+      spawnParticles(sp.x, groundY - 8, 10, "#3a5a1a", 75, 60);
+      Game.screenShake = Math.max(Game.screenShake, 0.22);
+      break;
+    case "gravitywell":
+      spawnParticles(sp.x, groundY - 8, 18, "#3a1a5a", 90, 80);
+      spawnParticles(sp.x, groundY - 8, 10, "#7a3aff", 60, 120);
+      Game.screenShake = Math.max(Game.screenShake, 0.26);
+      break;
+    case "leech":
+      spawnParticles(sp.x, groundY - 8, 14, "#7a0a1a", 80, 60);
+      spawnParticles(sp.x, groundY - 8, 7, "#c0102a", 55, 90);
       break;
   }
 }

@@ -42,7 +42,6 @@ export function setupDevPanel() {
   // Spawn enemy
   bind('[data-dev="imp"]',          () => DEV.spawnEnemyNearBase('imp'));
   bind('[data-dev="fireImp"]',      () => DEV.spawnEnemyNearBase('fireImp'));
-  bind('[data-dev="emberBrute"]',   () => DEV.spawnEnemyNearBase('emberBrute'));
   bind('[data-dev="brute"]',        () => DEV.spawnEnemyNearBase('brute'));
   bind('[data-dev="ashPriest"]',    () => DEV.spawnEnemyNearBase('ashPriest'));
   bind('[data-dev="siegeImp"]',     () => DEV.spawnEnemyNearBase('siegeImp'));
@@ -50,6 +49,7 @@ export function setupDevPanel() {
   bind('[data-dev="8imp"]',         () => DEV.spawn8ImpsRight());
   bind('[data-dev="dragon"]',       () => DEV.spawnFireDragonBoss());
   bind('[data-dev="magmaGolem"]',   () => DEV.spawnMagmaGolemBoss());
+  bind('[data-dev="pyreTyrant"]',   () => DEV.spawnPyreTyrantBoss());
   bind('[data-dev="killAll"]',      () => DEV.killAll());
   bind('[data-dev="shade"]',        () => DEV.spawnEnemyNearBase('shade'));
   bind('[data-dev="voidWraith"]',   () => DEV.spawnEnemyNearBase('voidWraith'));

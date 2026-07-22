@@ -1917,6 +1917,37 @@ function drawBiomeBoss(e, t, dark, atkF) {
     const bob = Math.sin(e.biomeWalkPhase || e.anim) * 3 - crouch;
     const y = groundY - bob;
 
+    const barkDeep = flash ? "#fff" : "#10180f";
+    const barkDark = flash ? "#fff" : "#1b2918";
+    const bark = flash ? "#fff" : "#304329";
+    const barkLight = flash ? "#fff" : "#50633b";
+    const moss = flash ? "#fff" : "#789052";
+    const antlerCol = flash ? "#fff" : "#765438";
+    const antlerTip = flash ? "#fff" : "#ad8b5b";
+    const mistCol = e.enraged ? "#8a4bd6" : "#b66bff";
+
+    // A long bramble tail borrows the dragon's sweeping silhouette. The
+    // heavier base keeps it feeling like a living battering ram, not a deer.
+    const tailSway = Math.sin(T * 1.8 + e.x * 0.006) * 8;
+    ctx.strokeStyle = barkDark; ctx.lineWidth = 15; ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(-48, y - 72);
+    ctx.bezierCurveTo(-82, y - 82, -100, y - 119 + tailSway, -143, y - 105 + tailSway * 0.45);
+    ctx.stroke();
+    ctx.strokeStyle = barkLight; ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-52, y - 76);
+    ctx.bezierCurveTo(-84, y - 86, -103, y - 116 + tailSway, -143, y - 105 + tailSway * 0.45);
+    ctx.stroke();
+    ctx.fillStyle = barkDeep;
+    for (let k = 0; k < 4; k++) {
+      const tx = -72 - k * 19, ty = y - 88 - k * 7 + tailSway * k * 0.08;
+      ctx.beginPath(); ctx.moveTo(tx - 4, ty + 4); ctx.lineTo(tx - 1, ty - 13); ctx.lineTo(tx + 7, ty + 2); ctx.closePath(); ctx.fill();
+    }
+    ctx.strokeStyle = moss; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(-139, y - 105 + tailSway * 0.45); ctx.quadraticCurveTo(-158, y - 118 + tailSway, -168, y - 96 + tailSway * 0.4); ctx.stroke();
+    ctx.lineCap = "butt";
+
     // ---- legs: two-segment bend with a diagonal trot gait ----
     const legX = [-42, -15, 20, 46];
     for (let i = 0; i < 4; i++) {
@@ -1930,11 +1961,15 @@ function drawBiomeBoss(e, t, dark, atkF) {
       const kneeSide = (swing >= 0 ? 1 : -1) * (5 + lift * 0.35);
       const kneeX = (lx + footX) / 2 + kneeSide;
       const kneeY = hipY + (footY - hipY) * 0.5;
-      ctx.strokeStyle = flash ? "#fff" : (i % 2 === 0 ? "#1d2b17" : "#28391f");
-      ctx.lineWidth = i % 2 === 0 ? 7.5 : 9; ctx.lineCap = "round";
+      ctx.strokeStyle = i % 2 === 0 ? barkDark : bark;
+      ctx.lineWidth = i % 2 === 0 ? 10 : 13; ctx.lineCap = "round";
       ctx.beginPath(); ctx.moveTo(lx, hipY); ctx.quadraticCurveTo(kneeX, kneeY, footX, footY); ctx.stroke();
-      ctx.fillStyle = flash ? "#fff" : "#0f1710";
-      ctx.beginPath(); ctx.ellipse(footX, footY + 2, 4, 2.6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = i % 2 === 0 ? barkDeep : barkDark;
+      ctx.beginPath(); ctx.ellipse(kneeX, kneeY, 7, 8, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = barkDeep;
+      ctx.beginPath(); ctx.ellipse(footX + 2, footY + 2, 7.5, 3.3, -0.08, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = antlerTip; ctx.lineWidth = 1.7;
+      ctx.beginPath(); ctx.moveTo(footX + 2, footY + 1); ctx.lineTo(footX + 9, footY + 3); ctx.moveTo(footX + 1, footY + 1); ctx.lineTo(footX + 7, footY + 6); ctx.stroke();
 
       if (vulnerable && i >= 2) {
         const g = 0.45 + 0.4 * Math.sin(T * 11 + i);
@@ -1953,40 +1988,77 @@ function drawBiomeBoss(e, t, dark, atkF) {
 
     // ---- body ----
     ctx.save(); ctx.translate(bodyLean * 0.4, 0);
-    ctx.fillStyle = flash ? "#fff" : "#1e2b18";
-    ctx.beginPath(); ctx.ellipse(2, y - 68, w * 0.5, w * 0.26, -0.04, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = col;
-    ctx.beginPath(); ctx.ellipse(4, y - 72, w * 0.48, w * 0.24, -0.04, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = flash ? "#fff" : "rgba(120,150,90,0.3)";
-    ctx.beginPath(); ctx.ellipse(-4, y - 82, w * 0.34, w * 0.09, -0.06, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = flash ? "#fff" : "#16210f";
-    for (let k = -2; k <= 2; k++) {
-      const sx = k * 16 - 6, sy = y - 92 - Math.abs(k) * 1.5;
-      ctx.beginPath(); ctx.moveTo(sx - 5, sy + 6); ctx.lineTo(sx, sy - 6); ctx.lineTo(sx + 5, sy + 6); ctx.closePath(); ctx.fill();
+    const bodyGrad = ctx.createLinearGradient(0, y - 112, 0, y - 36);
+    bodyGrad.addColorStop(0, barkLight);
+    bodyGrad.addColorStop(0.45, bark);
+    bodyGrad.addColorStop(1, barkDeep);
+    ctx.fillStyle = bodyGrad;
+    ctx.strokeStyle = barkDeep; ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-56, y - 66);
+    ctx.bezierCurveTo(-58, y - 96, -35, y - 113, -8, y - 110);
+    ctx.bezierCurveTo(17, y - 116, 48, y - 105, 58, y - 80);
+    ctx.bezierCurveTo(62, y - 57, 42, y - 42, 12, y - 42);
+    ctx.bezierCurveTo(-20, y - 39, -49, y - 45, -56, y - 66);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+
+    // Overlapping bark plates give the flank the brute's armored mass.
+    for (let k = 0; k < 5; k++) {
+      const px = -37 + k * 19;
+      const py = y - 77 - Math.sin(k * 1.35) * 6;
+      ctx.fillStyle = k % 2 ? barkDark : bark;
+      ctx.strokeStyle = barkLight; ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(px - 13, py - 12);
+      ctx.quadraticCurveTo(px + 2, py - 20, px + 15, py - 8);
+      ctx.quadraticCurveTo(px + 10, py + 14, px - 9, py + 12);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
     }
+    ctx.strokeStyle = moss; ctx.lineWidth = 3; ctx.globalAlpha = 0.72;
+    ctx.beginPath(); ctx.moveTo(-39, y - 101); ctx.quadraticCurveTo(-10, y - 113, 20, y - 104); ctx.quadraticCurveTo(39, y - 101, 48, y - 88); ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // A serrated bark ridge repeats the dragon's dorsal rhythm.
+    ctx.fillStyle = barkDeep;
+    for (let k = 0; k < 7; k++) {
+      const sx = -42 + k * 14, sy = y - 101 - Math.sin((k / 6) * Math.PI) * 10;
+      const sh = 10 + Math.sin((k / 6) * Math.PI) * 7;
+      ctx.beginPath(); ctx.moveTo(sx - 6, sy + 6); ctx.lineTo(sx, sy - sh); ctx.lineTo(sx + 7, sy + 5); ctx.closePath(); ctx.fill();
+    }
+
+    // Corruption leaks through a split in the shoulder armor.
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = mistCol; ctx.globalAlpha = 0.38 + pulse * 0.22; ctx.lineWidth = 2.4;
+    ctx.beginPath(); ctx.moveTo(32, y - 96); ctx.lineTo(24, y - 82); ctx.lineTo(34, y - 72); ctx.lineTo(27, y - 58); ctx.stroke();
+    ctx.restore();
     ctx.restore();
 
     // ---- head + antlers (this whole group lunges/dips for the ram) ----
     ctx.save();
     ctx.translate(headLunge, headDip);
-    ctx.fillStyle = flash ? "#fff" : "#485a32";
-    ctx.beginPath(); ctx.ellipse(56, y - 96, w * 0.22, w * 0.18, 0.12, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = flash ? "#fff" : "#374528";
-    ctx.beginPath(); ctx.ellipse(70, y - 90, w * 0.11, w * 0.09, 0.2, 0, Math.PI * 2); ctx.fill();
+    // Thick neck and thorn mane sell the lowered, brute-like charge pose.
+    ctx.strokeStyle = barkDark; ctx.lineWidth = 29; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(34, y - 78); ctx.quadraticCurveTo(45, y - 103, 58, y - 104); ctx.stroke();
+    ctx.strokeStyle = barkLight; ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.moveTo(35, y - 87); ctx.quadraticCurveTo(46, y - 107, 59, y - 106); ctx.stroke();
+    ctx.fillStyle = barkDeep;
+    for (let k = 0; k < 4; k++) {
+      const mx = 34 + k * 8, my = y - 91 - k * 5;
+      ctx.beginPath(); ctx.moveTo(mx - 5, my + 5); ctx.lineTo(mx - 2, my - 12); ctx.lineTo(mx + 6, my + 3); ctx.closePath(); ctx.fill();
+    }
 
-    const antlerCol = flash ? "#fff" : "#5a3d26";
-    const mistCol = e.enraged ? "#8a4bd6" : "#b66bff";
+    // Crown antlers are layered behind the skull and branch like dead trees.
     for (const s of [-1, 1]) {
-      const bx = 66, by = y - 112;
-      const mx = bx + s * 30, my = y - 150 - castP * 6;
-      const tx = bx + s * 56, ty = y - 176 - castP * 10;
-      ctx.strokeStyle = antlerCol; ctx.lineWidth = 5; ctx.lineCap = "round";
+      const bx = 58 + s * 6, by = y - 114;
+      const mx = bx + s * 28, my = y - 147 - castP * 6;
+      const tx = bx + s * 59, ty = y - 176 - castP * 10;
+      ctx.strokeStyle = s < 0 ? antlerCol : antlerTip; ctx.lineWidth = s < 0 ? 7 : 6; ctx.lineCap = "round";
       ctx.beginPath(); ctx.moveTo(bx, by); ctx.quadraticCurveTo(mx, my + 10, tx, ty); ctx.stroke();
-      ctx.lineWidth = 3;
+      ctx.strokeStyle = antlerTip; ctx.lineWidth = 3.5;
       for (let k = 0; k < 3; k++) {
         const u = 0.35 + k * 0.22;
         const px = mixN(bx, tx, u), py = mixN(by, ty, u);
-        ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + s * (14 + k * 5), py - 14 - k * 4); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + s * (15 + k * 6), py - 16 - k * 5); ctx.stroke();
       }
       // corruption mist wisping off the antler, thicker while casting/enraged
       ctx.save(); ctx.globalCompositeOperation = "lighter";
@@ -2000,13 +2072,41 @@ function drawBiomeBoss(e, t, dark, atkF) {
         ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
       }
       ctx.restore();
-      ctx.lineWidth = 5;
+      ctx.lineWidth = 6;
     }
 
-    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = eye;
-    const eyeGlow = 3.5 + pulse * 1.5 + (e.enraged ? 1.2 : 0);
-    for (const ex of [48, 61]) for (const ey of [-102, -113]) { ctx.beginPath(); ctx.arc(ex, y + ey, eyeGlow, 0, Math.PI * 2); ctx.fill(); }
+    // Ear, angular bark skull, and a hooked ram-snout.
+    ctx.fillStyle = moss;
+    ctx.beginPath(); ctx.moveTo(48, y - 111); ctx.lineTo(31, y - 123); ctx.lineTo(43, y - 103); ctx.closePath(); ctx.fill();
+    const skullGrad = ctx.createLinearGradient(43, y - 119, 84, y - 82);
+    skullGrad.addColorStop(0, barkLight); skullGrad.addColorStop(1, barkDark);
+    ctx.fillStyle = skullGrad; ctx.strokeStyle = barkDeep; ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(43, y - 114);
+    ctx.quadraticCurveTo(58, y - 124, 72, y - 111);
+    ctx.lineTo(87, y - 96);
+    ctx.lineTo(82, y - 78);
+    ctx.lineTo(64, y - 82);
+    ctx.lineTo(46, y - 94);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = barkDeep;
+    ctx.beginPath(); ctx.moveTo(64, y - 86); ctx.lineTo(86, y - 80); ctx.lineTo(78, y - 70); ctx.lineTo(60, y - 77); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = antlerTip;
+    for (let k = 0; k < 3; k++) {
+      const fx = 69 + k * 6;
+      ctx.beginPath(); ctx.moveTo(fx, y - 80); ctx.lineTo(fx + 3, y - 71 + k); ctx.lineTo(fx + 6, y - 80); ctx.closePath(); ctx.fill();
+    }
+
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    const eyeGlow = 5 + pulse * 2 + (e.enraged ? 1.5 : 0);
+    ctx.fillStyle = eye; ctx.globalAlpha = 0.9;
+    ctx.beginPath(); ctx.ellipse(64, y - 103, eyeGlow * 1.25, eyeGlow * 0.75, -0.15, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = mistCol; ctx.lineWidth = 2.1; ctx.globalAlpha = 0.5 + pulse * 0.25;
+    ctx.beginPath(); ctx.moveTo(61, y - 99); ctx.lineTo(55, y - 91); ctx.lineTo(59, y - 84); ctx.moveTo(68, y - 99); ctx.lineTo(75, y - 91); ctx.stroke();
     ctx.restore();
+    ctx.fillStyle = barkDeep;
+    ctx.beginPath(); ctx.ellipse(65, y - 103, 2.2, 4.2, -0.12, 0, Math.PI * 2); ctx.fill();
+    ctx.lineCap = "butt";
     ctx.restore(); // head group
 
     // ---- roots erupting from the ground during the cast telegraph ----

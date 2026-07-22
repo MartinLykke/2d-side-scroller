@@ -17,6 +17,7 @@ import { approachSpeedMult, unopposedSprintMult } from './EnemyShared.js';
 export function updateBoss(e, t, dt) {
   if (t.voidTitan)  { updateVoidTitan(e, t, dt); return true; }
   if (t.voidSeraph) { updateVoidSeraph(e, t, dt); return true; }
+  if (t.pyreTyrant) { updatePyreTyrant(e, t, dt); return true; }
   if (t.dragon) { updateFireDragon(e, t, dt); return true; }
   if (t.golem)  { updateMagmaGolem(e, t, dt); return true; }
   if (t.biomeBoss) { updateBiomeBoss(e, t, dt); return true; }
@@ -97,6 +98,342 @@ function updateFireDragon(e, t, dt) {
     } else {
       e.dropCd = 0.5;
     }
+  }
+}
+
+// ---------- Vaelgor, the Pyre Tyrant (night 9 apex boss) ----------
+//
+// A ground duelist with four readable states: a greatsword cleave for siege,
+// Crownfire runes that erupt beneath defenders, a low charging dash after the
+// walls fall, and a one-time Second Ignition at half health. The renderer reads
+// these timers directly so every damaging frame has a matching pose/telegraph.
+
+const PYRE_CLEAVE_IMPACT = 0.58;
+const PYRE_CLEAVE_DURATION = 1.02;
+const PYRE_PILLAR_RADIUS = 62;
+const PYRE_DASH_SPEED = 540;
+
+function initPyreTyrant(e) {
+  if (e.pyreInitialized) return;
+  e.pyreInitialized = true;
+  e.pyreWalkPhase = e.anim || 0;
+  e.pyreWalkBlend = 0;
+  e.pyrePillarCd = e.pyrePillarCd ?? rand(2.4, 3.6);
+  e.pyreDashCd = e.pyreDashCd ?? rand(4.2, 5.4);
+  e.pyreCleaveCd = 0.7;
+  e.pyreCleaveIndex = 0;
+  e.pyreMarkers = [];
+  e.pyreDashSerial = 0;
+  e.pyreTrailCd = 0;
+  e.pyreEnraged = false;
+  e.pyreIgnitionDone = false;
+  e.attackKind = "";
+}
+
+function pyreWallStandX(w, t) {
+  return w.x + w.side * (wallRenderWidth(w) * 0.5 + t.w * 0.42 + 9);
+}
+
+function damagePyreWall(e, t, w, mult = 1) {
+  if (!wallReady(w)) return;
+  const crit = applyCrit(t.dmg * mult * (e.damageMult || 1), CFG.critChance, CFG.critMultiplier);
+  w.hp -= crit.damage;
+  w.flash = Math.max(w.flash || 0, 0.3);
+  w.bossImpact = Math.max(w.bossImpact || 0, 0.38);
+  const impactY = groundY - wallHeight(w) * 0.55;
+  spawnParticles(w.x, impactY, 18, "#ff5a18", 125, 130);
+  spawnParticles(w.x, impactY, 9, "#fff0a0", 72, 145);
+  floaty(w.x, "-" + Math.round(crit.damage), "#ff6a3a", 17);
+  Game.screenShake = Math.max(Game.screenShake || 0, 0.46);
+  Audio.hit();
+  if (w.hp <= 0) killWallByBoss(w);
+}
+
+function startPyreCleave(e, kind, target) {
+  e.pyreCleaveT = 0;
+  e.pyreCleaveHit = false;
+  e.pyreCleaveTargetKind = kind;
+  e.pyreCleaveTarget = target;
+  e.pyreCleaveIndex = (e.pyreCleaveIndex || 0) + 1;
+  e.attackKind = e.pyreCleaveIndex % 2 ? "pyreCleave" : "pyreSweep";
+  e.attackAnim = 0.5;
+}
+
+function releasePyreCleave(e, t) {
+  const kind = e.pyreCleaveTargetKind;
+  const target = e.pyreCleaveTarget;
+  const impactX = kind === "wall" && target ? target.x : kind === "base" ? state.base.x : e.x + e.dir * 72;
+
+  if (kind === "wall" && target) damagePyreWall(e, t, target, e.attackKind === "pyreSweep" ? 1.28 : 1.12);
+  else if (kind === "base") damageBaseByBoss(e, t, e.attackKind === "pyreSweep" ? 0.82 : 0.68, "#ff5a18");
+
+  const radius = e.attackKind === "pyreSweep" ? 122 : 92;
+  const unitDamage = e.pyreEnraged ? 3 : 2;
+  damageUnitsInRange(impactX, radius, unitDamage, "#ff6a3a", { knock: 210 });
+  const player = state.player;
+  if (player && player.hp > 0 && dist(player.x, impactX) < radius
+      && (player.jumpH || 0) + entityWallLift(player) <= 35) {
+    damagePlayer(2, { knock: Math.sign(player.x - e.x || 1) * 270 });
+  }
+  pushBossRing(impactX, radius, "#ff5a18", 0.46, 7);
+  spawnParticles(impactX, groundY - 18, 24, "#ff5a18", 150, 125);
+  spawnParticles(impactX, groundY - 25, 11, "#fff0a0", 85, 145);
+  Game.screenShake = Math.max(Game.screenShake || 0, 0.5);
+  Audio.hit();
+}
+
+function updatePyreCleave(e, t, dt) {
+  e.pyreCleaveT += dt;
+  if (!e.pyreCleaveHit && e.pyreCleaveT >= PYRE_CLEAVE_IMPACT) {
+    e.pyreCleaveHit = true;
+    releasePyreCleave(e, t);
+  }
+  if (e.pyreCleaveT < PYRE_CLEAVE_DURATION) return true;
+  e.pyreCleaveT = undefined;
+  e.pyreCleaveTarget = null;
+  e.pyreCleaveTargetKind = "";
+  e.pyreCleaveCd = e.pyreEnraged ? 0.48 : 0.72;
+  e.attackKind = "";
+  return false;
+}
+
+function pyreMarkerTargets(e) {
+  const count = e.pyreEnraged ? 5 : 3;
+  const minX = CFG.baseX - 640;
+  const maxX = CFG.baseX + 640;
+  const xs = [];
+  const add = x => {
+    const clampedX = Math.max(minX, Math.min(maxX, x));
+    if (xs.every(prev => Math.abs(prev - clampedX) >= 92)) xs.push(clampedX);
+  };
+
+  const player = state.player;
+  if (player?.hp > 0) add(player.x);
+  const defenders = activeUnits()
+    .filter(u => Math.abs(u.x - CFG.baseX) < 720)
+    .sort((a, b) => Math.abs(a.x - e.x) - Math.abs(b.x - e.x));
+  for (const u of defenders) {
+    add(u.x);
+    if (xs.length >= count) break;
+  }
+  const offsets = e.pyreEnraged ? [-390, 340, -170, 150, 0] : [-300, 270, 0];
+  for (const off of offsets) {
+    add(CFG.baseX + off + rand(-42, 42));
+    if (xs.length >= count) break;
+  }
+  while (xs.length < count) add(CFG.baseX + rand(-560, 560));
+  return xs.slice(0, count);
+}
+
+function startPyrePillars(e) {
+  e.pyreCastT = 0;
+  e.pyreCastMax = e.pyreEnraged ? 0.88 : 1.05;
+  e.attackKind = "pyrePillars";
+  e.attackAnim = 0.55;
+  const targets = pyreMarkerTargets(e);
+  for (let i = 0; i < targets.length; i++) {
+    const delay = (e.pyreEnraged ? 0.92 : 1.12) + i * 0.12;
+    e.pyreMarkers.push({
+      x: targets[i], r: PYRE_PILLAR_RADIUS, delay, maxDelay: delay,
+      erupted: false, eruptionLife: 0, maxEruptionLife: 0.52, ph: rand(0, Math.PI * 2),
+    });
+  }
+  Audio.fireball();
+}
+
+function eruptPyreMarker(e, marker) {
+  marker.erupted = true;
+  marker.eruptionLife = marker.maxEruptionLife;
+  const player = state.player;
+  if (player && player.hp > 0 && dist(player.x, marker.x) < marker.r
+      && (player.jumpH || 0) + entityWallLift(player) <= 28) {
+    damagePlayer(2, { knock: Math.sign(player.x - marker.x || 1) * 190 });
+  }
+  damageUnitsInRange(marker.x, marker.r, 2, "#ff6a3a", { knock: 145 });
+  spawnFirePool(marker.x, 52, e.pyreEnraged ? 6.4 : 5.2);
+  pushBossRing(marker.x, marker.r * 1.18, "#fff0a0", 0.42, 8);
+  spawnParticles(marker.x, groundY - 20, 30, "#ff5a18", 115, 245);
+  spawnParticles(marker.x, groundY - 45, 16, "#fff0a0", 70, 280);
+  Game.screenShake = Math.max(Game.screenShake || 0, 0.32);
+}
+
+function updatePyreMarkers(e, dt) {
+  const markers = e.pyreMarkers || [];
+  for (let i = markers.length - 1; i >= 0; i--) {
+    const marker = markers[i];
+    if (!marker.erupted) {
+      marker.delay -= dt;
+      if (marker.delay <= 0) eruptPyreMarker(e, marker);
+    } else {
+      marker.eruptionLife -= dt;
+      if (marker.eruptionLife <= 0) markers.splice(i, 1);
+    }
+  }
+}
+
+function startPyreDash(e) {
+  e.pyreDashTelegraph = e.pyreEnraged ? 0.45 : 0.62;
+  e.pyreDashTelegraphMax = e.pyreDashTelegraph;
+  e.pyreDashTime = 0;
+  e.pyreDashTargetX = state.base.x - e.dir * 82;
+  e.pyreDashSerial = (e.pyreDashSerial || 0) + 1;
+  e.attackKind = "pyreDashWindup";
+}
+
+function updatePyreDash(e, t, dt) {
+  if (e.pyreDashTelegraph > 0) {
+    e.pyreDashTelegraph -= dt;
+    if (e.pyreDashTelegraph <= 0) {
+      e.pyreDashTime = e.pyreEnraged ? 0.78 : 0.64;
+      e.attackKind = "pyreDash";
+      e.attackAnim = 0.5;
+      Audio.dragonRoar();
+    }
+    return true;
+  }
+  if (e.pyreDashTime <= 0) return false;
+
+  e.pyreDashTime -= dt;
+  const dir = Math.sign(e.pyreDashTargetX - e.x) || e.dir;
+  e.dir = dir;
+  const nextX = e.x + dir * PYRE_DASH_SPEED * (e.pyreEnraged ? 1.16 : 1) * dt;
+  e.x = dir > 0 ? Math.min(nextX, e.pyreDashTargetX) : Math.max(nextX, e.pyreDashTargetX);
+  e.pyreTrailCd -= dt;
+  if (e.pyreTrailCd <= 0) {
+    spawnFirePool(e.x - dir * 30, 38, 3.8);
+    e.pyreTrailCd = 0.15;
+  }
+
+  const player = state.player;
+  if (player && player.hp > 0 && player.pyreDashHit !== e.pyreDashSerial
+      && dist(player.x, e.x) < 72 && (player.jumpH || 0) + entityWallLift(player) <= 42) {
+    player.pyreDashHit = e.pyreDashSerial;
+    damagePlayer(2, { knock: dir * 330 });
+  }
+  for (const u of activeUnits()) {
+    if (u.pyreDashHit === e.pyreDashSerial || dist(u.x, e.x) >= 78) continue;
+    u.pyreDashHit = e.pyreDashSerial;
+    u.hp -= 2;
+    u.panic = 1.2;
+    u.knock = (u.knock || 0) + dir * 290;
+    spawnParticles(u.x, groundY - 34 - entityWallLift(u), 9, "#ff5a18", 70, 105);
+  }
+  spawnParticles(e.x - dir * 48, groundY - 58, 4, "#ff5a18", 70, 95);
+  Game.screenShake = Math.max(Game.screenShake || 0, 0.16);
+
+  if (e.x === e.pyreDashTargetX || e.pyreDashTime <= 0) {
+    if (dist(e.x, state.base.x) < 130) damageBaseByBoss(e, t, 0.62, "#ff5a18");
+    pushBossRing(e.x, 105, "#ff5a18", 0.4, 6);
+    e.pyreDashTime = 0;
+    e.pyreDashCd = e.pyreEnraged ? 4.8 : 6.8;
+    e.attackKind = "";
+  }
+  return true;
+}
+
+function startSecondIgnition(e) {
+  e.pyreIgnitionDone = true;
+  e.pyreEnrageT = 1.3;
+  e.pyreEnrageMax = e.pyreEnrageT;
+  e.attackKind = "pyreIgnition";
+  e.attackAnim = 0.65;
+  e.pyreMarkers.length = 0;
+  Game.screenShake = Math.max(Game.screenShake || 0, 0.6);
+  spawnParticles(e.x, groundY - 92, 36, "#ff5a18", 165, 250);
+  spawnParticles(e.x, groundY - 104, 18, "#fff0a0", 100, 285);
+  Audio.dragonRoar();
+}
+
+function releaseSecondIgnition(e) {
+  e.pyreEnraged = true;
+  e.pyrePillarCd = 1.0;
+  e.pyreDashCd = Math.min(e.pyreDashCd, 2.5);
+  pushBossRing(e.x, 255, "#fff0a0", 0.75, 11);
+  pushBossRing(e.x, 175, "#ff5a18", 0.58, 8);
+  const player = state.player;
+  if (player && dist(player.x, e.x) < 235 && (player.jumpH || 0) + entityWallLift(player) <= 38) {
+    damagePlayer(1, { knock: Math.sign(player.x - e.x || 1) * 310 });
+  }
+  damageUnitsInRange(e.x, 235, 1, "#fff0a0", { knock: 270 });
+  spawnParticles(e.x, groundY - 84, 54, "#ff5a18", 270, 285);
+  spawnParticles(e.x, groundY - 104, 28, "#fff0a0", 180, 320);
+  Game.screenShake = Math.max(Game.screenShake || 0, 0.78);
+}
+
+function updatePyreTyrant(e, t, dt) {
+  initPyreTyrant(e);
+  updatePyreMarkers(e, dt);
+  if (e.burn) { e.burn = 0; e.ignited = false; e.burnDmg = 0; }
+  if (e.knock) e.knock = 0;
+  e.pyrePillarCd -= dt;
+  e.pyreDashCd -= dt;
+  e.pyreCleaveCd -= dt;
+  e.pyreWalkBlend = Math.max(0, e.pyreWalkBlend - dt * 3.2);
+
+  if (!e.pyreIgnitionDone && e.hp <= e.maxHp * 0.5) startSecondIgnition(e);
+  if (e.pyreEnrageT > 0) {
+    e.pyreEnrageT -= dt;
+    if (e.pyreEnrageT <= 0) {
+      releaseSecondIgnition(e);
+      e.attackKind = "";
+    }
+    return;
+  }
+  if (e.pyreCleaveT !== undefined && updatePyreCleave(e, t, dt)) return;
+  if (e.pyreCastT !== undefined) {
+    e.pyreCastT += dt;
+    if (e.pyreCastT >= e.pyreCastMax) {
+      e.pyreCastT = undefined;
+      e.pyrePillarCd = (t.shootInterval || 7.2) * (e.pyreEnraged ? 0.68 : 1) + rand(-0.45, 0.55);
+      e.attackKind = "";
+    }
+    return;
+  }
+  if ((e.pyreDashTelegraph || 0) > 0 || (e.pyreDashTime || 0) > 0) {
+    if (updatePyreDash(e, t, dt)) return;
+  }
+
+  const wallAhead = golemWallAhead(e);
+  if (e.pyrePillarCd <= 0 && Math.abs(e.x - state.base.x) < 1050) {
+    startPyrePillars(e);
+    return;
+  }
+
+  const player = state.player;
+  if (e.pyreCleaveCd <= 0 && player?.hp > 0 && dist(e.x, player.x) < 92
+      && (player.jumpH || 0) + entityWallLift(player) <= 38) {
+    e.dir = Math.sign(player.x - e.x) || e.dir;
+    startPyreCleave(e, "player", player);
+    return;
+  }
+
+  if (wallAhead) {
+    const standX = pyreWallStandX(wallAhead, t);
+    if (Math.abs(e.x - standX) <= 2) {
+      if (e.pyreCleaveCd <= 0) startPyreCleave(e, "wall", wallAhead);
+      return;
+    }
+  } else if (e.pyreDashCd <= 0 && Math.abs(e.x - state.base.x) > 180) {
+    e.dir = Math.sign(state.base.x - e.x) || e.dir;
+    startPyreDash(e);
+    return;
+  }
+
+  const marchTarget = wallAhead ? pyreWallStandX(wallAhead, t) : state.base.x - e.dir * 72;
+  const remaining = marchTarget - e.x;
+  if (!wallAhead && Math.abs(remaining) <= 3) {
+    if (e.pyreCleaveCd <= 0) startPyreCleave(e, "base", state.base);
+    return;
+  }
+  e.dir = Math.sign(remaining) || e.dir;
+  const slowMult = e.rooted > 0 ? 0.05 : e.frost > 0 ? 0.45 : e.slow > 0 ? 0.62 : 1;
+  const speed = t.speed * (e.pyreEnraged ? 1.28 : 1) * slowMult;
+  const step = Math.min(Math.abs(remaining), speed * dt);
+  e.x += Math.sign(remaining) * step;
+  e.pyreWalkPhase += dt * (e.pyreEnraged ? 1.95 : 1.55) * slowMult;
+  e.pyreWalkBlend = Math.min(1, e.pyreWalkBlend + dt * 4.2);
+  if (Math.random() < dt * (e.pyreEnraged ? 10 : 5)) {
+    spawnParticles(e.x - e.dir * 22, groundY - rand(12, 78), 1, e.pyreEnraged ? "#fff0a0" : "#ff5a18", 25, 62);
   }
 }
 
@@ -483,11 +820,6 @@ const BIOME_CASTS = {
   voidMindflayer: { kind: "possess", dur: 0.86 },
 };
 
-function playerWeaponIs(...ids) {
-  const weapon = state.player?.weapon;
-  return !!weapon && ids.includes(weapon);
-}
-
 function pushBossRing(x, radius, col, life = 0.65, width = 6) {
   if (!state.legendaryEffects) state.legendaryEffects = [];
   state.legendaryEffects.push({ type: "ring", x, radius, life, totalLife: life, col, width });
@@ -570,7 +902,7 @@ function outerWallOnSide(side) {
 function damageBiomeBossWall(e, t, w, mult = 1, col = t.eye) {
   if (!wallReady(w)) return;
   let dmg = t.dmg * mult * (e.damageMult || 1);
-  if (t.skadiWrath && (w.brittle || 0) > 0 && !playerWeaponIs("icicle_spear")) {
+  if (t.skadiWrath && (w.brittle || 0) > 0) {
     dmg = Math.max(dmg, w.hp + 1);
     floaty(w.x, "SHATTER", "#bfefff", 18);
   }
@@ -634,7 +966,7 @@ function updateBiomeTimers(e, t, dt) {
     e.cryoShield = Math.max(0, (e.cryoShield || 0) - dt);
     e.reflectFlash = Math.max(0, (e.reflectFlash || 0) - dt);
     if ((e.cryoShield || 0) <= 0 && e.cryoShieldCd <= 0) {
-      e.cryoShield = playerWeaponIs("blizzard_chime") ? 1.8 : 5.2;
+      e.cryoShield = 5.2;
       e.cryoShieldCd = 30;
       e.attackKind = "cryoShield";
       spawnParticles(e.x, groundY + (e.fy || 0) - 35, 26, "#bfefff", 120, 150);
@@ -647,79 +979,19 @@ function updateBiomeTimers(e, t, dt) {
 function reactToBiomeBossDamage(e, t) {
   const taken = Math.max(0, (e.lastHp ?? e.hp) - e.hp);
   if (taken <= 0) { e.lastHp = e.hp; return; }
-  const weapon = state.player?.weapon;
 
   if (t.forestStalker) {
-    if (weapon === "splinter_bow") {
-      e.natureRootT = 0;
-      for (const u of activeUnits()) {
-        if ((u.rooted || 0) > 0) u.rooted = Math.max(0, u.rooted - 2.5);
-      }
-      spawnParticles(e.x, groundY - t.w * 0.8, 8, "#8fd05a", 80, 95);
-    }
-    if (weapon === "lumberjack_axe") {
-      e.hp -= taken * 0.45;
-      e.biomeVulnerable = Math.max(e.biomeVulnerable || 0, 3.0);
-      e.biomeStunned = Math.max(e.biomeStunned || 0, 0.35);
-      floaty(e.x, "Bark cracked", "#d2b07a", 14);
-    } else if ((e.biomeVulnerable || 0) > 0) {
-      e.hp -= taken * 0.22;
-    }
+    if ((e.biomeVulnerable || 0) > 0) e.hp -= taken * 0.22;
   }
 
   if (t.skadiWrath) {
-    if ((e.cryoShield || 0) > 0 && weapon !== "icicle_spear" && weapon !== "blizzard_chime") {
+    if ((e.cryoShield || 0) > 0) {
       e.hp = Math.min(e.maxHp, e.hp + taken * 0.55);
       stunArchersNear(e.x, 650, 1.25, "#bfefff", 1);
       floaty(e.x, "Reflected", "#bfefff", 14);
       e.reflectFlash = 0.35;
       pushBossRing(e.x, 120, "#eaf6ff", 0.4, 5);
       spawnParticles(e.x, groundY + (e.fy || 0) - 40, 9, "#eaf6ff", 110, 80);
-    } else if ((e.cryoShield || 0) > 0 && weapon === "icicle_spear") {
-      e.cryoShield = 0;
-      e.biomeStunned = Math.max(e.biomeStunned || 0, 0.65);
-      e.hp -= taken * 0.3;
-      spawnParticles(e.x, groundY + (e.fy || 0) - 35, 18, "#ffffff", 100, 130);
-      floaty(e.x, "Shield broken", "#d8f8ff", 15);
-    }
-  }
-
-  if (t.duneBroodmother && weapon === "sandstorm_sling") {
-    e.blinded = Math.max(e.blinded || 0, 3.2);
-    spawnParticles(e.x, groundY - t.w * 0.48, 8, "#d8b46a", 95, 55);
-  }
-
-  if (t.sunkenBehemoth) {
-    if (weapon === "acid_blowgun") {
-      e.healLocked = Math.max(e.healLocked || 0, 4.2);
-      spawnParticles(e.x, groundY - t.w * 0.4, 9, "#7fe05a", 85, 75);
-    }
-    if (weapon === "gator_hammer" && (e.suckT || 0) > 0) {
-      e.suckT = 0;
-      e.biomeStunned = Math.max(e.biomeStunned || 0, 0.9);
-      e.hp -= taken * 0.25;
-      floaty(e.x, "Suction broken", "#b8ff7a", 15);
-    }
-  }
-
-  if (t.ignitedCore && (weapon === "obsidian_brand" || weapon === "magma_mortar")) {
-    e.coreHeat = Math.min(1.4, (e.coreHeat || 0) + taken / Math.max(80, e.maxHp * 0.08));
-    if ((e.supernovaT || 0) > 0) e.supernovaDamage = (e.supernovaDamage || 0) + taken * (weapon === "magma_mortar" ? 1.3 : 1.0);
-    if (weapon === "obsidian_brand") e.hp -= taken * 0.18;
-  }
-
-  if (t.voidMindflayer) {
-    if (weapon === "shadow_scythe") {
-      e.tentacleCut = Math.max(e.tentacleCut || 0, 3.4);
-      for (const u of activeUnits("archer")) u.possessed = Math.min(u.possessed || 0, 0.45);
-      e.hp -= taken * 0.25;
-      floaty(e.x, "Tentacles cut", "#8c4cff", 14);
-    }
-    if (weapon === "possessed_heart") {
-      e.maskCracked = Math.max(e.maskCracked || 0, 3.6);
-      e.hp -= taken * 0.18;
-      if (e.hp < e.maxHp * 0.18) e.hp -= taken * 0.25;
-      spawnParticles(e.x, groundY + (e.fy || 0) - 60, 10, "#f0c8ff", 80, 110);
     }
   }
 
@@ -735,8 +1007,8 @@ function releaseForestRoots(e, t) {
   spawnParticles(x, groundY - 42, 18, "#b66bff", 130, 150);
   if (wall) damageBiomeBossWall(e, t, wall, 1.15, "#b66bff");
   else damageBaseByBoss(e, t, 0.78, "#b66bff");
-  if (!playerWeaponIs("splinter_bow")) rootBuildersInsideBase(4.8);
-  if (!playerWeaponIs("lumberjack_axe")) stunArchersNear(x, 220, 1.7, "#b66bff");
+  rootBuildersInsideBase(4.8);
+  stunArchersNear(x, 220, 1.7, "#b66bff");
   e.natureRootT = 5;
   Game.screenShake = Math.max(Game.screenShake || 0, 0.48);
 }
@@ -745,15 +1017,10 @@ function releaseSkadiFreeze(e, t) {
   const wall = strongestWall();
   const col = "#bfefff";
   if (wall) {
-    const shieldCounter = playerWeaponIs("icicle_spear");
-    wall.hp -= Math.round(t.dmg * (shieldCounter ? 0.32 : 0.52));
+    wall.hp -= Math.round(t.dmg * 0.52);
     wall.flash = Math.max(wall.flash || 0, 0.34);
-    if (!shieldCounter) {
-      wall.brittle = Math.max(wall.brittle || 0, 12);
-      floaty(wall.x, "Brittle", col, 16);
-    } else {
-      floaty(wall.x, "Freeze cracked", "#ffffff", 15);
-    }
+    wall.brittle = Math.max(wall.brittle || 0, 12);
+    floaty(wall.x, "Brittle", col, 16);
     const ix = wall.x, iy = groundY - wallHeight(wall) * 0.58;
     pushBossRing(ix, 160, col, 0.7, 8);
     pushBossRing(ix, 96, "#ffffff", 0.5, 5);
@@ -764,7 +1031,7 @@ function releaseSkadiFreeze(e, t) {
   } else {
     damageBaseByBoss(e, t, 0.62, col);
   }
-  if (!playerWeaponIs("blizzard_chime")) stunArchersNear(state.base.x, 760, 1.4, col);
+  stunArchersNear(state.base.x, 760, 1.4, col);
   Game.screenShake = Math.max(Game.screenShake || 0, 0.34);
   Audio.fireball();
 }
@@ -850,7 +1117,7 @@ function updateBehemothSuction(e, t, dt) {
 }
 
 function releaseBehemothConsumption(e) {
-  e.suckT = playerWeaponIs("acid_blowgun") ? 2.0 : 3.6;
+  e.suckT = 3.6;
   e.suckTick = 0.22;
   spawnParticles(e.x, groundY - 52, 28, "#b8ff7a", 150, 150);
   pushBossRing(e.x, 360, "#b8ff7a", 0.7, 8);
@@ -865,7 +1132,7 @@ function releaseVolcanoCracks(e, t) {
     spawnFirePool(x, rand(52, 72), 5.6);
     pushBossRing(x, 78, "#ff6a28", 0.32, 4);
     for (const u of activeUnits()) {
-      if (u.role === "builder" && dist(u.x, x) < 120 && !playerWeaponIs("magma_mortar")) {
+      if (u.role === "builder" && dist(u.x, x) < 120) {
         u.rooted = Math.max(u.rooted || 0, 2.1);
       }
     }
@@ -898,7 +1165,7 @@ function updateSupernova(e, t, dt) {
   pushBossRing(e.x, 210 + (10 - e.supernovaT) * 16, "#ff6a28", 0.12, 5);
   if (e.supernovaT > 0) return true;
 
-  const needed = e.maxHp * (playerWeaponIs("obsidian_brand", "magma_mortar") ? 0.055 : 0.08);
+  const needed = e.maxHp * 0.08;
   if ((e.supernovaDamage || 0) >= needed) {
     e.biomeStunned = 2.1;
     e.biomeVulnerable = 3.5;
@@ -922,11 +1189,10 @@ function updateSupernova(e, t, dt) {
 }
 
 function releaseVoidPossession(e, t) {
-  const counter = playerWeaponIs("shadow_scythe");
   let n = 0;
   for (const u of activeUnits("archer")) {
     if (dist(u.x, e.x) > 950 && Math.abs(u.x - CFG.baseX) > 820) continue;
-    u.possessed = Math.max(u.possessed || 0, counter ? 1.2 : 5.5);
+    u.possessed = Math.max(u.possessed || 0, 5.5);
     u.possessShotCd = rand(0.2, 0.8);
     n++;
     spawnParticles(u.x, groundY - 58 - entityWallLift(u), 10, "#8c4cff", 60, 90);
@@ -940,10 +1206,10 @@ function releaseVoidPossession(e, t) {
 function updateMindflayerAura(e, t, dt) {
   e.goldDecayCd = (e.goldDecayCd || 5) - dt;
   if (e.goldDecayCd <= 0) {
-    e.goldDecayCd = playerWeaponIs("possessed_heart") ? 7.5 : 5.0;
+    e.goldDecayCd = 5.0;
     const p = state.player;
     if (p && (p.coins || 0) > 0) {
-      const loss = Math.min(p.coins, Math.max(1, Math.ceil(p.coins * (playerWeaponIs("possessed_heart") ? 0.03 : 0.08))));
+      const loss = Math.min(p.coins, Math.max(1, Math.ceil(p.coins * 0.08)));
       p.coins -= loss;
       floaty(p.x, "-" + loss + " gold", "#8c4cff", 14);
       spawnParticles(p.x, groundY - 46, 12, "#8c4cff", 70, 90);
@@ -1033,7 +1299,7 @@ function updateBiomeWallAttack(e, t, dt) {
     const mult = t.forestStalker ? 1.25 : t.sunkenBehemoth ? 1.15 : t.voidMindflayer ? 0.82 : 1;
     damageBiomeBossWall(e, t, e.biomeWall, mult, t.eye);
     if (t.forestStalker) {
-      stunArchersNear(e.biomeWall.x, 190, playerWeaponIs("lumberjack_axe") ? 0.45 : 1.35, "#b66bff");
+      stunArchersNear(e.biomeWall.x, 190, 1.35, "#b66bff");
       spawnParticles(e.biomeWall.x, groundY - 20, 16, "#8a6a3a", 130, 90);
       spawnParticles(e.biomeWall.x, groundY - 30, 10, "#b66bff", 90, 100);
     }

@@ -8,16 +8,10 @@ import { WEAPONS, RARITY_COL } from '../config/weapons.js?v=biomeweapons1';
 import { cachedUpgradeEffects } from '../config/weaponUpgrades.js?v=biomeweapons1';
 import { ARMORS, ARMOR_RARITY_COL } from '../config/armor.js';
 import { shootPose, ease, drawBow, limb } from './sprites/Archer.js';
-import { drawWandModel, wandTipLength, roundedRect, spellTypeWandLook } from './DrawHelpers.js?v=biomeweapons1';
+import { drawWandModel, wandTipLength, roundedRect } from './DrawHelpers.js?v=biomeweapons1';
 import { armorOutfit } from './ArmorOutfits.js';
 
 export const WEAPON_TYPE_LABEL = { melee: "Melee", ranged: "Ranged", magic: "Magic" };
-
-// Generated casters have no hand-authored WAND_LOOKS entry — theme them off
-// their rolled spellType/color instead of always falling back to "arcane".
-function proceduralWandLook(w) {
-  return w.generated ? spellTypeWandLook(w.spellType, w.col) : null;
-}
 
 // ---------- Small helpers ----------
 function rarityHalo(rarity, col, r, extra = 0) {
@@ -935,89 +929,6 @@ export function drawMeleeWeaponModel(weaponId, w, len, fx) {
   drawSwordLikeWeapon(weaponId, w, len, fx);
 }
 
-function drawSlingWeaponModel(w, fx = null, loaded = true) {
-  const t = performance.now() / 1000;
-  const col = upgradeColor(fx, w.col);
-  ctx.save();
-  ctx.strokeStyle = "#5b3a22"; ctx.lineWidth = 2.2; ctx.lineCap = "round";
-  ctx.beginPath(); ctx.moveTo(-9, -8); ctx.quadraticCurveTo(1, -2, 10, -2); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(-9, 8); ctx.quadraticCurveTo(1, 2, 10, 2); ctx.stroke();
-  ctx.fillStyle = "#7a4f28";
-  roundedRect(6, -5, 10, 10, 4); ctx.fill();
-  ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.stroke();
-  if (loaded) {
-    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.32 + 0.12 * Math.sin(t * 5);
-    const g = ctx.createRadialGradient(12, 0, 1, 12, 0, 12);
-    g.addColorStop(0, "#ffe0a0"); g.addColorStop(1, "rgba(120,80,30,0)");
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(12, 0, 13, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-    ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(12, 0, 4.5, 3.5, 0, 0, Math.PI * 2); ctx.fill();
-  }
-  ctx.restore();
-}
-
-function drawBlowgunWeaponModel(w, fx = null) {
-  const t = performance.now() / 1000;
-  const col = upgradeColor(fx, w.col);
-  ctx.save();
-  ctx.strokeStyle = "#4f3422"; ctx.lineWidth = 4; ctx.lineCap = "round";
-  ctx.beginPath(); ctx.moveTo(-17, 0); ctx.lineTo(21, 0); ctx.stroke();
-  ctx.strokeStyle = "#8b5d36"; ctx.lineWidth = 1.3;
-  ctx.beginPath(); ctx.moveTo(-14, -1.1); ctx.lineTo(18, -1.1); ctx.stroke();
-  ctx.strokeStyle = col; ctx.lineWidth = 1.1;
-  for (let k = 0; k < 4; k++) {
-    const x = -10 + k * 7;
-    ctx.beginPath(); ctx.moveTo(x, -2.5); ctx.lineTo(x + 2.4, 2.5); ctx.stroke();
-  }
-  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.25 + 0.08 * Math.sin(t * 4);
-  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(21, 0, 9, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-  ctx.fillStyle = "#d8f0c0";
-  ctx.beginPath(); ctx.ellipse(-18, -3, 2.2, 4.4, -0.7, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(-16, 4, 2, 4, 0.6, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-}
-
-function drawHandCannonWeaponModel(w, fx = null) {
-  const t = performance.now() / 1000;
-  const col = upgradeColor(fx, w.col);
-  const rank = upgradeRank(fx);
-  ctx.save();
-  // stubby wooden stock
-  ctx.fillStyle = "#4a3520";
-  roundedRect(-16, -3.6, 12, 7.2, 2.2); ctx.fill();
-  ctx.strokeStyle = "#2a1c10"; ctx.lineWidth = 0.8; ctx.stroke();
-  // brass-banded barrel, flared at the muzzle
-  const barrel = ctx.createLinearGradient(-6, -6, 20, 6);
-  barrel.addColorStop(0, "#8a7048"); barrel.addColorStop(0.5, "#c9a860"); barrel.addColorStop(1, "#5a4526");
-  ctx.fillStyle = barrel;
-  ctx.beginPath();
-  ctx.moveTo(-6, -5.2); ctx.lineTo(14, -5.2); ctx.lineTo(19, -8); ctx.lineTo(19, 8); ctx.lineTo(14, 5.2); ctx.lineTo(-6, 5.2);
-  ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = "rgba(20,14,6,0.5)"; ctx.lineWidth = 0.8; ctx.stroke();
-  ctx.strokeStyle = "#3a2c18"; ctx.lineWidth = 1.4;
-  for (const bx of [0, 6, 12]) { ctx.beginPath(); ctx.moveTo(bx, -5.4); ctx.lineTo(bx, 5.4); ctx.stroke(); }
-  // rune vents glowing along the top
-  ctx.save(); ctx.globalCompositeOperation = "lighter";
-  for (let k = 0; k < 3; k++) {
-    const vx = -2 + k * 6;
-    ctx.globalAlpha = 0.5 + 0.35 * Math.sin(t * 5 + k * 1.6);
-    ctx.fillStyle = col;
-    ctx.beginPath(); ctx.arc(vx, -5.4, 1.1, 0, Math.PI * 2); ctx.fill();
-  }
-  // charged muzzle glow
-  ctx.globalAlpha = (rank >= 2 ? 0.42 : 0.28) + 0.15 * Math.sin(t * 6);
-  const g = ctx.createRadialGradient(19, 0, 0.5, 19, 0, 9);
-  g.addColorStop(0, col); g.addColorStop(1, "rgba(0,0,0,0)");
-  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(19, 0, 9, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-  ctx.fillStyle = "#1c1712"; ctx.beginPath(); ctx.ellipse(19, 0, 1.6, 5.6, 0, 0, Math.PI * 2); ctx.fill();
-  // grip + trigger guard
-  ctx.strokeStyle = "#2a1c10"; ctx.lineWidth = 2.2; ctx.lineCap = "round";
-  ctx.beginPath(); ctx.moveTo(-11, 3.6); ctx.lineTo(-14, 11); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(-13, 2.6); ctx.quadraticCurveTo(-16, 6, -13, 8.4); ctx.stroke();
-  ctx.restore();
-}
 
 function drawHeldCrossbow(hx, hy, aim, pull, recoil, loaded, col, fx = null) {
   const rot = (1 - aim) * 0.45 - recoil * 0.08;
@@ -1226,22 +1137,15 @@ export function drawWeaponModel(weaponId, s = 1, opts = {}) {
     ctx.rotate(-0.72);
     ctx.translate(-(len - 4) / 2, 0);
     drawMeleeWeaponModel(weaponId, w, len, modelFx);
-  } else if (weaponId.includes("sling")) {
-    drawSlingWeaponModel(w, modelFx, true);
-  } else if (weaponId.includes("blowgun")) {
-    ctx.rotate(-0.18);
-    drawBlowgunWeaponModel(w, modelFx);
-  } else if (weaponId.includes("crossbow")) {
+  } else if (weaponId === "crossbow") {
     const crossCol = modelFx?._vfxCols?.length ? modelFx._vfxCols[modelFx._vfxCols.length - 1] : w.col;
     drawHeldCrossbow(-2, 0, 1, 0, 0, true, crossCol, modelFx);
-  } else if (weaponId.includes("handcannon")) {
-    drawHandCannonWeaponModel(w, modelFx);
   } else if (w.type === "ranged") {
     ctx.translate(-4, 0);
     drawBowModel(weaponId, w, modelFx);
   } else {
     ctx.rotate(0.42);
-    drawWandModel(weaponId, w.col, 0.92, { glow: (opts.glow || 0) + (w.rarity >= 3 ? 0.25 : 0.1), fx: modelFx, look: proceduralWandLook(w) });
+    drawWandModel(weaponId, w.col, 0.92, { glow: (opts.glow || 0) + (w.rarity >= 3 ? 0.25 : 0.1), fx: modelFx });
   }
   ctx.restore();
 }
@@ -1963,7 +1867,7 @@ export function drawHeldWeapon(player, px = 0) {
     const attackP = sw > 0 ? 1 - clamp(sw / 0.32, 0, 1) : 0;
     const len = clamp(w.range * 0.48, 18, 46);
     let angle, grip, slide = 0;
-    if (player.weapon.includes("spear") || player.weapon.includes("glaive") || player.weapon.includes("trident")) {
+    if (player.weapon.includes("spear")) {
       // Two-handed thrust: coil back, drive the point forward, recover.
       let ext = 0; // -1 fully coiled .. 1 fully extended
       if (sw > 0) {
@@ -1975,7 +1879,7 @@ export function drawHeldWeapon(player, px = 0) {
       angle = sw > 0 ? -0.06 + push * 0.04 : -0.42;
       grip = { x: px + 6 - coil * 7 + push * 9, y: groundY - 24 + push * 1.5 };
       slide = push * 10 - coil * 4; // shaft slides through the hands on the jab
-    } else if (player.weapon.includes("axe") || player.weapon.includes("mace") || player.weapon.includes("cleaver")) {
+    } else if (player.weapon.includes("axe")) {
       // Heavy overhead chop: slow raise, fast drop, brief follow-through.
       let raise = 0, drop = 0;
       angle = -0.55;
@@ -1995,7 +1899,7 @@ export function drawHeldWeapon(player, px = 0) {
       };
     }
     // Spears are gripped further apart than one-handed hilts.
-    const rearReach = (player.weapon.includes("spear") || player.weapon.includes("glaive") || player.weapon.includes("trident")) ? 11 : 6;
+    const rearReach = player.weapon.includes("spear") ? 11 : 6;
     const rearGrip = {
       x: grip.x - Math.cos(angle) * rearReach,
       y: grip.y - Math.sin(angle) * rearReach,
@@ -2021,7 +1925,7 @@ export function drawHeldWeapon(player, px = 0) {
     }
     const grip = { x: frontSh.x + 4 + aim * 7, y: frontSh.y + 7 - aim * 8 };
     let drawHand = null;
-    if (player.weapon.includes("crossbow")) {
+    if (player.weapon === "crossbow") {
       let recoil = 0;
       if (shoot?.phase === "release") recoil = 1 - shoot.p;
       else if (shoot?.phase === "recoil") recoil = 1 - ease(shoot.p);
@@ -2034,31 +1938,6 @@ export function drawHeldWeapon(player, px = 0) {
       drawPlayerWeaponArm(frontSh.x, frontSh.y, grip.x + 4 - recoil * 3, grip.y, 2.8);
       const crossCol = weaponFx._vfxCols?.length ? weaponFx._vfxCols[weaponFx._vfxCols.length - 1] : w.col;
       drawHeldCrossbow(grip.x + 6, grip.y, aim, pull, recoil, true, crossCol, weaponFx);
-    } else if (player.weapon.includes("sling")) {
-      const slingSwing = shoot?.phase === "draw" ? ease(shoot.p) : shoot?.phase === "release" ? 1 - shoot.p : 0;
-      const grip = { x: frontSh.x + 5 + aim * 7, y: frontSh.y + 8 - aim * 6 };
-      drawPlayerWeaponArm(backSh.x, backSh.y, grip.x - 7, grip.y + 6, 2.6);
-      drawPlayerWeaponArm(frontSh.x, frontSh.y, grip.x, grip.y, 2.8);
-      ctx.save();
-      ctx.translate(grip.x + 5, grip.y);
-      ctx.rotate(-0.35 + aim * 0.28 + slingSwing * 1.15);
-      drawSlingWeaponModel(w, weaponFx, true);
-      ctx.restore();
-    } else if (player.weapon.includes("blowgun")) {
-      const puff = shoot?.phase === "release" ? 1 - shoot.p : 0;
-      const grip = { x: frontSh.x + 6 + aim * 8 + puff * 2, y: frontSh.y + 5 - aim * 5 };
-      drawPlayerWeaponArm(backSh.x, backSh.y, grip.x - 11, grip.y + 2, 2.6);
-      drawPlayerWeaponArm(frontSh.x, frontSh.y, grip.x + 5, grip.y - 1, 2.7);
-      ctx.save();
-      ctx.translate(grip.x + 5, grip.y);
-      ctx.rotate(-0.12 + aim * 0.12);
-      drawBlowgunWeaponModel(w, weaponFx);
-      if (puff > 0) {
-        ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = puff * 0.35;
-        ctx.fillStyle = "#7fe05a"; ctx.beginPath(); ctx.ellipse(26, 0, 14, 5, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
-      }
-      ctx.restore();
     } else {
       if (shoot) {
         if (shoot.phase === "reach") { const p = ease(shoot.p); drawHand = { x: backSh.x + 2 - p * 6, y: backSh.y + 8 - p * 14 }; }
@@ -2120,7 +1999,7 @@ export function drawHeldWeapon(player, px = 0) {
       ctx.restore();
     }
     ctx.save(); ctx.translate(grip.x, grip.y); ctx.rotate(rot);
-    drawWandModel(player.weapon, w.col, mScale, { cast: pulse, glow: pulse + upgCount * 0.08, fx: weaponFx, look: proceduralWandLook(w) });
+    drawWandModel(player.weapon, w.col, mScale, { cast: pulse, glow: pulse + upgCount * 0.08, fx: weaponFx });
     ctx.restore();
   }
   ctx.restore();

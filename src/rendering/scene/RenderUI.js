@@ -16,7 +16,7 @@ import { currentShopList, isShopItemOwned, SHOP_COLS } from '../../systems/econo
 import { CASTLE_UPGRADES } from '../../config/castleUpgrades.js';
 import { castleUpgradeCost } from '../../systems/economy/CastleUpgradeSystem.js?v=biomeweapons1';
 import { ensureCastleUpgrades, currentPopCap, currentCoinCap, crownAegisStats, trebuchetStats, castleUpgradeUnlockLevel } from '../../util/DefenseStats.js';
-import { drawBossPortrait } from './RenderEntities.js?v=biomeactive4';
+import { drawBossPortrait } from './RenderEntities.js?v=forestboss1';
 import { drawTrebuchetModel } from './RenderWorld.js?v=biomevisual4';
 
 // ---------- Shared UI helpers ----------
@@ -97,15 +97,6 @@ function upgradeSummary(u) {
   return UPGRADE_TIERS[u.tier]?.name.toLowerCase() || "special";
 }
 
-const BIOME_DROP_LABELS = {
-  forest: "Forest",
-  frozen: "Frozen Wastes",
-  desert: "Desert",
-  swamp: "Swamp",
-  volcano: "Volcano",
-  corrupted: "Corrupted Lands",
-};
-
 function armorAbilityText(a) {
   return a?.ability ? a.ability.name + ": " + a.ability.desc : "";
 }
@@ -125,7 +116,6 @@ function drawItemTooltip(item, mx, my) {
     lines.push({ t: "Damage: " + eff.dmg + (eff.dmg > w.dmg ? "  (+" + Math.round((eff.dmg - w.dmg) * 10) / 10 + ")" : ""), c: "#9bd05a" });
     lines.push({ t: "Range: " + eff.range + " px" + (eff.range > w.range ? "  (+" + (eff.range - w.range) + ")" : ""), c: "#e8d8a8" });
     lines.push({ t: "Attack time: " + eff.speed + "s" + (eff.speed < w.speed ? "  (faster)" : ""), c: "#6ab4ff" });
-    if (w.biomeOnly) lines.push({ t: "Biome drop: " + (BIOME_DROP_LABELS[w.biome] || w.biome), c: w.col, gap: 4 });
     if (upgs.length) {
       lines.push({ t: "Upgrades:", c: MUTED, gap: 4 });
       for (const u of upgs) lines.push({ t: "• " + u.name + " — " + upgradeSummary(u), c: UPGRADE_TIERS[u.tier]?.col || "#9bd05a" });
@@ -1069,6 +1059,7 @@ export function drawXpBar() {
 
 // ---------- Legendary intro ----------
 const BOSS_INTRO_DESCS = {
+  pyreTyrant: "Dodge the Crownfire runes before they erupt. Vaelgor charges once the walls fall and enters Second Ignition at half health.",
   legend1: "Stomps the ground and sends a shockwave destroying everything within 200px.",
   legend2: "Charges up and rushes at lightning speed, crushing everything in its path.",
   legend3: "Emits a massive void pulse that hits everything within 310px.",

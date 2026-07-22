@@ -555,6 +555,40 @@ export const Audio = {
     this._osc(40, 0.8, 'sine', 0.15, { attack: 0.1, decay: 0.3, sustain: 0.4 });
   },
 
+  // Arcanum staff cast voices — one per school, layered over spell().
+  arcanumCast(school) {
+    if (!this.ctx || !this.enabled) return;
+    switch (school) {
+      case "bramble": // creaking, splitting growth
+        this._noise(0.24, 0.09, 'bandpass', 420, 3);
+        this._pitchOsc(190, 85, 0.3, 'triangle', 0.06);
+        break;
+      case "prism": // struck glass splitting into overtones
+        this._osc(1600, 0.2, 'sine', 0.05, { attack: 0.004, decay: 0.07, sustain: 0.3 });
+        this._osc(2150, 0.15, 'sine', 0.035);
+        this._noise(0.1, 0.04, 'highpass', 6000, 2, this.reverbNode);
+        break;
+      case "spore": // a wet, sour rupture
+        this._noise(0.32, 0.11, 'lowpass', 700, 1.2);
+        this._pitchOsc(240, 110, 0.34, 'sawtooth', 0.05);
+        break;
+      case "gravitywell": // the room inhaling
+        this._pitchOsc(70, 210, 0.55, 'sine', 0.15);
+        this._noise(0.4, 0.06, 'lowpass', 260, 0.8, this.reverbNode);
+        break;
+      case "leech": // two thick heartbeats
+        this._pitchOsc(150, 60, 0.2, 'sine', 0.12);
+        setTimeout(() => this._pitchOsc(130, 55, 0.16, 'sine', 0.08), 140);
+        break;
+      case "resonance": // a bell with a long tail
+        this._osc(880, 0.9, 'sine', 0.09, { attack: 0.004, decay: 0.3, sustain: 0.35 });
+        this._osc(1320, 0.7, 'sine', 0.05, { attack: 0.004, decay: 0.25, sustain: 0.3 });
+        this._osc(2640, 0.4, 'sine', 0.022);
+        this._noise(0.12, 0.05, 'highpass', 4000, 2, this.reverbNode);
+        break;
+    }
+  },
+
   // Procedural staff cast flourish — one of five textures (haze/hum/
   // heartbeat/sparks/motes), pitched by the rolled element's voice.
   spellFlourish(kind, pitch = 500) {

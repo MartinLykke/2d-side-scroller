@@ -246,6 +246,24 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8647"],
       "port": 8647
+    },
+    {
+      "name": "arcanum-staff-server",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8663"],
+      "port": 8663
+    },
+    {
+      "name": "caster-weapons-server",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8677", "--directory", ".claude/worktrees/proximity-caster-weapons"],
+      "port": 8677
+    },
+    {
+      "name": "devpanel-server",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8691"],
+      "port": 8691
     }
   ]
 }

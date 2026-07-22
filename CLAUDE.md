@@ -23,7 +23,7 @@ Press `P` to open the dev panel. It exposes:
 - **Kingdom**: upgrade base, max base, max walls, fort tier +1 (Runeforge)
 - **World**: switch the active biome (Forest, Frozen Wastes, Desert, Swamp, Volcano, Corrupted Lands)
 - **Spawn**:
-  - Enemies (imp, flying imp, ember brute, ash priest, siege imp, chain imp, 8× imp, dragon, magma colossus, kill all)
+  - Enemies (imp, flying imp, brute, ash priest, siege imp, chain imp, 8× imp, dragon, magma colossus, kill all)
   - The Hollow / phase 2 (shade, void wraith, hollow brute, void titan, null seraph)
   - Biome bosses (forest stalker, skadi's wrath, dune broodmother, sunken behemoth, ignited core, void mind-flayer)
   - Assault & phases (start assault, crack portals, begin biome shift)
@@ -57,7 +57,7 @@ The `DEV` object is defined in `src/rendering/HUD.js` and exposed on `window`.
 
 ### Biomes
 
-The whole map uses **one active biome at a time** (`Game.activeBiome`); switching biome remakes the entire landscape rather than moving through world-space bands. Biome data lives in `BIOME_DEFS` / `BIOME_ORDER` (`src/rendering/Effects.js`), enemy rosters in `BIOME_ENEMY_POOLS` / `BIOME_BOSS_TYPES` (`src/config/enemies.js`), and weapon drops in `BIOME_WEAPON_DROPS` (`src/config/weapons.js`).
+The whole map uses **one active biome at a time** (`Game.activeBiome`); switching biome remakes the entire landscape rather than moving through world-space bands. Biome data lives in `BIOME_DEFS` / `BIOME_ORDER` (`src/rendering/Effects.js`), enemy rosters in `BIOME_ENEMY_POOLS` / `BIOME_BOSS_TYPES` (`src/config/enemies.js`).
 
 Progression order (`BIOME_ORDER`): **forest → frozen → desert → swamp → volcano → corrupted**. A run starts in **forest**. Each destroyed portal advances one biome (`performPhaseShift()` → `setActiveBiome(nextBiomeId(...))`); after **corrupted**, the next break flips `Game.worldPhase = 2` (the Hollow). `activeBiome`, `unlockedBiomes`, and `worldPhase` are saved, but a run always begins in forest / phase 1.
 
@@ -136,7 +136,7 @@ Every module imports these directly; nothing is passed as arguments through upda
 |------|----|-------|
 | Imp | 6 | Basic melee, spawns in night quotas |
 | Flying Imp | 8 | Flying, shoots fireballs at 430 px range |
-| Ember Brute | 45 | Charger + stomper |
+| Brute | 140 | Charger + stomper |
 | Ash Priest | 14 | Fast caster: big splashing fireballs, scorch, wards, bursts |
 | Chain Imp | 10 | Support (from day 3): hooks a grappling chain onto a wall so imps climb it; kill it or the chain to drop climbers |
 | Siege Imp | 58 | Heavy (from day 4): front shield deflects frontal arrows, carries a platform of rider imps, rams gates |
@@ -166,7 +166,7 @@ After the final biome's portal falls, void rifts open and these replace the nigh
 |------|----|-------|
 | Shade | 36 | Fast basic melee; void-shift (incorporeal), lunges, darkens walls (replaces imp; does not wall-stack) |
 | Void Wrath | 48 | Flying, fires void bolts that mark targets; gravity bursts, void rain, rift shield |
-| Hollow Brute | 120 | Charger + stomper (ember brute mechanics) |
+| Hollow Brute | 120 | Charger + stomper (brute mechanics) |
 | Void Titan | 3280 | Legendary boss (golem mechanics), "Reality Collapse" |
 | Null Seraph | 2480 | Flying legendary boss, summons adds ("Black Star Choir") |
 
@@ -222,7 +222,7 @@ A linear arcane upgrade track bought at the runeforge obelisk (unlocks at base l
 Buildings in forest require surrounding trees to be felled first.
 
 ### Weapons & armor
-- **39 weapons** (`src/config/weapons.js`) across melee, ranged, and magic (wands & staffs), in 5 rarity tiers (Common→Legendary). This includes **12 biome-only drops** (2 per biome, `BIOME_WEAPON_DROPS`) with unique innate effects — e.g. Splinter Bow (forest), Icicle Lance (frozen), Cactus Whip (desert), Gator Maul (swamp), Obsidian Brand (volcano), Shadow Scythe / Possessed Heart (corrupted).
+- **27 weapons** (`src/config/weapons.js`) across melee, ranged, and magic (wands & staffs), in 5 rarity tiers (Common→Legendary).
 - 9 armor pieces providing defense (reduces incoming damage; defense also gives a chance to fully block a hit — `armorBlockChance` in `PlayerCombat.js`)
 - Every armor has a unique **ability** (`ability` in `src/config/armor.js`): passive buffs (move speed, dodge cooldown, regen speed) and on-block effects — knockback/damage pulses with burn, frost, root, or pull; heal-on-block; riposte (block resets attack cooldown); extra block i-frames. Epic+ armors shed ambient particles (`updateArmorPassiveFX` in `PlayerCombat.js`)
 - Shop unlocked at base level 4; shop tier scales with base level

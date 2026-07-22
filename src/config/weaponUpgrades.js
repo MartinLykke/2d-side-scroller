@@ -49,14 +49,67 @@
 // New staff-specific keys include scorchChain, geyser, stormCloud,
 // meteorFragments, runeTrap, shadowCurse, and voidScar.
 //
-// Procedural-only keys (introduced by ProceduralWeaponSystem, consumed by the
-// same shared combat code as everything else):
-//     lifeLink       – melee: heals a fraction of damage dealt as HP per hit
-//     frenzyOnHit    – melee: consecutive hits stack a decaying attack-speed buff
-//     echoShot       – ranged: chance a free, weaker echo arrow trails the shot
-//     shatterCrit    – ranged: critical hits fragment into shards that seek nearby enemies
-//     overcharge     – magic: consecutive casts escalate damage/blast radius, decays if you stop
-//     soulSiphon     – magic: chance a direct spell hit heals 1 HP
+// Arcanum staff keys (one school per staff, all consumed in SpellSystem.js):
+//     Thornroot Stave (bramble):
+//       brambleSeeds  – extra seedlings dropped along the pod's flight
+//       brambleLife   – extra seconds every thorn patch survives
+//       brambleLash   – extra fraction of spell damage per lash
+//       brambleRoot   – chance a lash pins its target
+//       brambleTwin   – impacts sprout a second patch further down the lane
+//     Prism Spire (prism):
+//       refractRays   – extra rays the shard splinters into
+//       refractSplit  – each ray refracts once more on its first hit
+//     Miasma Censer (spore):
+//       sporeSpread   – chance per tick the plague jumps to a neighbour
+//       sporeLife     – extra seconds the contagion cloud lingers
+//       sporeSlow     – slow applied to anything breathing the cloud
+//       plagueDmg     – extra damage per plague tick
+//       sporeBloom    – plague victims burst into a fresh cloud on death
+//     Nullstone Scepter (gravitywell):
+//       wellDuration  – extra seconds the well holds before it implodes
+//       wellPull      – extra inward pull strength
+//       wellRoot      – enemies caught in the well are pinned
+//       wellCrush     – extra fraction of damage on the implosion
+//       wellRepeat    – the well implodes a second time
+//     Sanguine Rod (leech):
+//       leechHeal     – chance each drain tick restores 1 HP
+//       leechDmg      – extra fraction of damage per drain tick
+//       leechLife     – extra seconds a leech clings on
+//       leechJumps    – extra hosts a leech can leap to
+//       leechSwarm    – extra orbs released per cast
+//     Choirbell Staff (resonance):
+//       resonanceTune – fewer stacks needed before a target shatters
+//       waveForce     – extra knockback carried by the wave
+//       waveEcho      – the wave rebounds and sweeps back through the lane
+//       chorusShatter – a shatter passes its resonance to nearby enemies
+//
+// Autonomous foci (staffs that pick their own targets — see the `autoTarget`
+// field in weapons.js and the matching schools in SpellSystem.js):
+//     The Rupture Shard (fracture):
+//       fractureBolts   – extra bolts loosed per burst
+//       rupturePull     – stronger, wider micro-shockwave on impact
+//       fractureCascade – an impact re-rolls a new random target and flies on
+//       fractureSplinter– impacts splinter into two weaker bolts
+//       fractureRift    – impacts leave an unstable rift that pulls, then bursts
+//     Gale-Staff of Aerion (gale):
+//       galeForce   – extra launch height
+//       galeCyclone – the updraft lingers and keeps lofting whatever enters it
+//       galeShear   – lofted enemies are cut while airborne
+//       galeSlam    – landings crater, damaging and flooring their neighbours
+//       galeTwin    – a second burst erupts under the next-highest target
+//     The Bastion Scepter (bastion):
+//       bastionRange  – extra px of guard radius around the gates
+//       bastionSalvo  – extra stones per volley
+//       bastionQuake  – craters widen and pin what they catch
+//       bastionFocus  – extra damage multiplier at the heart of the ring
+//       bastionWard   – kills inside the ring mend the base and shield you
+//     The Hive-King's Scepter (larva):
+//       hiveStride    – fewer px walked between larvae
+//       larvaBrood    – extra larvae released per stride
+//       larvaVenom    – deeper rot and a heavier slow
+//       larvaHunger   – a hatching larva leaps on to a fresh host
+//       hatchLife     – extra seconds (and bite) on every hatchling
+//       larvaSwarm    – each host hatches a second minion
 //
 // Each upgrade may carry vfxCol: a color woven into the held weapon's glow and
 // its ambient particles, so upgrades visibly change the weapon.
@@ -269,42 +322,67 @@ export const UNIQUE_UPGRADES = {
     { id:"eventide_pages",tier:"epic",      name:"Eventide Sigil",   desc:"The staff carves a second void sigil and tears a smaller scar", effect:{ spellEcho:0.25, aoeBonus:25, voidScar:0.8 }, vfxCol:"#c080ff" },
     { id:"total_collapse",tier:"legendary", name:"Total Collapse",   desc:"Reality collapses twice, pulling enemies into splitting void scars", effect:{ singularity:true, splitOrbs:3, freeCast:0.2, spellEcho:0.35, voidScar:1.6 }, vfxCol:"#ffffff" },
   ],
-  // --- Biome-drop weapons ---
-  splinter_bow: [
-    { id:"rootmothers_embrace", tier:"legendary", name:"Rootmother's Embrace", desc:"Splinters pin enemies in place and arrows bite through the line", effect:{ splinterCount:2, splinterDmgFrac:0.18, rootHit:0.55, pierce:1 }, vfxCol:"#d6b15a" },
+  // --- Arcanum staffs ---
+  bramble_staff: [
+    { id:"seedfall",      tier:"epic",      name:"Seedfall",         desc:"The pod sheds twice as many seedlings, and every thicket takes deeper root", effect:{ brambleSeeds:2, brambleLife:1.2 }, vfxCol:"#9bd05a" },
+    { id:"strangleroot",  tier:"epic",      name:"Strangleroot",     desc:"Thorns coil around whatever they touch, pinning and dragging it down", effect:{ brambleRoot:0.45, slowHit:0.3, brambleLash:0.25 }, vfxCol:"#4f7a2a" },
+    { id:"thornheart",    tier:"legendary", name:"Thornheart Grove", desc:"The grove lives on: patches last far longer, lash harder, and feed you their spoils", effect:{ brambleLife:2.5, brambleLash:0.6, soulSiphon:0.2 }, vfxCol:"#c8e070" },
+    { id:"worldroot",     tier:"legendary", name:"Worldroot Rising", desc:"Every impact splits the earth twice over, and the roots hold nothing back", effect:{ brambleTwin:true, brambleRoot:0.6, brambleSeeds:1, aoeBonus:25 }, vfxCol:"#e8ffb0" },
   ],
-  lumberjack_axe: [
-    { id:"heartwood_cleaver", tier:"legendary", name:"Heartwood Cleaver", desc:"Every chop tears a wider heartwood shock and yanks nearby enemies around", effect:{ splashFrac:0.35, splashR:35, knockBonus:120, alwaysCleave:true }, vfxCol:"#d18c45" },
+  prism_staff: [
+    { id:"facet_cut",     tier:"epic",      name:"Facet Cut",        desc:"A finer cut splinters the shard into two extra rays", effect:{ refractRays:2, dmg:1 }, vfxCol:"#d8f8ff" },
+    { id:"hoarfrost_lens",tier:"epic",      name:"Hoarfrost Lens",   desc:"Light bent through ice: rays chill everything they pass through", effect:{ spellFrost:2, refractRays:1 }, vfxCol:"#bfefff" },
+    { id:"kaleidoscope",  tier:"legendary", name:"Kaleidoscope",     desc:"Rays refract again the moment they bite, filling the lane with light", effect:{ refractSplit:true, refractRays:2 }, vfxCol:"#ffffff" },
+    { id:"white_star",    tier:"legendary", name:"White Star",       desc:"The shard detonates into a starburst of piercing light", effect:{ refractRays:4, aoeBonus:30, dmg:2 }, vfxCol:"#eaffff" },
   ],
-  icicle_spear: [
-    { id:"permafrost_pike", tier:"legendary", name:"Permafrost Pike", desc:"Frozen kills burst into a cold shockwave while the lance hits harder", effect:{ frostHit:2, rootHit:0.35, shatter:4, novaR:115, novaFrac:0.55, novaCol:"#bfefff" }, vfxCol:"#ffffff" },
+  plague_staff: [
+    { id:"virulence",     tier:"epic",      name:"Virulence",        desc:"A meaner strain: the rot bites deeper and jumps between bodies", effect:{ plagueDmg:1, sporeSpread:0.3 }, vfxCol:"#7fbf3a" },
+    { id:"choking_smog",  tier:"epic",      name:"Choking Smog",     desc:"The miasma hangs thick and heavy, dragging everything in it to a crawl", effect:{ aoeBonus:30, sporeSlow:0.5, sporeLife:1.5 }, vfxCol:"#5a7a2a" },
+    { id:"pandemic",      tier:"legendary", name:"Pandemic",         desc:"The infected burst into fresh spores when they fall", effect:{ sporeBloom:true, sporeSpread:0.45 }, vfxCol:"#c8e070" },
+    { id:"rot_crown",     tier:"legendary", name:"Rot Crown",        desc:"A crowned plague: clouds linger, spread wide, and rot twice as fast", effect:{ sporeLife:3.5, plagueDmg:2, sporeSpread:0.35, aoeBonus:20 }, vfxCol:"#d8ff9a" },
   ],
-  blizzard_chime: [
-    { id:"glacial_rhapsody", tier:"legendary", name:"Glacial Rhapsody", desc:"The frost aura bites harder and every cast erupts into a larger freezing geyser", effect:{ aoeBonus:32, spellFrost:2.5, geyser:1.2, frostAura:0.45, frostAuraRadius:45 }, vfxCol:"#ffffff" },
+  gravity_staff: [
+    { id:"deepening_well",tier:"epic",      name:"Deepening Well",   desc:"The well holds longer and hauls the wave in harder", effect:{ wellDuration:0.7, wellPull:0.5 }, vfxCol:"#7a3aff" },
+    { id:"crushing_dark", tier:"epic",      name:"Crushing Dark",    desc:"What collapses inward comes apart: the implosion hits far harder", effect:{ wellCrush:0.8 }, vfxCol:"#3a1a5a" },
+    { id:"dying_star",    tier:"legendary", name:"Dying Star",       desc:"The star dies twice — a second collapse follows the first", effect:{ wellRepeat:true, wellCrush:0.5 }, vfxCol:"#c8a0ff" },
+    { id:"absolute_horizon",tier:"legendary",name:"Absolute Horizon",desc:"A horizon nothing walks out of: vast, patient, and inescapable", effect:{ aoeBonus:45, wellRoot:true, wellDuration:0.9, wellPull:0.4 }, vfxCol:"#ffffff" },
   ],
-  cactus_whip: [
-    { id:"dune_stinger_whip", tier:"legendary", name:"Dune-Stinger Whip", desc:"Scorpion barbs spread poison down the line and snap faster", effect:{ poisonHit:2.5, slowHit:0.45, splashFrac:0.22, splashR:45, speedBonus:0.14 }, vfxCol:"#d9a642" },
+  sanguine_staff: [
+    { id:"crimson_thirst",tier:"epic",      name:"Crimson Thirst",   desc:"The leech drinks for two: drain ticks often mend your wounds", effect:{ leechHeal:0.35 }, vfxCol:"#ff5060" },
+    { id:"barbed_proboscis",tier:"epic",    name:"Barbed Proboscis", desc:"Barbs sink to the bone — a deeper, longer drain", effect:{ leechDmg:0.5, leechLife:1.5 }, vfxCol:"#7a0a1a" },
+    { id:"hemoswarm",     tier:"legendary", name:"Hemoswarm",        desc:"Every cast releases a swarm of clinging leeches", effect:{ leechSwarm:2, leechHeal:0.15 }, vfxCol:"#ff8a90" },
+    { id:"red_harvest",   tier:"legendary", name:"Red Harvest",      desc:"When a host falls the leech simply finds another, and another", effect:{ leechJumps:3, leechHeal:0.3, leechDmg:0.4 }, vfxCol:"#ffb0b8" },
   ],
-  sandstorm_sling: [
-    { id:"khamsin_wrath", tier:"legendary", name:"Khamsin Wrath", desc:"Shots burst into a dragging dust storm that blinds clustered enemies", effect:{ explosiveR:105, explosiveFrac:0.65, gravityArrow:0.45, sandBlind:2 }, vfxCol:"#ffe0a0" },
+  resonance_staff: [
+    { id:"perfect_pitch", tier:"epic",      name:"Perfect Pitch",    desc:"Struck true: enemies shatter one full tone sooner", effect:{ resonanceTune:1 }, vfxCol:"#a8d8ff" },
+    { id:"deep_toll",     tier:"epic",      name:"Deep Toll",        desc:"A lower, heavier note that throws the whole line back", effect:{ dmg:2, waveForce:0.6 }, vfxCol:"#8fb8d8" },
+    { id:"echo_chamber",  tier:"legendary", name:"Echo Chamber",     desc:"The note rebounds off the horizon and sweeps back through the wave", effect:{ waveEcho:true, resonanceTune:1 }, vfxCol:"#ffffff" },
+    { id:"carillon",      tier:"legendary", name:"Carillon of Ruin", desc:"One shattering body sets its neighbours ringing in sympathy", effect:{ chorusShatter:true, resonanceTune:1, dmg:2 }, vfxCol:"#e8f8ff" },
   ],
-  acid_blowgun: [
-    { id:"hydras_breath", tier:"legendary", name:"Hydra's Breath", desc:"The blowgun spits more darts and leaves acid eating through the wave", effect:{ multishot:0.65, poisonArrow:2.5, acidPool:1 }, vfxCol:"#b8ff7a" },
+  // --- Autonomous foci ---
+  rupture_shard: [
+    { id:"probability_storm",tier:"epic",   name:"Probability Storm", desc:"The shard stops choosing at all: two more bolts per burst, flung wherever chance lands them", effect:{ fractureBolts:2, speedBonus:0.08 }, vfxCol:"#c46bff" },
+    { id:"collapsing_field",tier:"epic",    name:"Collapsing Field",  desc:"Each rupture bites deeper into space, hauling the whole knot of bodies into the blast", effect:{ rupturePull:1.2, aoeBonus:30 }, vfxCol:"#7a2aff" },
+    { id:"cascade_failure",tier:"legendary",name:"Cascade Failure",   desc:"A bolt that lands simply picks a new victim and keeps going, over and over", effect:{ fractureCascade:2, fractureBolts:1, rupturePull:0.4 }, vfxCol:"#ff7ad8" },
+    { id:"broken_causality",tier:"legendary",name:"Broken Causality", desc:"Every impact splinters in two and tears an unstable rift that collapses a beat later", effect:{ fractureSplinter:true, fractureRift:1.3, rupturePull:0.6 }, vfxCol:"#ffffff" },
   ],
-  gator_hammer: [
-    { id:"apex_sovereign", tier:"legendary", name:"Apex Sovereign", desc:"The maul's mud-wave crushes weak enemies and throws the rest back", effect:{ execute:0.18, splashFrac:0.35, splashR:45, knockBonus:180 }, vfxCol:"#a6d36a" },
+  gale_staff: [
+    { id:"updraft",       tier:"epic",      name:"Updraft",          desc:"A column that keeps blowing: the gale lingers and lofts anything that wanders in", effect:{ galeCyclone:1.4, aoeBonus:24 }, vfxCol:"#8fd8ff" },
+    { id:"razor_wind",    tier:"epic",      name:"Razor Wind",       desc:"The air carries edges — everything airborne is cut on the way up", effect:{ galeShear:1, galeForce:0.3 }, vfxCol:"#d8f8ff" },
+    { id:"skybreaker",    tier:"legendary", name:"Skybreaker",       desc:"They go up far higher, and the ground they land on comes apart around them", effect:{ galeForce:1.1, galeSlam:1, dmg:2 }, vfxCol:"#ffffff" },
+    { id:"eye_of_aerion", tier:"legendary", name:"Eye of Aerion",    desc:"Twin storms open at once, and neither one lets go", effect:{ galeTwin:true, galeCyclone:1.8, galeForce:0.5, speedBonus:0.35 }, vfxCol:"#c8f0ff" },
   ],
-  obsidian_brand: [
-    { id:"magma_overlord", tier:"legendary", name:"Magma Overlord", desc:"Overheated cuts throw a molten ground wave and burn everything they touch", effect:{ burnHit:2, heatStacks:-1, heatBurstRadius:50, beamChance:0.35, beamFrac:0.9 }, vfxCol:"#ffcc60" },
+  bastion_scepter: [
+    { id:"long_watch",    tier:"epic",      name:"The Long Watch",   desc:"The watchfires reach further: you can range well past the gate and still answer", effect:{ bastionRange:210, dmg:2 }, vfxCol:"#f0b855" },
+    { id:"murder_holes",  tier:"epic",      name:"Murder Holes",     desc:"Two more stones per volley, straight down onto whatever is at the gate", effect:{ bastionSalvo:2, speedBonus:0.08 }, vfxCol:"#ffd88a" },
+    { id:"siege_breaker", tier:"legendary", name:"Siege Breaker",    desc:"Each stone lands like a trebuchet shot, cratering the ground and pinning the wave", effect:{ bastionQuake:1, bastionSalvo:1, aoeBonus:35 }, vfxCol:"#ffb040" },
+    { id:"hearth_eternal",tier:"legendary", name:"Hearth Eternal",   desc:"The hearth burns brightest at home: crushing damage in close, and the dead mend your walls", effect:{ bastionFocus:1.1, bastionWard:1, bastionRange:90 }, vfxCol:"#fff0c0" },
   ],
-  magma_mortar: [
-    { id:"volcanic_eruption", tier:"legendary", name:"Volcanic Eruption", desc:"Mortar shots break into a storm of lava fragments over a wider crater", effect:{ meteorFragments:3, aoeBonus:40, firePool:true, spellBurn:1 }, vfxCol:"#fff0a0" },
-  ],
-  shadow_scythe: [
-    { id:"void_reaper", tier:"legendary", name:"Void Reaper", desc:"Reaping arcs send shadow blades through the line and feed you on kills", effect:{ beamChance:0.45, beamFrac:0.9, healOnKill:0.25, novaR:90, novaFrac:0.55, novaCol:"#5d2ca8" }, vfxCol:"#d0a4ff" },
-  ],
-  possessed_heart: [
-    { id:"eldritch_catalyst", tier:"legendary", name:"Eldritch Catalyst", desc:"The heart opens into a stronger void beam that echoes and leaves deeper scars", effect:{ splitOrbs:2, spellEcho:0.35, voidScar:1, freeCast:0.15 }, vfxCol:"#f0c8ff" },
+  hive_scepter: [
+    { id:"restless_brood",tier:"epic",      name:"Restless Brood",   desc:"The hive never settles: larvae come faster, and two at a time", effect:{ hiveStride:45, larvaBrood:1 }, vfxCol:"#9ef0b8" },
+    { id:"gravebloom",    tier:"epic",      name:"Gravebloom",       desc:"A fouler strain — the rot bites deeper and drags its host to a crawl", effect:{ larvaVenom:1, hatchLife:1.5 }, vfxCol:"#4fbf7a" },
+    { id:"chitin_court",  tier:"legendary", name:"The Chitin Court", desc:"Every corpse gives up two soldiers, and they stay long past their welcome", effect:{ larvaSwarm:true, hatchLife:3.5, dmg:1 }, vfxCol:"#d8ffc8" },
+    { id:"hive_king",     tier:"legendary", name:"Crown of the Hive",desc:"When a host falls the larva simply moves in next door, and the brood never thins", effect:{ larvaHunger:2, larvaBrood:2, larvaVenom:1, hiveStride:30 }, vfxCol:"#ffffff" },
   ],
 };
 

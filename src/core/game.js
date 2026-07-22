@@ -20,7 +20,7 @@ import { updateFirePools } from '../systems/ai/BossAI.js?v=biomeactive4';
 import { updateDyingEnemies } from '../util/EnemyUtils.js?v=biomeactive4';
 
 import { FX, initFX, updateFX as updateFXEffects, biomeAt } from '../rendering/Effects.js?v=biomeactive4';
-import { render, drawEntityShadows } from '../rendering/Renderer.js?v=biomevisual4';
+import { render, drawEntityShadows } from '../rendering/Renderer.js?v=forestboss1';
 import { UI, DEV, baseName } from '../rendering/HUD.js?v=biomevisual4';
 import { updateArcherShoot } from '../rendering/sprites/Archer.js';
 

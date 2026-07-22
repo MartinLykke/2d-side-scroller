@@ -666,11 +666,6 @@ export const DEV = {
     floaty(state.player.x,"+"+n+"🪙","#f2c14e");
   },
 
-  give1000Gold() {
-    this.addCoins(1000);
-    return;
-  },
-
   addEmbers(n) {
     Game.meta = Game.meta || { embers: 0, upgrades: {}, totalRuns: 0, bestDay: 1, totalKills: 0, lastReward: 0, lastDay: 1, lastKills: 0 };
     Game.meta.embers = (Game.meta.embers || 0) + n;
@@ -789,15 +784,6 @@ export const DEV = {
     floaty(state.base.x, "👹 8x Imp!","#ff6a4a");
   },
 
-  spawnFireImpsRight() {
-    if (Game.state!=="play") return;
-    for (let i = 0; i < 4; i++) {
-      const portal = { x: state.base.x + 780 + i * 140, side: 1 };
-      spawnEnemy("fireImp", portal);
-    }
-    floaty(state.base.x, "4x Flying Imp!", "#ff6a20");
-  },
-
   spawnFireDragonBoss() {
     if (Game.state!=="play") return;
     const side = pick([-1, 1]);
@@ -808,6 +794,15 @@ export const DEV = {
     if (Game.state!=="play") return;
     const side = pick([-1, 1]);
     spawnBoss("magmaGolem", { x: state.base.x + side * 720, side });
+  },
+
+  spawnPyreTyrantBoss() {
+    if (Game.state!=="play") return;
+    const side = pick([-1, 1]);
+    const boss = spawnBoss("pyreTyrant", { x: state.base.x + side * 780, side });
+    state.legendaryBoss = boss;
+    Game.legendaryIntro = { timer: 4.6, maxTimer: 4.6, bossType: boss.type };
+    floaty(boss.x, ENEMY_TYPES[boss.type].name, ENEMY_TYPES[boss.type].eye, 18);
   },
 
   spawnVoidTitanBoss() {

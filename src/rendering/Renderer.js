@@ -11,11 +11,11 @@ import { darkness, skyColors, drawStars, drawClouds, drawCelestials, drawBirds, 
 
 // Import all render modules
 import { drawGroundTexture, drawGroundDeco, drawPonds, drawEntityShadows, drawPortals, drawWalls, drawBase, drawStations, drawForestTrees, drawForestCamps, drawBuildings } from './scene/RenderWorld.js?v=biomevisual4';
-import { drawEnemies } from './scene/RenderEntities.js?v=biomeactive4';
+import { drawEnemies } from './scene/RenderEntities.js?v=forestboss1';
 import { drawVagrants, drawUnits, drawAnimals } from './scene/RenderUnits.js?v=biomevisual4';
 import { drawCoins, drawGoldCollectors, drawArrows, drawLootItems, drawChests, drawGroundBows, drawGroundHammers } from './scene/RenderItems.js?v=biomeweapons1';
 import { drawCaltrops, drawPoisonShots, drawFirePools, drawSpellFields, drawLegendaryEffects, drawAegisStrikes, drawTrebuchetShots, drawParticles, drawFloats, drawSpells, drawCampLight } from './scene/RenderEffects.js?v=biomeactive4';
-import { drawWeaponPickupOverlay, drawInventoryOverlay, drawShopOverlay, drawCastleUpgradeOverlay, drawUpgradeMenu, drawXpBar, drawLegendaryIntro, drawOneSidedAnnounce } from './scene/RenderUI.js?v=biomeactive4';
+import { drawWeaponPickupOverlay, drawInventoryOverlay, drawShopOverlay, drawCastleUpgradeOverlay, drawUpgradeMenu, drawXpBar, drawLegendaryIntro, drawOneSidedAnnounce } from './scene/RenderUI.js?v=forestboss1';
 import { drawHeart } from './DrawHelpers.js?v=biomeweapons1';
 import { beginRenderFrame } from './RenderFrame.js';
 // Profiler uses window._perf (set by HUD toggle)
