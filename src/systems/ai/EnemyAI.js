@@ -93,6 +93,9 @@ function debuffSpeedMult(e) {
   if (e.rooted > 0) m = 0.02;
   else if (e.frost > 0) m = 0.3;
   else if (e.slow > 0) m = 0.45;
+  // Glacial Wake: crossing the sapphire's ice trail cripples a leg for good.
+  // Unlike frost/slow this never ticks down, so it stacks under the timed ones.
+  if (e.glacialMark) m *= 0.5;
   if (e.emberFrenzy > 0) m *= 1.18;
   return m;
 }

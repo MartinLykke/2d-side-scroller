@@ -43,6 +43,12 @@ export const WEAPON_SHOP = [
   { weaponId: 'sanguine_staff', price: 46, tier: 4 },
   { weaponId: 'gravity_staff',  price: 56, tier: 5 },
   { weaponId: 'resonance_staff',price: 74, tier: 6 },
+  // Self-driving casters — they aim themselves, so they cost a premium
+  { weaponId: 'pale_censer',      price: 46, tier: 5 },
+  { weaponId: 'weeping_sapphire', price: 44, tier: 5 },
+  { weaponId: 'raven_scepter',    price: 54, tier: 5 },
+  { weaponId: 'tuning_fork',      price: 74, tier: 6 },
+  { weaponId: 'fractured_monolith',price: 80, tier: 6 },
 ];
 
 export const ARMOR_SHOP = [

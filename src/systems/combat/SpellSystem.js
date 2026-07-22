@@ -521,6 +521,54 @@ function updateSpellFields(dt) {
           if (f.heal) trySoulSiphon(state.player, f.heal, f.col);
         }
       }
+    } else if (f.type === "pyrearc") {
+      // The hanging arc of ghost-fire: anything inside the swept half-circle
+      // keeps cooking for as long as the flame holds.
+      if (Math.random() < dt * 22) {
+        const p = censerArcPoint(f.x, f.y, f.r, f.dir, Math.random() * Math.PI);
+        spawnParticles(p.x, p.y, 1, Math.random() < 0.3 ? "#eaffe8" : f.col, 10, 40);
+      }
+      f.tick -= dt;
+      if (f.tick <= 0) {
+        f.tick = 0.34;
+        for (const e of livingEnemies()) {
+          const dx = (e.x - f.x) * f.dir;
+          if (dx < -20 || dx > f.r) continue;
+          spellDamageEnemy(e, f.dmg, f.col, { particleCount: 5, spread: 40 });
+          if (!ENEMY_TYPES[e.type]?.fireImmune) {
+            e.burn = Math.max(e.burn || 0, 2.2);
+            e.burnTick = Math.min(e.burnTick || 1, 0.6);
+            e.burnDmg = Math.max(e.burnDmg || 0, f.burnDmg);
+            e.ignited = true;
+          }
+        }
+      }
+    } else if (f.type === "icespike") {
+      // A spike from the sapphire's wake: fast repeat damage, and it cripples
+      // whatever walks over it for the rest of the night.
+      if (Math.random() < dt * 4) spawnParticles(f.x + rand(-6, 6), groundY - 8, 1, "#d8f8ff", 8, 34);
+      f.tick -= dt;
+      if (f.tick <= 0) {
+        f.tick = 0.32;
+        for (const e of enemiesNearX(f.x, f.r)) {
+          const chilled = (e.frost || 0) > 0 || e.glacialMark;
+          spellDamageEnemy(e, f.dmg + (chilled ? f.shatter : 0), f.col, { particleCount: 5, spread: 38 });
+          e.frost = Math.max(e.frost || 0, 1.2);
+          if (!e.glacialMark) {
+            e.glacialMark = true;
+            floaty(e.x, "❄ Crippled", f.col, 12);
+            spawnParticles(e.x, groundY - 20, 8, "#d8f8ff", 40, 60);
+          }
+        }
+      }
+    } else if (f.type === "eruption") {
+      if (!f.erupted) {
+        f.warn -= dt;
+        if (Math.random() < dt * 30) {
+          spawnParticles(f.x + rand(-f.r * 0.75, f.r * 0.75), groundY - 4, 1, "#ff8840", 10, 70);
+        }
+        if (f.warn <= 0) eruptMonolith(f);
+      }
     }
     if (f.life <= 0) {
       if (f.type === "rune") detonateRuneField(f, i);
@@ -529,7 +577,9 @@ function updateSpellFields(dt) {
         // Dying Star: the collapse comes twice
         if (f.repeat) { f.repeat = false; f.crush *= 0.6; f.life = f.maxLife = 0.55; f.tick = 0.32; }
         else fields.splice(i, 1);
-      } else fields.splice(i, 1);
+      }
+      else if (f.type === "eruption" && !f.erupted) { eruptMonolith(f); fields.splice(i, 1); }
+      else fields.splice(i, 1);
     }
   }
 }
@@ -659,6 +709,391 @@ export function chainLightning(x, dmg, bounces) {
     chainLightning(nearest.x, dmg * 0.6, bounces - 1);
   }
 }
+
+// ---------- Self-driving caster weapons ----------
+// Five hand-written casting schools. Where every other weapon aims at whatever
+// is nearest, these pick their own mark — the crowded side of the lane, the
+// tightest knot of bodies, the weakest straggler — or need no mark at all.
+// PlayerCombat.js routes them here via `autoTarget`; none of them touch the
+// shared ballistic projectile path below.
+
+function playerCastY(player) {
+  return groundY - 34 - entityWallLift(player) - (player.jumpH || 0) - playerMountLift(player);
+}
+
+function livingEnemies() {
+  return state.enemies.filter(e => !e.fleeing && !e.dying && e.hp > 0);
+}
+
+// Which side of the mage the horde is thickest on. 0 = the lane is empty.
+function densestSide(player, range) {
+  let left = 0, right = 0;
+  for (const e of livingEnemies()) {
+    const d = e.x - player.x;
+    if (Math.abs(d) > range) continue;
+    if (d < 0) left++; else right++;
+  }
+  if (!left && !right) return 0;
+  if (left === right) return player.dir || 1;
+  return right > left ? 1 : -1;
+}
+
+// The tightest knot of enemies within `radius`: most bodies wins, and among
+// equal counts the one packed closest together. `exclude` keeps a second
+// eruption from landing on top of the first.
+function densestCluster(radius, exclude = [], originX = null, maxRange = Infinity) {
+  const pool = livingEnemies().filter(e => originX === null || dist(originX, e.x) <= maxRange);
+  if (!pool.length) return null;
+  let best = null, bestCount = 0, bestSpread = Infinity;
+  for (const anchor of pool) {
+    if (exclude.some(x => Math.abs(x - anchor.x) < radius)) continue;
+    let count = 0, sum = 0, spread = 0;
+    for (const e of pool) {
+      const d = Math.abs(e.x - anchor.x);
+      if (d > radius) continue;
+      count++; sum += e.x; spread += d;
+    }
+    if (count > bestCount || (count === bestCount && spread < bestSpread)) {
+      bestCount = count; bestSpread = spread; best = { x: sum / count, count };
+    }
+  }
+  return best;
+}
+
+function weakestEnemies(originX, range, n) {
+  const pool = livingEnemies().filter(e => !range || dist(originX, e.x) <= range);
+  pool.sort((a, b) => a.hp - b.hp);
+  return pool.slice(0, n);
+}
+
+// Target selection for the self-driving casters, called from updatePlayerAttack
+// in place of its nearest-enemy scan. Returns an enemy, a synthetic aim point,
+// or null to hold this tick.
+export function pickAutoTarget(player, wBase, w) {
+  switch (wBase.autoTarget) {
+    case "trail":
+      return null; // fully passive — updateGlacialWake drives the sapphire
+    case "sweep": {
+      // The censer swings whether or not anything is in reach, so you can lay
+      // fire ahead of the wave — but it stays quiet in an empty lane.
+      const moving = Math.abs(player.vx || 0) > 20;
+      const near = livingEnemies().some(e => dist(player.x, e.x) < w.range * 1.5);
+      if (!moving && !near) return null;
+      return { x: player.x + (player.dir || 1) * 40, y: playerCastY(player), synthetic: true };
+    }
+    case "densestSide": {
+      const side = densestSide(player, w.range);
+      if (!side) return null;
+      return { x: player.x + side * 60, y: playerCastY(player), synthetic: true, side };
+    }
+    case "cluster": {
+      const c = densestCluster(Math.max(60, wBase.aoeRadius || 100), [], player.x, w.range);
+      if (!c) return null;
+      return { x: c.x, y: groundY - 24, synthetic: true, count: c.count };
+    }
+    case "weakest":
+      return weakestEnemies(player.x, w.range, 1)[0] || null;
+  }
+  return null;
+}
+
+// --- Censer of the Pale Flame (palefire) ---
+// The censer swings a heavy half-circle in whatever direction the mage is
+// travelling. The iron deals blunt damage on the way through; the arc it traces
+// keeps burning where it hung, so weaving up and down the lane paints standing
+// barriers of ghost-fire.
+function castPaleFire(player, wBase, tgt, fx, ctx) {
+  const { ew, dmgMult, aoeR, upgradeCol } = ctx;
+  const col = upgradeCol || wBase.col;
+  const reach = Math.max(60, ew.range + aoeR);
+  const dir = (Math.abs(player.vx || 0) > 20 ? Math.sign(player.vx) : (player.dir || 1)) || 1;
+  const cy = playerCastY(player);
+  const dmg = Math.max(1, Math.round(ew.dmg * dmgMult));
+
+  Audio.swordSwing();
+  Audio.spell();
+  swingCenser(player, dir, reach, dmg, fx, col, cy);
+  // Twin Thurible: the chain whips back through the other half of the circle.
+  if (fx.arcTwin) swingCenser(player, -dir, reach, Math.max(1, Math.round(dmg * 0.7)), fx, col, cy);
+  Game.screenShake = Math.max(Game.screenShake, 0.26);
+}
+
+// The swept half-circle, shared by the swing particles, the lingering arc and
+// its renderer: `a` runs 0 (at the mage) through π/2 (peak, overhead and half
+// way out) to π (full reach, back down at chest height).
+export function censerArcPoint(x, cy, r, dir, a) {
+  return { x: x + dir * r * (a / Math.PI), y: cy - r * 0.62 * Math.sin(a) };
+}
+
+function swingCenser(player, dir, reach, dmg, fx, col, cy) {
+  let hits = 0;
+  for (const e of livingEnemies()) {
+    const dx = (e.x - player.x) * dir;
+    if (dx < -20 || dx > reach) continue;
+    spellDamageEnemy(e, dmg, col, { particleCount: 9, spread: 62 });
+    if (!ENEMY_TYPES[e.type]?.noKnockback) e.knock = (e.knock || 0) + dir * (fx.sweepForce || 150);
+    hits++;
+  }
+  if (hits > 1) floaty(player.x, "Sweep x" + hits, col);
+  if (hits) Audio.hit();
+  for (let i = 0; i <= 14; i++) {
+    const p = censerArcPoint(player.x, cy, reach, dir, (i / 14) * Math.PI);
+    spawnParticles(p.x, p.y, 1, i % 3 ? col : "#eaffe8", 16, 34);
+  }
+  const life = 1.4 + (fx.arcLife || 0);
+  ensureSpellFields().push({
+    type: "pyrearc",
+    x: player.x, y: cy, r: reach, dir,
+    dmg: Math.max(1, Math.round(dmg * (fx.arcDmg || 0.3))),
+    burnDmg: Math.max(1, Math.round(fx.arcBurn || 1)),
+    life, maxLife: life, tick: 0.34, ph: rand(0, 6), col,
+  });
+}
+
+// --- Prismatic Tuning Fork (harmonic) ---
+// On its own slow beat the fork reaches resonance and fires a flat bar of hard
+// light down whichever side of the lane is most crowded. It pierces without
+// limit, so the play is to line the wave up before the timer pops.
+function castHarmonicLance(player, wBase, tgt, fx, ctx) {
+  const { ew, dmgMult, upgradeCol } = ctx;
+  const col = upgradeCol || wBase.col;
+  const dir = tgt.side || Math.sign(tgt.x - player.x) || player.dir || 1;
+  fireHarmonicLance(player, dir, ew, fx, dmgMult, col, 1);
+  // Counterpoint: the second prong answers down the opposite lane.
+  if (fx.lanceEcho) fireHarmonicLance(player, -dir, ew, fx, dmgMult, col, 0.6);
+}
+
+function fireHarmonicLance(player, dir, ew, fx, dmgMult, col, scale) {
+  const beamY = playerCastY(player);
+  const range = ew.range;
+  const halfW = (fx.lanceWidth || 30) * 0.5;
+  const startX = player.x + dir * 14;
+  const endX = player.x + dir * range;
+  const dmg = Math.max(1, Math.round(ew.dmg * dmgMult * scale));
+
+  Audio.spell();
+  Audio.explosion();
+  Game.screenShake = Math.max(Game.screenShake, 0.42 * scale);
+
+  let hits = 0;
+  for (const e of livingEnemies()) {
+    const dx = (e.x - player.x) * dir;
+    if (dx < 0 || dx > range) continue;
+    // Only what is actually standing in the bar gets cut — fliers ride above
+    // it unless the mage is up on a wall or mid-jump.
+    if (Math.abs(targetImpactY(e) - beamY) > halfW + 22) continue;
+    spellDamageEnemy(e, dmg, col, { y: beamY, particleCount: 10, spread: 58 });
+    if (fx.lanceStun) e.rooted = Math.max(e.rooted || 0, fx.lanceStun);
+    if (fx.soulSiphon) trySoulSiphon(player, fx.soulSiphon, col);
+    hits++;
+  }
+  if (hits > 1) floaty(player.x + dir * 60, "Pierced x" + hits, col, 16);
+  for (let i = 0; i <= 26; i++) {
+    const px = startX + (endX - startX) * (i / 26);
+    spawnParticles(px, beamY + rand(-halfW, halfW), 1, i % 4 ? col : "#ffffff", 10, 16);
+  }
+  ensureSpellFields().push({
+    type: "lance",
+    x: (startX + endX) / 2, x1: startX, x2: endX, y: beamY,
+    r: Math.abs(endX - startX) / 2, halfW,
+    life: 0.42, maxLife: 0.42, col, ph: rand(0, 6),
+  });
+}
+
+// --- The Weeping Sapphire (glacialwake) ---
+// The staff drags along the ground, so movement *is* the attack: walking paints
+// a trail of ice spikes. Running a lap in front of the fastest imps lays a
+// freezing carpet for them to walk into. Driven per-frame, not on a cooldown.
+export function updateGlacialWake(player, wBase) {
+  if (!player || player.hp <= 0) return;
+  const ew = effectiveWeapon(player.weapon, player.weaponUpgrades || []);
+  const fx = mergeInnateEffects(wBase, player.weaponUpgrades || []);
+  // The tip has to be on the ground to carve anything.
+  if (entityWallLift(player) + (player.jumpH || 0) > 24) { player.wakeLastX = player.x; return; }
+  const spacing = Math.max(12, 28 - (fx.wakeDensity || 0));
+  if (player.wakeLastX === undefined || Math.abs(player.x - player.wakeLastX) > 500) {
+    player.wakeLastX = player.x;
+    return;
+  }
+  const travelled = player.x - player.wakeLastX;
+  if (Math.abs(travelled) < spacing) return;
+  const at = player.wakeLastX + Math.sign(travelled) * spacing;
+  player.wakeLastX = at;
+  const life = 2.5 + (fx.wakeLife || 0);
+  ensureSpellFields().push({
+    type: "icespike",
+    x: at, r: 22 + (fx.wakeWidth || 0),
+    dmg: Math.max(1, Math.round(ew.dmg * 0.34 + (fx.wakeDmg || 0))),
+    shatter: fx.wakeShatter || 0,
+    life, maxLife: life, tick: 0, ph: rand(0, 6),
+    col: fx._vfxCols?.length ? fx._vfxCols[fx._vfxCols.length - 1] : wBase.col,
+  });
+  spawnParticles(at, groundY - 6, 3, "#d8f8ff", 26, 42);
+}
+
+// --- The Fractured Monolith (coreeruption) ---
+// The slab floating at the mage's shoulder picks the tightest knot of bodies on
+// the field, flashes, and a beat later drops a pillar of magma on it. Letting
+// the horde swarm into a dangerous mob is the whole point.
+function castCoreEruption(player, wBase, tgt, fx, ctx) {
+  const { ew, dmgMult, aoeR, upgradeCol, castOrigin } = ctx;
+  const col = upgradeCol || wBase.col;
+  const r = Math.max(60, aoeR);
+  const delay = Math.max(0.12, (fx.eruptDelay || 0.5) - (fx.eruptQuicken || 0));
+  const dmg = ew.dmg * dmgMult;
+
+  // the blinding flash off the stone as the heartbeat peaks
+  spawnParticles(castOrigin.x, castOrigin.y, 20, "#fff0d0", 95, 140);
+  spawnParticles(castOrigin.x, castOrigin.y, 10, col, 60, 120);
+  Audio.spell();
+  Game.screenShake = Math.max(Game.screenShake, 0.3);
+
+  spawnEruption(tgt.x, r, delay, dmg, fx, col);
+  // Twin Fault: a second, smaller pillar answers on the next-densest knot.
+  if (fx.eruptTwin) {
+    const second = densestCluster(r, [tgt.x], player.x, ew.range);
+    if (second) spawnEruption(second.x, r * 0.8, delay + 0.22, dmg * 0.7, fx, col);
+  }
+  if (tgt.count > 2) floaty(tgt.x, "Cluster x" + tgt.count, col, 14);
+}
+
+function spawnEruption(x, r, delay, dmg, fx, col) {
+  ensureSpellFields().push({
+    type: "eruption",
+    x, r, warn: delay,
+    dmg: Math.max(1, Math.round(dmg)),
+    burnDmg: Math.max(1, Math.round(fx.eruptBurn || 1)),
+    pool: !!fx.eruptPool,
+    fragments: Math.max(0, Math.round(fx.eruptFragments || 0)),
+    life: delay + 0.75, maxLife: delay + 0.75,
+    ph: rand(0, 6), col, erupted: false,
+  });
+}
+
+function eruptMonolith(f) {
+  Audio.explosion();
+  Game.screenShake = Math.max(Game.screenShake, 0.95);
+  spawnParticles(f.x, groundY - 10, 40, "#ff7a2a", f.r * 1.1, 250);
+  spawnParticles(f.x, groundY - 70, 26, "#ffd060", f.r * 0.6, 300);
+  spawnParticles(f.x, groundY - 6, 20, "#2a1814", f.r, 120);
+  state.legendaryEffects.push({ type: "ring", x: f.x, radius: f.r, life: 0.5, totalLife: 0.5, col: "#ff9a40", width: 7 });
+  let hits = 0;
+  for (const e of enemiesNearX(f.x, f.r)) {
+    const et = ENEMY_TYPES[e.type] || {};
+    spellDamageEnemy(e, f.dmg, f.col, { particleCount: 12, spread: 80, life: 130 });
+    if (!et.noKnockback) e.knock = (e.knock || 0) + Math.sign(e.x - f.x || 1) * 240;
+    if (!et.fireImmune) {
+      e.burn = Math.max(e.burn || 0, 3.2);
+      e.burnTick = Math.min(e.burnTick || 1, 0.5);
+      e.burnDmg = Math.max(e.burnDmg || 0, f.burnDmg);
+      e.ignited = true;
+    }
+    hits++;
+  }
+  if (hits > 1) floaty(f.x, "Core Eruption x" + hits, f.col, 16);
+  if (f.pool) spawnPlayerSpellPool(f.x, Math.max(34, f.r * 0.5), 3.2, { dmg: 1, burnDmg: f.burnDmg, col: f.col });
+  if (f.fragments) {
+    spawnMeteorFragments({ meteorFragments: f.fragments, dmg: f.dmg, aoeRadius: f.r, col: f.col }, f.x, groundY - 30);
+  }
+  f.erupted = true;
+}
+
+// --- Raven Scepter (ravenflock) ---
+// The flock ignores whatever is closest and goes straight for the weakest
+// bodies on the field, cleaning up stragglers that slipped past your area
+// attacks. Ravens home rather than fly ballistically.
+function castRavenFlock(player, wBase, tgt, fx, ctx) {
+  const { ew, dmgMult, upgradeCol, castOrigin } = ctx;
+  const col = upgradeCol || wBase.col;
+  const n = Math.max(1, Math.round(fx.ravenCount || 3));
+  const marks = weakestEnemies(player.x, ew.range, n);
+  if (!marks.length) return;
+  const dmg = Math.max(1, Math.round(ew.dmg * dmgMult));
+
+  Audio.spell();
+  spawnParticles(castOrigin.x, castOrigin.y, 16, col, 70, 90);
+  spawnParticles(castOrigin.x, castOrigin.y, 6, "#1a1024", 45, 70);
+  for (let i = 0; i < n; i++) {
+    const mark = marks[i % marks.length];
+    const dir = Math.sign(mark.x - castOrigin.x) || 1;
+    state.spells.push({
+      x: castOrigin.x, y: castOrigin.y - rand(0, 12),
+      vx: dir * rand(60, 150), vy: -rand(150, 260),
+      spellType: "ravenflock", raven: true, target: mark,
+      dmg, life: 3.2, col, ph: rand(0, 6),
+      execute: fx.ravenExecute || 0,
+      siphon: fx.ravenSiphon || fx.soulSiphon || 0,
+      splitsLeft: Math.max(0, Math.round(fx.ravenSplit || 0)),
+      upgradeCol, upgradeRank: ctx.upgradeRank,
+    });
+  }
+}
+
+// Steers one raven at its mark, re-targeting if the mark dies first. Returns
+// true once the bird is spent and should be removed.
+function updateRaven(sp, dt) {
+  sp.life -= dt;
+  let tgt = sp.target;
+  if (!tgt || tgt.fleeing || tgt.dying || tgt.hp <= 0) {
+    tgt = weakestEnemies(sp.x, 0, 1)[0] || null;
+    sp.target = tgt;
+  }
+  if (tgt) {
+    const ty = targetImpactY(tgt);
+    const ang = Math.atan2(ty - sp.y, tgt.x - sp.x);
+    const speed = Math.min(600, Math.hypot(sp.vx, sp.vy) + 1100 * dt);
+    const turn = Math.min(1, 7 * dt);
+    sp.vx += (Math.cos(ang) * speed - sp.vx) * turn;
+    sp.vy += (Math.sin(ang) * speed - sp.vy) * turn;
+  } else {
+    sp.vy += 220 * dt;
+  }
+  sp.x += sp.vx * dt;
+  sp.y += sp.vy * dt;
+  // wingbeat smoke
+  if (Math.random() < 0.7) spawnParticles(sp.x, sp.y, 1, sp.col, 12, 22);
+  if (Math.random() < 0.25) spawnParticles(sp.x, sp.y, 1, "#1a1024", 9, 18);
+
+  if (tgt && dist(sp.x, tgt.x) < 18 && Math.abs(sp.y - targetImpactY(tgt)) < 28) {
+    strikeRaven(sp, tgt);
+    return true;
+  }
+  return sp.life <= 0 || sp.y > groundY - 4;
+}
+
+function strikeRaven(sp, tgt) {
+  const et = ENEMY_TYPES[tgt.type] || {};
+  Audio.hit();
+  spawnParticles(sp.x, sp.y, 12, sp.col, 65, 85);
+  spawnParticles(sp.x, sp.y, 6, "#1a1024", 45, 60);
+  spellDamageEnemy(tgt, sp.dmg, sp.col, { particleCount: 8, spread: 52 });
+  // Carrion Right: a straggler already this close to death is simply taken.
+  if (sp.execute && tgt.hp > 0 && !et.boss && tgt.hp <= (et.hp || 6) * sp.execute) {
+    floaty(tgt.x, "☠ Taken", sp.col);
+    spellDamageEnemy(tgt, tgt.hp, sp.col, { particleCount: 10, spread: 60 });
+  }
+  if (sp.siphon) trySoulSiphon(state.player, sp.siphon, sp.col);
+  // Murder: the bird splits off a fledgling toward the next weakest body.
+  if (sp.splitsLeft > 0) {
+    const next = weakestEnemies(sp.x, 0, 2).find(e => e !== tgt);
+    if (next) {
+      state.spells.push({
+        ...sp,
+        x: sp.x, y: sp.y - 6,
+        vx: -sp.vx * 0.4, vy: -Math.abs(sp.vy) * 0.5 - 90,
+        target: next, dmg: Math.max(1, Math.round(sp.dmg * 0.6)),
+        life: 2.4, splitsLeft: sp.splitsLeft - 1,
+      });
+    }
+  }
+}
+
+const BESPOKE_CASTS = {
+  palefire: castPaleFire,
+  harmonic: castHarmonicLance,
+  coreeruption: castCoreEruption,
+  ravenflock: castRavenFlock,
+};
 
 // ---------- Procedural spell recipe system (generated staffs) ----------
 // Everything below is reached only via wBase.spellRecipe (set exclusively by
@@ -2078,6 +2513,15 @@ export function castSpell(player, wBase, tgt) {
     return;
   }
 
+  // Self-driving casters resolve in their own branch — they were handed a
+  // target their own selector chose (or a synthetic aim point), not the
+  // nearest enemy, and none of them fire a plain arcing projectile.
+  const bespoke = BESPOKE_CASTS[wBase.spellType];
+  if (bespoke) {
+    bespoke(player, wBase, tgt, fx, { ew, dmgMult, aoeR, castOrigin, upgradeCol, upgradeRank });
+    return;
+  }
+
   const tgtIsBear = tgt.type === "bear" && state.animals.includes(tgt);
 
   if (wBase.spellType === "lightning") {
@@ -2272,6 +2716,12 @@ export function updateSpells(dt) {
       sp.life -= dt;
       spellTrail(sp);
       if (updateArcanumSpell(sp, dt)) spells.splice(i, 1);
+      continue;
+    }
+    // Ravens home on their mark instead of flying an arc, and resolve their
+    // own contact test — they never fall through to the ballistic path.
+    if (sp.raven) {
+      if (updateRaven(sp, dt)) spells.splice(i, 1);
       continue;
     }
     if (sp.form) {

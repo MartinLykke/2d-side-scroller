@@ -62,6 +62,13 @@ const WAND_LOOKS = {
   gravity_staff:  { len:48, wood:"#0d0a14", woodLt:"#2b1a44", trim:"#7a3aff", gem:"#050308", core:"#c8a0ff", kind:"nullstone" },
   sanguine_staff: { len:40, wood:"#cdc4b4", woodLt:"#f2ece0", trim:"#c0102a", gem:"#7a0a1a", core:"#ff8a90", kind:"sanguine" },
   resonance_staff:{ len:46, wood:"#4a4238", woodLt:"#8a7c66", trim:"#e8f8ff", gem:"#c8b878", core:"#ffffff", kind:"bell" },
+  // Self-driving casters. The thurible hangs off a chain and the monolith isn't
+  // held at all, so both skip the haft furniture (ferrule, grip wrap, cap).
+  pale_censer:       { len:34, wood:"#2a2c30", woodLt:"#565a62", trim:"#7cf2a8", gem:"#1c2420", core:"#eaffe8", kind:"thurible", noHaft:true },
+  tuning_fork:       { len:46, wood:"#3a1f5c", woodLt:"#6c3fa8", trim:"#b06aff", gem:"#8a4ae0", core:"#f0e0ff", kind:"fork" },
+  weeping_sapphire:  { len:52, wood:"#2a3a4a", woodLt:"#4e6a80", trim:"#7fd8ff", gem:"#3aa8d8", core:"#e8fbff", kind:"teardrop" },
+  fractured_monolith:{ len:40, wood:"#1c1418", woodLt:"#3a2a2a", trim:"#ff5a2a", gem:"#14100f", core:"#ffd060", kind:"monolith", noHaft:true },
+  raven_scepter:     { len:44, wood:"#1e1626", woodLt:"#3c2e4c", trim:"#9a86c8", gem:"#241a30", core:"#d8c8f0", kind:"raven" },
 };
 const DEFAULT_WAND = { len:38, wood:"#3a2448", woodLt:"#5c3d70", trim:"#d0a0ff", gem:"#b080ff", core:"#f0e4ff", kind:"arcane" };
 
@@ -70,7 +77,51 @@ export function wandTipLength(weaponId) {
   return (WAND_LOOKS[weaponId] || DEFAULT_WAND).len * 0.58;
 }
 
-function drawWandShaft(look, top, bot) {
+// How far the censer has swung on its chain, and how far the monolith has
+// drifted on its slow heartbeat. Shared so the shaft and the head agree.
+function censerSway(t) { return Math.sin(t * 2.3) * 7; }
+function monolithBob(t) { return Math.sin(t * 1.5) * 2.6; }
+
+function drawWandShaft(look, top, bot, t) {
+  if (look.kind === "monolith") return; // it floats at the shoulder — nothing to hold
+  if (look.kind === "thurible") {
+    // a glowing spectral chain from the wrist out to the swinging thurible
+    const sw = censerSway(t);
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = look.trim; ctx.lineWidth = 2.6; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(0, bot); ctx.quadraticCurveTo(sw * 0.4, (bot + top) * 0.5, sw, top + 2); ctx.stroke();
+    ctx.restore();
+    ctx.strokeStyle = "#6a6f78"; ctx.lineWidth = 1.2; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(0, bot); ctx.quadraticCurveTo(sw * 0.4, (bot + top) * 0.5, sw, top + 2); ctx.stroke();
+    ctx.fillStyle = "#8a8f98";
+    for (let k = 1; k < 5; k++) {
+      const p = k / 5;
+      const lx = sw * p * (0.4 + p * 0.6), ly = bot + (top + 2 - bot) * p;
+      ctx.beginPath(); ctx.ellipse(lx, ly, 1.5, 1, 0.4, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.lineCap = "butt";
+    return;
+  }
+  if (look.kind === "fork") {
+    // a single jagged shard of amethyst, humming hard enough to blur its edges
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.2 + 0.1 * Math.sin(t * 31);
+    ctx.strokeStyle = look.trim; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.moveTo(0, bot); ctx.lineTo(0, top + 1.5); ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = look.wood;
+    ctx.beginPath();
+    ctx.moveTo(-2.2, bot); ctx.lineTo(-1.4, top + 2); ctx.lineTo(1.6, top + 2); ctx.lineTo(2.2, bot);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = look.woodLt;
+    ctx.beginPath();
+    ctx.moveTo(-0.7, bot - 1); ctx.lineTo(-0.4, top + 3); ctx.lineTo(0.8, top + 3); ctx.lineTo(0.9, bot - 1);
+    ctx.closePath(); ctx.fill();
+    return;
+  }
   if (look.kind === "shadow") {
     // twisted dark wood: two intertwined strands
     ctx.lineCap = "round";
@@ -490,6 +541,199 @@ function drawWandHead(look, top, t, cast) {
       ctx.restore();
       break;
     }
+    case "thurible": {
+      // heavy gothic thurible swinging on its chain, leaking pale ash
+      const sw = censerSway(t);
+      ctx.save();
+      ctx.translate(sw, top - 4);
+      ctx.rotate(Math.cos(t * 2.3) * 0.28);
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.4 + cast * 0.4;
+      const cg = ctx.createRadialGradient(0, 1, 1, 0, 1, 12);
+      cg.addColorStop(0, look.core); cg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(0, 1, 12, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      // suspension yoke
+      ctx.strokeStyle = look.woodLt; ctx.lineWidth = 1.1;
+      ctx.beginPath(); ctx.moveTo(-3.4, -4); ctx.lineTo(0, -7); ctx.lineTo(3.4, -4); ctx.stroke();
+      // domed lid with a cross finial
+      ctx.fillStyle = look.wood;
+      ctx.beginPath(); ctx.moveTo(-4.4, -3.4); ctx.quadraticCurveTo(0, -8.4, 4.4, -3.4); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = look.woodLt; ctx.lineWidth = 0.9;
+      ctx.beginPath(); ctx.moveTo(0, -8.6); ctx.lineTo(0, -11.4); ctx.moveTo(-1.5, -10.2); ctx.lineTo(1.5, -10.2); ctx.stroke();
+      // bulbous perforated bowl
+      ctx.fillStyle = look.wood;
+      ctx.beginPath(); ctx.ellipse(0, 1.4, 5.2, 5.6, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = look.woodLt;
+      ctx.beginPath(); ctx.ellipse(-1.6, 0, 1.5, 2.4, 0.4, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = look.trim;
+      ctx.globalAlpha = 0.75 + 0.25 * Math.sin(t * 6);
+      for (const [hx, hy] of [[-2.4, 2.4], [0, 3.4], [2.4, 2.4], [-1.2, 0.4], [1.6, 0.6]]) {
+        ctx.beginPath(); ctx.arc(hx, hy, 0.85, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = look.wood;
+      roundedRect(-5.4, -3.8, 10.8, 1.8, 0.8); ctx.fill();
+      ctx.restore();
+      // ethereal ash dripping onto the floor
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = look.trim;
+      for (let k = 0; k < 3; k++) {
+        const drop = ((t * 34 + k * 15) % 30);
+        ctx.globalAlpha = Math.max(0, 0.55 - drop / 46);
+        ctx.beginPath(); ctx.arc(sw + (k - 1) * 2.4, top + 2 + drop, 1 - drop / 44, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+      break;
+    }
+    case "fork": {
+      // two amethyst prongs with lightning jumping the gap; the air behind
+      // them warps from the hum
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.14 + 0.06 * Math.sin(t * 27);
+      ctx.fillStyle = look.trim;
+      for (let k = 1; k <= 3; k++) {
+        ctx.beginPath(); ctx.ellipse(0, top - 6, 9 + k * 4.5, 13 + k * 5, 0, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+      for (const s of [-1, 1]) {
+        ctx.fillStyle = look.gem;
+        ctx.beginPath();
+        ctx.moveTo(s * 1.4, top + 3);
+        ctx.lineTo(s * 4.6, top - 6);
+        ctx.lineTo(s * 3.4, top - 14);
+        ctx.lineTo(s * 1.2, top - 13);
+        ctx.lineTo(s * 0.6, top - 5);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = look.trim;
+        ctx.globalAlpha = 0.7;
+        ctx.beginPath();
+        ctx.moveTo(s * 2.4, top - 1); ctx.lineTo(s * 3.4, top - 7); ctx.lineTo(s * 2.4, top - 12);
+        ctx.closePath(); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      // spark arcing between the prongs, snapping harder as it charges
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.4 + 0.4 * Math.abs(Math.sin(t * 9)) + cast * 0.4;
+      ctx.strokeStyle = look.core; ctx.lineWidth = 1.2; ctx.lineCap = "round";
+      for (let k = 0; k < 2; k++) {
+        const yy = top - 5 - k * 5;
+        ctx.beginPath();
+        ctx.moveTo(-3.2, yy);
+        ctx.lineTo(-1 + Math.sin(t * 23 + k) * 1.6, yy + 1.8);
+        ctx.lineTo(1.2 + Math.cos(t * 19 + k) * 1.6, yy - 1.8);
+        ctx.lineTo(3.2, yy);
+        ctx.stroke();
+      }
+      ctx.restore();
+      break;
+    }
+    case "teardrop": {
+      // an oversized teardrop crystal, permanently melting into freezing vapor
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.3 + cast * 0.3;
+      const tg = ctx.createRadialGradient(0, top - 6, 1, 0, top - 6, 16);
+      tg.addColorStop(0, look.core); tg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = tg; ctx.beginPath(); ctx.arc(0, top - 6, 16, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      // cradle prongs
+      ctx.strokeStyle = look.woodLt; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(-2.6, top + 3); ctx.quadraticCurveTo(-4.6, top - 1, -3.2, top - 4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(2.6, top + 3); ctx.quadraticCurveTo(4.6, top - 1, 3.2, top - 4); ctx.stroke();
+      ctx.fillStyle = look.gem;
+      ctx.beginPath();
+      ctx.moveTo(0, top - 15);
+      ctx.bezierCurveTo(5.6, top - 8, 5.2, top - 1, 0, top + 1);
+      ctx.bezierCurveTo(-5.2, top - 1, -5.6, top - 8, 0, top - 15);
+      ctx.fill();
+      ctx.fillStyle = look.core;
+      ctx.globalAlpha = 0.75;
+      ctx.beginPath(); ctx.ellipse(-1.4, top - 7, 1.4, 3.4, 0.25, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      // liquid nitrogen running off the point
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.fillStyle = look.trim;
+      for (let k = 0; k < 3; k++) {
+        const drop = ((t * 30 + k * 13) % 26);
+        ctx.globalAlpha = Math.max(0, 0.6 - drop / 38);
+        ctx.beginPath(); ctx.ellipse((k - 1) * 1.6, top + 2 + drop, 0.9, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+      break;
+    }
+    case "monolith": {
+      // a cracked slab of obsidian hanging free at the mage's shoulder, magma
+      // bleeding through the fractures on a slow heartbeat
+      const pulse = Math.pow((Math.sin(t * 1.5) + 1) / 2, 3);
+      ctx.save();
+      ctx.translate(-2, top - 6 + monolithBob(t));
+      ctx.rotate(-0.16 + Math.sin(t * 0.8) * 0.05);
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.2 + pulse * 0.4 + cast * 0.4;
+      const mg = ctx.createRadialGradient(0, 0, 2, 0, 0, 20);
+      mg.addColorStop(0, look.core); mg.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = mg; ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = look.gem;
+      ctx.beginPath();
+      ctx.moveTo(-4.2, -11); ctx.lineTo(4, -12.4); ctx.lineTo(5.4, 4.6);
+      ctx.lineTo(1.6, 11.6); ctx.lineTo(-3.6, 9.4); ctx.lineTo(-5.2, -2.4);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = look.woodLt;
+      ctx.globalAlpha = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(-4.2, -11); ctx.lineTo(0.4, -11.8); ctx.lineTo(0.8, 10.6); ctx.lineTo(-3.6, 9.4); ctx.lineTo(-5.2, -2.4);
+      ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 1;
+      // magma bleeding through the cracks
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.45 + pulse * 0.55;
+      ctx.strokeStyle = look.trim; ctx.lineWidth = 1.1; ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(-3.4, -8.6); ctx.lineTo(0.2, -3.4); ctx.lineTo(-1.8, 1.6); ctx.lineTo(2, 7.4);
+      ctx.moveTo(3.4, -9.4); ctx.lineTo(1.4, -4.6);
+      ctx.moveTo(-1.8, 1.6); ctx.lineTo(-4, 5.6);
+      ctx.stroke();
+      ctx.strokeStyle = look.core; ctx.lineWidth = 0.5;
+      ctx.globalAlpha = pulse;
+      ctx.beginPath();
+      ctx.moveTo(-3.4, -8.6); ctx.lineTo(0.2, -3.4); ctx.lineTo(-1.8, 1.6); ctx.lineTo(2, 7.4);
+      ctx.stroke();
+      ctx.restore();
+      ctx.restore();
+      break;
+    }
+    case "raven": {
+      // a raven skull finial ringed by circling motes of its own flock
+      ctx.strokeStyle = look.woodLt; ctx.lineWidth = 1.7;
+      ctx.beginPath(); ctx.moveTo(-2, top + 3); ctx.quadraticCurveTo(-4.2, top - 1, -2.4, top - 4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(2, top + 3); ctx.quadraticCurveTo(4.2, top - 1, 2.4, top - 4); ctx.stroke();
+      ctx.fillStyle = look.gem;
+      ctx.beginPath(); ctx.ellipse(0, top - 7, 4.2, 3.6, 0, 0, Math.PI * 2); ctx.fill();
+      // long beak
+      ctx.beginPath();
+      ctx.moveTo(2.6, top - 7.6); ctx.lineTo(9.4, top - 5.2); ctx.lineTo(2.6, top - 4.6);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = look.woodLt; ctx.lineWidth = 0.6;
+      ctx.beginPath(); ctx.moveTo(3, top - 6); ctx.lineTo(8.8, top - 5.2); ctx.stroke();
+      // hollow, lit eye socket
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.6 + 0.4 * Math.sin(t * 3.4) + cast * 0.3;
+      ctx.fillStyle = look.core;
+      ctx.beginPath(); ctx.arc(0.4, top - 8, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      drawWandOrbit(0, top - 7, 11, 6, 3, look.trim, t, { size: 1.1, alpha: 0.5, speed: 2.6 });
+      break;
+    }
   }
   ctx.lineCap = "butt"; ctx.lineJoin = "miter";
 }
@@ -742,22 +986,26 @@ export function drawWandModel(weaponId, col, s = 1, opts = {}) {
     ctx.beginPath(); ctx.arc(0, top - 4, 22 + rank * 7, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   }
-  drawWandShaft(look, top, bot);
+  drawWandShaft(look, top, bot, t);
   drawMagicUpgradeLayer(weaponId, look, top, bot, rank, upgCol, t, cast);
-  // metal ferrule under the head and a butt cap
-  ctx.fillStyle = look.trim;
-  roundedRect(-2, top + 1.5, 4, 2.4, 1);
-  ctx.fill();
-  ctx.fillStyle = look.woodLt;
-  roundedRect(-1.8, bot - 1.5, 3.6, 2.6, 1.2);
-  ctx.fill();
-  // leather grip wrap just below middle
-  ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = 3.8;
-  ctx.beginPath(); ctx.moveTo(0, bot * 0.28); ctx.lineTo(0, bot * 0.72); ctx.stroke();
-  ctx.strokeStyle = look.woodLt; ctx.lineWidth = 0.8;
-  for (let k = 0; k < 3; k++) {
-    const y = bot * 0.34 + k * bot * 0.14;
-    ctx.beginPath(); ctx.moveTo(-1.9, y); ctx.lineTo(1.9, y + 1.2); ctx.stroke();
+  // Haft furniture — skipped by the censer (it hangs off a chain) and the
+  // monolith (nothing to grip in the first place).
+  if (!look.noHaft) {
+    // metal ferrule under the head and a butt cap
+    ctx.fillStyle = look.trim;
+    roundedRect(-2, top + 1.5, 4, 2.4, 1);
+    ctx.fill();
+    ctx.fillStyle = look.woodLt;
+    roundedRect(-1.8, bot - 1.5, 3.6, 2.6, 1.2);
+    ctx.fill();
+    // leather grip wrap just below middle
+    ctx.strokeStyle = "rgba(0,0,0,0.4)"; ctx.lineWidth = 3.8;
+    ctx.beginPath(); ctx.moveTo(0, bot * 0.28); ctx.lineTo(0, bot * 0.72); ctx.stroke();
+    ctx.strokeStyle = look.woodLt; ctx.lineWidth = 0.8;
+    for (let k = 0; k < 3; k++) {
+      const y = bot * 0.34 + k * bot * 0.14;
+      ctx.beginPath(); ctx.moveTo(-1.9, y); ctx.lineTo(1.9, y + 1.2); ctx.stroke();
+    }
   }
   drawWandHead(look, top, t, cast);
   if (rank >= 3) {

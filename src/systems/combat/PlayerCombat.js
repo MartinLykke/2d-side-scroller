@@ -12,7 +12,7 @@ import { Audio } from '../infrastructure/Audio.js';
 import { spawnGoldReward, spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js?v=biomeactive4';
 import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive4';
 import { shootArrow } from './ProjectileSystem.js?v=biomeactive4';
-import { castSpell, chainLightning } from './SpellSystem.js?v=biomeactive4';
+import { castSpell, chainLightning, pickAutoTarget, updateGlacialWake } from './SpellSystem.js?v=biomeactive4';
 import { startArcherShoot } from '../../rendering/sprites/Archer.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { entityWallLift } from '../../entities/Wall.js';
@@ -191,6 +191,11 @@ const WEAPON_AMBIENT = {
   arcane_tome:    { rate: 3,   cols: ["#cc44ff", "#ff88ff"] },
   shadow_tome:    { rate: 3,   cols: ["#8822cc", "#440066"] },
   void_tome:      { rate: 4,   cols: ["#9922ff", "#ddaaff"] },
+  pale_censer:      { rate: 6,   cols: ["#7cf2a8", "#eaffe8"] },
+  tuning_fork:      { rate: 5,   cols: ["#b06aff", "#ffffff"] },
+  weeping_sapphire: { rate: 5.5, cols: ["#7fd8ff", "#e8fbff"] },
+  fractured_monolith:{ rate: 4,  cols: ["#ff5a2a", "#1c1418"] },
+  raven_scepter:    { rate: 4,   cols: ["#9a86c8", "#1a1024"] },
 };
 
 function mergeInnateEffects(wBase, upgrades) {
@@ -743,12 +748,38 @@ export function updatePlayerAttack(dt) {
       player.iceNovaCd = 10;
     }
   }
+  // The Weeping Sapphire never swings or casts — the staff dragging along the
+  // ground is the whole weapon, so it runs on distance travelled, not a timer.
+  if (WEAPONS[player.weapon].autoTarget === "trail") {
+    updateGlacialWake(player, WEAPONS[player.weapon]);
+    return;
+  }
   if (player.swing > 0) player.swing -= dt;
   player.attackCd -= dt;
   if (player.attackCd > 0) return;
   const wBase = WEAPONS[player.weapon];
   const w = effectiveWeapon(player.weapon, player.weaponUpgrades || []);
   const fx = mergeInnateEffects(wBase, player.weaponUpgrades);
+
+  // Self-driving casters choose their own mark — the crowded side of the lane,
+  // the tightest cluster, the weakest straggler — so they skip the
+  // nearest-enemy scan entirely.
+  if (wBase.autoTarget) {
+    const mark = pickAutoTarget(player, wBase, w);
+    if (!mark) return;
+    player.dir = Math.sign(mark.x - player.x) || player.dir;
+    player.castAnim = 0.55;
+    castSpell(player, wBase, mark);
+    finishRiposte(player, mark.x);
+    let autoCd = w.speed;
+    if (fx.freeCast && Math.random() < fx.freeCast) {
+      autoCd = 0.1;
+      floaty(player.x, "✨ Free cast", "#ffffff");
+    }
+    player.attackCd = autoCd * playerMomentumCooldownMultiplier();
+    return;
+  }
+
   const canHuntAnimals = wBase.type === "ranged";
   let tgt = null, bd = w.range, tgtIsAnimal = false;
   for (const e of enemies) {

@@ -54,6 +54,18 @@ export const WEAPONS = {
                      note:"Silent in the field. Near your own gates it hammers whatever stands closest to them." },
   hive_scepter:    { name:"The Hive-King's Scepter", type:"magic", dmg:2, speed:1.0,  range:400, rarity:4, col:"#9ef0b8", spellType:"larva",    aoeRadius:30, autoTarget:"stride",
                      note:"Sheds a soul-larva every few paces you walk. What a larva kills hatches and fights for you." },
+
+  // --- Self-driving casters ---
+  // These five never use the shared ballistic projectile path. `autoTarget`
+  // replaces the usual nearest-enemy scan in PlayerCombat.js (the censer and
+  // the sapphire need no target at all), and each spellType resolves in its own
+  // hand-written branch in SpellSystem.js. Positioning, not aiming, is the
+  // skill — the mage's movement is what steers them.
+  pale_censer:        { name:"Censer of the Pale Flame", type:"magic", dmg:4,  speed:0.9, range:132, rarity:3, col:"#7cf2a8", spellType:"palefire",     aoeRadius:0,   autoTarget:"sweep",       innate:{ arcLife:2.4, arcDmg:0.35, sweepForce:170 } },
+  tuning_fork:        { name:"Prismatic Tuning Fork",    type:"magic", dmg:9,  speed:2.6, range:920, rarity:4, col:"#b06aff", spellType:"harmonic",     aoeRadius:0,   autoTarget:"densestSide", innate:{ lanceWidth:36 } },
+  weeping_sapphire:   { name:"The Weeping Sapphire",     type:"magic", dmg:3,  speed:1.0, range:70,  rarity:3, col:"#7fd8ff", spellType:"glacialwake",  aoeRadius:0,   autoTarget:"trail",       innate:{ wakeDmg:1, wakeLife:4.5 } },
+  fractured_monolith: { name:"The Fractured Monolith",   type:"magic", dmg:12, speed:3.2, range:620, rarity:4, col:"#ff5a2a", spellType:"coreeruption", aoeRadius:105, autoTarget:"cluster",     innate:{ eruptDelay:0.55, eruptPool:true } },
+  raven_scepter:      { name:"Raven Scepter",            type:"magic", dmg:4,  speed:1.5, range:660, rarity:3, col:"#9a86c8", spellType:"ravenflock",   aoeRadius:0,   autoTarget:"weakest",     innate:{ ravenCount:3 } },
 };
 
 // How far from the base gates the Bastion Scepter will answer at all.

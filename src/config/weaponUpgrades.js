@@ -111,6 +111,37 @@
 //       hatchLife     – extra seconds (and bite) on every hatchling
 //       larvaSwarm    – each host hatches a second minion
 //
+// Self-driving caster keys (one school per weapon, all consumed in the
+// bespoke branches of SpellSystem.js):
+//     Censer of the Pale Flame (palefire):
+//       arcLife       – extra seconds the ghost-fire arc hangs in the air
+//       arcDmg        – fraction of the swing's damage each arc tick deals
+//       arcBurn       – damage per tick of the burn the arc leaves
+//       sweepForce    – knockback the iron imparts on the way through
+//       arcTwin       – the chain whips back through the opposite half-circle
+//     Prismatic Tuning Fork (harmonic):
+//       lanceWidth    – thickness of the beam, i.e. how sloppily you may line up
+//       lanceStun     – seconds the lance pins whatever it passes through
+//       lanceEcho     – a second, weaker lance fires down the opposite lane
+//     The Weeping Sapphire (glacialwake):
+//       wakeDmg       – extra damage per spike tick
+//       wakeLife      – extra seconds each spike survives
+//       wakeWidth     – extra radius per spike
+//       wakeDensity   – tightens the spacing between spikes as you walk
+//       wakeShatter   – bonus damage against anything already chilled or crippled
+//     The Fractured Monolith (coreeruption):
+//       eruptDelay    – seconds between the flash and the pillar (base only)
+//       eruptQuicken  – shaves that delay down
+//       eruptBurn     – damage per tick of the burn the magma leaves
+//       eruptPool     – the pillar leaves burning ground behind
+//       eruptFragments– the eruption throws N star-fragments outward
+//       eruptTwin     – a second pillar drops on the next-densest cluster
+//     Raven Scepter (ravenflock):
+//       ravenCount    – birds released per cast
+//       ravenExecute  – a struck enemy below this HP fraction is simply taken
+//       ravenSplit    – each bird splits off N fledglings on a hit
+//       ravenSiphon   – chance a strike draws back a sliver of your life
+//
 // Each upgrade may carry vfxCol: a color woven into the held weapon's glow and
 // its ambient particles, so upgrades visibly change the weapon.
 
@@ -383,6 +414,37 @@ export const UNIQUE_UPGRADES = {
     { id:"gravebloom",    tier:"epic",      name:"Gravebloom",       desc:"A fouler strain — the rot bites deeper and drags its host to a crawl", effect:{ larvaVenom:1, hatchLife:1.5 }, vfxCol:"#4fbf7a" },
     { id:"chitin_court",  tier:"legendary", name:"The Chitin Court", desc:"Every corpse gives up two soldiers, and they stay long past their welcome", effect:{ larvaSwarm:true, hatchLife:3.5, dmg:1 }, vfxCol:"#d8ffc8" },
     { id:"hive_king",     tier:"legendary", name:"Crown of the Hive",desc:"When a host falls the larva simply moves in next door, and the brood never thins", effect:{ larvaHunger:2, larvaBrood:2, larvaVenom:1, hiveStride:30 }, vfxCol:"#ffffff" },
+  ],
+  // --- Self-driving casters ---
+  pale_censer: [
+    { id:"ashen_thurible", tier:"epic",      name:"Ashen Thurible",      desc:"The pale fire clings where it hung, burning far longer and far hotter", effect:{ arcLife:2, arcBurn:1 }, vfxCol:"#7cf2a8" },
+    { id:"iron_pendulum",  tier:"epic",      name:"Iron Pendulum",       desc:"A heavier censer on a longer chain hurls whatever it catches", effect:{ sweepForce:170, dmg:2, aoeBonus:24 }, vfxCol:"#8a8f98" },
+    { id:"twin_thurible",  tier:"legendary", name:"Twin Thurible",       desc:"The chain whips back through the other half-circle on the same beat", effect:{ arcTwin:true, arcDmg:0.2 }, vfxCol:"#eaffe8" },
+    { id:"ashen_procession",tier:"legendary",name:"Procession of Ash",   desc:"The arcs stand for an age, and the whole lane becomes a wall of green fire", effect:{ arcLife:3.5, arcDmg:0.35, arcBurn:2, aoeBonus:38 }, vfxCol:"#d8ffd0" },
+  ],
+  tuning_fork: [
+    { id:"broadband",      tier:"epic",      name:"Broadband",           desc:"A fatter bar of light — far less precise kiting required", effect:{ lanceWidth:26 }, vfxCol:"#b06aff" },
+    { id:"standing_wave",  tier:"epic",      name:"Standing Wave",       desc:"The resonance holds whatever it passes through pinned in place", effect:{ lanceStun:1.2, dmg:3 }, vfxCol:"#d8b0ff" },
+    { id:"counterpoint",   tier:"legendary", name:"Counterpoint",        desc:"The second prong answers down the opposite lane", effect:{ lanceEcho:true }, vfxCol:"#ffffff" },
+    { id:"perfect_fifth",  tier:"legendary", name:"Perfect Fifth",       desc:"Both prongs ring true: a wider bar, both directions, on a shorter beat", effect:{ lanceEcho:true, lanceWidth:34, dmg:4, speedBonus:0.4 }, vfxCol:"#f0e0ff" },
+  ],
+  weeping_sapphire: [
+    { id:"deepening_cold", tier:"epic",      name:"Deepening Cold",      desc:"The trail bites wider and takes far longer to melt", effect:{ wakeLife:3, wakeWidth:12 }, vfxCol:"#7fd8ff" },
+    { id:"splintered_tip", tier:"epic",      name:"Splintered Tip",      desc:"A cracked point lays spikes twice as thickly as you walk", effect:{ wakeDensity:10, wakeDmg:1 }, vfxCol:"#e8fbff" },
+    { id:"permafrost_drag",tier:"legendary", name:"Permafrost Drag",     desc:"Anything already crippled shatters against the ice it is limping over", effect:{ wakeShatter:4, wakeDmg:2, wakeWidth:10 }, vfxCol:"#ffffff" },
+    { id:"the_long_winter",tier:"legendary", name:"The Long Winter",     desc:"A freezing carpet that never lifts — dense, wide, and lethal to the slowed", effect:{ wakeLife:6, wakeDensity:12, wakeShatter:3, wakeWidth:14 }, vfxCol:"#d8f8ff" },
+  ],
+  fractured_monolith: [
+    { id:"hair_trigger",   tier:"epic",      name:"Hair Trigger",        desc:"The heartbeat quickens — the pillar lands before the mob can scatter", effect:{ eruptQuicken:0.3, dmg:3 }, vfxCol:"#ff9a40" },
+    { id:"wider_fault",    tier:"epic",      name:"Wider Fault",         desc:"A broader crater, and the magma clings to everything it splashes", effect:{ aoeBonus:45, eruptBurn:1 }, vfxCol:"#ff5a2a" },
+    { id:"twin_fault",     tier:"legendary", name:"Twin Fault",          desc:"A second pillar answers on the next-densest knot, spraying molten shards", effect:{ eruptTwin:true, eruptFragments:2 }, vfxCol:"#ffd060" },
+    { id:"mantle_breach",  tier:"legendary", name:"Mantle Breach",       desc:"The floor gives way entirely: a vast crater and a storm of fragments", effect:{ aoeBonus:60, eruptFragments:3, eruptBurn:2, eruptQuicken:0.2 }, vfxCol:"#fff0a0" },
+  ],
+  raven_scepter: [
+    { id:"unkindness",     tier:"epic",      name:"An Unkindness",       desc:"Two more birds answer the call each time", effect:{ ravenCount:2 }, vfxCol:"#9a86c8" },
+    { id:"carrion_right",  tier:"epic",      name:"Carrion Right",       desc:"A straggler already this close to death is simply taken", effect:{ ravenExecute:0.22 }, vfxCol:"#1a1024" },
+    { id:"murder",         tier:"legendary", name:"A Murder",            desc:"Every bird splits off a fledgling toward the next weakest body", effect:{ ravenSplit:1, ravenCount:2 }, vfxCol:"#d8c8f0" },
+    { id:"feast_of_crows", tier:"legendary", name:"Feast of Crows",      desc:"The whole flock descends, finishing the wounded and feeding you their spoils", effect:{ ravenCount:3, ravenExecute:0.3, ravenSiphon:0.25 }, vfxCol:"#ffffff" },
   ],
 };
 

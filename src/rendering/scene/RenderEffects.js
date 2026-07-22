@@ -320,9 +320,141 @@ export function drawSpellFields() {
       bg2.addColorStop(0, "rgba(255,90,100,0.8)"); bg2.addColorStop(1, "rgba(120,10,26,0)");
       ctx.fillStyle = bg2;
       ctx.beginPath(); ctx.arc(f.x, f.y, 18, 0, Math.PI * 2); ctx.fill();
+    } else if (f.type === "pyrearc") {
+      drawPyreArc(f, fade, T);
+    } else if (f.type === "icespike") {
+      drawIceSpike(f, fade, T);
+    } else if (f.type === "eruption") {
+      drawEruption(f, fade, T);
+    } else if (f.type === "lance") {
+      drawHarmonicLance(f, fade, T);
     }
     ctx.restore();
   }
+}
+
+// The censer's ghost-fire arc, still hanging in the air where the iron swung:
+// a burning parabola from the mage out to full reach, peaking overhead.
+function drawPyreArc(f, fade, T) {
+  const endX = f.x + f.dir * f.r;
+  const ctrlX = f.x + f.dir * f.r * 0.5;
+  const ctrlY = f.y - f.r * 1.24;
+  ctx.globalCompositeOperation = "lighter";
+  for (const [w, col, a] of [[13, f.col, 0.20], [6, f.col, 0.42], [2.2, "#eaffe8", 0.72]]) {
+    ctx.globalAlpha = a * fade * (0.82 + 0.18 * Math.sin(T * 9 + f.ph));
+    ctx.strokeStyle = col;
+    ctx.lineWidth = w * (0.6 + fade * 0.4);
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(f.x, f.y);
+    ctx.quadraticCurveTo(ctrlX, ctrlY, endX, f.y);
+    ctx.stroke();
+  }
+  ctx.lineCap = "butt";
+  // ash dripping off the underside of the arc
+  ctx.globalAlpha = 0.5 * fade;
+  ctx.fillStyle = f.col;
+  for (let k = 0; k < 5; k++) {
+    const p = (k + 0.5) / 5;
+    const ax = f.x + (endX - f.x) * p;
+    const ay = f.y - f.r * 0.62 * Math.sin(p * Math.PI) + ((T * 26 + k * 13 + f.ph * 5) % 22);
+    ctx.beginPath(); ctx.arc(ax, ay, 1.4 + Math.sin(T * 6 + k) * 0.5, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+// One spike from the sapphire's dragging tip.
+function drawIceSpike(f, fade, T) {
+  const h = 11 + Math.sin(f.ph) * 3;
+  ctx.globalAlpha = 0.72 * fade;
+  ctx.fillStyle = f.col || "#7fd8ff";
+  for (let k = -1; k <= 1; k++) {
+    const sx = f.x + k * 6.5;
+    const sh = h * (k === 0 ? 1 : 0.6);
+    ctx.beginPath();
+    ctx.moveTo(sx - 3.2, groundY - 1);
+    ctx.lineTo(sx + (k * 1.2), groundY - 1 - sh);
+    ctx.lineTo(sx + 3.2, groundY - 1);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = 0.42 * fade * (0.7 + 0.3 * Math.sin(T * 4 + f.ph));
+  ctx.fillStyle = "#e8fbff";
+  ctx.beginPath(); ctx.moveTo(f.x - 1.4, groundY - 1); ctx.lineTo(f.x, groundY - 1 - h); ctx.lineTo(f.x + 1.4, groundY - 1); ctx.closePath(); ctx.fill();
+  // freezing mist pooling around the base
+  ctx.globalAlpha = 0.2 * fade;
+  const mg = ctx.createRadialGradient(f.x, groundY - 3, 2, f.x, groundY - 3, f.r);
+  mg.addColorStop(0, "rgba(216,248,255,0.75)");
+  mg.addColorStop(1, "rgba(120,190,230,0)");
+  ctx.fillStyle = mg;
+  ctx.beginPath(); ctx.ellipse(f.x, groundY - 3, f.r, f.r * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+// The monolith's strike site: a tightening warning ring, then the magma pillar.
+function drawEruption(f, fade, T) {
+  if (!f.erupted) {
+    const warnP = clamp(1 - f.warn / Math.max(0.001, f.maxLife - 0.75), 0, 1);
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = 0.35 + warnP * 0.45;
+    ctx.strokeStyle = "#ff7a2a";
+    ctx.lineWidth = 2 + warnP * 3;
+    ctx.beginPath();
+    ctx.ellipse(f.x, groundY - 5, f.r * (1.25 - warnP * 0.25), f.r * 0.3 * (1.25 - warnP * 0.25), 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.globalAlpha = 0.18 + warnP * 0.3;
+    const wg = ctx.createRadialGradient(f.x, groundY - 5, 3, f.x, groundY - 5, f.r);
+    wg.addColorStop(0, "rgba(255,200,110,0.85)");
+    wg.addColorStop(1, "rgba(160,40,0,0)");
+    ctx.fillStyle = wg;
+    ctx.beginPath(); ctx.ellipse(f.x, groundY - 5, f.r, f.r * 0.32, 0, 0, Math.PI * 2); ctx.fill();
+    return;
+  }
+  // the pillar itself, punching up out of the floor and fading back down
+  const p = clamp(f.life / 0.75, 0, 1);
+  const h = 210 * Math.min(1, (1 - p) * 3.4 + 0.25) * p;
+  ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = 0.85 * p;
+  const pg = ctx.createLinearGradient(f.x, groundY, f.x, groundY - h);
+  pg.addColorStop(0, "rgba(255,240,190,0.95)");
+  pg.addColorStop(0.35, "rgba(255,140,40,0.8)");
+  pg.addColorStop(1, "rgba(160,30,0,0)");
+  ctx.fillStyle = pg;
+  const halfW = f.r * 0.42 * (0.7 + p * 0.3);
+  ctx.beginPath();
+  ctx.moveTo(f.x - halfW, groundY);
+  ctx.quadraticCurveTo(f.x - halfW * 0.5, groundY - h * 0.6, f.x - halfW * 0.2, groundY - h);
+  ctx.lineTo(f.x + halfW * 0.2, groundY - h);
+  ctx.quadraticCurveTo(f.x + halfW * 0.5, groundY - h * 0.6, f.x + halfW, groundY);
+  ctx.closePath(); ctx.fill();
+  ctx.globalAlpha = 0.5 * p;
+  ctx.fillStyle = "#fff2c8";
+  ctx.beginPath(); ctx.ellipse(f.x, groundY - 4, halfW * 0.8, 6, 0, 0, Math.PI * 2); ctx.fill();
+}
+
+// The fork's harmonic lance: a flat bar of hard light with prismatic fringes.
+function drawHarmonicLance(f, fade, T) {
+  ctx.globalCompositeOperation = "lighter";
+  const grow = 1 - fade; // widest the instant it fires, then collapses
+  for (const [wMult, col, a] of [[2.4, f.col, 0.26], [1.15, f.col, 0.5], [0.35, "#ffffff", 0.9]]) {
+    ctx.globalAlpha = a * fade;
+    ctx.fillStyle = col;
+    const hw = f.halfW * wMult * (1 - grow * 0.45);
+    ctx.fillRect(Math.min(f.x1, f.x2), f.y - hw, Math.abs(f.x2 - f.x1), hw * 2);
+  }
+  // split fringes bleeding off the top and bottom edge
+  ctx.globalAlpha = 0.3 * fade;
+  for (const [off, col] of [[-1, "#ff6ad0"], [1, "#6adcff"]]) {
+    ctx.fillStyle = col;
+    ctx.fillRect(Math.min(f.x1, f.x2), f.y + off * f.halfW * 1.5, Math.abs(f.x2 - f.x1), 1.6);
+  }
+  // the resonant flare back at the prongs
+  ctx.globalAlpha = 0.55 * fade;
+  const fg = ctx.createRadialGradient(f.x1, f.y, 2, f.x1, f.y, 34);
+  fg.addColorStop(0, "rgba(255,255,255,0.9)");
+  fg.addColorStop(1, "rgba(176,106,255,0)");
+  ctx.fillStyle = fg;
+  ctx.beginPath(); ctx.arc(f.x1, f.y, 34, 0, Math.PI * 2); ctx.fill();
 }
 
 export function drawPoisonShots() {
@@ -944,6 +1076,42 @@ export function drawSpells() {
         ctx.strokeStyle = "#e8f8ff"; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.ellipse(0, 0, 8, 48 + Math.sin(t * 12) * 3, 0, 0, Math.PI * 2); ctx.stroke();
         ctx.restore();
+        break;
+      }
+      case "ravenflock": {
+        // an ethereal bird: swept wings beating around a dark, glowing body
+        ctx.rotate(Math.atan2(sp.vy, sp.vx));
+        const beat = Math.sin(t * 22 + (sp.ph || 0));
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = 0.5;
+        const rg = ctx.createRadialGradient(0, 0, 1, 0, 0, 20);
+        rg.addColorStop(0, sp.col || "#9a86c8");
+        rg.addColorStop(1, "rgba(20,10,35,0)");
+        ctx.fillStyle = rg;
+        ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+
+        ctx.fillStyle = "#1a1024";
+        for (const s of [-1, 1]) {
+          ctx.beginPath();
+          ctx.moveTo(-1, 0);
+          ctx.quadraticCurveTo(-9, s * (3 + beat * 7), -13, s * (7 + beat * 9));
+          ctx.quadraticCurveTo(-6, s * (2 + beat * 3), 1, 0);
+          ctx.closePath(); ctx.fill();
+        }
+        ctx.beginPath(); ctx.ellipse(0, 0, 7, 2.8, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(6, -1.4); ctx.lineTo(12, 0); ctx.lineTo(6, 1.4);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = sp.col || "#9a86c8";
+        ctx.beginPath(); ctx.arc(4, -0.8, 1.1, 0, Math.PI * 2); ctx.fill();
+        // ragged tail feathers trailing behind
+        ctx.globalAlpha = 0.55;
+        ctx.fillStyle = "#1a1024";
+        ctx.beginPath();
+        ctx.moveTo(-6, 0); ctx.lineTo(-15, -2.5 + beat); ctx.lineTo(-13, 0); ctx.lineTo(-15, 2.5 + beat);
+        ctx.closePath(); ctx.fill();
         break;
       }
       default: {
