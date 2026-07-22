@@ -1718,6 +1718,121 @@ export function drawMurkAbomination(e, t, dark, atkF) {
 // VOLCANO
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Ember Hound - a fast common predator built from cracked clinker. Its low
+// quadruped silhouette keeps it distinct from the volcano's imp variants while
+// the open furnace ribs, flame mane, tail flare and ember wake tie it to them.
+export function drawEmberHound(e, t, dark) {
+  const T = performance.now() / 1000;
+  const flash = e.flash > 0 && !e.dying;
+  const dp = deathP(e);
+  const w = t.w;
+  const g = gait(e);
+  const A = attackPose(e);
+  const run = g.run;
+  const ph = g.phase * 4.2;
+  const lunge = Math.max(0, A.ext);
+  const recoil = A.wind * 3.5;
+  const bob = Math.abs(Math.sin(ph)) * (0.8 + run * 1.8) - lunge * 1.4;
+
+  const coal = col(flash, "#2b1816");
+  const coalDk = col(flash, "#140a09");
+  const crust = col(flash, "#563026");
+  const ember = "#ff6a20";
+  const hot = t.eye || "#ffd060";
+  const bodyY = groundY - w * 0.43 - bob;
+  const headX = w * 0.38 + lunge * w * 0.2 - recoil;
+  const headY = bodyY - w * 0.08 + A.wind * 2;
+
+  contactShadow(w * 0.62, Math.max(0.05, 0.2 - dp * 0.12));
+  glow(-w * 0.02, bodyY, w * 0.72, "rgba(255,105,28,0.42)",
+    "rgba(120,20,0,0)", (0.28 + dark * 0.15) * (1 - dp * 0.65));
+
+  // Deterministic sparks stream behind the body without adding simulation
+  // particles; the update loop supplies a second, world-space ember trail.
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = (0.45 + run * 0.25) * (1 - dp);
+  for (let k = 0; k < 3; k++) {
+    const age = (T * (1.1 + k * 0.08) + k * 0.31 + e.x * 0.003) % 1;
+    ctx.fillStyle = k === 1 ? hot : ember;
+    ctx.beginPath();
+    ctx.arc(-w * (0.35 + age * 0.65), bodyY - age * w * 0.35 + Math.sin(T * 7 + k) * 1.5,
+      1.8 - age * 1.2, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Far legs first. Opposing pairs cycle together for a readable gallop.
+  const drawLeg = (front, near) => {
+    const phase = ph + (front ? Math.PI : 0) + (near ? 0 : Math.PI * 0.82);
+    const stride = Math.sin(phase) * w * 0.18 * (0.3 + run);
+    const lift = Math.max(0, -Math.cos(phase)) * w * 0.1 * (0.25 + run);
+    const hipX = front ? w * 0.22 : -w * 0.23;
+    const pawX = hipX + stride + (front ? lunge * 5 : -lunge * 2);
+    limb(hipX, bodyY + w * 0.13, pawX, groundY - lift, w * 0.25, w * 0.28,
+      front ? 1 : -1, near ? 4.2 : 3.3, near ? 3.2 : 2.5, near ? coal : coalDk);
+    ctx.strokeStyle = near ? crust : coalDk;
+    ctx.lineWidth = near ? 1.7 : 1.2;
+    ctx.beginPath(); ctx.moveTo(pawX - 2, groundY - lift); ctx.lineTo(pawX + 5, groundY - lift); ctx.stroke();
+  };
+  drawLeg(false, false);
+  drawLeg(true, false);
+
+  // Sinuous coal tail ending in an exposed flame.
+  const tailWave = Math.sin(ph - 0.8) * 4 * (0.25 + run);
+  ctx.strokeStyle = coalDk; ctx.lineCap = "round"; ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.35, bodyY - 1);
+  ctx.bezierCurveTo(-w * 0.58, bodyY - 6, -w * 0.72, bodyY + tailWave, -w * 0.86, bodyY - 5 + tailWave);
+  ctx.stroke(); ctx.lineCap = "butt";
+  glow(-w * 0.86, bodyY - 5 + tailWave, 7, hot, "rgba(255,70,0,0)", 0.72 * (1 - dp));
+
+  // Long, armored torso with a bright furnace seam between crust plates.
+  ctx.fillStyle = coal;
+  ctx.beginPath(); ctx.ellipse(-w * 0.05, bodyY, w * 0.48, w * 0.28, -0.05, 0, TAU); ctx.fill();
+  ctx.strokeStyle = coalDk; ctx.lineWidth = 1.8; ctx.stroke();
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.72 * (1 - dp);
+  ctx.strokeStyle = ember; ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(-w * 0.28, bodyY - 2); ctx.lineTo(-w * 0.12, bodyY + 4);
+  ctx.lineTo(w * 0.03, bodyY - 5); ctx.lineTo(w * 0.19, bodyY + 3); ctx.stroke();
+  ctx.restore();
+
+  // Flame mane: a compact crown that flickers hardest during an attack.
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  ctx.fillStyle = ember; ctx.globalAlpha = (0.65 + A.hit * 0.3) * (1 - dp);
+  for (let k = 0; k < 5; k++) {
+    const x = -w * 0.18 + k * w * 0.11;
+    const flameH = w * (0.18 + (k % 2) * 0.08) + Math.sin(T * 10 + k) * 2;
+    ctx.beginPath(); ctx.moveTo(x - 4, bodyY - w * 0.18);
+    ctx.quadraticCurveTo(x, bodyY - w * 0.18 - flameH, x + 4, bodyY - w * 0.18);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+
+  // Wedge-shaped skull, swept ear and an opening furnace jaw.
+  ctx.fillStyle = coal;
+  poly([[headX - w * 0.16, headY - w * 0.16], [headX + w * 0.2, headY - w * 0.1],
+    [headX + w * 0.3, headY + w * 0.04], [headX + w * 0.06, headY + w * 0.18],
+    [headX - w * 0.17, headY + w * 0.1]]); ctx.fill();
+  ctx.strokeStyle = coalDk; ctx.lineWidth = 1.6; ctx.stroke();
+  ctx.fillStyle = crust;
+  poly([[headX - w * 0.1, headY - w * 0.1], [headX - w * 0.2, headY - w * 0.3],
+    [headX + w * 0.02, headY - w * 0.15]]); ctx.fill();
+
+  const jawOpen = w * (0.035 + A.wind * 0.04 + A.hit * 0.1);
+  ctx.fillStyle = "#100403";
+  ctx.beginPath(); ctx.ellipse(headX + w * 0.19, headY + w * 0.08, w * 0.13, jawOpen, 0.08, 0, TAU); ctx.fill();
+  glow(headX + w * 0.16, headY + w * 0.07, w * 0.17, hot, "rgba(255,70,0,0)",
+    (0.48 + A.hit * 0.4) * (1 - dp));
+  glow(headX + w * 0.08, headY - w * 0.04, 5, hot, "rgba(255,80,0,0)", 0.78 * (1 - dp));
+  ctx.fillStyle = col(flash, hot);
+  ctx.beginPath(); ctx.ellipse(headX + w * 0.09, headY - w * 0.04, 2.2, 1.5, -0.2, 0, TAU); ctx.fill();
+
+  drawLeg(false, true);
+  drawLeg(true, true);
+}
+
 // Ash-Fiend — a small glowing coal-imp that sprints unstoppably at the wall and
 // detonates (explodeOnDeath / explodeOnWall). Cracked ash crust over a molten
 // core that brightens as it nears its target; trailing embers, blazing eyes.

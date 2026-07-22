@@ -1,24 +1,17 @@
 import { CFG } from '../../config/config.js';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive4';
-import { clamp, dist, rand } from '../../util/math.js';
+import { ENEMY_TYPES } from '../../config/enemies.js';
+import { clamp, dist } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, spawnGoldCoins } from '../world/SpawnSystem.js?v=biomeactive4';
-import { shootArrow, killEnemy } from '../combat/Combat.js?v=biomeactive4';
-import { spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive4';
-import {
-  wallHeight, wallStandX, wallBackDir, wallRenderWidth, wallPlatformDepth,
-  wallLayout, wallClimbX, overWallPlatform, wallReady, wallCritical, wallIsInner, wallPartner
-} from '../../entities/Wall.js';
+import { spawnParticles, spawnGoldCoins } from '../world/SpawnSystem.js';
+import { shootArrow, killEnemy } from '../combat/Combat.js';
+import { spawnImpBlood } from '../../util/EnemyUtils.js';
+import { wallHeight, wallStandX, wallBackDir, wallRenderWidth, wallPlatformDepth, wallLayout, wallClimbX, overWallPlatform, wallReady, wallCritical, wallIsInner, wallPartner } from '../../entities/Wall.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { addSkillPoints } from '../economy/SkillSystem.js';
 import { wallTopHasLivingImp } from './EnemyTargeting.js';
-import {
-  floaty, hasSkill, nearestEnemy, nearestThreatOnSide,
-  moveToward, sunsetApproaching, nearestAnimal, nearestGroundCoin, assignFixedSide,
-  tryStartBridgeFlee, updateBridgeCross
-} from './AIHelpers.js?v=biomeweapons1';
+import { floaty, hasSkill, nearestEnemy, nearestThreatOnSide, moveToward, sunsetApproaching, nearestAnimal, nearestGroundCoin, assignFixedSide, tryStartBridgeFlee, updateBridgeCross } from './AIHelpers.js';
 
 // ── Archer shoot ─────────────────────────────────────────────────────────
 function archerShoot(u, x, h, tgt) {

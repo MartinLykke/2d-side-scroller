@@ -1,11 +1,9 @@
 import { state, Game } from '../../core/state.js';
 import { inject } from '../../core/services.js';
-import { WEAPONS } from '../../config/weapons.js?v=biomeweapons1';
 import { ARMORS } from '../../config/armor.js';
 import { dist } from '../../util/math.js';
 import { Audio } from '../infrastructure/Audio.js';
 import { equipArmor, playerOwnsWeapon, playerOwnsArmor } from './InventorySystem.js';
-import { MOUNTS } from '../../config/mounts.js';
 import { playerOwnsMount, acquireMount, toggleMount } from './MountSystem.js';
 
 // Grid width shared with the shop overlay renderer.
@@ -49,6 +47,11 @@ export const WEAPON_SHOP = [
   { weaponId: 'raven_scepter',    price: 54, tier: 5 },
   { weaponId: 'tuning_fork',      price: 74, tier: 6 },
   { weaponId: 'fractured_monolith',price: 80, tier: 6 },
+  // Autonomous foci
+  { weaponId: 'gale_staff',      price: 24, tier: 3 },
+  { weaponId: 'bastion_scepter', price: 40, tier: 4 },
+  { weaponId: 'rupture_shard',   price: 54, tier: 5 },
+  { weaponId: 'hive_scepter',    price: 78, tier: 6 },
 ];
 
 export const ARMOR_SHOP = [

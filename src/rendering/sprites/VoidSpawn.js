@@ -3,6 +3,7 @@
 // x with the ground at groundY, facing +x (drawEnemies mirrors for dir < 0).
 // Death ragdoll rotation and fy translation are applied by the caller.
 import { ctx, groundY } from '../../core/canvas.js';
+import { wallHeight } from '../../entities/Wall.js';
 
 const TAU = Math.PI * 2;
 const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
@@ -775,7 +776,8 @@ export function drawVoidTitan(e, t, dark, atkF) {
 // Null Seraph: a cathedral-sized void angel. It is not a dragon with a new
 // paint job; the silhouette is vertical, ritualistic and full of floating
 // blade-wings. The AI writes seraphLanceCharge, seraphPulseFlash,
-// seraphSummonFlash and seraphEnrage so each attack has a readable pose.
+// seraphSummonFlash, seraphWallCharge and seraphEnrage so each attack has a
+// readable pose.
 export function drawVoidSeraph(e, t, dark, atkF) {
   const T = performance.now() / 1000;
   const w = t.w;
@@ -790,8 +792,10 @@ export function drawVoidSeraph(e, t, dark, atkF) {
   const lance = clamp01(e.seraphLanceCharge || 0);
   const pulse = clamp01(e.seraphPulseFlash || 0);
   const summon = clamp01(e.seraphSummonFlash || 0);
+  const wallChoir = clamp01(e.seraphWallCharge || 0);
+  const wallImpact = clamp01((e.seraphWallImpact || 0) / 0.34);
   const enrage = clamp01(e.seraphEnrage || 0);
-  const cast = Math.max(lance, pulse, summon, enrage * 0.85);
+  const cast = Math.max(lance, pulse, summon, wallChoir, wallImpact, enrage * 0.85);
   const crownSpin = T * (e.enraged ? 0.9 : 0.55);
 
   const poly = pts => {
@@ -847,8 +851,10 @@ export function drawVoidSeraph(e, t, dark, atkF) {
         const reach = w * (0.5 + k * 0.14 + layer * 0.08);
         const lift = w * (0.42 - k * 0.07);
         const fold = flap * side * (0.05 + k * 0.025) + (layer ? -0.06 : 0.05);
-        const tipX = side * reach;
-        const tipY = rootY - lift * (0.8 + fold);
+        // Fallen Choir folds every blade toward the wall before releasing a
+        // single converging ray. In local space the current target is +x.
+        const tipX = mix(side * reach, w * (0.48 + k * 0.12 + layer * 0.06), wallChoir);
+        const tipY = mix(rootY - lift * (0.8 + fold), rootY + w * (0.16 + k * 0.08), wallChoir);
         const lowX = side * (reach * 0.62);
         const lowY = rootY + w * (0.13 + k * 0.07) + fold * w * 0.16;
         ctx.save();
@@ -910,13 +916,13 @@ export function drawVoidSeraph(e, t, dark, atkF) {
   ctx.restore();
 
   // Arms change with the ritual: lance points forward, pulse spreads wide,
-  // summon draws both claws down to open gates below.
+  // summon draws both claws down, and Fallen Choir aims both blades at the wall.
   const shoulderY = yc - w * 0.44;
   const handBaseY = yc - w * 0.26;
   const drawArmBlade = (side) => {
     const spread = pulse * side * w * 0.42;
-    const lift = lance * -w * 0.08 + summon * w * 0.18;
-    const reach = lance * side * w * 0.42;
+    const lift = lance * -w * 0.08 + summon * w * 0.18 + wallChoir * w * 0.09;
+    const reach = lance * side * w * 0.42 + wallChoir * (w * 0.5 - side * w * 0.18);
     const sx = side * w * 0.14, sy = shoulderY;
     const ex = side * w * 0.18 + spread + reach;
     const ey = handBaseY + lift + Math.sin(T * 2 + side) * 3;
@@ -957,6 +963,35 @@ export function drawVoidSeraph(e, t, dark, atkF) {
     for (let k = 0; k < 5; k++) {
       const sx = (k - 2) * w * 0.09 + Math.sin(T * 3 + k) * 3;
       ctx.beginPath(); ctx.moveTo(sx, groundY); ctx.lineTo(sx * 0.5, yc + w * 0.16 - summon * w * 0.08); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  if ((wallChoir > 0.04 || wallImpact > 0.02) && e.seraphWallTarget) {
+    const targetX = (e.seraphWallTarget.x - e.x) * (e.dir || 1);
+    // The caller translates flying enemies by fy, so cancel that lift to pin
+    // the ray to the real wall instead of letting its endpoint hover in space.
+    const targetY = groundY - (e.fy || 0) - wallHeight(e.seraphWallTarget) * 0.58;
+    const sourceX = w * 0.12, sourceY = yc - w * 0.28;
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    if (wallChoir > 0.04) {
+      ctx.strokeStyle = wallChoir > 0.82 ? star : violet;
+      ctx.globalAlpha = 0.28 + wallChoir * 0.58;
+      ctx.lineWidth = 2 + wallChoir * 9;
+      ctx.beginPath(); ctx.moveTo(sourceX, sourceY); ctx.lineTo(targetX, targetY); ctx.stroke();
+      ctx.lineWidth = 1.5;
+      for (let k = -1; k <= 1; k++) {
+        const spread = (1 - wallChoir) * (36 + Math.abs(k) * 24);
+        ctx.globalAlpha = 0.18 + wallChoir * 0.34;
+        ctx.beginPath(); ctx.moveTo(k * w * 0.22, yc - w * 0.42); ctx.lineTo(targetX, targetY + k * spread); ctx.stroke();
+      }
+    }
+    if (wallImpact > 0.02) {
+      ctx.strokeStyle = star; ctx.globalAlpha = wallImpact * 0.85;
+      for (let k = 0; k < 3; k++) {
+        const rr = (1 - wallImpact) * (46 + k * 22) + 18;
+        ctx.lineWidth = 5 - k;
+        ctx.beginPath(); ctx.arc(targetX, targetY, rr, 0, TAU); ctx.stroke();
+      }
     }
     ctx.restore();
   }

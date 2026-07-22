@@ -1,13 +1,13 @@
-import { WEAPONS, effectiveWeapon } from '../../config/weapons.js?v=biomeweapons1';
-import { mergeUpgradeEffects } from '../../config/weaponUpgrades.js?v=biomeweapons1';
+import { effectiveWeapon } from '../../config/weapons.js';
+import { mergeUpgradeEffects } from '../../config/weaponUpgrades.js';
 import { CFG } from '../../config/config.js';
 import { dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, floaty, critFloaty, spawnGoldReward } from '../world/SpawnSystem.js?v=biomeactive4';
-import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive4';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive4';
+import { spawnParticles, floaty, critFloaty, spawnGoldReward } from '../world/SpawnSystem.js';
+import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js';
+import { ENEMY_TYPES } from '../../config/enemies.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { entityWallLift } from '../../entities/Wall.js';
 import { playerMountLift } from '../economy/MountSystem.js';
@@ -569,10 +569,101 @@ function updateSpellFields(dt) {
         }
         if (f.warn <= 0) eruptMonolith(f);
       }
+    } else if (f.type === "rift") {
+      // a tear that keeps hauling the lane in until it lets go
+      for (const e of enemiesNearX(f.x, f.r * 1.2)) {
+        if (ENEMY_TYPES[e.type]?.noKnockback) continue;
+        e.x += Math.sign(f.x - e.x || 1) * Math.min(190 * f.pull * dt, Math.abs(f.x - e.x) * 0.16);
+        e.slow = Math.max(e.slow || 0, 0.4);
+      }
+      if (Math.random() < dt * 34) {
+        const a = rand(0, Math.PI * 2), rr = f.r * rand(0.6, 1.2);
+        spawnParticles(f.x + Math.cos(a) * rr, f.y + Math.sin(a) * rr * 0.55, 1, f.col, 12, 44);
+      }
+      f.tick -= dt;
+      if (f.tick <= 0) {
+        f.tick = 0.24;
+        for (const e of enemiesNearX(f.x, f.r)) spellDamageEnemy(e, f.dmg, f.col, { particleCount: 3, spread: 24, float: false });
+      }
+    } else if (f.type === "updraft") {
+      // the column keeps blowing: anything that wanders in goes straight up
+      if (Math.random() < dt * 40) spawnParticles(f.x + rand(-f.r, f.r) * 0.7, groundY - rand(4, 130), 1, "#d8f8ff", 20, 150);
+      f.tick -= dt;
+      if (f.tick <= 0) {
+        f.tick = 0.35;
+        for (const e of enemiesNearX(f.x, f.r)) {
+          loftEnemy(e, f.power * rand(0.8, 1), { dmg: f.dmg, galeShear: f.shear, galeSlam: f.slam, upgradeCol: f.col });
+        }
+      }
+    } else if (f.type === "larva") {
+      const h = f.host;
+      if (!h || h.fleeing || h.dying || h.hp <= 0) {
+        // the host is gone — this is what the larva was waiting for
+        const at = h ? h.x : f.x;
+        hatchSoulMinion(f, at);
+        if (f.swarm) hatchSoulMinion(f, at + rand(-24, 24));
+        floaty(at, f.swarm ? "Hatched x2!" : "Hatched!", "#c8ffd8", 12);
+        // Crown of the Hive: it simply moves in next door
+        const next = f.hunger > 0 ? nearestEnemyTo(at, 260, h) : null;
+        if (next) {
+          f.hunger--;
+          f.host = next;
+          f.life = f.maxLife;
+          next.slow = Math.max(next.slow || 0, f.slow);
+          spawnParticles((at + next.x) / 2, targetImpactY(next), 10, "#9ef0b8", 58, 72);
+          floaty(next.x, "Crawled", f.col, 11);
+        } else {
+          f.life = 0;
+        }
+      } else {
+        f.x = h.x;
+        f.y = targetImpactY(h) - 8;
+        h.slow = Math.max(h.slow || 0, f.slow);
+        if (Math.random() < dt * 9) spawnParticles(f.x + rand(-8, 8), f.y + rand(-6, 8), 1, "#4fbf7a", 12, 24);
+        f.tick -= dt;
+        if (f.tick <= 0) {
+          f.tick = 0.6;
+          spellDamageEnemy(h, f.dmg, f.col, { y: f.y, particleCount: 4, spread: 28, float: false });
+        }
+      }
+    } else if (f.type === "hatchling") {
+      f.anim = (f.anim || 0) + dt * 9;
+      if (f.lunge > 0) f.lunge -= dt;
+      const prey = nearestEnemyTo(f.x, 340);
+      if (prey) {
+        const d = prey.x - f.x;
+        f.dir = Math.sign(d) || f.dir;
+        if (Math.abs(d) > 22) {
+          f.x += f.dir * 195 * dt;
+        } else {
+          f.tick -= dt;
+          if (f.tick <= 0) {
+            f.tick = 0.5;
+            f.lunge = 0.22;
+            spellDamageEnemy(prey, f.dmg, f.col, { particleCount: 5, spread: 34 });
+            if (!ENEMY_TYPES[prey.type]?.noKnockback) prey.knock = (prey.knock || 0) + f.dir * 45;
+            Audio.hit();
+          }
+        }
+      } else {
+        // nothing left to eat: it trails after the mage instead
+        const p = state.player;
+        if (p && Math.abs(p.x - f.x) > 70) { f.dir = Math.sign(p.x - f.x) || f.dir; f.x += f.dir * 130 * dt; }
+      }
+      f.y = groundY - 18;
+      if (Math.random() < dt * 7) spawnParticles(f.x + rand(-7, 7), f.y + rand(-8, 8), 1, f.col, 12, 30);
     }
     if (f.life <= 0) {
       if (f.type === "rune") detonateRuneField(f, i);
-      else if (f.type === "well") {
+      else if (f.type === "rift") { burstRuptureRift(f); fields.splice(i, 1); }
+      else if (f.type === "hatchling") {
+        spawnParticles(f.x, groundY - 20, 12, f.col, 55, 90);
+        spawnParticles(f.x, groundY - 20, 5, "#ffffff", 30, 110);
+        fields.splice(i, 1);
+      } else if (f.type === "updraft") {
+        spawnParticles(f.x, groundY - 60, 10, "#d8f8ff", 70, 120);
+        fields.splice(i, 1);
+      } else if (f.type === "well") {
         implodeGravityWell(f);
         // Dying Star: the collapse comes twice
         if (f.repeat) { f.repeat = false; f.crush *= 0.6; f.life = f.maxLife = 0.55; f.tick = 0.32; }
@@ -2452,11 +2543,86 @@ function castArcanumSpell(player, wBase, tgt, fx, ctx) {
       });
       break;
     }
+    case "fracture": {
+      // one bolt per victim, every victim rolled independently of the last
+      const n = 1 + (fx.fractureBolts || 0);
+      for (let i = 0; i < n; i++) {
+        const mark = i === 0 ? tgt : (randomLiveEnemy(player.x, ew.range * 1.2) || tgt);
+        const ang = Math.atan2(targetImpactY(mark) - castOrigin.y, mark.x - castOrigin.x) + rand(-0.8, 0.8);
+        push({
+          x: castOrigin.x, y: castOrigin.y,
+          vx: Math.cos(ang) * 520, vy: Math.sin(ang) * 520,
+          dmg: dmg * (n > 1 ? 0.72 : 1),
+          life: 1.6,
+          mark,
+          rupturePull: fx.rupturePull || 0,
+          cascade: fx.fractureCascade || 0,
+          splinter: !!fx.fractureSplinter,
+          rift: fx.fractureRift || 0,
+          _hit: new Set(),
+        });
+      }
+      break;
+    }
+    case "gale": {
+      // a compressed slug of air that runs the lane and erupts underfoot
+      const destX = tgt.x;
+      const dirX = Math.sign(destX - castOrigin.x) || dir;
+      push({
+        x: castOrigin.x, y: groundY - 34,
+        vx: dirX * 900, vy: 0,
+        destX,
+        life: Math.abs(destX - castOrigin.x) / 900 + 0.5,
+        galeForce: fx.galeForce || 0,
+        galeCyclone: fx.galeCyclone || 0,
+        galeShear: fx.galeShear || 0,
+        galeSlam: fx.galeSlam || 0,
+        galeTwin: !!fx.galeTwin,
+      });
+      break;
+    }
+    case "bastion": {
+      const n = 1 + (fx.bastionSalvo || 0);
+      // the closer to the gate you stand, the heavier the answer
+      const focus = 1 + (1 - Math.min(1, Math.abs(player.x - CFG.baseX) / 430)) * (0.35 + (fx.bastionFocus || 0));
+      for (let i = 0; i < n; i++) {
+        const b = ballisticVelocity(castOrigin.x, castOrigin.y, tgt.x + rand(-26, 26) * (i > 0 ? 1 : 0), targetY, 620, 420);
+        push({
+          x: castOrigin.x, y: castOrigin.y,
+          vx: b.vx, vy: b.vy - i * 34,
+          dmg: dmg * focus * (n > 1 ? 0.78 : 1),
+          life: b.flight + 1.1,
+          quake: fx.bastionQuake || 0,
+          ward: fx.bastionWard || 0,
+        });
+      }
+      break;
+    }
+    case "larva": {
+      const n = 1 + (fx.larvaBrood || 0);
+      const baseAng = Math.atan2(targetY - castOrigin.y, tgt.x - castOrigin.x);
+      for (let i = 0; i < n; i++) {
+        const off = n === 1 ? 0 : ((i / (n - 1)) * 2 - 1) * 0.45;
+        push({
+          x: castOrigin.x, y: castOrigin.y,
+          vx: Math.cos(baseAng + off) * 300, vy: Math.sin(baseAng + off) * 300,
+          dmg,
+          life: 3,
+          mark: i === 0 ? tgt : null,
+          larvaVenom: fx.larvaVenom || 0,
+          larvaHunger: fx.larvaHunger || 0,
+          larvaSwarm: !!fx.larvaSwarm,
+          hatchLife: fx.hatchLife || 0,
+        });
+      }
+      break;
+    }
   }
 
-  // Echoing casts release a weaker second projectile (the bell wave has its
-  // own rebound instead, so it sits this one out).
-  if (fx.spellEcho && wBase.spellType !== "resonance" && shots.length && Math.random() < fx.spellEcho) {
+  // Echoing casts release a weaker second projectile (the bell wave and the
+  // gale lance both carry their own doubling, so they sit this one out).
+  const noEcho = wBase.spellType === "resonance" || wBase.spellType === "gale";
+  if (fx.spellEcho && !noEcho && shots.length && Math.random() < fx.spellEcho) {
     const lead = shots[0];
     shots.push({
       ...lead,
@@ -2890,6 +3056,22 @@ function spellTrail(sp) {
     case "resonance":
       // the wave's own ripples are drawn per-frame in updateResonanceWave
       break;
+    case "fracture":
+      if (Math.random() < 0.8) spawnParticles(sp.x + rand(-4, 4), sp.y + rand(-4, 4), 1, "#c46bff", 16, 12);
+      if (Math.random() < 0.4) spawnParticles(sp.x, sp.y, 1, "#ff7ad8", 22, 16);   // inverted afterimage
+      if (Math.random() < 0.2) spawnParticles(sp.x, sp.y, 1, "#ffffff", 8, 22);
+      break;
+    case "gale":
+      if (Math.random() < 0.5) spawnParticles(sp.x, sp.y + rand(-20, 20), 1, "#d8f8ff", 30, 26);
+      break;
+    case "bastion":
+      if (Math.random() < 0.5) spawnParticles(sp.x, sp.y, 1, "#b8a488", 14, 16);   // grit off the stone
+      if (Math.random() < 0.35) spawnParticles(sp.x, sp.y, 1, "#ffd88a", 9, 22);   // hearth-light
+      break;
+    case "larva":
+      if (Math.random() < 0.65) spawnParticles(sp.x, sp.y, 1, "#9ef0b8", 10, 24);
+      if (Math.random() < 0.25) spawnParticles(sp.x, sp.y, 1, "#4fbf7a", 14, 18);
+      break;
   }
 }
 
@@ -2939,6 +3121,22 @@ function castBurstFX(wBase, x, y, dirX = 1, dirY = 0) {
     case "resonance":
       spawnParticles(x, y, 8, "#e8f8ff", 48, 80);
       spawnParticles(x, y, 4, "#ffffff", 26, 95);
+      break;
+    case "fracture":
+      spawnParticles(x, y, 8, "#c46bff", 44, 80);
+      spawnParticles(x, y, 4, "#ff7ad8", 30, 95);
+      Game.screenShake = Math.max(Game.screenShake, 0.08);
+      break;
+    case "gale":
+      spawnParticles(x, y, 9, "#d8f8ff", 55, 60);
+      break;
+    case "bastion":
+      spawnParticles(x, y, 7, "#ffd88a", 36, 60);
+      spawnParticles(x, y, 4, "#b8a488", 26, 45);
+      break;
+    case "larva":
+      spawnParticles(x, y, 7, "#9ef0b8", 32, 55);
+      spawnParticles(x, y, 3, "#4fbf7a", 22, 40);
       break;
   }
 }
@@ -3023,6 +3221,25 @@ function spellEnemyImpact(sp, x, y) {
       spawnParticles(x, y, 6, "#ffffff", 45, 140);
       Game.screenShake = Math.max(Game.screenShake, 0.22);
       break;
+    case "fracture":
+      spawnParticles(x, y, 16, "#c46bff", 85, 110);
+      spawnParticles(x, y, 8, "#ff7ad8", 55, 130);
+      spawnParticles(x, y, 4, "#ffffff", 30, 150);
+      Game.screenShake = Math.max(Game.screenShake, 0.22);
+      break;
+    case "gale":
+      spawnParticles(x, y, 14, "#d8f8ff", 90, 130);
+      spawnParticles(x, y, 6, "#ffffff", 50, 150);
+      break;
+    case "bastion":
+      spawnParticles(x, y, 16, "#b8a488", 80, 85);
+      spawnParticles(x, y, 8, "#ffd88a", 55, 115);
+      Game.screenShake = Math.max(Game.screenShake, 0.24);
+      break;
+    case "larva":
+      spawnParticles(x, y, 10, "#9ef0b8", 55, 75);
+      spawnParticles(x, y, 5, "#4fbf7a", 38, 55);
+      break;
     default:
       spawnParticles(x, y, 8, sp.col, 70, 90);
       break;
@@ -3088,6 +3305,19 @@ function spellGroundImpact(sp) {
     case "leech":
       spawnParticles(sp.x, groundY - 8, 14, "#7a0a1a", 80, 60);
       spawnParticles(sp.x, groundY - 8, 7, "#c0102a", 55, 90);
+      break;
+    case "fracture":
+      spawnParticles(sp.x, groundY - 8, 18, "#c46bff", 95, 120);
+      spawnParticles(sp.x, groundY - 8, 8, "#ff7ad8", 60, 140);
+      Game.screenShake = Math.max(Game.screenShake, 0.24);
+      break;
+    case "bastion":
+      spawnParticles(sp.x, groundY - 8, 22, "#b8a488", 100, 90);
+      spawnParticles(sp.x, groundY - 8, 10, "#ffd88a", 70, 125);
+      Game.screenShake = Math.max(Game.screenShake, 0.3);
+      break;
+    case "larva":
+      spawnParticles(sp.x, groundY - 8, 10, "#4fbf7a", 60, 55);
       break;
   }
 }

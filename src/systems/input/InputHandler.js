@@ -1,16 +1,16 @@
 import { state, Game } from '../../core/state.js';
 import { canvas, W, H } from '../../core/canvas.js';
 import { inject, provide } from '../../core/services.js';
-import { UI, DEV, closeSkillTree, openSkillTree } from '../../rendering/HUD.js?v=biomevisual4';
-import { tryOpenShop, handleShopKeys, currentShopList, tryBuyShopItem } from '../economy/ShopSystem.js?v=biomeweapons1';
-import { tryOpenCastleUpgrades, closeCastleUpgrades, buyCastleUpgrade } from '../economy/CastleUpgradeSystem.js?v=biomeweapons1';
+import { UI, DEV, closeSkillTree, openSkillTree } from '../../rendering/HUD.js';
+import { tryOpenShop, handleShopKeys, currentShopList, tryBuyShopItem } from '../economy/ShopSystem.js';
+import { tryOpenCastleUpgrades, closeCastleUpgrades, buyCastleUpgrade } from '../economy/CastleUpgradeSystem.js';
 import { CASTLE_UPGRADES } from '../../config/castleUpgrades.js';
 import { toggleMount } from '../economy/MountSystem.js';
 import { equipFromInventory, unequipWeapon, unequipArmor, ensureInventory } from '../economy/InventorySystem.js';
-import { applyUpgrade, checkUpgrade } from '../economy/UpgradeSystem.js?v=biomeweapons1';
-import { triggerBarrage, triggerRoyalRally } from '../ai/AI.js?v=biomeactive4';
-import { startAssault } from '../world/AssaultSystem.js?v=biomevisual4';
-import { setupDevPanel } from './DevPanel.js?v=biomeactive4';
+import { applyUpgrade } from '../economy/UpgradeSystem.js';
+import { triggerBarrage, triggerRoyalRally } from '../ai/AI.js';
+import { startAssault } from '../world/AssaultSystem.js';
+import { setupDevPanel } from './DevPanel.js';
 import { warpToHubPortal, snapHubToPlaza } from '../infrastructure/RoguelikeSystem.js';
 
 export function setupInputHandlers() {

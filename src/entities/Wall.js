@@ -10,10 +10,6 @@ export function wallHeight(w) {
   return [0, 44, 64, 86, 112, 150][w.level] || 44;
 }
 
-export function wallWidth(w) {
-  return [0, 40, 50, 60, 70, 80][w.level] || 40;
-}
-
 // Width of the wall body as drawn by the renderer (level 5 draws its own
 // 96px castle wall and ignores this).
 export function wallRenderWidth(w) {
@@ -96,18 +92,6 @@ export function wallLayout(w, renderedHeight = wallHeight(w)) {
   };
 }
 
-export function wallPlatformRearX(w) {
-  return wallLayout(w).deckRearX;
-}
-
-export function wallClimbAnchorX(w) {
-  return wallLayout(w).accessBottomX;
-}
-
-export function wallClimbTopX(w) {
-  return wallLayout(w).accessTopX;
-}
-
 // X coordinate along the visible access route. Stairs travel diagonally from
 // their foot to the deck; ladders remain vertical.
 export function wallClimbX(w, t) {
@@ -130,10 +114,6 @@ export function nearWallClimbTop(w, x) {
 
 export function nearWallClimbAnchor(w, x) {
   return nearWallClimbBottom(w, x) || nearWallClimbTop(w, x);
-}
-
-export function nearWallClimbAccess(w, x) {
-  return nearWallClimbAnchor(w, x);
 }
 
 export function entityWallLift(entity) {

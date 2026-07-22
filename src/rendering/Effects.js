@@ -1,4 +1,4 @@
-import { clamp, lerp, lerpColor, rgb, withA, shade, hazeColor, atmo, rand, mulberry32 } from '../util/math.js';
+import { clamp, lerpColor, rgb, withA, shade, hazeColor, atmo, rand, mulberry32 } from '../util/math.js';
 import { CFG } from '../config/config.js';
 import { ctx, W, H, groundY } from '../core/canvas.js';
 import { Game, state } from '../core/state.js';
@@ -10,7 +10,6 @@ import { renderBudget } from './RenderFrame.js';
 // The map is one continuous kingdom, but it only has one active biome at a
 // time. Changing biome remakes the whole landscape instead of moving through
 // world-space bands.
-const BIOME_BLEND = 180;
 export const BIOME_ORDER = ["forest", "frozen", "desert", "swamp", "volcano", "corrupted"];
 export const BIOME_DEFS = [
   {
@@ -75,26 +74,8 @@ function applyWorldPhase(b) {
   };
 }
 
-function mixBiome(a, b, t) {
-  const near = t < 0.5 ? a : b;
-  return {
-    ...near,
-    treeL: lerpColor(a.treeL,b.treeL,t), treeD: lerpColor(a.treeD,b.treeD,t),
-    gT: lerpColor(a.gT,b.gT,t), gB: lerpColor(a.gB,b.gB,t),
-    fog: lerpColor(a.fog,b.fog,t), sky: lerpColor(a.sky,b.sky,t),
-    leaf: near.leaf, deco: near.deco, snow: near.snow, moss: near.moss,
-    dry: near.dry, hot: near.hot, wet: near.wet, corrupt: near.corrupt,
-    fallKind: near.fallKind,
-  };
-}
-
 export function biomeById(id) {
   return BIOME_DEFS.find(b => b.id === id) || BIOME_DEFS.find(b => b.id === "forest") || BIOME_DEFS[0];
-}
-
-export function biomeCenterX(id) {
-  const b = biomeById(id);
-  return clamp(b.c ?? (b.start + b.end) / 2, 120, CFG.worldWidth - 120);
 }
 
 export function activeBiomeId() {
@@ -1099,15 +1080,6 @@ export function drawHills(hills, dark) {
       }
     }
   }
-}
-
-export function drawFogBand(y, h, dark, intensity) {
-  const bi=biomeAt(Game.cam+W/2);
-  const a=intensity*(0.16+0.1*Math.sin(Game.windT*0.2))*(1-0.4*dark);
-  const col=lerpColor(bi.fog,[20,22,40],dark);
-  const grad=ctx.createLinearGradient(0,y-h,0,y+h);
-  grad.addColorStop(0,withA(col,0)); grad.addColorStop(0.5,withA(col,a)); grad.addColorStop(1,withA(col,0));
-  ctx.fillStyle=grad; ctx.fillRect(0,y-h,W,h*2);
 }
 
 function fogHash(n){ const s=Math.sin(n*127.1)*43758.5453; return s-Math.floor(s); }

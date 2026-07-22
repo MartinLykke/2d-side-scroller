@@ -8,13 +8,13 @@
 // so a save can re-register the handful currently in play (player.weapon /
 // inventory / chests) after a reload — see exportGeneratedWeapon /
 // restoreGeneratedWeapon, wired up in SaveSystem.js.
-import { WEAPONS, RARITY_COL } from '../../config/weapons.js?v=biomeweapons1';
-import { UNIQUE_UPGRADES } from '../../config/weaponUpgrades.js?v=biomeweapons1';
+import { WEAPONS, RARITY_COL } from '../../config/weapons.js';
+import { UNIQUE_UPGRADES } from '../../config/weaponUpgrades.js';
 import {
   WEAPON_CATEGORIES, RARITY_WEIGHTS, AFFIX_COUNT_BY_RARITY, PREFIXES,
   PLAIN_SUFFIXES, EPITHETS, NOUNS, STAT_RANGES, AFFIX_POOL, THEME_BANK,
   SPELL_ELEMENTS, SPELL_FORMS, TRAVEL_BEHAVIORS, IMPACT_EFFECTS, VISUAL_FLOURISHES,
-} from '../../config/proceduralWeapons.js?v=procweap1';
+} from '../../config/proceduralWeapons.js';
 
 const registry = {}; // id -> { def, uniqueUpgrades }
 

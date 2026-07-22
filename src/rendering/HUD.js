@@ -1,15 +1,14 @@
 import { CFG } from '../config/config.js';
-import { ENEMY_TYPES, BIOME_ENEMY_POOLS } from '../config/enemies.js?v=biomeactive4';
-import { ANIMAL_TYPES, BIOME_ANIMAL_POOLS, animalDef } from '../config/animals.js';
-import { WEAPONS, RARITY_COL, RARITY_NAME } from '../config/weapons.js?v=biomeweapons1';
+import { ENEMY_TYPES } from '../config/enemies.js';
+import { WEAPONS, RARITY_COL, RARITY_NAME } from '../config/weapons.js';
 import { ARMORS, ARMOR_RARITY_COL, ARMOR_RARITY_NAME } from '../config/armor.js';
-import { dist, clamp, rand, clampCameraTarget } from '../util/math.js';
+import { dist, clamp } from '../util/math.js';
 import { Game, state } from '../core/state.js';
 import { inject, provide } from '../core/services.js';
 import { Audio } from '../systems/infrastructure/Audio.js';
-import { spawnEnemy, spawnFireDragon, spawnBoss, spawnBiomeBoss, planNight, floaty, spawnParticles, makeAnimal, populateBiomeAnimals } from '../systems/world/SpawnSystem.js?v=biomeactive4';
+import { spawnEnemy, spawnBoss, planNight, floaty, spawnParticles } from '../systems/world/SpawnSystem.js';
 import { pick } from '../util/math.js';
-import { groundY, W } from '../core/canvas.js';
+import { groundY } from '../core/canvas.js';
 import { ARCHER_SKILLS, ARROW_RAIN_COOLDOWN } from '../config/archerSkills.js';
 import { GUARD_SKILLS } from '../config/guardSkills.js';
 import { makeUnit } from '../entities/Unit.js';
@@ -19,12 +18,10 @@ import { MOUNTS } from '../config/mounts.js';
 import { acquireMount, toggleMount } from '../systems/economy/MountSystem.js';
 import { expectedGoldForDay, goldRewardAmount } from '../systems/economy/EconomyBalance.js';
 import { addSkillPoints, autoSpendSkillPoints } from '../systems/economy/SkillSystem.js';
-import { renderBudget, renderLoad } from './RenderFrame.js';
 import { profilerEnabled, setProfilerEnabled, profilerResults, profilerFrameMs, profilerReset } from '../util/Profiler.js';
-import { canOpenCastleUpgrades } from '../systems/economy/CastleUpgradeSystem.js?v=biomeweapons1';
+import { canOpenCastleUpgrades } from '../systems/economy/CastleUpgradeSystem.js';
 import { currentCoinCap, currentPopCap, wallMaxHpForLevel } from '../util/DefenseStats.js';
-import { BIOME_DEFS, biomeAt, setActiveBiome } from './Effects.js?v=biomeactive4';
-import { generateProceduralWeapon } from '../systems/economy/ProceduralWeaponSystem.js?v=procweap1';
+import { generateProceduralWeapon } from '../systems/economy/ProceduralWeaponSystem.js';
 
 // ── Skill Tree ────────────────────────────────────────────────
 const BRANCH_NAMES = {
@@ -245,13 +242,14 @@ export const UI = {
     document.getElementById("hud-coins-text").textContent = player.coins;
     document.getElementById("hud-hp-text").textContent    = "";
 
-    let arch = 0, build = 0, guards = 0, farmers = 0;
+    let arch = 0, build = 0, guards = 0, farmers = 0, clerics = 0;
     for (let i = 0; i < units.length; i++) {
       const r = units[i].role;
       if (r === "archer") arch++;
       else if (r === "builder") build++;
       else if (r === "guard") guards++;
       else if (r === "farmer") farmers++;
+      else if (r === "cleric") clerics++;
     }
     const popCap = currentPopCap(base.level);
     document.getElementById("hud-pop-text").textContent   = (units.length + vagrants.length) + "/" + popCap;
@@ -262,6 +260,7 @@ export const UI = {
     setRosterCount("guard", guards);
     setRosterCount("builder", build);
     setRosterCount("farmer", farmers);
+    setRosterCount("cleric", clerics);
     setRosterCount("vagrant", vagrants.length);
 
     let obj = "🎯 Survive as long as you can. Threat level " + (Game.threatLevel || Game.day);
@@ -373,8 +372,8 @@ function renderDevWeaponButtons() {
   if (!row) return;
   const dropButton = row.querySelector(".dev-danger");
   row.innerHTML = "";
-  const typeLabels = { melee: "Melee", ranged: "Ranged", magic: "Magic" };
-  for (const type of ["melee", "ranged", "magic"]) {
+  const typeLabels = { magic: "Magic" };
+  for (const type of ["magic"]) {
     const weapons = Object.entries(WEAPONS).filter(([, weapon]) => weapon.type === type && !weapon.generated);
     if (!weapons.length) continue;
     const group = document.createElement("div");
@@ -453,126 +452,6 @@ function renderDevMountButtons() {
   if (stableButton) row.appendChild(stableButton);
 }
 
-function biomeEnemyEntries(id) {
-  const pool = BIOME_ENEMY_POOLS[id] || {};
-  const seen = new Set();
-  const entries = [];
-  for (const role of ["basic", "standard", "special", "heavy"]) {
-    const types = Array.isArray(pool[role]) ? pool[role] : [pool[role]];
-    for (const type of types) {
-      if (!type || seen.has(type)) continue;
-      seen.add(type);
-      entries.push({ role, type, enemy: ENEMY_TYPES[type] });
-    }
-  }
-  return entries;
-}
-
-function makeBiomeEnemyButton(entry, biomeName = "") {
-  const btn = document.createElement("button");
-  const enemy = entry.enemy || {};
-  btn.className = "dev-btn";
-  btn.textContent = enemy.name || entry.type;
-  btn.title = [biomeName, entry.role, entry.type].filter(Boolean).join(" - ");
-  const col = enemy.eye || enemy.color;
-  if (col) {
-    btn.style.color = col;
-    btn.style.borderColor = col + "80";
-  }
-  btn.onclick = () => DEV.spawnBiomeEnemyDev(entry.type);
-  return btn;
-}
-
-function renderDevBiomeEnemyButtons() {
-  const row = document.getElementById("dev-biome-enemy-buttons");
-  if (!row) return;
-
-  const activeId = biomeAt(state.player?.x || CFG.baseX).id;
-  if (row.dataset.biomeKey === activeId && row.childElementCount > 0) return;
-  row.dataset.biomeKey = activeId;
-  row.innerHTML = "";
-
-  const activeBiome = BIOME_DEFS.find(b => b.id === activeId) || BIOME_DEFS.find(b => b.id === "forest");
-  const activeGroup = document.createElement("div");
-  activeGroup.className = "dev-subsection";
-  const activeLabel = document.createElement("div");
-  activeLabel.className = "dev-mini-label";
-  activeLabel.textContent = (activeBiome?.name || "Current biome") + " enemies";
-  const activeButtons = document.createElement("div");
-  activeButtons.className = "dev-row";
-  for (const entry of biomeEnemyEntries(activeId)) activeButtons.appendChild(makeBiomeEnemyButton(entry, activeBiome?.name));
-  activeGroup.append(activeLabel, activeButtons);
-  row.appendChild(activeGroup);
-
-  for (const biome of BIOME_DEFS) {
-    if (biome.id === activeId) continue;
-    const entries = biomeEnemyEntries(biome.id);
-    if (!entries.length) continue;
-    const group = document.createElement("div");
-    group.className = "dev-subsection";
-    const label = document.createElement("div");
-    label.className = "dev-mini-label";
-    label.textContent = biome.name;
-    const buttons = document.createElement("div");
-    buttons.className = "dev-row";
-    for (const entry of entries) buttons.appendChild(makeBiomeEnemyButton(entry, biome.name));
-    group.append(label, buttons);
-    row.appendChild(group);
-  }
-}
-
-function renderDevAnimalButtons() {
-  const row = document.getElementById("dev-animal-buttons");
-  if (!row) return;
-
-  const activeId = biomeAt(state.player?.x || CFG.baseX).id;
-  if (row.dataset.biomeKey === activeId && row.childElementCount > 0) return;
-  row.dataset.biomeKey = activeId;
-  row.innerHTML = "";
-
-  const seen = new Set();
-  const pool = BIOME_ANIMAL_POOLS[activeId] || BIOME_ANIMAL_POOLS.forest;
-  const activeBiome = BIOME_DEFS.find(b => b.id === activeId);
-  const tint = activeBiome?.hot ? "#ff7a36"
-    : activeBiome?.corrupt ? "#b66bff"
-    : activeBiome?.snow ? "#cfe6f2"
-    : activeBiome?.deco === "desert" ? "#d8b06a"
-    : activeBiome?.deco === "swamp" ? "#9bd05a"
-    : "#f2c14e";
-
-  for (const type of pool) {
-    if (seen.has(type)) continue;
-    seen.add(type);
-    const def = ANIMAL_TYPES[type];
-    if (!def) continue;
-    const btn = document.createElement("button");
-    btn.className = "dev-btn";
-    btn.textContent = def.name;
-    btn.title = `${activeBiome?.name || activeId} wildlife - ${type}`;
-    btn.style.color = tint;
-    btn.style.borderColor = tint + "80";
-    btn.onclick = () => DEV.spawnAnimalNearBase(type);
-    row.appendChild(btn);
-  }
-
-  const bear = document.createElement("button");
-  bear.className = "dev-btn dev-danger";
-  bear.textContent = "Bear";
-  bear.title = "Spawn a rare predator";
-  bear.onclick = () => DEV.spawnAnimalNearBase("bear");
-  row.appendChild(bear);
-}
-
-function appendDevStat(fragment, label, value) {
-  const item = document.createElement("div");
-  item.className = "dev-stat";
-  const term = document.createElement("dt");
-  term.textContent = label;
-  const desc = document.createElement("dd");
-  desc.textContent = String(value);
-  item.append(term, desc);
-  fragment.appendChild(item);
-}
 
 // ---- Dev tools ----
 export const DEV = {
@@ -603,66 +482,16 @@ export const DEV = {
   },
 
   _renderPanel() {
-    this._renderFps();
-    this._renderStats();
     this._renderProfiler();
-    renderDevBiomeEnemyButtons();
-    renderDevAnimalButtons();
   },
 
-  _renderFps() {
-    const el = document.getElementById("dev-fps");
-    if (el) el.textContent = `${Math.round(this._fps)} FPS`;
-  },
 
-  _renderStats() {
-    const el = document.getElementById("dev-stats");
-    if (!el) return;
-    const player = state.player || {};
-    const base = state.base || {};
-    const units = state.units || [];
-    const enemies = state.enemies || [];
-    const activeEnemies = enemies.filter(e => !e.fleeing && !e.dying && e.hp > 0).length;
-    const fxCount = (state.particles?.length || 0) + (state.floatTexts?.length || 0);
-    const budget = renderBudget();
-    const load = renderLoad();
-    const popCap = base.level ? currentPopCap(base.level) : "-";
-
-    const costs = [];
-    costs.push({ label: `Enemies (${load.enemies})`, weight: load.enemies * 1.4 });
-    costs.push({ label: `Units (${units.length})`, weight: units.length * 1.1 });
-    costs.push({ label: `FX (${fxCount})`, weight: fxCount * 0.12 });
-    costs.push({ label: `Arrows (${state.arrows?.length || 0})`, weight: (state.arrows?.length || 0) * 0.45 });
-    costs.push({ label: `Coins (${state.coins?.length || 0})`, weight: (state.coins?.length || 0) * 0.18 });
-    costs.sort((a, b) => b.weight - a.weight);
-    const top3 = costs.slice(0, 3).map(c => `${c.label}`).join(", ");
-
-    const fragment = document.createDocumentFragment();
-    const biome = state.player ? biomeAt(player.x || CFG.baseX) : null;
-    appendDevStat(fragment, "Day", Game.day || 1);
-    appendDevStat(fragment, "Phase", `${phaseName()} ${Math.round((Game.time || 0) * 100)}%`);
-    appendDevStat(fragment, "Biome", biome ? biome.name : "-");
-    appendDevStat(fragment, "Gold", player.coins ?? 0);
-    appendDevStat(fragment, "Embers", Game.meta?.embers ?? 0);
-    appendDevStat(fragment, "Base", base.level ? `L${base.level} ${Math.ceil(base.hp)}/${base.maxHp}` : "-");
-    appendDevStat(fragment, "Player", player.maxHp ? `${Math.ceil(player.hp)}/${player.maxHp}` : "-");
-    appendDevStat(fragment, "Units", `${units.length}/${popCap}`);
-    appendDevStat(fragment, "Enemies", `${activeEnemies}/${enemies.length}`);
-    appendDevStat(fragment, "Drops", `${state.coins?.length || 0}/${state.lootItems?.length || 0}`);
-    appendDevStat(fragment, "FX", fxCount);
-    appendDevStat(fragment, "Render", `${budget.level} ${Math.round(load.fps || 0)}/${Math.round(load.targetFps || Game.targetFps || 144)}fps ${Math.round(load.score || 0)}`);
-    appendDevStat(fragment, "Top Costs", top3);
-    appendDevStat(fragment, "Pos", Math.round(player.x || 0));
-    appendDevStat(fragment, "Speed", `${this.speedMult}x`);
-    el.replaceChildren(fragment);
-  },
 
   addCoins(n) {
     if (Game.state!=="play"||!state.player) return;
     n = Math.max(0, Math.floor(Number(n) || 0));
     if (n <= 0) return;
     state.player.coins=Math.max(0,(state.player.coins||0)+n);
-    this._renderStats();
     floaty(state.player.x,"+"+n+"🪙","#f2c14e");
   },
 
@@ -670,7 +499,6 @@ export const DEV = {
     Game.meta = Game.meta || { embers: 0, upgrades: {}, totalRuns: 0, bestDay: 1, totalKills: 0, lastReward: 0, lastDay: 1, lastKills: 0 };
     Game.meta.embers = (Game.meta.embers || 0) + n;
     saveMeta();
-    this._renderStats();
     const x = state.player ? state.player.x : 0;
     floaty(x,"+"+n+"🔥","#8fd8ff");
   },
@@ -766,14 +594,6 @@ export const DEV = {
     floaty(state.base.x, "👹 " + type + "!","#ff6a4a");
   },
 
-  spawnBiomeEnemyDev(type) {
-    if (Game.state!=="play") return;
-    if (!ENEMY_TYPES[type]) {
-      floaty(state.base.x, "Unknown enemy: " + type, "#ff8a6a");
-      return;
-    }
-    this.spawnEnemyNearBase(type);
-  },
 
   spawn8ImpsRight() {
     if (Game.state!=="play") return;
@@ -784,58 +604,39 @@ export const DEV = {
     floaty(state.base.x, "👹 8x Imp!","#ff6a4a");
   },
 
-  spawnFireDragonBoss() {
+  _spawnBossDev(type, distance) {
     if (Game.state!=="play") return;
     const side = pick([-1, 1]);
-    spawnFireDragon({ x: state.base.x + side * 900, side });
+    const boss = spawnBoss(type, { x: state.base.x + side * distance, side });
+    const bossType = ENEMY_TYPES[type];
+    state.legendaryBoss = boss;
+    Game.legendaryIntro = { timer: 4.6, maxTimer: 4.6, bossType: type };
+    floaty(boss.x, bossType?.name || type, bossType?.eye || "#ff6a4a", 18);
+    return boss;
+  },
+
+  spawnForestStalkerBoss() {
+    return this._spawnBossDev("forestStalker", 940);
+  },
+
+  spawnFireDragonBoss() {
+    return this._spawnBossDev("fireDragon", 900);
   },
 
   spawnMagmaGolemBoss() {
-    if (Game.state!=="play") return;
-    const side = pick([-1, 1]);
-    spawnBoss("magmaGolem", { x: state.base.x + side * 720, side });
+    return this._spawnBossDev("magmaGolem", 720);
   },
 
   spawnPyreTyrantBoss() {
-    if (Game.state!=="play") return;
-    const side = pick([-1, 1]);
-    const boss = spawnBoss("pyreTyrant", { x: state.base.x + side * 780, side });
-    state.legendaryBoss = boss;
-    Game.legendaryIntro = { timer: 4.6, maxTimer: 4.6, bossType: boss.type };
-    floaty(boss.x, ENEMY_TYPES[boss.type].name, ENEMY_TYPES[boss.type].eye, 18);
+    return this._spawnBossDev("pyreTyrant", 780);
   },
 
-  spawnVoidTitanBoss() {
-    if (Game.state!=="play") return;
-    const side = pick([-1, 1]);
-    spawnBoss("voidTitan", { x: state.base.x + side * 720, side });
-  },
 
-  spawnVoidSeraphBoss() {
-    if (Game.state!=="play") return;
-    const side = pick([-1, 1]);
-    spawnBoss("voidSeraph", { x: state.base.x + side * 820, side });
-  },
-
-  spawnBiomeBossDev(id) {
-    if (Game.state!=="play") return;
-    const boss = spawnBiomeBoss(id);
-    if (!boss) {
-      floaty(state.base.x, "Unknown biome boss", "#ff8a6a");
-      return;
-    }
-    const t = ENEMY_TYPES[boss.type];
-    if (t?.legendary) {
-      state.legendaryBoss = boss;
-      Game.legendaryIntro = { timer: 4.6, maxTimer: 4.6, bossType: boss.type };
-    }
-    floaty(boss.x, t?.name || boss.type, t?.eye || "#ff6a4a", 18);
-  },
 
   // Dynamic import keeps HUD out of the AssaultSystem module graph
   startAssaultDev() {
     if (Game.state!=="play") return;
-    import('../systems/world/AssaultSystem.js?v=biomevisual4').then(m => m.startAssault());
+    import('../systems/world/AssaultSystem.js').then(m => m.startAssault());
   },
 
   crackPortals() {
@@ -855,51 +656,7 @@ export const DEV = {
     Game.phaseTransition = { t: 0, swapped: false };
   },
 
-  teleportBiome(id) {
-    if (Game.state!=="play" || !state.player) return;
-    const biome = BIOME_DEFS.find(b => b.id === id);
-    if (!biome) return;
-    setActiveBiome(id, { reseed: true });
-    const x = CFG.baseX;
-    state.assault = null;
-    Game.phaseTransition = null;
-    Game.worldPhase = 1;
-    for (const u of state.units || []) {
-      u.assault = false;
-      u.assaultSlot = 0;
-      u.combatTarget = null;
-      u.pendingLog = null;
-      u.carryLog = null;
-    }
-    const p = state.player;
-    p.x = x;
-    p.vx = 0;
-    p.knock = 0;
-    p.jumpH = 0;
-    p.vy = 0;
-    p.invuln = Math.max(p.invuln || 0, 0.8);
-    Game.cam = clampCameraTarget(x - W / 2, CFG.worldWidth, W, Game.zoom || 1);
-    const col = biome.hot ? "#ff7a36" : biome.corrupt ? "#b66bff" : biome.snow ? "#cfe6f2" : biome.deco==="desert" ? "#d8b06a" : biome.deco==="swamp" ? "#9bd05a" : "#f2c14e";
-    state.enemies.length = 0;
-    state.animals.length = 0;
-    import('../systems/world/ForestSystem.js?v=biomeactive4').then(({ buildForest }) => {
-      buildForest();
-      populateBiomeAnimals(12, { nearX: x });
-    });
-    spawnParticles(x, groundY - 45, 24, col, 120, 130);
-    floaty(x, "World biome: " + biome.name, col, 18);
-    this._renderPanel();
-  },
 
-  spawnAnimalNearBase(type) {
-    if (Game.state!=="play") return;
-    const x = state.base.x + pick([-1, 1]) * rand(200, 400);
-    const a = makeAnimal(type, x, "graze");
-    if (type === "bear") { a.hp = 12; a.maxHp = 12; a.attackCd = 0; a.attackAnim = 0; a.flash = 0; a.chargeCd = 0; a.charging = 0; }
-    state.animals.push(a);
-    const animal = animalDef(type);
-    floaty(state.base.x, (animal.name || type) + "!", "#9bd05a");
-  },
 
   killAll() {
     if (Game.state!=="play") return;
@@ -976,8 +733,8 @@ export const DEV = {
     const x = state.base.x + pick([-1, 1]) * 120;
     const u = makeUnit(role, x);
     state.units.push(u);
-    const roleNames = { archer: "🏹 Archer", builder: "🔨 Builder", farmer: "🌾 Farmer", guard: "🛡 Guard" };
-    floaty(state.base.x, roleNames[role] + " born!", "#9bd05a");
+    const roleNames = { archer: "🏹 Archer", builder: "🔨 Builder", farmer: "🌾 Farmer", guard: "🛡 Guard", cleric: "✨ Cleric" };
+    floaty(state.base.x, (roleNames[role] || role) + " born!", "#9bd05a");
   },
 
   levelUpUnits(role, levels = 1) {

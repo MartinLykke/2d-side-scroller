@@ -1,23 +1,24 @@
 import { CFG, STATIONS_X } from '../../config/config.js';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive4';
+import { ENEMY_TYPES } from '../../config/enemies.js';
 import { ARROW_RAIN_COOLDOWN } from '../../config/archerSkills.js';
 import { clamp, dist, rand, pick } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, spawnGoldCoins, spawnGoldReward, floaty as showFloaty } from '../world/SpawnSystem.js?v=biomeactive4';
-import { shootArrow, killEnemy, damagePlayer } from '../combat/Combat.js?v=biomeactive4';
-import { killEnemyWithAnimation, spawnImpBlood, spawnHumanBlood } from '../../util/EnemyUtils.js?v=biomeactive4';
+import { spawnParticles, spawnGoldCoins, spawnGoldReward, floaty as showFloaty } from '../world/SpawnSystem.js';
+import { shootArrow, killEnemy, damagePlayer } from '../combat/Combat.js';
+import { killEnemyWithAnimation, spawnImpBlood, spawnHumanBlood } from '../../util/EnemyUtils.js';
 import { wallHeight, wallStandX, wallBackDir, wallRenderWidth, wallPlatformDepth, overWallPlatform, entityWallLift } from '../../entities/Wall.js';
 import { makeUnit } from '../../entities/Unit.js';
-import { nearestChoppableTree, chopTree, nearestLog, deliverLog, pondAt, nearestPond } from '../world/ForestSystem.js?v=biomeactive4';
+import { nearestChoppableTree, chopTree, nearestLog, deliverLog, pondAt, nearestPond } from '../world/ForestSystem.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { addSkillPoints } from '../economy/SkillSystem.js';
-import { archerAI as archerRoleAI } from './ArcherAI.js?v=biomeactive4';
-import { builderAI as builderRoleAI } from './BuilderAI.js?v=biomeactive4';
-import { farmerAI as farmerRoleAI } from './FarmerAI.js?v=biomeactive4';
-import { guardAI as guardRoleAI } from './GuardAI.js?v=biomeactive4';
-import { assaultUnitAI } from '../world/AssaultSystem.js?v=biomevisual4';
+import { archerAI as archerRoleAI } from './ArcherAI.js';
+import { builderAI as builderRoleAI } from './BuilderAI.js';
+import { farmerAI as farmerRoleAI } from './FarmerAI.js';
+import { guardAI as guardRoleAI } from './GuardAI.js';
+import { clericAI as clericRoleAI } from './ClericAI.js';
+import { assaultUnitAI } from '../world/AssaultSystem.js';
 import { animalDef } from '../../config/animals.js';
 
 function hasSkill(id) { return state.archerSkills.includes(id); }
@@ -1230,6 +1231,7 @@ const AI_HANDLERS = {
   farmer:  farmerRoleAI,
   peasant: peasantAI,
   guard:   guardRoleAI,
+  cleric:  clericRoleAI,
   hound:   houndAI,
 };
 
@@ -1324,6 +1326,7 @@ export function updateUnits(dt) {
     if (u.grappleCd > 0) u.grappleCd -= dt;
     if (u.powerFlash > 0) u.powerFlash -= dt;
     if (u.biteFlash > 0) u.biteFlash -= dt;
+    if (u.healFlash > 0) u.healFlash = Math.max(0, u.healFlash - dt);
     if (u.meleeMode > 0) u.meleeMode -= dt;
     if (u.panic > 0) u.panic -= dt;
     if (u.strike > 0) u.strike -= dt;

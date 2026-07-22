@@ -4,7 +4,7 @@ import { Game, state } from '../../core/state.js';
 import { groundY } from '../../core/canvas.js';
 import { Audio } from '../infrastructure/Audio.js';
 import { spawnParticles, spawnGoldReward } from './SpawnSystem.js';
-import { biomeAt, makeTree } from '../../rendering/Effects.js?v=biomeactive4';
+import { biomeAt, makeTree } from '../../rendering/Effects.js';
 import { currentPopCap } from '../../util/DefenseStats.js';
 
 const CAMP_SPACING = 1700;

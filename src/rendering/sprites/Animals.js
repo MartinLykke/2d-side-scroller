@@ -2,7 +2,7 @@ import { clamp, lerp } from '../../util/math.js';
 import { ctx, groundY } from '../../core/canvas.js';
 import { state } from '../../core/state.js';
 import { visibleWorldBounds } from '../Viewport.js';
-import { biomeAt } from '../Effects.js?v=biomeactive4';
+import { biomeAt } from '../Effects.js';
 
 // ---------------------------------------------------------------------------
 // Procedural forest game: deer and rabbit.

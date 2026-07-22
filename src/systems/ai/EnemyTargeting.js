@@ -1,7 +1,5 @@
 import { dist } from '../../util/math.js';
 import { state } from '../../core/state.js';
-import { wallHeight } from '../../entities/Wall.js';
-import { playerCombatLift } from './EnemyShared.js';
 
 export function fireImpTarget(e, range) {
   let best = null, bd = range;

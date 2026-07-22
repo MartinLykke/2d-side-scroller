@@ -1,4 +1,4 @@
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive4';
+import { ENEMY_TYPES } from '../../config/enemies.js';
 import { ctx, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { roundedRect, legs, drawArm, drawHpBar } from '../DrawHelpers.js';
@@ -11,13 +11,13 @@ import { drawGuard } from '../sprites/Guard.js';
 import { drawFarmer } from '../sprites/Farmer.js';
 import { drawImp, drawFireImp } from '../sprites/Imps.js';
 import { drawShade, drawVoidWraith, drawVoidBrute, drawVoidTitan, drawVoidSeraph } from '../sprites/VoidSpawn.js';
-import { bruteRig } from '../sprites/Brute.js?v=biomeactive4';
+import { bruteRig } from '../sprites/Brute.js';
 import {
   drawGreedlet, drawMaskedGreed, drawFloater, drawBreeder,
   drawFrostSprite, drawIceGolem, drawBlizzardWitch,
   drawSandScuttler, drawDustWraith, drawBehemothScorpion,
   drawBogCrawler, drawSporeSpitter, drawMurkAbomination,
-  drawAshFiend, drawMagmaGargoyle, drawObsidianJuggernaut,
+  drawAshFiend, drawEmberHound, drawMagmaGargoyle, drawObsidianJuggernaut,
   drawShadowStalker, drawRiftWeaver, drawAmalgam,
 } from '../sprites/BiomeEnemies.js';
 
@@ -26,7 +26,8 @@ const BIOME_ENEMY_DRAWERS = {
   frostSprite: drawFrostSprite, iceGolem: drawIceGolem, blizzardWitch: drawBlizzardWitch,
   sandScuttler: drawSandScuttler, dustWraith: drawDustWraith, behemothScorpion: drawBehemothScorpion,
   bogCrawler: drawBogCrawler, sporeSpitter: drawSporeSpitter, murkAbomination: drawMurkAbomination,
-  ashFiend: drawAshFiend, magmaGargoyle: drawMagmaGargoyle, obsidianJuggernaut: drawObsidianJuggernaut,
+  ashFiend: drawAshFiend, emberHound: drawEmberHound,
+  magmaGargoyle: drawMagmaGargoyle, obsidianJuggernaut: drawObsidianJuggernaut,
   shadowStalker: drawShadowStalker, riftWeaver: drawRiftWeaver, amalgam: drawAmalgam,
 };
 import { renderBudget } from '../RenderFrame.js';
@@ -712,6 +713,232 @@ function drawFireDragon(e, t, dark, atkF) {
     ctx.arc(-w * 0.3 + k * w * 0.16 + Math.sin((T + k * 1.7) * 4) * 6, yc + w * 0.2 + et2 * w * 0.4, 1.6 * (1 - et2) + 0.4, 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.restore();
+}
+
+// Night-9 apex boss: a black-iron fire knight whose animation is driven by
+// BossAI's combat timers. Cleaves arc through a full windup/release, Crownfire
+// plants the sword into the ground, and the dash folds the silhouette forward.
+function drawPyreTyrant(e, t, dark, atkF) {
+  const T = performance.now() / 1000;
+  const TAU = Math.PI * 2;
+  const w = t.w;
+  const flash = e.flash > 0 && !e.dying;
+  const clamp01 = v => Math.max(0, Math.min(1, v));
+  const smooth = v => { v = clamp01(v); return v * v * (3 - 2 * v); };
+  const mix = (a, b, p) => a + (b - a) * p;
+  const poly = pts => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+  };
+
+  const walk = Math.sin((e.pyreWalkPhase || e.anim || 0) * TAU);
+  const walkBlend = clamp01(e.pyreWalkBlend || 0);
+  const stride = walk * 13 * walkBlend;
+  const bob = Math.abs(walk) * 2.6 * walkBlend;
+  const cleaveP = e.pyreCleaveT === undefined ? 0 : clamp01(e.pyreCleaveT / 1.02);
+  const castP = e.pyreCastT === undefined ? 0 : clamp01(e.pyreCastT / (e.pyreCastMax || 1));
+  const dashWind = clamp01(1 - (e.pyreDashTelegraph || 0) / Math.max(0.01, e.pyreDashTelegraphMax || 0.62));
+  const dashing = (e.pyreDashTime || 0) > 0;
+  const ignition = clamp01((e.pyreEnrageT || 0) / Math.max(0.01, e.pyreEnrageMax || 1.3));
+  const enraged = !!e.pyreEnraged || ignition > 0;
+  const pulse = 0.5 + 0.5 * Math.sin(T * (enraged ? 8 : 4.5));
+  const body = flash ? "#ffffff" : "#17131a";
+  const plate = flash ? "#ffffff" : "#29222d";
+  const edge = flash ? "#ffffff" : "#5b3130";
+  const ember = flash ? "#ffffff" : "#ff5a18";
+  const hot = flash ? "#ffffff" : "#fff0a0";
+  const lean = dashing ? 0.22 : dashWind > 0 ? mix(0, 0.14, smooth(dashWind)) : 0;
+
+  // Ground shadow and a heat aura that brightens during the second phase.
+  ctx.save();
+  ctx.fillStyle = "rgba(0,0,0,0.42)";
+  ctx.beginPath(); ctx.ellipse(0, groundY + 2, w * (dashing ? 0.72 : 0.48), dashing ? 11 : 9, 0, 0, TAU); ctx.fill();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = 0.16 + pulse * 0.07 + (enraged ? 0.16 : 0) + ignition * 0.22;
+  const aura = ctx.createRadialGradient(0, groundY - 82, 6, 0, groundY - 82, w * 1.05);
+  aura.addColorStop(0, "rgba(255,198,72,0.72)");
+  aura.addColorStop(0.42, "rgba(255,74,18,0.32)");
+  aura.addColorStop(1, "rgba(100,8,0,0)");
+  ctx.fillStyle = aura; ctx.beginPath(); ctx.ellipse(0, groundY - 78, w * 1.05, w * 0.9, 0, 0, TAU); ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.translate(0, groundY);
+  ctx.rotate(lean);
+  ctx.translate(0, -groundY + bob);
+
+  // Torn furnace-cloak, kept behind the armor. During a dash it streams flat.
+  const capeBack = dashing ? -84 : -38 - walk * 5;
+  const capeLift = dashing ? 30 : Math.sin(T * 3.2) * 5;
+  ctx.fillStyle = flash ? "#fff" : "#260b0d";
+  poly([[-20, groundY - 123], [-33, groundY - 93], [capeBack, groundY - 66 - capeLift],
+    [capeBack + 12, groundY - 44 - capeLift * 0.7], [-34, groundY - 55], [-15, groundY - 90]]);
+  ctx.fill();
+  ctx.strokeStyle = edge; ctx.lineWidth = 2; ctx.stroke();
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.45 + (enraged ? 0.25 : 0);
+  ctx.strokeStyle = ember; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(-24, groundY - 105); ctx.quadraticCurveTo(capeBack * 0.75, groundY - 78, capeBack + 8, groundY - 53 - capeLift); ctx.stroke();
+  ctx.restore();
+
+  // Greaves and sabatons: long strides on approach, braced feet while casting.
+  const braced = castP > 0 || ignition > 0 || cleaveP > 0 || dashWind > 0;
+  const leftFoot = braced ? -20 : -14 + stride;
+  const rightFoot = braced ? 20 : 14 - stride;
+  for (const [hipX, footX, shade] of [[-13, leftFoot, "#211b25"], [13, rightFoot, "#302630"]]) {
+    ctx.strokeStyle = flash ? "#fff" : shade;
+    ctx.lineWidth = 15; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(hipX, groundY - 58); ctx.lineTo(footX * 0.84, groundY - 27); ctx.lineTo(footX, groundY - 6); ctx.stroke();
+    ctx.lineCap = "butt";
+    ctx.fillStyle = plate;
+    poly([[footX - 10, groundY - 13], [footX + 8, groundY - 13], [footX + 16, groundY - 3], [footX - 12, groundY - 3]]); ctx.fill();
+    ctx.strokeStyle = edge; ctx.lineWidth = 1.5; ctx.stroke();
+  }
+
+  // Layered cuirass with a molten furnace seam down the center.
+  ctx.fillStyle = body;
+  poly([[-31, groundY - 121], [-43, groundY - 102], [-34, groundY - 62], [-20, groundY - 49],
+    [20, groundY - 49], [35, groundY - 64], [43, groundY - 102], [30, groundY - 122]]);
+  ctx.fill();
+  ctx.strokeStyle = edge; ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = plate;
+  poly([[-27, groundY - 117], [0, groundY - 124], [27, groundY - 117], [20, groundY - 89],
+    [0, groundY - 79], [-21, groundY - 90]]); ctx.fill();
+  ctx.strokeStyle = "#43323e"; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = "#0d0b10";
+  for (let k = 0; k < 3; k++) {
+    const y = groundY - 78 + k * 10;
+    poly([[-24 + k * 2, y], [0, y + 5], [24 - k * 2, y], [20 - k * 2, y + 8], [0, y + 12], [-20 + k * 2, y + 8]]); ctx.fill();
+  }
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  ctx.strokeStyle = hot; ctx.lineWidth = enraged ? 2.5 : 1.5; ctx.globalAlpha = 0.55 + pulse * 0.35;
+  ctx.beginPath(); ctx.moveTo(0, groundY - 117); ctx.lineTo(-5, groundY - 101); ctx.lineTo(4, groundY - 91); ctx.lineTo(-2, groundY - 76); ctx.lineTo(4, groundY - 60); ctx.stroke();
+  ctx.strokeStyle = ember; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.moveTo(-18, groundY - 108); ctx.lineTo(-5, groundY - 101); ctx.moveTo(4, groundY - 91); ctx.lineTo(19, groundY - 99); ctx.stroke();
+  ctx.restore();
+
+  // Horned crown-helm and a living flame plume.
+  ctx.fillStyle = body;
+  ctx.beginPath(); ctx.ellipse(0, groundY - 137, 22, 25, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = edge; ctx.lineWidth = 2.4; ctx.stroke();
+  ctx.fillStyle = plate;
+  poly([[-22, groundY - 143], [-13, groundY - 157], [0, groundY - 151], [13, groundY - 157], [22, groundY - 143], [17, groundY - 125], [0, groundY - 120], [-17, groundY - 125]]); ctx.fill();
+  ctx.strokeStyle = edge; ctx.lineWidth = 2; ctx.stroke();
+  ctx.fillStyle = body;
+  for (const s of [-1, 1]) {
+    poly([[s * 10, groundY - 154], [s * 17, groundY - 178], [s * 3, groundY - 161]]); ctx.fill();
+  }
+  ctx.save(); ctx.globalCompositeOperation = "lighter";
+  ctx.fillStyle = hot; ctx.globalAlpha = 0.9;
+  ctx.beginPath(); ctx.ellipse(-8, groundY - 139, 6, 2.7, -0.08, 0, TAU); ctx.ellipse(8, groundY - 139, 6, 2.7, 0.08, 0, TAU); ctx.fill();
+  ctx.fillStyle = ember; ctx.globalAlpha = 0.62 + pulse * 0.22;
+  for (let k = 0; k < (enraged ? 7 : 5); k++) {
+    const px = -17 + k * (34 / Math.max(1, (enraged ? 6 : 4)));
+    const h = 18 + (k % 2) * 11 + pulse * 7 + ignition * 20;
+    ctx.beginPath();
+    ctx.moveTo(px - 6, groundY - 157); ctx.quadraticCurveTo(px - 9, groundY - 165 - h * 0.35, px + Math.sin(T * 8 + k) * 5, groundY - 158 - h);
+    ctx.quadraticCurveTo(px + 8, groundY - 169 - h * 0.25, px + 6, groundY - 157); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+
+  // Sword arm follows the attack state. Planting Crownfire puts the blade tip
+  // at the ground; cleaves interpolate from a high coil into the impact arc.
+  let swordAngle = 0.48 + walk * 0.08;
+  if (e.attackKind === "pyreCleave" || e.attackKind === "pyreSweep" || e.attackKind === "pyreBreach") {
+    if (cleaveP < 0.57) swordAngle = mix(0.42, -2.02, smooth(cleaveP / 0.57));
+    else swordAngle = mix(-2.02, e.attackKind === "pyreSweep" ? 0.12 : e.attackKind === "pyreBreach" ? 1.02 : 0.72, smooth((cleaveP - 0.57) / 0.23));
+  } else if (e.attackKind === "pyrePillars") swordAngle = mix(0.48, 1.56, smooth(Math.min(1, castP * 2.4)));
+  else if (e.attackKind === "pyreDashWindup") swordAngle = mix(0.48, -0.22, smooth(dashWind));
+  else if (e.attackKind === "pyreDash") swordAngle = -0.12;
+  else if (e.attackKind === "pyreIgnition") swordAngle = -1.05;
+
+  const shoulderX = 26, shoulderY = groundY - 108;
+  const planted = e.attackKind === "pyrePillars";
+  const handX = planted ? 5 : shoulderX + Math.cos(swordAngle) * 29;
+  const handY = planted ? groundY - 86 : shoulderY + Math.sin(swordAngle) * 29;
+  ctx.strokeStyle = body; ctx.lineWidth = 13; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(shoulderX, shoulderY); ctx.lineTo(handX, handY); ctx.stroke(); ctx.lineCap = "butt";
+  ctx.fillStyle = plate; ctx.beginPath(); ctx.arc(shoulderX, shoulderY, 12, 0, TAU); ctx.fill();
+
+  ctx.save(); ctx.translate(handX, handY); ctx.rotate(swordAngle);
+  ctx.fillStyle = "#4a3020"; ctx.fillRect(-8, -4, 22, 8);
+  ctx.fillStyle = "#b47436"; ctx.fillRect(7, -11, 6, 22);
+  const bladeLen = planted ? 88 : 96;
+  ctx.fillStyle = flash ? "#fff" : "#24191b";
+  poly([[13, -8], [bladeLen - 12, -13], [bladeLen, 0], [bladeLen - 12, 13], [13, 8]]); ctx.fill();
+  ctx.strokeStyle = ember; ctx.lineWidth = 2.8; ctx.stroke();
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.8 + (enraged ? 0.18 : 0);
+  ctx.strokeStyle = hot; ctx.lineWidth = enraged ? 3.2 : 2;
+  ctx.beginPath(); ctx.moveTo(19, 0); ctx.lineTo(42, -2); ctx.lineTo(59, 3); ctx.lineTo(bladeLen - 8, 0); ctx.stroke();
+  ctx.fillStyle = ember; ctx.globalAlpha = 0.58 + pulse * 0.25;
+  for (let k = 0; k < 5; k++) {
+    const bx = 25 + k * 14;
+    const flameH = 7 + (k % 2) * 5 + (enraged ? 4 : 0);
+    poly([[bx - 7, -7], [bx + Math.sin(T * 10 + k) * 3, -7 - flameH], [bx + 7, -7]]); ctx.fill();
+  }
+  ctx.restore();
+  ctx.restore();
+
+  // Free gauntlet gathers a fire orb during Crownfire and spreads wide during ignition.
+  const offShoulderX = -27, offShoulderY = groundY - 108;
+  const offHandX = ignition > 0 ? -62 : castP > 0 ? -42 : -31;
+  const offHandY = ignition > 0 ? groundY - 126 : castP > 0 ? groundY - 88 : groundY - 78;
+  ctx.strokeStyle = body; ctx.lineWidth = 13; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(offShoulderX, offShoulderY); ctx.lineTo(offHandX, offHandY); ctx.stroke(); ctx.lineCap = "butt";
+  ctx.fillStyle = plate; ctx.beginPath(); ctx.arc(offShoulderX, offShoulderY, 12, 0, TAU); ctx.fill();
+  if (castP > 0 || ignition > 0) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    const orbR = 8 + castP * 9 + ignition * 12;
+    const orb = ctx.createRadialGradient(offHandX, offHandY, 1, offHandX, offHandY, orbR * 1.8);
+    orb.addColorStop(0, "#ffffff"); orb.addColorStop(0.3, hot); orb.addColorStop(0.68, ember); orb.addColorStop(1, "rgba(120,10,0,0)");
+    ctx.fillStyle = orb; ctx.beginPath(); ctx.arc(offHandX, offHandY, orbR * 1.8, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
+  // Dash after-image and cleave arc make the damaging direction unmistakable.
+  if (dashing || cleaveP > 0.54) {
+    ctx.save(); ctx.globalCompositeOperation = "lighter";
+    ctx.strokeStyle = enraged ? hot : ember;
+    ctx.lineCap = "round";
+    if (dashing) {
+      ctx.globalAlpha = 0.32; ctx.lineWidth = 18;
+      ctx.beginPath(); ctx.moveTo(-88, groundY - 88); ctx.lineTo(-20, groundY - 88); ctx.stroke();
+      ctx.globalAlpha = 0.55; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(-110, groundY - 64); ctx.lineTo(-26, groundY - 64); ctx.stroke();
+    } else {
+      const slash = smooth((cleaveP - 0.54) / 0.26);
+      ctx.globalAlpha = Math.sin(slash * Math.PI) * 0.68; ctx.lineWidth = e.attackKind === "pyreBreach" ? 15 : e.attackKind === "pyreSweep" ? 12 : 9;
+      ctx.beginPath(); ctx.arc(18, groundY - 88, 105, -2.05, mix(-2.05, 0.5, slash)); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  if (e.attackKind === "pyreBreach" && cleaveP > 0.5 && e.pyreCleaveTarget) {
+    const strike = Math.sin(smooth(clamp01((cleaveP - 0.5) / 0.34)) * Math.PI);
+    const tx = (e.pyreCleaveTarget.x - e.x) * (e.dir || 1);
+    const ty = groundY - wallHeight(e.pyreCleaveTarget) * 0.5;
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = strike * 0.78;
+    const burst = ctx.createRadialGradient(tx, ty, 2, tx, ty, 70 * strike);
+    burst.addColorStop(0, "rgba(255,255,230,0.95)");
+    burst.addColorStop(0.38, "rgba(255,90,24,0.62)");
+    burst.addColorStop(1, "rgba(120,8,0,0)");
+    ctx.fillStyle = burst; ctx.beginPath(); ctx.arc(tx, ty, 70 * strike, 0, TAU); ctx.fill();
+    ctx.strokeStyle = hot; ctx.lineWidth = 5 + strike * 7;
+    ctx.beginPath(); ctx.moveTo(tx - 8, groundY - 146); ctx.lineTo(tx + 4, groundY - 4); ctx.stroke();
+    ctx.restore();
+  }
+
+  // Loose embers peel upward continuously so idle frames still feel alive.
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.fillStyle = enraged ? hot : ember;
+  ctx.globalAlpha = 0.5 + (enraged ? 0.22 : 0);
+  for (let k = 0; k < 7; k++) {
+    const age = (T * (0.38 + k * 0.025) + k * 0.17) % 1;
+    const px = -38 + k * 12 + Math.sin(T * 4 + k) * 5;
+    ctx.beginPath(); ctx.arc(px, groundY - 45 - age * 125, 2.2 * (1 - age) + 0.35, 0, TAU); ctx.fill();
+  }
+  ctx.restore();
   ctx.restore();
 }
 
@@ -2963,6 +3190,7 @@ function drawBiomeBoss(e, t, dark, atkF) {
 // Height (world px) the boss body occupies above the ground line. Mirrors the
 // per-boss visual scaling used for the in-world name plate / HP bar.
 function bossBodyHeight(type, t) {
+  if (t.visualH) return t.visualH;
   return type === "magmaGolem" || type === "voidTitan" ? t.w * 1.58
     : type === "voidSeraph" ? t.w * 1.24
     : t.biomeBoss ? t.w * (t.flying ? 1.45 : 1.35)
@@ -2976,6 +3204,7 @@ export function drawBossPortrait(type, cx, cy, targetH) {
   const t = ENEMY_TYPES[type];
   if (!t) return;
   const custom = type === "fireDragon" ? drawFireDragon
+    : type === "pyreTyrant" ? drawPyreTyrant
     : type === "magmaGolem" ? drawMagmaGolem
     : t.biomeBoss ? drawBiomeBoss
     : type === "voidTitan" ? drawVoidTitan
@@ -3033,7 +3262,7 @@ export function drawEnemies(dark) {
     const w=t.w, bob=Math.abs(Math.sin(e.anim*2))*2;
     const isBoss = !!t.boss;
     const atkF = Math.max(0, e.attackAnim || 0) / 0.25;
-    const custom = BIOME_ENEMY_DRAWERS[e.type] || (e.type === "imp" ? drawImp : e.type === "fireImp" ? drawFireImp : e.type === "brute" ? drawBrute : e.type === "emberBrute" ? drawEmberBrute : e.type === "ashPriest" ? drawAshPriest : e.type === "siegeImp" ? drawSiegeImp : e.type === "chainImp" ? drawChainImp : e.type === "fireDragon" ? drawFireDragon : e.type === "magmaGolem" ? drawMagmaGolem : t.biomeBoss ? drawBiomeBoss
+    const custom = BIOME_ENEMY_DRAWERS[e.type] || (e.type === "imp" ? drawImp : e.type === "fireImp" ? drawFireImp : e.type === "brute" ? drawBrute : e.type === "emberBrute" ? drawEmberBrute : e.type === "ashPriest" ? drawAshPriest : e.type === "siegeImp" ? drawSiegeImp : e.type === "chainImp" ? drawChainImp : e.type === "fireDragon" ? drawFireDragon : e.type === "pyreTyrant" ? drawPyreTyrant : e.type === "magmaGolem" ? drawMagmaGolem : t.biomeBoss ? drawBiomeBoss
       : e.type === "shade" ? drawShade : e.type === "voidWraith" ? drawVoidWraith : e.type === "voidBrute" ? drawVoidBrute : e.type === "voidTitan" ? drawVoidTitan : e.type === "voidSeraph" ? drawVoidSeraph : null);
     const useSilhouette = shouldDrawEnemySilhouette(e, t, budget);
     ctx.save(); ctx.translate(e.x + drawXOff, drawYOff);
@@ -3179,7 +3408,7 @@ export function drawEnemies(dark) {
     // Bosses get a big always-on health bar with a name plate
     if ((isBoss || t.legendary) && !e.dying) {
       // Just a floating HP bar — no name plate or "BOSS" label hovering above.
-      const bossVisualH = e.type === "magmaGolem" || e.type === "voidTitan" ? t.w * 1.58 : e.type === "voidSeraph" ? t.w * 1.24 : t.biomeBoss ? t.w * (t.flying ? 1.45 : 1.35) : t.w;
+      const bossVisualH = t.visualH || (e.type === "magmaGolem" || e.type === "voidTitan" ? t.w * 1.58 : e.type === "voidSeraph" ? t.w * 1.24 : t.biomeBoss ? t.w * (t.flying ? 1.45 : 1.35) : t.w);
       drawHpBar(e.x, groundY+drawYOff-bossVisualH-28, t.w*0.85, e.hp/e.maxHp, "#ff2040");
       continue;
     }

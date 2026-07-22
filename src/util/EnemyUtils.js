@@ -1,9 +1,9 @@
-import { ENEMY_TYPES } from '../config/enemies.js?v=biomeactive4';
-import { WEAPONS } from '../config/weapons.js?v=biomeweapons1';
+import { ENEMY_TYPES } from '../config/enemies.js';
+import { WEAPONS } from '../config/weapons.js';
 import { groundY } from '../core/canvas.js';
 import { Game, state } from '../core/state.js';
 import { inject } from '../core/services.js';
-import { spawnGoldReward, spawnParticles, floaty } from '../systems/world/SpawnSystem.js?v=biomeactive4';
+import { spawnGoldReward, spawnParticles, floaty } from '../systems/world/SpawnSystem.js';
 import { Audio } from '../systems/infrastructure/Audio.js';
 import { registerEnemyKill } from '../systems/infrastructure/RoguelikeSystem.js';
 
@@ -28,6 +28,13 @@ const ENEMY_DEATH_PROFILES = {
     chunks: ["#431018", "#7a1c14", "#ff6a20"],
     ember: true,
     mass: 0.62,
+  },
+  emberHound: {
+    gore: false,
+    blood: ["#ff6a20", "#ffd060", "#2b1816"],
+    chunks: ["#160c0b", "#2b1816", "#6b2d20", "#ff6a20"],
+    ember: true,
+    mass: 0.85,
   },
   brute: {
     blood: ["#1c1922", "#332e3c", "#4a4450"],

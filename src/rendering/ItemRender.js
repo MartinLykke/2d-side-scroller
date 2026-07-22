@@ -4,11 +4,11 @@
 // renderer and the inventory preview share one implementation.
 import { clamp, lerp } from '../util/math.js';
 import { ctx, groundY } from '../core/canvas.js';
-import { WEAPONS, RARITY_COL } from '../config/weapons.js?v=biomeweapons1';
-import { cachedUpgradeEffects } from '../config/weaponUpgrades.js?v=biomeweapons1';
+import { WEAPONS, RARITY_COL } from '../config/weapons.js';
+import { cachedUpgradeEffects } from '../config/weaponUpgrades.js';
 import { ARMORS, ARMOR_RARITY_COL } from '../config/armor.js';
 import { shootPose, ease, drawBow, limb } from './sprites/Archer.js';
-import { drawWandModel, wandTipLength, roundedRect } from './DrawHelpers.js?v=biomeweapons1';
+import { drawWandModel, wandTipLength, roundedRect } from './DrawHelpers.js';
 import { armorOutfit } from './ArmorOutfits.js';
 
 export const WEAPON_TYPE_LABEL = { melee: "Melee", ranged: "Ranged", magic: "Magic" };

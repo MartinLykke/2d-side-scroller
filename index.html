@@ -47,6 +47,7 @@
           <span class="hud-roster-item" data-role="guard"   title="Guards">🛡️ <b id="hud-roster-guard">0</b></span>
           <span class="hud-roster-item" data-role="builder" title="Builders">🔨 <b id="hud-roster-builder">0</b></span>
           <span class="hud-roster-item" data-role="farmer"  title="Farmers">🌾 <b id="hud-roster-farmer">0</b></span>
+          <span class="hud-roster-item" data-role="cleric"  title="Clerics">✨ <b id="hud-roster-cleric">0</b></span>
           <span class="hud-roster-sep"></span>
           <span class="hud-roster-item hud-roster-vagrant" data-role="vagrant" title="Vagrants waiting to be recruited">🧍 <b id="hud-roster-vagrant">0</b></span>
         </div>
@@ -132,13 +133,10 @@
       <strong>Tools</strong>
     </div>
     <div class="dev-header-actions">
-      <output id="dev-fps" class="dev-fps" aria-label="Frames per second">-- FPS</output>
       <kbd>P</kbd>
       <button type="button" id="dev-close" class="dev-close" title="Close dev tools" aria-label="Close dev tools">×</button>
     </div>
   </div>
-
-  <dl id="dev-stats" class="dev-stats" aria-live="polite"></dl>
 
   <!-- QUICKBAR -->
   <div class="dev-quickbar dev-button-grid" aria-label="Quick dev controls">
@@ -180,74 +178,41 @@
     </div>
   </details>
 
-  <!-- WORLD -->
-  <details class="dev-section">
-    <summary><span>World</span><small>Skift biom</small></summary>
-    <div class="dev-section-body dev-button-grid">
-      <button class="dev-btn" data-dev="biomeForest">Skov</button>
-      <button class="dev-btn" data-dev="biomeFrozen">Frost</button>
-      <button class="dev-btn" data-dev="biomeDesert">Ørken</button>
-      <button class="dev-btn" data-dev="biomeSwamp">Sump</button>
-      <button class="dev-btn" data-dev="biomeVolcano">Vulkan</button>
-      <button class="dev-btn" data-dev="biomeCorrupted">Korrupt</button>
-    </div>
-  </details>
 
   <!-- SPAWN (Slået sammen til én massiv og tæt grid) -->
   <details class="dev-section">
     <summary><span>Spawn</span><small>Fjender, Bosses & Dyr</small></summary>
     <div class="dev-section-body">
       
-      <div class="dev-label">Standard & Bosses</div>
+      <div class="dev-label">Standard Enemies</div>
       <div class="dev-button-grid">
         <button class="dev-btn" data-dev="imp">Imp</button>
         <button class="dev-btn" data-dev="fireImp">Flyv. Imp</button>
+        <button class="dev-btn" data-dev="emberHound">Ember Hound</button>
         <button class="dev-btn" data-dev="brute">Brute</button>
         <button class="dev-btn" data-dev="ashPriest">Præst</button>
         <button class="dev-btn" data-dev="siegeImp">Siege</button>
         <button class="dev-btn" data-dev="chainImp">Chain</button>
         <button class="dev-btn" data-dev="8imp">8x Imp</button>
-        <button class="dev-btn" data-dev="dragon">🐉</button>
-        <button class="dev-btn" data-dev="magmaGolem">🌋</button>
-        <button class="dev-btn" data-dev="pyreTyrant">Pyre Tyrant</button>
         <button class="dev-btn dev-danger" data-dev="killAll">💀 Kill All</button>
       </div>
 
-      <div class="dev-label">Biome Bosses</div>
+      <div class="dev-label">Bosses</div>
       <div class="dev-button-grid">
-        <button class="dev-btn" data-dev="forestBoss">Forest Stalker</button>
-        <button class="dev-btn" data-dev="frozenBoss">Skadi's Wrath</button>
-        <button class="dev-btn" data-dev="desertBoss">Dune Broodmother</button>
-        <button class="dev-btn" data-dev="swampBoss">Sunken Behemoth</button>
-        <button class="dev-btn" data-dev="volcanoBoss">Ignited Core</button>
-        <button class="dev-btn" data-dev="corruptedBoss">Mind-Flayer</button>
+        <button class="dev-btn dev-danger" data-dev="forestStalker">Great Horned Stalker</button>
+        <button class="dev-btn dev-danger" data-dev="pyreTyrant">Vaelgor, Pyre Tyrant</button>
+        <button class="dev-btn dev-danger" data-dev="dragon">Fire Dragon</button>
+        <button class="dev-btn dev-danger" data-dev="magmaGolem">Magma Colossus</button>
       </div>
 
-      <div class="dev-label">The Hollow (Phase 2)</div>
+      <div class="dev-label">Units</div>
       <div class="dev-button-grid">
-        <button class="dev-btn" data-dev="shade">Shade</button>
-        <button class="dev-btn" data-dev="voidWraith">Wraith</button>
-        <button class="dev-btn" data-dev="voidBrute">H. Brute</button>
-        <button class="dev-btn" data-dev="voidTitan">Titan</button>
-        <button class="dev-btn" data-dev="voidSeraph">Seraph</button>
-      </div>
-
-      <div class="dev-label">Assault & Units</div>
-      <div class="dev-button-grid">
-        <button class="dev-btn" data-dev="startAssault">⚔ Assault</button>
-        <button class="dev-btn" data-dev="crackPortals">Portaler</button>
-        <button class="dev-btn dev-danger" data-dev="phase2">🌀 Phase 2</button>
-        <div class="dev-divider"></div>
         <button class="dev-btn" title="Archer" data-dev="unitArcher">🏹</button>
         <button class="dev-btn" title="Builder" data-dev="unitBuilder">🔨</button>
         <button class="dev-btn" title="Farmer" data-dev="unitFarmer">🌾</button>
         <button class="dev-btn" title="Guard" data-dev="unitGuard">🛡️</button>
-        <div class="dev-divider"></div>
-        <div id="dev-animal-buttons" style="display:contents;"></div>
+        <button class="dev-btn" title="Cleric" data-dev="unitCleric">✨</button>
       </div>
-
-      <!-- Pladsholder til dynamiske biome enemies -->
-      <div id="dev-biome-enemy-buttons" class="dev-button-grid" style="margin-top:4px;"></div>
     </div>
   </details>
 
@@ -298,6 +263,6 @@
     </div>
   </div>
 
-  <script type="module" src="src/core/game.js?v=biomevisual4"></script>
+  <script type="module" src="src/core/game.js"></script>
 </body>
 </html>

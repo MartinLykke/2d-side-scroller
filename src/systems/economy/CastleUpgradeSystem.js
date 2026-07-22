@@ -1,12 +1,11 @@
 import { Game, state } from '../../core/state.js';
-import { CFG } from '../../config/config.js';
 import { CASTLE_UPGRADES, CASTLE_UPGRADE_MAP } from '../../config/castleUpgrades.js';
 import { groundY } from '../../core/canvas.js';
 import { clamp, dist } from '../../util/math.js';
 import { ensureCastleUpgrades, reapplyDefenseMaxHp, currentCoinCap, castleUpgradeUnlockLevel } from '../../util/DefenseStats.js';
 import { spawnParticles, floaty } from '../world/SpawnSystem.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { addXP } from './UpgradeSystem.js?v=biomeweapons1';
+import { addXP } from './UpgradeSystem.js';
 
 export const CASTLE_MENU_RANGE = 155;
 

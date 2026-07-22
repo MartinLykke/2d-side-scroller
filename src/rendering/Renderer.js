@@ -1,22 +1,22 @@
-import { clamp, lerpColor, rgb, lerp, withA, shade } from '../util/math.js';
+import { clamp, lerpColor, rgb, withA, shade } from '../util/math.js';
 import { ctx, W, H, groundY } from '../core/canvas.js';
 import { Game, state } from '../core/state.js';
 import { entityWallLift } from '../entities/Wall.js';
 import { drawPlayer as drawPlayerBody } from './sprites/Player.js';
-import { drawHeldWeapon } from './ItemRender.js?v=biomeweapons1';
-import { cachedUpgradeEffects } from '../config/weaponUpgrades.js?v=biomeweapons1';
+import { drawHeldWeapon } from './ItemRender.js';
+import { cachedUpgradeEffects } from '../config/weaponUpgrades.js';
 import { drawMount } from './sprites/Mount.js';
 import { activeMount, playerMountLift } from '../systems/economy/MountSystem.js';
-import { darkness, skyColors, drawStars, drawClouds, drawCelestials, drawBirds, drawWildBirds, getTrees, drawHills, drawTreeLayer, drawLowFog, drawAmbientFront, drawLevelUpBeams, biomeAt, FX, windSway } from './Effects.js?v=biomeactive4';
+import { darkness, skyColors, drawStars, drawClouds, drawCelestials, drawBirds, drawWildBirds, getTrees, drawHills, drawTreeLayer, drawLowFog, drawAmbientFront, drawLevelUpBeams, biomeAt } from './Effects.js';
 
 // Import all render modules
-import { drawGroundTexture, drawGroundDeco, drawPonds, drawEntityShadows, drawPortals, drawWalls, drawBase, drawStations, drawForestTrees, drawForestCamps, drawBuildings } from './scene/RenderWorld.js?v=biomevisual4';
-import { drawEnemies } from './scene/RenderEntities.js?v=forestboss1';
-import { drawVagrants, drawUnits, drawAnimals } from './scene/RenderUnits.js?v=biomevisual4';
-import { drawCoins, drawGoldCollectors, drawArrows, drawLootItems, drawChests, drawGroundBows, drawGroundHammers } from './scene/RenderItems.js?v=biomeweapons1';
-import { drawCaltrops, drawPoisonShots, drawFirePools, drawSpellFields, drawLegendaryEffects, drawAegisStrikes, drawTrebuchetShots, drawParticles, drawFloats, drawSpells, drawCampLight } from './scene/RenderEffects.js?v=biomeactive4';
-import { drawWeaponPickupOverlay, drawInventoryOverlay, drawShopOverlay, drawCastleUpgradeOverlay, drawUpgradeMenu, drawXpBar, drawLegendaryIntro, drawOneSidedAnnounce } from './scene/RenderUI.js?v=forestboss1';
-import { drawHeart } from './DrawHelpers.js?v=biomeweapons1';
+import { drawGroundTexture, drawGroundDeco, drawPonds, drawEntityShadows, drawPortals, drawWalls, drawBase, drawStations, drawForestTrees, drawForestCamps, drawBuildings } from './scene/RenderWorld.js';
+import { drawEnemies } from './scene/RenderEntities.js';
+import { drawVagrants, drawUnits, drawAnimals } from './scene/RenderUnits.js';
+import { drawCoins, drawGoldCollectors, drawArrows, drawLootItems, drawChests, drawGroundBows, drawGroundHammers } from './scene/RenderItems.js';
+import { drawCaltrops, drawPoisonShots, drawFirePools, drawPyreTyrantHazards, drawSpellFields, drawLegendaryEffects, drawAegisStrikes, drawTrebuchetShots, drawParticles, drawFloats, drawSpells, drawCampLight } from './scene/RenderEffects.js';
+import { drawWeaponPickupOverlay, drawInventoryOverlay, drawShopOverlay, drawCastleUpgradeOverlay, drawUpgradeMenu, drawXpBar, drawLegendaryIntro, drawOneSidedAnnounce } from './scene/RenderUI.js';
+import { drawHeart } from './DrawHelpers.js';
 import { beginRenderFrame } from './RenderFrame.js';
 // Profiler uses window._perf (set by HUD toggle)
 
@@ -381,7 +381,7 @@ export function render() {
   if(p) p.end("draw.structures");
 
   if(p) p.begin("draw.entities");
-  drawAnimals(); drawVagrants(); drawCaltrops(); drawFirePools(); drawSpellFields(); drawUnits(); drawEnemies(dark); drawLegendaryEffects();
+  drawAnimals(); drawVagrants(); drawCaltrops(); drawFirePools(); drawPyreTyrantHazards(); drawSpellFields(); drawUnits(); drawEnemies(dark); drawLegendaryEffects();
   drawPlayer(dark);
   if(p) p.end("draw.entities");
 

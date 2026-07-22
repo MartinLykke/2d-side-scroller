@@ -7,11 +7,11 @@ import { makeWall } from '../../entities/Wall.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { Audio } from './Audio.js';
 import { spawnParticles, populateBiomeAnimals, planNight, purchaseFloaty } from '../world/SpawnSystem.js';
-import { addForestCamp, buildForest } from '../world/ForestSystem.js?v=biomeactive4';
-import { makeBuildings, buildingCost, buildingLabel, payBuilding } from '../world/OutpostSystem.js?v=biomeactive4';
-import { upgradeBase } from '../../util/GameStateHelpers.js?v=biomeweapons1';
-import { addXP } from '../economy/UpgradeSystem.js?v=biomeweapons1';
-import { baseName } from '../../rendering/HUD.js?v=biomevisual4';
+import { addForestCamp, buildForest } from '../world/ForestSystem.js';
+import { makeBuildings, buildingCost, buildingLabel, payBuilding } from '../world/OutpostSystem.js';
+import { upgradeBase } from '../../util/GameStateHelpers.js';
+import { addXP } from '../economy/UpgradeSystem.js';
+import { baseName } from '../../rendering/HUD.js';
 import { applyPermanentUpgrades, applyPermanentWorldUpgrades, permanentForestCampPlans } from './RoguelikeSystem.js';
 import { currentPopCap, wallMaxHpForLevel } from '../../util/DefenseStats.js';
 
@@ -167,6 +167,22 @@ export function buildStations() {
         if (state.units.length + state.vagrants.length >= currentPopCap()) return;
         const u = makeUnit("guard", STATIONS_X.guard + rand(-20, 20));
         u.hp = u.maxHp = 8; u.transform = 0.55;
+        state.units.push(u);
+        Audio.recruit();
+      },
+    });
+  }
+  if (state.base.level >= 3) {
+    state.stations.push({
+      id:"cleric", x:()=>STATIONS_X.cleric, paid:0, instantPurchase:true,
+      cost:()=> state.units.length + state.vagrants.length >= currentPopCap() ? 0 : CFG.clericCost,
+      label:()=> state.units.length + state.vagrants.length >= currentPopCap()
+        ? "Population cap reached"
+        : `Recruit cleric (${CFG.clericCost} coins) - heals wounded allies`,
+      onPaid:()=>{
+        if (state.units.length + state.vagrants.length >= currentPopCap()) return;
+        const u = makeUnit("cleric", STATIONS_X.cleric + rand(-20, 20));
+        u.transform = 0.55;
         state.units.push(u);
         Audio.recruit();
       },

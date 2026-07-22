@@ -8,6 +8,7 @@ import { drawBuilder } from '../sprites/Builder.js';
 import { drawVillager } from '../sprites/Villager.js';
 import { drawGuard } from '../sprites/Guard.js';
 import { drawFarmer } from '../sprites/Farmer.js';
+import { drawCleric } from '../sprites/Cleric.js';
 
 function drawHumanoid(x, anim, bodyCol, headCol, tool, dir, moving) {
   ctx.save(); ctx.translate(x,0); if (dir<0) ctx.scale(-1,1);
@@ -237,6 +238,8 @@ export function drawUnits() {
       drawVillager(u);
     } else if (u.role === "guard") {
       drawGuard(u);
+    } else if (u.role === "cleric") {
+      drawCleric(u);
     } else if (u.role === "hound") {
       drawHound(u);
     } else {
@@ -298,4 +301,4 @@ export function drawUnits() {
   }
 }
 
-export { drawAnimals } from '../sprites/Animals.js?v=biomevisual4';
+export { drawAnimals } from '../sprites/Animals.js';

@@ -1,5 +1,5 @@
 import { Game } from '../core/state.js';
-import { biomeAt } from './Effects.js?v=biomeactive4';
+import { biomeAt } from './Effects.js';
 
 const HOLLOW_MARKS = {
   player: { hollow: true, rune: "#d7b4ff", glow: "#ad82ff" },
@@ -8,6 +8,7 @@ const HOLLOW_MARKS = {
   builder: { hollow: true, rune: "#b897ff", glow: "#9f7dff" },
   farmer: { hollow: true, rune: "#c7a2ff", glow: "#9f7dff" },
   guard: { hollow: true, rune: "#c6a0ff", glow: "#a875ff" },
+  cleric: { hollow: true, rune: "#d9b5ff", glow: "#b784ff" },
 };
 
 const SKINS = {

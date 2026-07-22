@@ -1,7 +1,7 @@
 import { clamp } from '../../util/math.js';
 import { ctx, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
-import { FX } from '../Effects.js?v=biomeactive4';
+import { FX } from '../Effects.js';
 import { visibleWorldBounds } from '../Viewport.js';
 import { renderBudget } from '../RenderFrame.js';
 
@@ -157,6 +157,176 @@ export function drawFirePools() {
     }
     ctx.restore();
   }
+}
+
+// Crownfire markers belong to their Pyre Tyrant so their lifetimes stay in the
+// simulation. This layer only paints the warning rune and the eruption column.
+export function drawPyreTyrantHazards() {
+  const T = performance.now() / 1000;
+  const view = visibleWorldBounds(240);
+  for (const e of state.enemies) {
+    if (e.type !== "pyreTyrant" || !e.pyreMarkers?.length || e.dying) continue;
+    for (const marker of e.pyreMarkers) {
+      const r = marker.r || 62;
+      if (marker.x + r < view.left || marker.x - r > view.right) continue;
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      if (!marker.erupted) {
+        const armed = clamp(1 - marker.delay / Math.max(0.01, marker.maxDelay), 0, 1);
+        const pulse = 0.72 + Math.sin(T * 12 + marker.ph) * 0.18;
+        const ringR = r * (1.15 - armed * 0.28);
+        ctx.globalAlpha = 0.2 + armed * 0.35;
+        const glow = ctx.createRadialGradient(marker.x, groundY - 5, 2, marker.x, groundY - 5, r * 1.25);
+        glow.addColorStop(0, "rgba(255,240,160,0.62)");
+        glow.addColorStop(0.38, "rgba(255,90,24,0.36)");
+        glow.addColorStop(1, "rgba(120,10,0,0)");
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.ellipse(marker.x, groundY - 5, r * 1.25, r * 0.29, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = (0.52 + armed * 0.4) * pulse;
+        ctx.strokeStyle = armed > 0.72 ? "#fff0a0" : "#ff5a18";
+        ctx.lineWidth = 2 + armed * 3.5;
+        ctx.beginPath(); ctx.ellipse(marker.x, groundY - 5, ringR, ringR * 0.23, 0, 0, Math.PI * 2); ctx.stroke();
+        ctx.lineWidth = 1.5 + armed;
+        for (let k = 0; k < 6; k++) {
+          const a = k * Math.PI / 3 + T * 0.35;
+          const x1 = marker.x + Math.cos(a) * ringR * 0.45;
+          const y1 = groundY - 5 + Math.sin(a) * ringR * 0.1;
+          const x2 = marker.x + Math.cos(a) * ringR * 0.78;
+          const y2 = groundY - 5 + Math.sin(a) * ringR * 0.18;
+          ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        }
+        ctx.globalAlpha = armed * 0.75;
+        ctx.fillStyle = "#fff0a0";
+        for (let k = 0; k < 5; k++) {
+          const x = marker.x + Math.sin(marker.ph + k * 1.8) * r * 0.55;
+          ctx.beginPath(); ctx.arc(x, groundY - 12 - ((T * 34 + k * 17) % 36), 1.2 + armed, 0, Math.PI * 2); ctx.fill();
+        }
+      } else {
+        const life = clamp(marker.eruptionLife / Math.max(0.01, marker.maxEruptionLife), 0, 1);
+        const burst = Math.sin((1 - life) * Math.PI);
+        const height = 80 + burst * 175;
+        ctx.globalAlpha = 0.42 + life * 0.35;
+        const column = ctx.createLinearGradient(marker.x, groundY - 4, marker.x, groundY - height);
+        column.addColorStop(0, "rgba(255,245,180,0.96)");
+        column.addColorStop(0.28, "rgba(255,118,28,0.86)");
+        column.addColorStop(0.72, "rgba(220,38,8,0.46)");
+        column.addColorStop(1, "rgba(120,8,0,0)");
+        ctx.fillStyle = column;
+        ctx.beginPath();
+        ctx.moveTo(marker.x - r * 0.58, groundY - 4);
+        ctx.quadraticCurveTo(marker.x - r * 0.32, groundY - height * 0.55, marker.x - 8, groundY - height);
+        ctx.quadraticCurveTo(marker.x + r * 0.35, groundY - height * 0.52, marker.x + r * 0.58, groundY - 4);
+        ctx.closePath(); ctx.fill();
+        ctx.globalAlpha = 0.78 * life;
+        ctx.fillStyle = "#fff7c8";
+        ctx.beginPath();
+        ctx.moveTo(marker.x - 12, groundY - 5);
+        ctx.quadraticCurveTo(marker.x - 7, groundY - height * 0.62, marker.x + 1, groundY - height * 0.86);
+        ctx.quadraticCurveTo(marker.x + 13, groundY - height * 0.45, marker.x + 15, groundY - 5);
+        ctx.closePath(); ctx.fill();
+        ctx.globalAlpha = 0.62 * life;
+        ctx.strokeStyle = "#fff0a0"; ctx.lineWidth = 7 * life + 2;
+        ctx.beginPath(); ctx.ellipse(marker.x, groundY - 5, r * (1.15 + burst * 0.35), r * 0.25, 0, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+}
+
+// A soul-larva that got its kill and hatched: a spectral imp or a fat beetle,
+// translucent and briefly on your side.
+function drawHatchling(f, T, fade) {
+  const col = f.col || "#9ef0b8";
+  const dir = f.dir || 1;
+  const step = Math.sin(f.anim || 0);
+  const lunge = clamp((f.lunge || 0) / 0.22, 0, 1);
+  const bob = Math.abs(step) * 2;
+  const x = f.x + dir * lunge * 7;
+  const y = groundY - 6 - bob;
+  ctx.save();
+  ctx.globalAlpha = fade * 0.9;
+  // it never quite touches the ground
+  ctx.globalCompositeOperation = "lighter";
+  const hg = ctx.createRadialGradient(x, y - 10, 2, x, y - 10, 24);
+  hg.addColorStop(0, col); hg.addColorStop(1, "rgba(30,70,45,0)");
+  ctx.globalAlpha = 0.28 * fade;
+  ctx.fillStyle = hg;
+  ctx.beginPath(); ctx.arc(x, y - 10, 24, 0, Math.PI * 2); ctx.fill();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = fade * 0.82;
+  ctx.translate(x, y);
+  ctx.scale(dir, 1);
+
+  if (f.kind === "beetle") {
+    // low, broad, armoured — six legs working hard
+    ctx.strokeStyle = "#2e4a34"; ctx.lineWidth = 1.4; ctx.lineCap = "round";
+    for (let k = 0; k < 3; k++) {
+      const sw = Math.sin((f.anim || 0) + k * 2.1) * 2.6;
+      ctx.beginPath();
+      ctx.moveTo(-5 + k * 5, -4);
+      ctx.lineTo(-5 + k * 5 + sw, 0);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-5 + k * 5, -4);
+      ctx.lineTo(-5 + k * 5 - sw, 0);
+      ctx.stroke();
+    }
+    ctx.lineCap = "butt";
+    ctx.fillStyle = "#2e4a34";
+    ctx.beginPath(); ctx.ellipse(0, -8, 9, 6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.ellipse(-1.5, -9.5, 6.5, 4, 0, 0, Math.PI * 2); ctx.fill();
+    // wing-case seam
+    ctx.strokeStyle = "#1a2e20"; ctx.lineWidth = 0.9;
+    ctx.beginPath(); ctx.moveTo(-8, -8.5); ctx.lineTo(6, -8.5); ctx.stroke();
+    // head and mandibles, snapping on the lunge
+    ctx.fillStyle = "#1a2e20";
+    ctx.beginPath(); ctx.ellipse(8.5, -7.5, 3.6, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 1.4; ctx.lineCap = "round";
+    const gape = 1.4 - lunge * 1.1;
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(10.5, -7.5 + s * 1.4);
+      ctx.quadraticCurveTo(14, -7.5 + s * gape * 2.2, 15.5, -7.5 + s * gape * 0.6);
+      ctx.stroke();
+    }
+    ctx.lineCap = "butt";
+    ctx.fillStyle = "#eaffe8";
+    ctx.beginPath(); ctx.arc(9.5, -8.6, 0.9, 0, Math.PI * 2); ctx.fill();
+  } else {
+    // a shade of the thing it hatched out of, running on stubby legs
+    ctx.strokeStyle = "#2e4a34"; ctx.lineWidth = 1.8; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-1.5, -6); ctx.lineTo(-2 - step * 3, 0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(1.5, -6); ctx.lineTo(2 + step * 3, 0); ctx.stroke();
+    ctx.fillStyle = "#2e4a34";
+    ctx.beginPath(); ctx.ellipse(0, -10, 5, 5.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.ellipse(-1, -11, 3.4, 3.6, 0, 0, Math.PI * 2); ctx.fill();
+    // arms reaching forward when it strikes
+    ctx.strokeStyle = col; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(2, -12); ctx.lineTo(5 + lunge * 5, -11 + step); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-2, -12); ctx.lineTo(-4 - step, -9); ctx.stroke();
+    ctx.lineCap = "butt";
+    // head with the horns it kept
+    ctx.fillStyle = "#2e4a34";
+    ctx.beginPath(); ctx.arc(1, -18, 4.2, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#1a2e20"; ctx.lineWidth = 1.3; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-1.4, -21); ctx.lineTo(-3, -24.5); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(3.2, -21); ctx.lineTo(4.6, -24.5); ctx.stroke();
+    ctx.lineCap = "butt";
+    ctx.fillStyle = "#eaffe8";
+    ctx.beginPath(); ctx.arc(2.6, -18.4, 1, 0, Math.PI * 2); ctx.fill();
+  }
+  // the wisp it is made of, always coming apart a little
+  ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = 0.4 * fade;
+  ctx.fillStyle = col;
+  for (let k = 0; k < 3; k++) {
+    const p = ((T * 0.9 + k * 0.33 + (f.ph || 0)) % 1);
+    ctx.globalAlpha = (1 - p) * 0.4 * fade;
+    ctx.beginPath(); ctx.arc(Math.sin(p * 6 + k) * 5, -12 - p * 14, 1.4 * (1 - p) + 0.4, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
 }
 
 export function drawSpellFields() {
@@ -328,6 +498,96 @@ export function drawSpellFields() {
       drawEruption(f, fade, T);
     } else if (f.type === "lance") {
       drawHarmonicLance(f, fade, T);
+    } else if (f.type === "rift") {
+      // a tear in the lane, hauling inward until it lets go
+      const wind = clamp(1 - f.life / (f.maxLife || 1), 0, 1);
+      ctx.globalCompositeOperation = "lighter";
+      // jagged crack lines converging on the tear
+      ctx.strokeStyle = f.col || "#c46bff";
+      for (let k = 0; k < 6; k++) {
+        const a = f.ph + k * 1.047 + T * 0.4;
+        const r1 = f.r * (1.1 - wind * 0.5);
+        ctx.globalAlpha = (0.5 - wind * 0.15) * fade;
+        ctx.lineWidth = 1 + wind * 1.4;
+        ctx.beginPath();
+        ctx.moveTo(f.x + Math.cos(a) * r1, f.y + Math.sin(a) * r1 * 0.55);
+        ctx.lineTo(f.x + Math.cos(a + 0.2) * r1 * 0.55, f.y + Math.sin(a + 0.2) * r1 * 0.3);
+        ctx.lineTo(f.x + Math.cos(a - 0.1) * 6, f.y + Math.sin(a - 0.1) * 4);
+        ctx.stroke();
+      }
+      // spinning rings closing on the core
+      for (let k = 0; k < 3; k++) {
+        const rp = (T * 1.8 + k * 0.33) % 1;
+        ctx.globalAlpha = 0.45 * (1 - rp) * fade;
+        ctx.strokeStyle = k % 2 ? "#ff7ad8" : f.col || "#c46bff";
+        ctx.lineWidth = 1.5;
+        const rr = f.r * (1 - rp * 0.8);
+        ctx.beginPath(); ctx.ellipse(f.x, f.y, rr, rr * 0.5, T * 1.1, 0, Math.PI * 2); ctx.stroke();
+      }
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = 1;
+      const core = 7 + wind * 9;
+      const rg2 = ctx.createRadialGradient(f.x, f.y, 1, f.x, f.y, core * 2.2);
+      rg2.addColorStop(0, "rgba(255,255,255,0.95)");
+      rg2.addColorStop(0.3, "rgba(196,107,255,0.85)");
+      rg2.addColorStop(1, "rgba(60,10,110,0)");
+      ctx.fillStyle = rg2;
+      ctx.beginPath(); ctx.arc(f.x, f.y, core * 2.2, 0, Math.PI * 2); ctx.fill();
+    } else if (f.type === "updraft") {
+      // a standing column of wind, still climbing
+      ctx.globalCompositeOperation = "lighter";
+      const h = 150;
+      const ug = ctx.createLinearGradient(f.x, groundY, f.x, groundY - h);
+      ug.addColorStop(0, "rgba(216,248,255,0.34)");
+      ug.addColorStop(0.6, "rgba(143,216,255,0.16)");
+      ug.addColorStop(1, "rgba(143,216,255,0)");
+      ctx.globalAlpha = fade;
+      ctx.fillStyle = ug;
+      ctx.beginPath();
+      ctx.moveTo(f.x - f.r * 0.5, groundY);
+      ctx.lineTo(f.x - f.r * 0.9, groundY - h);
+      ctx.lineTo(f.x + f.r * 0.9, groundY - h);
+      ctx.lineTo(f.x + f.r * 0.5, groundY);
+      ctx.closePath(); ctx.fill();
+      // helical gusts spiralling up the column
+      ctx.strokeStyle = "#d8f8ff"; ctx.lineWidth = 1.4;
+      for (let k = 0; k < 5; k++) {
+        const p = ((T * 0.85 + k * 0.2 + f.ph * 0.1) % 1);
+        const yy = groundY - p * h;
+        const wob = Math.sin(p * 8 + T * 5 + f.ph) * f.r * 0.35;
+        ctx.globalAlpha = (1 - p) * 0.55 * fade;
+        ctx.beginPath();
+        ctx.ellipse(f.x + wob, yy, f.r * (0.28 + p * 0.5), 3.5 + p * 4, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 0.4 * fade;
+      ctx.fillStyle = "#c8b89a";
+      ctx.beginPath(); ctx.ellipse(f.x, groundY - 3, f.r * 0.75, f.r * 0.12, 0, 0, Math.PI * 2); ctx.fill();
+    } else if (f.type === "larva") {
+      // the grub itself, curled on its host, with the rot it is pushing in
+      const wr = 1 + Math.sin(T * 7 + f.ph) * 0.18;
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.3 * fade;
+      const lg2 = ctx.createRadialGradient(f.x, f.y, 1, f.x, f.y, 16);
+      lg2.addColorStop(0, "rgba(158,240,184,0.85)"); lg2.addColorStop(1, "rgba(47,90,58,0)");
+      ctx.fillStyle = lg2;
+      ctx.beginPath(); ctx.arc(f.x, f.y, 16, 0, Math.PI * 2); ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      ctx.globalAlpha = fade;
+      // segmented body
+      ctx.fillStyle = "#2e4a34";
+      for (let k = 0; k < 4; k++) {
+        const a = f.ph + T * 3 + k * 0.7;
+        ctx.beginPath();
+        ctx.ellipse(f.x + Math.sin(a) * 1.6 - k * 0.6, f.y + k * 1.5, 3.2 - k * 0.5, 2.2 * wr - k * 0.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = f.col || "#9ef0b8";
+      ctx.beginPath(); ctx.ellipse(f.x + Math.sin(f.ph + T * 3) * 1.6, f.y - 0.5, 2.4, 1.8 * wr, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#0e1a12";
+      ctx.beginPath(); ctx.arc(f.x + Math.sin(f.ph + T * 3) * 1.6 + 0.8, f.y - 0.8, 0.6, 0, Math.PI * 2); ctx.fill();
+    } else if (f.type === "hatchling") {
+      drawHatchling(f, T, fade);
     }
     ctx.restore();
   }
@@ -1112,6 +1372,114 @@ export function drawSpells() {
         ctx.beginPath();
         ctx.moveTo(-6, 0); ctx.lineTo(-15, -2.5 + beat); ctx.lineTo(-13, 0); ctx.lineTo(-15, 2.5 + beat);
         ctx.closePath(); ctx.fill();
+        break;
+      }
+      case "fracture": {
+        // a splinter of the shard, jittering along a path it keeps rewriting
+        const jx = sp.jitterX || 0, jy = sp.jitterY || 0;
+        ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.7;
+        const fg = ctx.createRadialGradient(0, 0, 1, 0, 0, 24);
+        fg.addColorStop(0, "rgba(255,255,255,0.95)");
+        fg.addColorStop(0.35, "rgba(196,107,255,0.6)");
+        fg.addColorStop(1, "rgba(90,20,160,0)");
+        ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(0, 0, 24, 0, Math.PI * 2); ctx.fill();
+        // the cracks it drags through the air behind it
+        ctx.strokeStyle = "#ff7ad8"; ctx.lineWidth = 1.2;
+        const back = Math.atan2(sp.vy, sp.vx) + Math.PI;
+        for (let k = -1; k <= 1; k += 2) {
+          ctx.globalAlpha = 0.35 + 0.25 * Math.sin(t * 22 + k);
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(Math.cos(back + k * 0.3) * 14, Math.sin(back + k * 0.3) * 14);
+          ctx.lineTo(Math.cos(back - k * 0.15) * 26, Math.sin(back - k * 0.15) * 26);
+          ctx.stroke();
+        }
+        ctx.restore();
+        // two copies of the same shard, never quite in the same place
+        ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.55;
+        ctx.fillStyle = "#6ad8ff";
+        ctx.translate(-jx, -jy); ctx.rotate(-age * 9);
+        ctx.beginPath(); ctx.moveTo(0, -7); ctx.lineTo(5, 2); ctx.lineTo(-5, 2); ctx.closePath(); ctx.fill();
+        ctx.restore();
+        ctx.save();
+        ctx.translate(jx, jy); ctx.rotate(age * 11);
+        ctx.fillStyle = "#8a2aff";
+        ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(6, 3); ctx.lineTo(-6, 3); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath(); ctx.moveTo(0, -3.5); ctx.lineTo(2.6, 1.5); ctx.lineTo(-2.6, 1.5); ctx.closePath(); ctx.fill();
+        ctx.restore();
+        break;
+      }
+      case "gale": {
+        // a compressed slug of air running the lane just above the dirt
+        const face = Math.sign(sp.vx) || 1;
+        ctx.save(); ctx.globalCompositeOperation = "lighter";
+        ctx.scale(face, 1);
+        for (let k = 0; k < 4; k++) {
+          const p = ((age * 5 + k * 0.25) % 1);
+          ctx.globalAlpha = (1 - p) * 0.5;
+          ctx.strokeStyle = k % 2 ? "#ffffff" : "#8fd8ff";
+          ctx.lineWidth = 2.2 - k * 0.35;
+          ctx.beginPath();
+          ctx.ellipse(-p * 30, 0, 7 + p * 10, 20 + p * 14, 0, -Math.PI * 0.45, Math.PI * 0.45);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 0.6;
+        ctx.strokeStyle = "#d8f8ff"; ctx.lineWidth = 1.4;
+        for (let k = 0; k < 3; k++) {
+          const yy = -14 + k * 14;
+          ctx.beginPath();
+          ctx.moveTo(-30, yy);
+          ctx.quadraticCurveTo(-8, yy + Math.sin(t * 14 + k) * 5, 10, yy);
+          ctx.stroke();
+        }
+        ctx.restore();
+        break;
+      }
+      case "bastion": {
+        // a lump of your own wall, thrown, trailing hearth-light and grit
+        ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.45;
+        const bg3 = ctx.createRadialGradient(0, 0, 1, 0, 0, 18);
+        bg3.addColorStop(0, "rgba(255,216,138,0.85)"); bg3.addColorStop(1, "rgba(160,90,20,0)");
+        ctx.fillStyle = bg3; ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        ctx.rotate(sp.spin || 0);
+        ctx.fillStyle = "#6a6258";
+        ctx.beginPath();
+        ctx.moveTo(-7, -4); ctx.lineTo(-2, -8); ctx.lineTo(6, -5); ctx.lineTo(7, 3); ctx.lineTo(1, 8); ctx.lineTo(-6, 4);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "#9a9084";
+        ctx.beginPath();
+        ctx.moveTo(-7, -4); ctx.lineTo(-2, -8); ctx.lineTo(1, -2); ctx.lineTo(-4, 1);
+        ctx.closePath(); ctx.fill();
+        // molten seams where the hearth cracked it
+        ctx.strokeStyle = "#f0b855"; ctx.lineWidth = 1.1;
+        ctx.beginPath(); ctx.moveTo(-4, -1); ctx.lineTo(1, 1); ctx.lineTo(-1, 5); ctx.stroke();
+        ctx.strokeStyle = "#ffd88a"; ctx.lineWidth = 0.6;
+        ctx.beginPath(); ctx.moveTo(2, -5); ctx.lineTo(4, 0); ctx.stroke();
+        break;
+      }
+      case "larva": {
+        // a soul-grub swimming through the air after a body to live on
+        const wr = 1 + Math.sin(t * 12) * 0.16;
+        ctx.rotate(Math.atan2(sp.vy, sp.vx));
+        ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.45;
+        const lg3 = ctx.createRadialGradient(0, 0, 1, 0, 0, 17);
+        lg3.addColorStop(0, "rgba(158,240,184,0.9)"); lg3.addColorStop(1, "rgba(47,90,58,0)");
+        ctx.fillStyle = lg3; ctx.beginPath(); ctx.arc(0, 0, 17, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        // tail segments trailing behind the head, wriggling
+        ctx.fillStyle = "#2e4a34";
+        for (let k = 3; k >= 0; k--) {
+          const off = -k * 3.2;
+          ctx.beginPath();
+          ctx.ellipse(off, Math.sin(t * 16 - k * 0.9) * (1 + k * 0.5), 3.4 - k * 0.5, (2.6 - k * 0.4) * wr, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = "#9ef0b8";
+        ctx.beginPath(); ctx.ellipse(2, 0, 4, 3 * wr, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#0e1a12";
+        ctx.beginPath(); ctx.arc(4.2, -0.8, 0.9, 0, Math.PI * 2); ctx.fill();
         break;
       }
       default: {

@@ -1,18 +1,18 @@
 import { CFG } from '../../config/config.js';
-import { WEAPONS, effectiveWeapon } from '../../config/weapons.js?v=biomeweapons1';
-import { mergeUpgradeEffects } from '../../config/weaponUpgrades.js?v=biomeweapons1';
+import { WEAPONS, effectiveWeapon, BASTION_GUARD_RANGE } from '../../config/weapons.js';
+import { mergeUpgradeEffects } from '../../config/weaponUpgrades.js';
 import { ARMORS, ARMOR_RARITY_COL, armorBlockChance } from '../../config/armor.js';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive4';
+import { ENEMY_TYPES } from '../../config/enemies.js';
 import { animalDef } from '../../config/animals.js';
 import { clamp, dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { inject } from '../../core/services.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnGoldReward, spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js?v=biomeactive4';
-import { killEnemy, killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive4';
-import { shootArrow } from './ProjectileSystem.js?v=biomeactive4';
-import { castSpell, chainLightning, pickAutoTarget, updateGlacialWake } from './SpellSystem.js?v=biomeactive4';
+import { spawnGoldReward, spawnParticles, floaty, critFloaty } from '../world/SpawnSystem.js';
+import { killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js';
+import { shootArrow } from './ProjectileSystem.js';
+import { castSpell, chainLightning, pickAutoTarget, updateGlacialWake } from './SpellSystem.js';
 import { startArcherShoot } from '../../rendering/sprites/Archer.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { entityWallLift } from '../../entities/Wall.js';
@@ -735,6 +735,91 @@ function applyArrowUpgrades(ar, fx) {
   }
 }
 
+// ---------- Autonomous foci ----------
+// Four staffs pick their own target instead of hitting whatever is nearest.
+// Each rule may legitimately return nothing — that means "hold fire", not
+// "fall back to the default", which is what makes the Bastion Scepter dead
+// weight out in the field.
+
+function enemyEyeY(e) {
+  return ENEMY_TYPES[e.type]?.flying ? groundY + (e.fy || -80) : groundY - 24 + (e.fy || 0);
+}
+
+function autoTargetEnemy(rule, player, range, fx) {
+  const live = [];
+  for (const e of state.enemies) {
+    if (e.fleeing || e.dying || e.hp <= 0) continue;
+    if (dist(player.x, e.x) > range) continue;
+    live.push(e);
+  }
+  if (!live.length) return null;
+  switch (rule) {
+    // The Rupture Shard doesn't care about proximity or health.
+    case "chaos":
+      return live[Math.floor(Math.random() * live.length)];
+    // The Gale-Staff wants whatever is furthest off the ground; when the whole
+    // lane is grounded that ties, and the nearest body wins the tie-break.
+    case "highest": {
+      let best = null, bestY = Infinity, bd = Infinity;
+      for (const e of live) {
+        if ((e.galeH || 0) > 6) continue; // already up there
+        const y = enemyEyeY(e), d = dist(player.x, e.x);
+        if (y < bestY - 1 || (Math.abs(y - bestY) <= 1 && d < bd)) { bestY = y; bd = d; best = e; }
+      }
+      return best;
+    }
+    // The Bastion Scepter is silent unless you are holding the line, then it
+    // answers whatever stands closest to the gates.
+    case "gate": {
+      const guard = BASTION_GUARD_RANGE + (fx?.bastionRange || 0);
+      if (Math.abs(player.x - CFG.baseX) > guard) return null;
+      let best = null, bd = Infinity;
+      for (const e of live) {
+        const d = Math.abs(e.x - CFG.baseX);
+        if (d < bd) { bd = d; best = e; }
+      }
+      return best;
+    }
+    default: {
+      let best = null, bd = Infinity;
+      for (const e of live) {
+        const d = dist(player.x, e.x);
+        if (d < bd) { bd = d; best = e; }
+      }
+      return best;
+    }
+  }
+}
+
+// Paces walked between soul-larvae. Teleports (respawn, biome shift) jump the
+// player far further than a frame of walking ever could, so they don't count.
+const HIVE_STRIDE_PX = 130;
+const HIVE_STRIDE_TELEPORT = 220;
+
+function updateHiveStride(player, wBase, dt) {
+  const prev = player.hiveLastX;
+  player.hiveLastX = player.x;
+  if (prev === undefined) return;
+  const moved = Math.abs(player.x - prev);
+  if (moved > HIVE_STRIDE_TELEPORT) return;
+  const fx = mergeInnateEffects(wBase, player.weaponUpgrades);
+  const stride = Math.max(45, HIVE_STRIDE_PX - (fx.hiveStride || 0));
+  player.hiveStride = (player.hiveStride || 0) + moved;
+  // the hive stirs as the charge builds
+  if (player.hiveStride > stride * 0.6 && Math.random() < dt * 6) {
+    spawnParticles(player.x + (player.dir || 1) * 16, groundY - 34, 1, "#9ef0b8", 12, 26);
+  }
+  if (player.hiveStride < stride || player.attackCd > 0) return;
+  const w = effectiveWeapon(player.weapon, player.weaponUpgrades || []);
+  const tgt = autoTargetEnemy("nearest", player, w.range, fx);
+  if (!tgt) return;
+  player.hiveStride = 0;
+  player.dir = Math.sign(tgt.x - player.x) || player.dir;
+  player.castAnim = 0.55;
+  castSpell(player, wBase, tgt);
+  player.attackCd = Math.max(0.25, w.speed * 0.5) * playerMomentumCooldownMultiplier();
+}
+
 export function updatePlayerAttack(dt) {
   const { player, enemies } = state;
   if (player.castAnim > 0) player.castAnim -= dt;
@@ -756,15 +841,19 @@ export function updatePlayerAttack(dt) {
   }
   if (player.swing > 0) player.swing -= dt;
   player.attackCd -= dt;
-  if (player.attackCd > 0) return;
   const wBase = WEAPONS[player.weapon];
+  // The Hive-King's Scepter has no firing clock at all — it sheds a larva
+  // every few paces walked, so kiting is the reload.
+  if (wBase.autoTarget === "stride") { updateHiveStride(player, wBase, dt); return; }
+  if (player.attackCd > 0) return;
   const w = effectiveWeapon(player.weapon, player.weaponUpgrades || []);
   const fx = mergeInnateEffects(wBase, player.weaponUpgrades);
 
   // Self-driving casters choose their own mark — the crowded side of the lane,
   // the tightest cluster, the weakest straggler — so they skip the
   // nearest-enemy scan entirely.
-  if (wBase.autoTarget) {
+  const bespokeAutoTarget = ["sweep", "densestSide", "cluster", "weakest"].includes(wBase.autoTarget);
+  if (bespokeAutoTarget) {
     const mark = pickAutoTarget(player, wBase, w);
     if (!mark) return;
     player.dir = Math.sign(mark.x - player.x) || player.dir;
@@ -780,20 +869,28 @@ export function updatePlayerAttack(dt) {
     return;
   }
 
-  const canHuntAnimals = wBase.type === "ranged";
-  let tgt = null, bd = w.range, tgtIsAnimal = false;
-  for (const e of enemies) {
-    if (e.fleeing || e.dying || e.hp <= 0) continue;
-    const d = dist(player.x, e.x);
-    if (d < bd) { bd = d; tgt = e; tgtIsAnimal = false; }
-  }
-  const hasEnemyTarget = !!tgt;
-  for (const a of state.animals) {
-    const isBear = a.type === "bear";
-    if (!a.alive || a.dying) continue;
-    if (!isBear && (!canHuntAnimals || hasEnemyTarget)) continue;
-    const d = dist(player.x, a.x);
-    if (d < bd) { bd = d; tgt = a; tgtIsAnimal = true; }
+  let tgt = null, tgtIsAnimal = false;
+  if (wBase.autoTarget) {
+    // Autonomous foci choose their own victim; if their rule finds nobody they
+    // simply hold their fire rather than falling back to "whatever is closest".
+    tgt = autoTargetEnemy(wBase.autoTarget, player, w.range, fx);
+    if (!tgt) return;
+  } else {
+    const canHuntAnimals = wBase.type === "ranged";
+    let bd = w.range;
+    for (const e of enemies) {
+      if (e.fleeing || e.dying || e.hp <= 0) continue;
+      const d = dist(player.x, e.x);
+      if (d < bd) { bd = d; tgt = e; tgtIsAnimal = false; }
+    }
+    const hasEnemyTarget = !!tgt;
+    for (const a of state.animals) {
+      const isBear = a.type === "bear";
+      if (!a.alive || a.dying) continue;
+      if (!isBear && (!canHuntAnimals || hasEnemyTarget)) continue;
+      const d = dist(player.x, a.x);
+      if (d < bd) { bd = d; tgt = a; tgtIsAnimal = true; }
+    }
   }
   if (!tgt) return;
   player.dir = Math.sign(tgt.x - player.x) || player.dir;

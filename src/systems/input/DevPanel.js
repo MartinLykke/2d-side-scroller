@@ -1,4 +1,4 @@
-import { DEV } from '../../rendering/HUD.js?v=biomevisual4';
+import { DEV } from '../../rendering/HUD.js';
 import { inject } from '../../core/services.js';
 
 export function setupDevPanel() {
@@ -42,41 +42,27 @@ export function setupDevPanel() {
   // Spawn enemy
   bind('[data-dev="imp"]',          () => DEV.spawnEnemyNearBase('imp'));
   bind('[data-dev="fireImp"]',      () => DEV.spawnEnemyNearBase('fireImp'));
+  bind('[data-dev="emberHound"]',   () => DEV.spawnEnemyNearBase('emberHound'));
   bind('[data-dev="brute"]',        () => DEV.spawnEnemyNearBase('brute'));
   bind('[data-dev="ashPriest"]',    () => DEV.spawnEnemyNearBase('ashPriest'));
   bind('[data-dev="siegeImp"]',     () => DEV.spawnEnemyNearBase('siegeImp'));
   bind('[data-dev="chainImp"]',     () => DEV.spawnEnemyNearBase('chainImp'));
   bind('[data-dev="8imp"]',         () => DEV.spawn8ImpsRight());
+  bind('[data-dev="forestStalker"]', () => DEV.spawnForestStalkerBoss());
   bind('[data-dev="dragon"]',       () => DEV.spawnFireDragonBoss());
   bind('[data-dev="magmaGolem"]',   () => DEV.spawnMagmaGolemBoss());
   bind('[data-dev="pyreTyrant"]',   () => DEV.spawnPyreTyrantBoss());
   bind('[data-dev="killAll"]',      () => DEV.killAll());
-  bind('[data-dev="shade"]',        () => DEV.spawnEnemyNearBase('shade'));
-  bind('[data-dev="voidWraith"]',   () => DEV.spawnEnemyNearBase('voidWraith'));
-  bind('[data-dev="voidBrute"]',    () => DEV.spawnEnemyNearBase('voidBrute'));
-  bind('[data-dev="voidTitan"]',    () => DEV.spawnVoidTitanBoss());
-  bind('[data-dev="voidSeraph"]',   () => DEV.spawnVoidSeraphBoss());
-  bind('[data-dev="forestBoss"]',      () => DEV.spawnBiomeBossDev('forest'));
-  bind('[data-dev="frozenBoss"]',      () => DEV.spawnBiomeBossDev('frozen'));
-  bind('[data-dev="desertBoss"]',      () => DEV.spawnBiomeBossDev('desert'));
-  bind('[data-dev="swampBoss"]',       () => DEV.spawnBiomeBossDev('swamp'));
-  bind('[data-dev="volcanoBoss"]',     () => DEV.spawnBiomeBossDev('volcano'));
-  bind('[data-dev="corruptedBoss"]',   () => DEV.spawnBiomeBossDev('corrupted'));
   bind('[data-dev="startAssault"]', () => DEV.startAssaultDev());
   bind('[data-dev="crackPortals"]', () => DEV.crackPortals());
   bind('[data-dev="phase2"]',       () => DEV.beginPhase2());
-  bind('[data-dev="biomeForest"]',    () => DEV.teleportBiome('forest'));
-  bind('[data-dev="biomeFrozen"]',    () => DEV.teleportBiome('frozen'));
-  bind('[data-dev="biomeDesert"]',    () => DEV.teleportBiome('desert'));
-  bind('[data-dev="biomeSwamp"]',     () => DEV.teleportBiome('swamp'));
-  bind('[data-dev="biomeVolcano"]',   () => DEV.teleportBiome('volcano'));
-  bind('[data-dev="biomeCorrupted"]', () => DEV.teleportBiome('corrupted'));
 
   // Spawn unit
   bind('[data-dev="unitArcher"]',  () => DEV.spawnUnit('archer'));
   bind('[data-dev="unitBuilder"]', () => DEV.spawnUnit('builder'));
   bind('[data-dev="unitFarmer"]',  () => DEV.spawnUnit('farmer'));
   bind('[data-dev="unitGuard"]',   () => DEV.spawnUnit('guard'));
+  bind('[data-dev="unitCleric"]',  () => DEV.spawnUnit('cleric'));
 
   // Level units
   bind('[data-dev="archerLvl1"]',    () => DEV.levelUpUnits('archer', 1));
@@ -86,11 +72,6 @@ export function setupDevPanel() {
   bind('[data-dev="skillPts5"]',     () => DEV.addSkillPoints(5));
   bind('[data-dev="archerAllSkills"]', () => DEV.grantArcherSkills());
 
-  // Spawn animal
-  bind('[data-dev="deer"]',   () => DEV.spawnAnimalNearBase('deer'));
-  bind('[data-dev="rabbit"]', () => DEV.spawnAnimalNearBase('rabbit'));
-  bind('[data-dev="duck"]',   () => DEV.spawnAnimalNearBase('duck'));
-  bind('[data-dev="bear"]',   () => DEV.spawnAnimalNearBase('bear'));
 
   // Profiler
   bind('[data-dev="profiler"]',   () => DEV.toggleProfiler());

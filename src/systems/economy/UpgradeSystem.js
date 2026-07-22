@@ -1,6 +1,6 @@
 import { state, Game } from '../../core/state.js';
-import { WEAPONS } from '../../config/weapons.js?v=biomeweapons1';
-import { WEAPON_UPGRADES, UNIQUE_UPGRADES, SHORT_BOW_BRANCH, UPGRADE_TIERS, TIER_RANK } from '../../config/weaponUpgrades.js?v=biomeweapons1';
+import { WEAPONS } from '../../config/weapons.js';
+import { WEAPON_UPGRADES, UNIQUE_UPGRADES, SHORT_BOW_BRANCH, UPGRADE_TIERS, TIER_RANK } from '../../config/weaponUpgrades.js';
 import { groundY } from '../../core/canvas.js';
 import { floaty, spawnParticles } from '../world/SpawnSystem.js';
 import { Audio } from '../infrastructure/Audio.js';

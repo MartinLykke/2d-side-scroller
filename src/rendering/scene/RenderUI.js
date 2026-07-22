@@ -1,23 +1,23 @@
 import { clamp } from '../../util/math.js';
-import { WEAPONS, RARITY_COL, RARITY_NAME, effectiveWeapon } from '../../config/weapons.js?v=biomeweapons1';
-import { UPGRADE_TIERS } from '../../config/weaponUpgrades.js?v=biomeweapons1';
+import { WEAPONS, RARITY_COL, RARITY_NAME, effectiveWeapon } from '../../config/weapons.js';
+import { UPGRADE_TIERS } from '../../config/weaponUpgrades.js';
 import { ARMORS, ARMOR_RARITY_COL, ARMOR_RARITY_NAME, armorBlockChance } from '../../config/armor.js';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive4';
+import { ENEMY_TYPES } from '../../config/enemies.js';
 import { ctx, W, H, groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { inject, provide } from '../../core/services.js';
-import { roundedRect, drawHeart } from '../DrawHelpers.js?v=biomeweapons1';
-import { drawWeaponModel, drawArmorModel, drawHeldWeapon, WEAPON_TYPE_LABEL } from '../ItemRender.js?v=biomeweapons1';
+import { roundedRect, drawHeart } from '../DrawHelpers.js';
+import { drawWeaponModel, drawArmorModel, drawHeldWeapon, WEAPON_TYPE_LABEL } from '../ItemRender.js';
 import { MOUNTS } from '../../config/mounts.js';
 import { drawMountModel } from '../sprites/Mount.js';
 import { drawPlayer as drawPlayerBody } from '../sprites/Player.js';
 import { weaponLevel, ensureInventory } from '../../systems/economy/InventorySystem.js';
-import { currentShopList, isShopItemOwned, SHOP_COLS } from '../../systems/economy/ShopSystem.js?v=biomeweapons1';
+import { currentShopList, isShopItemOwned, SHOP_COLS } from '../../systems/economy/ShopSystem.js';
 import { CASTLE_UPGRADES } from '../../config/castleUpgrades.js';
-import { castleUpgradeCost } from '../../systems/economy/CastleUpgradeSystem.js?v=biomeweapons1';
+import { castleUpgradeCost } from '../../systems/economy/CastleUpgradeSystem.js';
 import { ensureCastleUpgrades, currentPopCap, currentCoinCap, crownAegisStats, trebuchetStats, castleUpgradeUnlockLevel } from '../../util/DefenseStats.js';
-import { drawBossPortrait } from './RenderEntities.js?v=forestboss1';
-import { drawTrebuchetModel } from './RenderWorld.js?v=biomevisual4';
+import { drawBossPortrait } from './RenderEntities.js';
+import { drawTrebuchetModel } from './RenderWorld.js';
 
 // ---------- Shared UI helpers ----------
 const GOLD = "#f2c14e";
@@ -116,6 +116,12 @@ function drawItemTooltip(item, mx, my) {
     lines.push({ t: "Damage: " + eff.dmg + (eff.dmg > w.dmg ? "  (+" + Math.round((eff.dmg - w.dmg) * 10) / 10 + ")" : ""), c: "#9bd05a" });
     lines.push({ t: "Range: " + eff.range + " px" + (eff.range > w.range ? "  (+" + (eff.range - w.range) + ")" : ""), c: "#e8d8a8" });
     lines.push({ t: "Attack time: " + eff.speed + "s" + (eff.speed < w.speed ? "  (faster)" : ""), c: "#6ab4ff" });
+    // Autonomous foci break the usual "hit whatever is closest" rule, so the
+    // rule they follow instead has to be readable before you buy one.
+    if (w.note) {
+      const noteLines = wrapText(w.note, 190, "11px Trebuchet MS");
+      noteLines.forEach((nl, i) => lines.push({ t: nl, c: RARITY_COL[w.rarity], gap: i === 0 ? 4 : 0 }));
+    }
     if (upgs.length) {
       lines.push({ t: "Upgrades:", c: MUTED, gap: 4 });
       for (const u of upgs) lines.push({ t: "• " + u.name + " — " + upgradeSummary(u), c: UPGRADE_TIERS[u.tier]?.col || "#9bd05a" });

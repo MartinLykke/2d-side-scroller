@@ -1,5 +1,5 @@
 import { CFG } from '../../config/config.js';
-import { ENEMY_TYPES, BOSS_SCHEDULE, BIOME_BOSS_TYPES, BIOME_ENEMY_POOLS } from '../../config/enemies.js?v=biomeactive4';
+import { ENEMY_TYPES, BOSS_SCHEDULE, BIOME_BOSS_TYPES, BIOME_ENEMY_POOLS } from '../../config/enemies.js';
 import { clamp, rand, randInt, pick } from '../../util/math.js';
 import { groundY, W } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
@@ -7,7 +7,7 @@ import { goldCoinChunks, goldRewardAmount } from '../economy/EconomyBalance.js';
 import { bountyRaiderCount, eliteChanceBonus, enemyVitalityMultiplier, nightQuotaMetaMultiplier, portalSpawnIntervalMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { currentDifficulty } from '../infrastructure/DifficultySystem.js';
 import { currentPopCap } from '../../util/DefenseStats.js';
-import { activeBiomeId } from '../../rendering/Effects.js?v=biomeactive4';
+import { activeBiomeId } from '../../rendering/Effects.js';
 import { BIOME_ANIMAL_POOLS, animalDef } from '../../config/animals.js';
 
 const ANIMAL_SOFT_CAP = 18;
@@ -433,11 +433,10 @@ function spawnBountyRaider(portal) {
 function biomeBossPortal(type, fallback = null) {
   const t = ENEMY_TYPES[type];
   if (!t?.biome) return fallback || pick(state.portals);
-  if (fallback && !t.biomeBoss) return fallback;
+  if (fallback && !t.spawnDistance) return fallback;
 
-  // Biome bosses emerge from their home terrain instead of walking in from a
-  // distant portal. Preserve a selected wave side, but pull the spawn point
-  // into the forest/biome band around the base for a readable entrance.
+  // Bosses with an authored distance emerge from their home terrain instead
+  // of walking in from a distant portal. Preserve the selected wave side.
   const side = fallback?.side || pick([-1, 1]);
   const spread = t.spawnDistance || (t.flying ? 900 : 760);
   return { x: clamp(CFG.baseX + side * spread, 900, CFG.worldWidth - 900), side };
@@ -542,16 +541,6 @@ export function spawnBoss(type, portal) {
   return boss;
 }
 
-export function spawnFireDragon(portal) {
-  return spawnBoss("fireDragon", portal);
-}
-
-export function spawnBiomeBoss(biomeId) {
-  const type = BIOME_BOSS_TYPES[biomeId];
-  if (!type) return null;
-  return spawnBoss(type, biomeBossPortal(type));
-}
-
 export function planNight() {
   const d = Game.day;
   Game.threatLevel  = Math.max(1, d);
@@ -581,6 +570,13 @@ export function planNight() {
   }
 }
 
+function scheduledBiomeBossType(day) {
+  const type = BIOME_BOSS_TYPES[activeBiomeId()];
+  if (!type) return null;
+  const bossRound = ENEMY_TYPES[type]?.bossRound;
+  return bossRound == null ? (day >= 3 ? type : null) : (day === bossRound ? type : null);
+}
+
 function nightEnemyType() {
   const d = Game.day, r = Math.random();
   const difficultyPressure = difficulty().elitePressureMult;
@@ -600,14 +596,13 @@ function nightEnemyType() {
     // bosses remain fallbacks so biome guardians keep their normal cadence.
     const scheduledBoss = BOSS_SCHEDULE[d];
     if (scheduledBoss && ENEMY_TYPES[scheduledBoss]?.apexBoss) return scheduledBoss;
-    const biomeBoss = BIOME_BOSS_TYPES[activeBiomeId()];
-    const bossRound = ENEMY_TYPES[biomeBoss]?.bossRound;
-    if (biomeBoss && (bossRound == null ? d >= 3 : d === bossRound)) return biomeBoss;
+    const biomeBoss = scheduledBiomeBossType(d);
+    if (biomeBoss) return biomeBoss;
     if (BOSS_SCHEDULE[d]) return BOSS_SCHEDULE[d];
   }
   // Second boss slot: legacy ember bosses only; biome bosses are tied to the
   // active world biome and use the first slot above.
-  if (Game.nightSpawned === 1 && !BIOME_BOSS_TYPES[activeBiomeId()]) {
+  if (Game.nightSpawned === 1 && !scheduledBiomeBossType(d)) {
     const unlocked = Object.keys(BOSS_SCHEDULE).map(Number).filter(n => d >= n).sort((a, b) => b - a);
     if (unlocked.length >= 2) return BOSS_SCHEDULE[unlocked[1]];
   }

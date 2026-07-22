@@ -44,6 +44,7 @@ export const CFG = {
   bowCost: 4,
   hammerCost: 3,
   guardCost: 7,
+  clericCost: 9,
   farmCost: 8,
   farmUpgradeCosts: [8, 13, 20, 31, 46],
   critChance: 0.15,
@@ -93,6 +94,7 @@ export const STATIONS_X = {
   farm:   CFG.baseX - 480,
   shop:   CFG.baseX + 445, // between the two right wall slots (mirrors the farm on the left)
   guard:  CFG.baseX + 220,
+  cleric: CFG.baseX - 220,
 };
 
 export const WALL_SLOTS = [

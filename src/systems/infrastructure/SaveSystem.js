@@ -2,12 +2,12 @@ import { Game, state } from '../../core/state.js';
 import { CFG, FOREST } from '../../config/config.js';
 import { makeUnit } from '../../entities/Unit.js';
 import { spawnVagrant, planNight, populateBiomeAnimals } from '../world/SpawnSystem.js';
-import { addForestCamp, buildForest } from '../world/ForestSystem.js?v=biomeactive4';
-import { buildStations } from './GameInit.js?v=biomeactive4';
+import { addForestCamp, buildForest } from '../world/ForestSystem.js';
+import { buildStations } from './GameInit.js';
 import { permanentForestCampPlans } from './RoguelikeSystem.js';
 import { autoSpendSkillPoints } from '../economy/SkillSystem.js';
 import { ensureCastleUpgrades, baseMaxHpForLevel, wallMaxHpForLevel } from '../../util/DefenseStats.js';
-import { isGeneratedWeaponId, exportGeneratedWeapon, restoreGeneratedWeapon } from '../economy/ProceduralWeaponSystem.js?v=procweap1';
+import { isGeneratedWeaponId, exportGeneratedWeapon, restoreGeneratedWeapon } from '../economy/ProceduralWeaponSystem.js';
 
 const SAVE_KEY = "ashen_reign_save_v1";
 
@@ -171,7 +171,7 @@ export function loadGame() {
         }));
     }
     state.units = snap.units
-      .filter(s => ["archer", "builder", "farmer", "guard", "hound", "peasant"].includes(s.role))
+      .filter(s => ["archer", "builder", "farmer", "guard", "cleric", "hound", "peasant"].includes(s.role))
       .map(s => {
         const u = makeUnit(s.role, s.x);
         if (s.archerName) u.archerName = s.archerName;

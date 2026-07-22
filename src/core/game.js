@@ -3,46 +3,43 @@
 // ---------- Bootstrap ----------
 import { CFG, WALL_SLOTS, PORTALS, STATIONS_X, FOREST } from '../config/config.js';
 import { ARMORS } from '../config/armor.js';
-import { clamp, clampCameraTarget, dist, lerp, rand, randInt, pick } from '../util/math.js';
-import { canvas, ctx, W, H, groundY, resize } from './canvas.js';
+import { clamp, clampCameraTarget, dist, lerp, rand } from '../util/math.js';
+import { ctx, W, H, groundY, resize } from './canvas.js';
 import { Game, state } from './state.js';
 
 import { Audio } from '../systems/infrastructure/Audio.js';
 import { keys } from '../systems/input/Input.js';
-import { saveGame, hasSave, loadGame, deleteSave } from '../systems/infrastructure/SaveSystem.js?v=biomeactive4';
-import { updateSpawning, floaty, spawnParticles, spawnAnimal, planNight, spawnEnemy, portalGuardianWave } from '../systems/world/SpawnSystem.js?v=biomeactive4';
+import { saveGame, hasSave, loadGame, deleteSave } from '../systems/infrastructure/SaveSystem.js';
+import { updateSpawning, floaty, spawnParticles, planNight, spawnEnemy, portalGuardianWave } from '../systems/world/SpawnSystem.js';
 import { updatePayment, updateCoins } from '../systems/economy/Economy.js';
-import { updateForestTrees, updateForestCamps } from '../systems/world/ForestSystem.js?v=biomeactive4';
-import { updateBuildings } from '../systems/world/OutpostSystem.js?v=biomeactive4';
-import { updateUnits, updateAssignments, updateVagrants, updateAnimals, nearestEnemy, updateCaltrops } from '../systems/ai/AI.js?v=biomevisual4';
-import { updateEnemies, updateArrows, updatePlayerAttack, updateSpells } from '../systems/combat/Combat.js?v=biomeactive4';
-import { updateFirePools } from '../systems/ai/BossAI.js?v=biomeactive4';
-import { updateDyingEnemies } from '../util/EnemyUtils.js?v=biomeactive4';
+import { updateForestTrees, updateForestCamps } from '../systems/world/ForestSystem.js';
+import { updateBuildings } from '../systems/world/OutpostSystem.js';
+import { updateUnits, updateAssignments, updateVagrants, updateAnimals, nearestEnemy, updateCaltrops } from '../systems/ai/AI.js';
+import { updateEnemies, updateArrows, updatePlayerAttack, updateSpells } from '../systems/combat/Combat.js';
+import { updateFirePools } from '../systems/ai/BossAI.js';
+import { updateDyingEnemies } from '../util/EnemyUtils.js';
 
-import { FX, initFX, updateFX as updateFXEffects, biomeAt } from '../rendering/Effects.js?v=biomeactive4';
-import { render, drawEntityShadows } from '../rendering/Renderer.js?v=forestboss1';
-import { UI, DEV, baseName } from '../rendering/HUD.js?v=biomevisual4';
+import { initFX, updateFX as updateFXEffects, biomeAt } from '../rendering/Effects.js';
+import { render } from '../rendering/Renderer.js';
+import { UI, DEV } from '../rendering/HUD.js';
 import { updateArcherShoot } from '../rendering/sprites/Archer.js';
 
 import { makePlayer } from '../entities/Player.js';
-import {
-  makeWall, wallReady, wallBackDir, wallLayout, wallClimbX,
-  nearWallClimbBottom, nearWallClimbTop
-} from '../entities/Wall.js';
+import { makeWall, wallReady, wallBackDir, wallLayout, wallClimbX, nearWallClimbBottom, nearWallClimbTop } from '../entities/Wall.js';
 import { makeUnit } from '../entities/Unit.js';
 
-import { WEAPON_SHOP, ARMOR_SHOP, updateShop, setPickupWeapon as setShopPickupWeapon } from '../systems/economy/ShopSystem.js?v=biomeweapons1';
-import { updateCastleUpgradeMenu } from '../systems/economy/CastleUpgradeSystem.js?v=biomeweapons1';
+import { WEAPON_SHOP, ARMOR_SHOP, updateShop, setPickupWeapon as setShopPickupWeapon } from '../systems/economy/ShopSystem.js';
+import { updateCastleUpgradeMenu } from '../systems/economy/CastleUpgradeSystem.js';
 import { mountSpeedMult, activeMount } from '../systems/economy/MountSystem.js';
-import { upgradeBase, pickupWeapon, setBuildStations } from '../util/GameStateHelpers.js?v=biomeweapons1';
+import { upgradeBase, pickupWeapon, setBuildStations } from '../util/GameStateHelpers.js';
 import { currentCoinCap } from '../util/DefenseStats.js';
-import { addXP, checkUpgrade } from '../systems/economy/UpgradeSystem.js?v=biomeweapons1';
-import { newGame, buildStations } from '../systems/infrastructure/GameInit.js?v=biomeactive4';
+import { addXP, checkUpgrade } from '../systems/economy/UpgradeSystem.js';
+import { newGame, buildStations } from '../systems/infrastructure/GameInit.js';
 import { initMeta, enterDeathHub, updateHub, updateHubTransition, renderHub, permanentDayLengthBonusSeconds } from '../systems/infrastructure/RoguelikeSystem.js';
 import { applyDifficulty } from '../systems/infrastructure/DifficultySystem.js';
 import { updateLootItems, updateWeaponPickup, updateChests, updateLootPhysics, setPickupWeapon as setLootPickupWeapon } from '../systems/economy/LootSystem.js';
-import { updateAssault, performPhaseShift } from '../systems/world/AssaultSystem.js?v=biomevisual4';
-import { setupInputHandlers } from '../systems/input/InputHandler.js?v=biomevisual4';
+import { updateAssault, performPhaseShift } from '../systems/world/AssaultSystem.js';
+import { setupInputHandlers } from '../systems/input/InputHandler.js';
 import { provide } from './services.js';
 // Profiler uses window._perf (set by HUD toggle) to avoid ES module cache issues
 
@@ -579,7 +576,7 @@ Game.start = function(continueGame) {
   applyDifficulty(Game, diff);
   if (continueGame && hasSave()) { newGame(); loadGame(); }
   else newGame();
-  import('../rendering/Effects.js?v=biomeactive4').then(({clearTreeCache})=>clearTreeCache());
+  import('../rendering/Effects.js').then(({clearTreeCache})=>clearTreeCache());
   Game.state="play";
   UI.startScreen.classList.add("hidden");
   UI.endScreen.classList.add("hidden");

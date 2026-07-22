@@ -3,13 +3,13 @@ import { clamp, dist, rand } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles } from '../world/SpawnSystem.js?v=biomeactive4';
-import { killEnemy } from '../combat/Combat.js?v=biomeactive4';
-import { killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive4';
+import { spawnParticles } from '../world/SpawnSystem.js';
+import { killEnemy } from '../combat/Combat.js';
+import { killEnemyWithAnimation, spawnImpBlood } from '../../util/EnemyUtils.js';
 import { wallHeight, wallStandX, wallLayout, wallClimbX, wallCritical } from '../../entities/Wall.js';
 import { permanentDamageMultiplier } from '../infrastructure/RoguelikeSystem.js';
 import { addSkillPoints } from '../economy/SkillSystem.js';
-import { floaty, nearestEnemy, moveToward, sunsetApproaching, tryStartBridgeFlee, updateBridgeCross } from './AIHelpers.js?v=biomeactive4';
+import { floaty, moveToward, sunsetApproaching, tryStartBridgeFlee, updateBridgeCross } from './AIHelpers.js';
 
 // A wall this weak is about to collapse — guards fall back off it, but
 // (unlike archers) never flee it purely because an imp reached the top.

@@ -1,14 +1,14 @@
 import { CFG } from '../../config/config.js';
-import { clamp, clampCameraTarget, dist, rand, randInt } from '../../util/math.js';
+import { clampCameraTarget, dist, rand, randInt } from '../../util/math.js';
 import { groundY, W } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnEnemy, spawnParticles, spawnGoldReward, floaty, planNight, biomeWaveEnemyType, populateBiomeAnimals } from './SpawnSystem.js?v=biomeactive4';
-import { shootArrow } from '../combat/Combat.js?v=biomeactive4';
-import { moveToward, nearestEnemy } from '../ai/AIHelpers.js?v=biomeactive4';
-import { buildForest } from './ForestSystem.js?v=biomeactive4';
-import { activeBiomeId, nextBiomeId, setActiveBiome, clearTreeCache } from '../../rendering/Effects.js?v=biomeactive4';
-import { addXP } from '../economy/UpgradeSystem.js?v=biomeweapons1';
+import { spawnEnemy, spawnParticles, spawnGoldReward, floaty, planNight, biomeWaveEnemyType, populateBiomeAnimals } from './SpawnSystem.js';
+import { shootArrow } from '../combat/Combat.js';
+import { moveToward, nearestEnemy } from '../ai/AIHelpers.js';
+import { buildForest } from './ForestSystem.js';
+import { activeBiomeId, nextBiomeId, setActiveBiome, clearTreeCache } from '../../rendering/Effects.js';
+import { addXP } from '../economy/UpgradeSystem.js';
 
 // ── Portal assault ───────────────────────────────────────────────────────
 // The player sounds the war horn (G): every archer and guard marches on the

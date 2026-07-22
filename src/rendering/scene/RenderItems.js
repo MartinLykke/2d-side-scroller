@@ -1,9 +1,9 @@
 import { clamp, dist } from '../../util/math.js';
-import { WEAPONS, RARITY_COL } from '../../config/weapons.js?v=biomeweapons1';
+import { WEAPONS, RARITY_COL } from '../../config/weapons.js';
 import { ctx, groundY } from '../../core/canvas.js';
 import { state } from '../../core/state.js';
-import { groundShadow } from '../DrawHelpers.js?v=biomeweapons1';
-import { drawWeaponModel } from '../ItemRender.js?v=biomeweapons1';
+import { groundShadow } from '../DrawHelpers.js';
+import { drawWeaponModel } from '../ItemRender.js';
 import { visibleWorldBounds } from '../Viewport.js';
 
 const STUCK_ARROW_FADE_TIME = 0.55;

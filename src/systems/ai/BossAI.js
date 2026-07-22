@@ -1,13 +1,13 @@
 import { CFG } from '../../config/config.js';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive4';
+import { ENEMY_TYPES } from '../../config/enemies.js';
 import { dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, floaty, spawnEnemy } from '../world/SpawnSystem.js?v=biomeactive4';
-import { killEnemyWithAnimation, spawnImpBlood, killEnemy } from '../../util/EnemyUtils.js?v=biomeactive4';
+import { spawnParticles, floaty, spawnEnemy } from '../world/SpawnSystem.js';
+import { killEnemyWithAnimation, spawnImpBlood, killEnemy } from '../../util/EnemyUtils.js';
 import { entityWallLift, wallHeight, wallReady, wallRenderWidth } from '../../entities/Wall.js';
-import { damagePlayer } from '../combat/PlayerCombat.js?v=biomeactive4';
+import { damagePlayer } from '../combat/PlayerCombat.js';
 import { approachSpeedMult, unopposedSprintMult } from './EnemyShared.js';
 
 // All night-boss behavior lives here: the fire dragon (night 5), the magma
@@ -123,7 +123,8 @@ function initPyreTyrant(e) {
   e.pyreCleaveCd = 0.7;
   e.pyreCleaveIndex = 0;
   e.pyreMarkers = [];
-  e.pyreDashSerial = 0;
+  // Randomized per boss so two dev-spawned Tyrants cannot share a dash-hit id.
+  e.pyreDashSerial = Math.floor(rand(1000, 1000000000));
   e.pyreTrailCd = 0;
   e.pyreEnraged = false;
   e.pyreIgnitionDone = false;
@@ -155,7 +156,9 @@ function startPyreCleave(e, kind, target) {
   e.pyreCleaveTargetKind = kind;
   e.pyreCleaveTarget = target;
   e.pyreCleaveIndex = (e.pyreCleaveIndex || 0) + 1;
-  e.attackKind = e.pyreCleaveIndex % 2 ? "pyreCleave" : "pyreSweep";
+  // Walls get a dedicated overhead Crownfire breach instead of reusing the
+  // duelling cleaves aimed at defenders and the base.
+  e.attackKind = kind === "wall" ? "pyreBreach" : e.pyreCleaveIndex % 2 ? "pyreCleave" : "pyreSweep";
   e.attackAnim = 0.5;
 }
 
@@ -164,10 +167,14 @@ function releasePyreCleave(e, t) {
   const target = e.pyreCleaveTarget;
   const impactX = kind === "wall" && target ? target.x : kind === "base" ? state.base.x : e.x + e.dir * 72;
 
-  if (kind === "wall" && target) damagePyreWall(e, t, target, e.attackKind === "pyreSweep" ? 1.28 : 1.12);
+  if (kind === "wall" && target) {
+    damagePyreWall(e, t, target, 1.42);
+    pushBossRing(target.x, 142, "#fff0a0", 0.48, 9);
+    spawnFirePool(target.x + target.side * 34, 48, e.pyreEnraged ? 5.2 : 4.2);
+  }
   else if (kind === "base") damageBaseByBoss(e, t, e.attackKind === "pyreSweep" ? 0.82 : 0.68, "#ff5a18");
 
-  const radius = e.attackKind === "pyreSweep" ? 122 : 92;
+  const radius = e.attackKind === "pyreBreach" ? 142 : e.attackKind === "pyreSweep" ? 122 : 92;
   const unitDamage = e.pyreEnraged ? 3 : 2;
   damageUnitsInRange(impactX, radius, unitDamage, "#ff6a3a", { knock: 210 });
   const player = state.player;
@@ -192,7 +199,7 @@ function updatePyreCleave(e, t, dt) {
   e.pyreCleaveT = undefined;
   e.pyreCleaveTarget = null;
   e.pyreCleaveTargetKind = "";
-  e.pyreCleaveCd = e.pyreEnraged ? 0.48 : 0.72;
+  e.pyreCleaveCd = e.attackKind === "pyreBreach" ? (e.pyreEnraged ? 0.62 : 0.84) : (e.pyreEnraged ? 0.48 : 0.72);
   e.attackKind = "";
   return false;
 }
@@ -221,7 +228,15 @@ function pyreMarkerTargets(e) {
     add(CFG.baseX + off + rand(-42, 42));
     if (xs.length >= count) break;
   }
-  while (xs.length < count) add(CFG.baseX + rand(-560, 560));
+  for (let attempts = 0; xs.length < count && attempts < 18; attempts++) {
+    add(CFG.baseX + rand(-560, 560));
+  }
+  // Deterministic fallback guarantees a full pattern even after unusually
+  // clustered random rolls, without risking an unbounded targeting loop.
+  for (const off of [-520, -260, 0, 260, 520]) {
+    if (xs.length >= count) break;
+    add(CFG.baseX + off);
+  }
   return xs.slice(0, count);
 }
 
@@ -1303,7 +1318,22 @@ function updateBiomeWallAttack(e, t, dt) {
       spawnParticles(e.biomeWall.x, groundY - 20, 16, "#8a6a3a", 130, 90);
       spawnParticles(e.biomeWall.x, groundY - 30, 10, "#b66bff", 90, 100);
     }
-    if (t.duneBroodmother) spawnAcidBossPool(e.biomeWall.x + e.biomeWall.side * 28, 60, 4.5);
+    if (t.skadiWrath) {
+      e.biomeWall.frozenT = Math.max(e.biomeWall.frozenT || 0, 5.5);
+      spawnParticles(e.biomeWall.x, groundY - wallHeight(e.biomeWall) * 0.55, 15, "#eaf6ff", 72, 95);
+    } else if (t.duneBroodmother) {
+      spawnAcidBossPool(e.biomeWall.x + e.biomeWall.side * 28, 60, 4.5);
+    } else if (t.sunkenBehemoth && (e.healLocked || 0) <= 0) {
+      const heal = Math.max(3, Math.round(t.dmg * 0.32));
+      e.hp = Math.min(e.maxHp, e.hp + heal);
+      floaty(e.x, "+" + heal, "#b8ff7a", 13);
+    } else if (t.ignitedCore) {
+      spawnFirePool(e.biomeWall.x + e.biomeWall.side * 34, 58, 4.6);
+      damageUnitsInRange(e.biomeWall.x, 118, 1, "#ff6a28", { knock: e.biomeWall.side * -125 });
+    } else if (t.voidMindflayer) {
+      stunArchersNear(e.biomeWall.x, 165, 1.15, "#d7a8ff");
+      pushBossRing(e.biomeWall.x, 126, "#8c4cff", 0.42, 6);
+    }
   }
   if (e.biomeWallAttackT < BIOME_WALL_ATTACK.duration) return true;
   e.biomeWallAttackT = undefined;
@@ -1441,6 +1471,8 @@ const SERAPH_PULSE_RADIUS = 270;
 const SERAPH_LANCE_WINDUP = 0.58;
 const SERAPH_PULSE_WINDUP = 0.92;
 const SERAPH_SUMMON_WINDUP = 1.08;
+const SERAPH_WALL_WINDUP = 1.02;
+const SERAPH_WALL_DURATION = 1.42;
 
 function initVoidTitan(e) {
   if (e.voidTitanInit) return;
@@ -1797,9 +1829,15 @@ function initVoidSeraph(e, t) {
   e.seraphLanceT = undefined;
   e.seraphPulseT = undefined;
   e.seraphSummonT = undefined;
+  e.seraphWallT = undefined;
+  e.seraphWallTarget = null;
+  e.seraphWallDidHit = false;
+  e.seraphWallCd = e.seraphWallCd ?? rand(2.4, 3.4);
   e.seraphLanceCharge = 0;
   e.seraphPulseFlash = 0;
   e.seraphSummonFlash = 0;
+  e.seraphWallCharge = 0;
+  e.seraphWallImpact = 0;
   e.seraphEnrage = 0;
   e.attackKind = "";
   e.lastHp = e.hp;
@@ -1883,6 +1921,79 @@ function seraphSummon(e) {
   Audio.upgrade();
 }
 
+function seraphWallTarget(e) {
+  let target = null;
+  let best = Infinity;
+  for (const w of state.walls) {
+    if (!wallReady(w)) continue;
+    const score = Math.abs(w.x - e.x) - w.level * 8;
+    if (score < best) { best = score; target = w; }
+  }
+  return target;
+}
+
+function startSeraphWallChoir(e, wall) {
+  e.seraphWallT = 0;
+  e.seraphWallTarget = wall;
+  e.seraphWallDidHit = false;
+  e.seraphWallCharge = 0;
+  e.seraphWallImpact = 0;
+  e.dir = Math.sign(wall.x - e.x) || e.dir;
+  e.attackKind = "wallChoir";
+  e.attackAnim = 0.55;
+}
+
+function releaseSeraphWallChoir(e, t) {
+  const wall = e.seraphWallTarget;
+  if (!wallReady(wall)) return;
+  const faceX = wall.x + wall.side * wallRenderWidth(wall) * 0.46;
+  const impactY = groundY - wallHeight(wall) * 0.58;
+  damageVoidWall(wall, t.dmg * (e.enraged ? 1.08 : 0.88), "#d7f6ff");
+  wall.bossImpact = Math.max(wall.bossImpact || 0, 0.42);
+  e.seraphWallImpact = 0.34;
+  pushBossRing(wall.x, e.enraged ? 182 : 152, "#d7f6ff", 0.56, 9);
+  spawnParticles(faceX, impactY, e.enraged ? 34 : 26, "#8a5aff", 175, 155);
+  spawnParticles(faceX, impactY - 12, e.enraged ? 18 : 12, "#d7f6ff", 95, 175);
+
+  // The converging blade-wings rake defenders posted on the struck wall.
+  for (const u of activeUnits()) {
+    if (u.wall !== wall && !(u.onWall && Math.abs(u.x - wall.x) < wallRenderWidth(wall))) continue;
+    u.hp -= 1;
+    u.stunned = Math.max(u.stunned || 0, 0.8);
+    u.panic = Math.max(u.panic || 0, 0.9);
+    spawnParticles(u.x, groundY - 42 - entityWallLift(u), 8, "#d7f6ff", 65, 100);
+  }
+  const player = state.player;
+  if (player?.hp > 0 && player.wall === wall) {
+    damagePlayer(1, { knock: -wall.side * 185 });
+  }
+  Game.screenShake = Math.max(Game.screenShake || 0, e.enraged ? 0.68 : 0.52);
+  Audio.dragonRoar();
+}
+
+function updateSeraphWallChoir(e, t, dt) {
+  e.seraphWallT += dt;
+  e.attackKind = "wallChoir";
+  e.dir = Math.sign((e.seraphWallTarget?.x ?? state.base.x) - e.x) || e.dir;
+  if (e.seraphWallT < SERAPH_WALL_WINDUP) {
+    e.seraphWallCharge = Math.min(1, e.seraphWallT / SERAPH_WALL_WINDUP);
+  } else {
+    if (!e.seraphWallDidHit) {
+      e.seraphWallDidHit = true;
+      releaseSeraphWallChoir(e, t);
+    }
+    e.seraphWallCharge = Math.max(0, 1 - (e.seraphWallT - SERAPH_WALL_WINDUP) / (SERAPH_WALL_DURATION - SERAPH_WALL_WINDUP));
+  }
+  if (e.seraphWallT < SERAPH_WALL_DURATION) return true;
+  e.seraphWallT = undefined;
+  e.seraphWallTarget = null;
+  e.seraphWallDidHit = false;
+  e.seraphWallCharge = 0;
+  e.seraphWallCd = e.enraged ? rand(4.1, 5.0) : rand(5.4, 6.6);
+  e.attackKind = "";
+  return false;
+}
+
 function updateVoidSeraph(e, t, dt) {
   initVoidSeraph(e, t);
   if (e.knock) e.knock = 0;
@@ -1891,9 +2002,11 @@ function updateVoidSeraph(e, t, dt) {
   e.seraphLanceCharge = Math.max(0, (e.seraphLanceCharge || 0) - dt);
   e.seraphPulseFlash = Math.max(0, (e.seraphPulseFlash || 0) - dt);
   e.seraphSummonFlash = Math.max(0, (e.seraphSummonFlash || 0) - dt);
+  e.seraphWallImpact = Math.max(0, (e.seraphWallImpact || 0) - dt);
   e.seraphEnrage = Math.max(0, (e.seraphEnrage || 0) - dt);
   e.seraphPulseCd -= dt;
   e.seraphSummonCd -= dt;
+  e.seraphWallCd -= dt;
 
   if (!e.enraged && e.hp < e.maxHp * 0.42) {
     e.enraged = true;
@@ -1913,7 +2026,7 @@ function updateVoidSeraph(e, t, dt) {
   if (Math.abs(e.x - CFG.baseX) > 760) {
     e.dir = Math.sign(CFG.baseX - e.x) || e.dir;
     e.x += e.dir * t.speed * dt;
-  } else if (e.seraphLanceT === undefined && e.seraphPulseT === undefined && e.seraphSummonT === undefined) {
+  } else if (e.seraphLanceT === undefined && e.seraphPulseT === undefined && e.seraphSummonT === undefined && e.seraphWallT === undefined) {
     e.x += e.patrolDir * t.speed * (e.enraged ? 1.25 : 1) * dt;
     if (e.x > R) e.patrolDir = -1;
     if (e.x < L) e.patrolDir = 1;
@@ -1923,6 +2036,8 @@ function updateVoidSeraph(e, t, dt) {
   if (Math.random() < 0.7) {
     spawnParticles(e.x + rand(-t.w * 0.32, t.w * 0.32), groundY + (e.fy || -230) + rand(-45, 35), 1, Math.random() < 0.5 ? "#8a5aff" : "#d7f6ff", 22, 42);
   }
+
+  if (e.seraphWallT !== undefined && updateSeraphWallChoir(e, t, dt)) return;
 
   if (e.seraphLanceT !== undefined) {
     e.seraphLanceT += dt;
@@ -1960,6 +2075,12 @@ function updateVoidSeraph(e, t, dt) {
       e.attackKind = "";
       e.seraphSummonCd = (t.summonInterval || 8.5) * (e.enraged ? 0.62 : 1) + rand(-0.8, 0.8);
     }
+    return;
+  }
+
+  const siegeWall = seraphWallTarget(e);
+  if (siegeWall && e.seraphWallCd <= 0 && Math.abs(e.x - siegeWall.x) < 820) {
+    startSeraphWallChoir(e, siegeWall);
     return;
   }
 

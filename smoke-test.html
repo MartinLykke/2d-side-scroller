@@ -134,11 +134,11 @@ async function testModuleImports() {
     ["BuilderAI", "./src/systems/ai/BuilderAI.js"],
     ["FarmerAI", "./src/systems/ai/FarmerAI.js"],
     ["GuardAI", "./src/systems/ai/GuardAI.js"],
+    ["ClericAI", "./src/systems/ai/ClericAI.js"],
+    ["Cleric sprite", "./src/rendering/sprites/Cleric.js"],
     ["EnemyAI", "./src/systems/ai/EnemyAI.js"],
     ["EnemyShared", "./src/systems/ai/EnemyShared.js"],
     ["EnemyTargeting", "./src/systems/ai/EnemyTargeting.js"],
-    ["ImpCombatAI", "./src/systems/ai/ImpCombatAI.js"],
-    ["ImpWallAI", "./src/systems/ai/ImpWallAI.js"],
   ];
 
   for (const [name, path] of modules) {
@@ -190,8 +190,8 @@ async function testFactoriesAndServices() {
   }
 
   try {
-    const { makeUnit } = await import("./src/entities/Unit.js");
-    for (const role of ["archer", "builder", "farmer", "guard"]) {
+    const { makeUnit } = await import("./src/entities/Unit.js?smoke=cleric1");
+    for (const role of ["archer", "builder", "farmer", "guard", "cleric"]) {
       const u = makeUnit(role, 4500);
       log(`Unit: ${role}`, u.role === role && Number.isFinite(u.x), `hp=${u.hp}`);
     }
@@ -205,6 +205,67 @@ async function testFactoriesAndServices() {
     log("Wall: factory shape", w.x === 4000 && w.side === -1 && w.level === 0 && !w.commissioned);
   } catch (e) {
     log("Wall: factory", false, e.message);
+  }
+}
+
+async function testClericHealing() {
+  let state = null;
+  let previous = null;
+  try {
+    ({ state } = await import("./src/core/state.js"));
+    const { makePlayer } = await import("./src/entities/Player.js");
+    const { makeUnit } = await import("./src/entities/Unit.js?smoke=cleric1");
+    const { clericAI } = await import("./src/systems/ai/ClericAI.js");
+    const { drawCleric } = await import("./src/rendering/sprites/Cleric.js");
+    const { buildStations } = await import("./src/systems/infrastructure/GameInit.js?smoke=cleric1");
+    const { CFG, STATIONS_X } = await import("./src/config/config.js?smoke=cleric1");
+    previous = {
+      player: state.player,
+      base: state.base,
+      walls: state.walls,
+      buildings: state.buildings,
+      stations: state.stations,
+      farmLevel: state.farmLevel,
+      units: state.units,
+      enemies: state.enemies,
+      animals: state.animals,
+      particles: state.particles,
+      floatTexts: state.floatTexts,
+    };
+
+    const cleric = makeUnit("cleric", 4500);
+    const guard = makeUnit("guard", 4540);
+    guard.hp = 4;
+    state.player = makePlayer();
+    state.base = { x: 4500, level: 3, hp: 130, maxHp: 130 };
+    state.walls = [];
+    state.buildings = [];
+    state.stations = [];
+    state.farmLevel = 0;
+    state.units = [cleric, guard];
+    state.enemies = [];
+    state.animals = [];
+    state.particles = [];
+    state.floatTexts = [];
+
+    clericAI(cleric, 0.016);
+    log("Cleric: heals wounded ally", guard.hp === 5 && cleric.cooldown > 0 && cleric.healFlash > 0,
+      `guard hp=${guard.hp}, cooldown=${cleric.cooldown}`);
+    drawCleric(cleric);
+    log("Cleric: sprite renders", true);
+    log("Cleric: balance config", CFG.clericCost === 9 && STATIONS_X.cleric === CFG.baseX - 220);
+
+    buildStations();
+    const station = state.stations.find(s => s.id === "cleric");
+    const beforeRecruit = state.units.length;
+    if (station) station.onPaid();
+    const recruited = state.units[state.units.length - 1];
+    log("Cleric: recruitment station", !!station && /heals wounded allies/.test(station.label())
+      && state.units.length === beforeRecruit + 1 && recruited.role === "cleric");
+  } catch (e) {
+    log("Cleric: healing behavior", false, e.message);
+  } finally {
+    if (state && previous) Object.assign(state, previous);
   }
 }
 
@@ -295,6 +356,8 @@ async function runAll() {
   await testConfigData();
   updateSummary();
   await testFactoriesAndServices();
+  updateSummary();
+  await testClericHealing();
   updateSummary();
   await testGameBoot();
   updateSummary();

@@ -1,16 +1,16 @@
 import { CFG } from '../../config/config.js';
-import { ENEMY_TYPES } from '../../config/enemies.js?v=biomeactive4';
+import { ENEMY_TYPES } from '../../config/enemies.js';
 import { clamp, lerp, dist, rand, applyCrit } from '../../util/math.js';
 import { groundY } from '../../core/canvas.js';
 import { Game, state } from '../../core/state.js';
 import { inject } from '../../core/services.js';
 import { Audio } from '../infrastructure/Audio.js';
-import { spawnParticles, floaty, critFloaty, spawnEnemy } from '../world/SpawnSystem.js?v=biomeactive4';
-import { meleeHitPlayer, damagePlayer } from '../combat/PlayerCombat.js?v=biomeactive4';
-import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js?v=biomeactive4';
+import { spawnParticles, floaty, critFloaty, spawnEnemy } from '../world/SpawnSystem.js';
+import { meleeHitPlayer, damagePlayer } from '../combat/PlayerCombat.js';
+import { killEnemy, spawnImpBlood } from '../../util/EnemyUtils.js';
 import { wallHeight, wallReady, wallRenderWidth, entityWallLift } from '../../entities/Wall.js';
-import { updateBoss, dropRiderFromDragon, spawnFirePool } from './BossAI.js?v=biomeactive4';
-import { updateBruteRig } from '../../rendering/sprites/Brute.js?v=biomeactive4';
+import { updateBoss, dropRiderFromDragon, spawnFirePool } from './BossAI.js';
+import { updateBruteRig } from '../../rendering/sprites/Brute.js';
 
 const IMP_STACK_STEP = 18;
 const IMP_ATTACH_RANGE = 34;
@@ -715,23 +715,6 @@ function fireImpTarget(e, range) {
     if (d < bd) { bd = d; best = u; }
   }
   return best;
-}
-
-function impAttackGuard(e, t, guard) {
-  if (!guard || guard.hp <= 0 || guard.dying) return;
-  if (e.attackCd > 0 || e.aiState === "recovery") return;
-  e.attackCd = 0.75;
-  e.attackAnim = 0.25;
-  const crit = applyCrit(t.meleeDmg || 1, CFG.critChance, CFG.critMultiplier);
-  guard.hp -= crit.damage;
-  guard.panic = 0.25;
-  guard.aiState = "combat";
-  guard.combatTarget = e;
-  guard.strike = Math.max(guard.strike || 0, 0.12);
-  spawnParticles(guard.x, groundY - 30, 3, "#7a1f1f");
-  if (crit.isCrit) critFloaty(guard.x, crit.damage);
-  else floaty(guard.x, "-" + crit.damage, "#7a1f1f");
-  Audio.hit();
 }
 
 function beginImpAttack(e, targetKind, target, kind) {
@@ -1876,6 +1859,20 @@ export function updateEnemies(dt) {
     updateEnemyGait(e, dt);
     if (e.emberWard > 0) e.emberWard = Math.max(0, e.emberWard - dt);
     if (e.emberFrenzy > 0) e.emberFrenzy = Math.max(0, e.emberFrenzy - dt);
+    if (t.fireImmune && e.burn) {
+      e.burn = 0;
+      e.burnTick = 0;
+      e.burnDmg = 0;
+      e.ignited = false;
+    }
+    if (t.emberTrail && !e.fleeing) {
+      e.emberTrailCd = (e.emberTrailCd ?? rand(0.04, 0.18)) - dt;
+      if (e.emberTrailCd <= 0) {
+        e.emberTrailCd = rand(0.18, 0.32);
+        spawnParticles(e.x - (e.dir || 1) * rand(5, 12), groundY - rand(3, 12), 1,
+          Math.random() < 0.3 ? "#ffd060" : "#ff6a20", 22, 34);
+      }
+    }
     if (updateBiomeCommon(e, t, dt)) continue;
 
     // Imps riding on the fire dragon's back stay seated until dropped

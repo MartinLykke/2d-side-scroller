@@ -36,7 +36,7 @@ export const BIOME_ENEMY_POOLS = {
     heavy: "murkAbomination",
   },
   volcano: {
-    basic: ["imp", "ashFiend"],
+    basic: ["imp", "ashFiend", "emberHound"],
     standard: ["fireImp", "magmaGargoyle"],
     special: ["chainImp", "brute", "ashPriest"],
     heavy: ["siegeImp", "obsidianJuggernaut"],
@@ -116,6 +116,11 @@ export const ENEMY_TYPES = {
     name: "Ash-Fiend", hp: 8, speed: 138, w: 22, color: "#3a1814", eye: "#ffb040",
     reward: 2, dmg: 8, baseDmg: 3, meleeDmg: 1, biome: "volcano",
     explodeOnDeath: true, explodeOnWall: true,
+  },
+  emberHound: {
+    name: "Ember Hound", hp: 9, speed: 132, w: 28, color: "#2b1816", eye: "#ffd060",
+    reward: 2, dmg: 5, baseDmg: 2, meleeDmg: 1, biome: "volcano",
+    fireImmune: true, emberTrail: true,
   },
   magmaGargoyle: {
     name: "Magma Gargoyle", hp: 30, speed: 56, w: 36, color: "#302222", eye: "#ff7a24",

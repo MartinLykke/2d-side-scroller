@@ -65,8 +65,6 @@ export const STAT_RANGES = {
   magic: { dmgByRarity: [[2, 3], [2, 4], [3, 5], [4, 7], [6, 9]], speed: [0.6, 2.2], range: [270, 440] },
 };
 
-export const SPELL_TYPES = ["fireball", "waterjet", "lightning", "meteor", "arcane", "shadow", "void"];
-
 // ---------- Procedural spell "recipe" system (generated staffs only) ----------
 // Five independent axes are rolled per generated magic weapon and combined at
 // cast time in SpellSystem.js: a themed Element (palette + flavor), a

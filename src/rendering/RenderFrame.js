@@ -1,6 +1,6 @@
 import { W } from '../core/canvas.js';
 import { Game, state } from '../core/state.js';
-import { ENEMY_TYPES } from '../config/enemies.js?v=biomeactive4';
+import { ENEMY_TYPES } from '../config/enemies.js';
 import {
   RENDER_BUDGETS,
   budgetDetailRank,
@@ -145,14 +145,6 @@ export function inFrameViewX(x, pad = 0) {
   return x >= view.left && x <= view.right;
 }
 
-export function frameNow() {
-  return frame.now || performance.now() / 1000;
-}
-
 export function renderBudget() {
   return frame.budget || RENDER_BUDGETS.high;
-}
-
-export function renderLoad() {
-  return frame.load;
 }

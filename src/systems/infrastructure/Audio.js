@@ -586,6 +586,26 @@ export const Audio = {
         this._osc(2640, 0.4, 'sine', 0.022);
         this._noise(0.12, 0.05, 'highpass', 4000, 2, this.reverbNode);
         break;
+      case "fracture": // detuned glass tearing in two directions at once
+        this._pitchOsc(340, 1150, 0.16, 'square', 0.045);
+        this._pitchOsc(1180, 300, 0.18, 'sawtooth', 0.035);
+        this._noise(0.14, 0.06, 'bandpass', 3200, 5);
+        break;
+      case "gale": // a hard upward rush of air
+        this._pitchOsc(180, 900, 0.42, 'sine', 0.05);
+        this._noise(0.45, 0.13, 'bandpass', 900, 0.9, this.reverbNode);
+        this._noise(0.2, 0.05, 'highpass', 3000, 1.5);
+        break;
+      case "bastion": // stone on stone over a low horn
+        this._pitchOsc(110, 62, 0.4, 'triangle', 0.11);
+        this._osc(220, 0.5, 'sawtooth', 0.035, { attack: 0.02, decay: 0.2, sustain: 0.3 });
+        this._noise(0.26, 0.1, 'lowpass', 900, 1);
+        break;
+      case "larva": // a wet chitter, close to the ear
+        this._pitchOsc(620, 300, 0.14, 'triangle', 0.045);
+        this._noise(0.16, 0.05, 'bandpass', 2400, 4);
+        setTimeout(() => { if (this.ctx && this.enabled) this._pitchOsc(520, 260, 0.1, 'triangle', 0.03); }, 90);
+        break;
     }
   },
 

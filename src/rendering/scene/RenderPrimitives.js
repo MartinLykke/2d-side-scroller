@@ -1,5 +1,5 @@
 import { ctx, groundY } from '../../core/canvas.js';
-import { FX, windGust, windSway } from '../Effects.js?v=biomeactive4';
+import { FX, windGust, windSway } from '../Effects.js';
 import { groundShadow } from '../DrawHelpers.js';
 
 export function drawTorch(x, y) {

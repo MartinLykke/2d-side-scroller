@@ -1,4 +1,4 @@
-import { clamp, lerp, lerpColor, rgb, withA, shade } from '../util/math.js';
+import { clamp, lerpColor, rgb } from '../util/math.js';
 import { ctx, groundY } from '../core/canvas.js';
 
 // ---------- Basic shapes ----------
@@ -69,6 +69,11 @@ const WAND_LOOKS = {
   weeping_sapphire:  { len:52, wood:"#2a3a4a", woodLt:"#4e6a80", trim:"#7fd8ff", gem:"#3aa8d8", core:"#e8fbff", kind:"teardrop" },
   fractured_monolith:{ len:40, wood:"#1c1418", woodLt:"#3a2a2a", trim:"#ff5a2a", gem:"#14100f", core:"#ffd060", kind:"monolith", noHaft:true },
   raven_scepter:     { len:44, wood:"#1e1626", woodLt:"#3c2e4c", trim:"#9a86c8", gem:"#241a30", core:"#d8c8f0", kind:"raven" },
+  // Autonomous foci — the four that aim themselves.
+  rupture_shard:  { len:42, wood:"#241038", woodLt:"#4a1e6e", trim:"#c46bff", gem:"#8a2aff", core:"#ffffff", kind:"rupture" },
+  gale_staff:     { len:48, wood:"#d8d2c4", woodLt:"#f6f2e8", trim:"#8fd8ff", gem:"#3aa8e0", core:"#ffffff", kind:"gale" },
+  bastion_scepter:{ len:40, wood:"#6a6258", woodLt:"#9a9084", trim:"#f0b855", gem:"#4a4238", core:"#ffd88a", kind:"bastion" },
+  hive_scepter:   { len:44, wood:"#3a2e1e", woodLt:"#6e5a38", trim:"#9ef0b8", gem:"#2e4a34", core:"#d8ffc8", kind:"hive" },
 };
 const DEFAULT_WAND = { len:38, wood:"#3a2448", woodLt:"#5c3d70", trim:"#d0a0ff", gem:"#b080ff", core:"#f0e4ff", kind:"arcane" };
 
@@ -188,6 +193,111 @@ function drawWandShaft(look, top, bot, t) {
     ctx.strokeStyle = "#5a1018"; ctx.lineWidth = 0.9; ctx.globalAlpha = 0.75;
     ctx.beginPath(); ctx.moveTo(-1, top * 0.6); ctx.lineTo(0.8, top * 0.3); ctx.stroke();
     ctx.globalAlpha = 1;
+    ctx.lineCap = "butt";
+    return;
+  }
+  if (look.kind === "rupture") {
+    // the shaft can't decide where it is: a solid rod plus an offset ghost of
+    // itself that never quite lines up
+    const t = performance.now() / 1000;
+    ctx.lineCap = "round";
+    ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = 0.4;
+    ctx.strokeStyle = look.trim; ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(Math.sin(t * 21) * 1.6, bot);
+    ctx.lineTo(Math.sin(t * 17 + 2) * 1.8, top + 2);
+    ctx.stroke();
+    ctx.restore();
+    ctx.strokeStyle = look.wood; ctx.lineWidth = 3.4;
+    ctx.beginPath(); ctx.moveTo(0, bot); ctx.lineTo(0, top + 2); ctx.stroke();
+    ctx.strokeStyle = look.woodLt; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(-0.4, bot - 1); ctx.lineTo(-0.4, top + 3); ctx.stroke();
+    // hairline cracks in the air along its length
+    ctx.strokeStyle = look.core; ctx.lineWidth = 0.6; ctx.globalAlpha = 0.35 + 0.35 * Math.sin(t * 9);
+    for (let k = 0; k < 3; k++) {
+      const y = bot + (top - bot) * (0.25 + k * 0.25);
+      ctx.beginPath(); ctx.moveTo(-3.5, y + 1); ctx.lineTo(-1, y - 1); ctx.lineTo(-3, y - 3.5); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.lineCap = "butt";
+    return;
+  }
+  if (look.kind === "gale") {
+    // pale wood bent by a wind that hasn't stopped blowing since it was cut
+    const t = performance.now() / 1000;
+    const bend = Math.sin(t * 2.6) * 1.2;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = look.wood; ctx.lineWidth = 3.4;
+    ctx.beginPath();
+    ctx.moveTo(0, bot);
+    ctx.bezierCurveTo(2.2 + bend, bot * 0.4, -2.4 + bend, top * 0.4, 0.6 + bend, top + 2);
+    ctx.stroke();
+    ctx.strokeStyle = look.woodLt; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(-0.5, bot - 1);
+    ctx.bezierCurveTo(1.6 + bend, bot * 0.4, -2.8 + bend, top * 0.4, 0.1 + bend, top + 3);
+    ctx.stroke();
+    // streamers snapping off the grain
+    ctx.strokeStyle = look.trim; ctx.lineWidth = 0.8;
+    for (let k = 0; k < 3; k++) {
+      const p = 0.3 + k * 0.22;
+      const y = bot + (top - bot) * p;
+      const w = 3 + Math.sin(t * 6 + k * 2) * 2;
+      ctx.globalAlpha = 0.35 + 0.3 * Math.sin(t * 5 + k);
+      ctx.beginPath();
+      ctx.moveTo(1.4, y);
+      ctx.quadraticCurveTo(1.4 + w, y - 1.5, 1.4 + w * 1.7, y + 0.6);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.lineCap = "butt";
+    return;
+  }
+  if (look.kind === "bastion") {
+    // a short column of the same masonry your walls are built from
+    ctx.fillStyle = look.wood;
+    roundedRect(-2.4, top + 1, 4.8, bot - top - 1, 1.2); ctx.fill();
+    ctx.fillStyle = look.woodLt;
+    roundedRect(-2.4, top + 1, 1.7, bot - top - 1, 1.2); ctx.fill();
+    // course lines: it is literally built, not carved
+    ctx.strokeStyle = "rgba(24,20,16,0.55)"; ctx.lineWidth = 0.7;
+    for (let k = 1; k < 5; k++) {
+      const y = top + 1 + (bot - top - 1) * (k / 5);
+      ctx.beginPath(); ctx.moveTo(-2.4, y); ctx.lineTo(2.4, y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(k % 2 ? -0.6 : 0.9, y); ctx.lineTo(k % 2 ? -0.6 : 0.9, y + (bot - top - 1) / 5); ctx.stroke();
+    }
+    // banded iron collar
+    ctx.fillStyle = look.trim;
+    roundedRect(-3, top + 5.5, 6, 2.2, 1); ctx.fill();
+    return;
+  }
+  if (look.kind === "hive") {
+    // interlocking chitin plates over a segmented core, faintly twitching
+    const t = performance.now() / 1000;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = look.wood; ctx.lineWidth = 3.6;
+    ctx.beginPath(); ctx.moveTo(0, bot); ctx.lineTo(0, top + 2); ctx.stroke();
+    ctx.strokeStyle = look.woodLt; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(-0.5, bot - 1); ctx.lineTo(-0.5, top + 3); ctx.stroke();
+    // overlapping segment plates
+    ctx.fillStyle = look.woodLt;
+    for (let k = 0; k < 6; k++) {
+      const y = bot - 2 - k * (bot - top) * 0.17;
+      const w = 2.6 + Math.sin(k * 1.4) * 0.5;
+      ctx.beginPath(); ctx.ellipse(0, y, w, 1.5, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    // vestigial legs that still remember how to move
+    ctx.strokeStyle = look.wood; ctx.lineWidth = 1;
+    for (let k = 0; k < 4; k++) {
+      const p = 0.22 + k * 0.18;
+      const y = bot + (top - bot) * p;
+      const side = k % 2 ? 1 : -1;
+      const twitch = Math.sin(t * 3.4 + k * 1.7) * 0.9;
+      ctx.beginPath();
+      ctx.moveTo(side * 1.6, y);
+      ctx.quadraticCurveTo(side * 4.4, y - 1 + twitch, side * 3.4, y + 3 + twitch);
+      ctx.stroke();
+    }
     ctx.lineCap = "butt";
     return;
   }
@@ -588,6 +698,69 @@ function drawWandHead(look, top, t, cast) {
       ctx.restore();
       break;
     }
+    case "rupture": {
+      // a chunk of raw crystal that will not hold still, showing an inverted
+      // sliver of the world and cracking the air it hangs in
+      const jx = Math.sin(t * 37) * 1.5 + Math.sin(t * 23.3) * 0.9;
+      const jy = Math.cos(t * 31) * 1.4 + Math.sin(t * 19.7) * 0.8;
+      const cx = jx, cy = top - 7 + jy;
+      // fracture lines torn through the air around it
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.3 + cast * 0.45;
+      ctx.strokeStyle = look.trim; ctx.lineWidth = 0.9;
+      for (let k = 0; k < 5; k++) {
+        const a = t * 0.6 + k * 1.257;
+        const r0 = 8 + Math.sin(t * 6 + k) * 1.5, r1 = 15 + Math.sin(t * 3 + k * 2) * 4;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+        ctx.lineTo(cx + Math.cos(a + 0.18) * (r0 + r1) * 0.55, cy + Math.sin(a + 0.18) * (r0 + r1) * 0.55);
+        ctx.lineTo(cx + Math.cos(a - 0.1) * r1, cy + Math.sin(a - 0.1) * r1);
+        ctx.stroke();
+      }
+      ctx.restore();
+      // the prongs never touch it — it floats clear of the setting
+      ctx.strokeStyle = look.woodLt; ctx.lineWidth = 1.7;
+      for (const s of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(s * 2, top + 1.5);
+        ctx.quadraticCurveTo(s * 5.4, top - 1, s * 4.2, top - 4.5);
+        ctx.stroke();
+      }
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(t * 1.6);
+      // outer shard: hard iridescent facets
+      const facets = ["#8a2aff", "#c46bff", "#ff7ad8", "#6ad8ff"];
+      for (let k = 0; k < 4; k++) {
+        const a0 = k * Math.PI * 0.5, a1 = a0 + Math.PI * 0.5;
+        ctx.fillStyle = facets[k];
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(a0) * 6, Math.sin(a0) * 6.8);
+        ctx.lineTo(Math.cos((a0 + a1) / 2) * 7.2, Math.sin((a0 + a1) / 2) * 8);
+        ctx.lineTo(Math.cos(a1) * 6, Math.sin(a1) * 6.8);
+        ctx.closePath(); ctx.fill();
+      }
+      // the inverted reflection trapped inside
+      ctx.save(); ctx.globalCompositeOperation = "difference";
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath(); ctx.moveTo(0, -3.4); ctx.lineTo(2.4, 0); ctx.lineTo(0, 3.4); ctx.lineTo(-2.4, 0); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = look.core;
+      ctx.beginPath(); ctx.arc(0, 0, 1.4 + cast * 0.8, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      // unstable energy bleeding off it
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      for (let k = 0; k < 3; k++) {
+        const p = (t * 1.6 + k * 0.33) % 1;
+        ctx.globalAlpha = (1 - p) * 0.6;
+        ctx.fillStyle = k % 2 ? look.trim : "#ff7ad8";
+        const a = k * 2.1 + t * 2.4;
+        ctx.beginPath(); ctx.arc(cx + Math.cos(a) * (4 + p * 12), cy + Math.sin(a) * (4 + p * 12), 1.2 * (1 - p) + 0.4, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+      break;
+    }
     case "fork": {
       // two amethyst prongs with lightning jumping the gap; the air behind
       // them warps from the hum
@@ -667,6 +840,58 @@ function drawWandHead(look, top, t, cast) {
       ctx.restore();
       break;
     }
+    case "gale": {
+      // a live tornado kept in an azure cage, straining against the bars
+      const spin = t * 4.2 + cast * 3;
+      ctx.save();
+      ctx.translate(0, top - 7);
+      // the cage: four bowed ribs and two hoops
+      ctx.strokeStyle = look.gem; ctx.lineWidth = 1.5;
+      for (let k = 0; k < 4; k++) {
+        const off = -3.4 + k * 2.27;
+        ctx.beginPath();
+        ctx.moveTo(off * 0.55, -7.5);
+        ctx.quadraticCurveTo(off * 1.5, 0, off * 0.55, 7.5);
+        ctx.stroke();
+      }
+      // the trapped funnel, wound tight
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      for (let k = 0; k < 7; k++) {
+        const p = k / 6;
+        const yy = -6.6 + p * 13;
+        const wob = Math.sin(spin + p * 5) * (1.6 - p);
+        ctx.globalAlpha = 0.34 + 0.3 * Math.sin(spin * 1.7 + k);
+        ctx.strokeStyle = k % 2 ? "#ffffff" : look.trim;
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.ellipse(wob, yy, 4.4 - p * 3.3, 1.5 - p * 0.9, 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+      // hoops sit in front so the funnel reads as caged
+      ctx.strokeStyle = look.woodLt; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.ellipse(0, -7.2, 3.6, 1.3, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(0, 7.2, 4.6, 1.6, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = look.trim; ctx.lineWidth = 0.7; ctx.globalAlpha = 0.8;
+      ctx.beginPath(); ctx.ellipse(0, -7.2, 3.6, 1.3, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.restore();
+      // gusts that got out
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      for (let k = 0; k < 3; k++) {
+        const p = (t * 1.3 + k * 0.34) % 1;
+        ctx.globalAlpha = (1 - p) * 0.45;
+        ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 0.9;
+        const yy = top - 7 - p * 14;
+        ctx.beginPath();
+        ctx.moveTo(-6 - p * 5, yy);
+        ctx.quadraticCurveTo(0, yy - 2 - p * 3, 6 + p * 5, yy);
+        ctx.stroke();
+      }
+      ctx.restore();
+      break;
+    }
     case "monolith": {
       // a cracked slab of obsidian hanging free at the mage's shoulder, magma
       // bleeding through the fractures on a slow heartbeat
@@ -732,6 +957,95 @@ function drawWandHead(look, top, t, cast) {
       ctx.beginPath(); ctx.arc(0.4, top - 8, 1.5, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
       drawWandOrbit(0, top - 7, 11, 6, 3, look.trim, t, { size: 1.1, alpha: 0.5, speed: 2.6 });
+      break;
+    }
+    case "bastion": {
+      // a watchtower hearth, still burning, mounted where a gem should be
+      const flare = 0.85 + 0.15 * Math.sin(t * 6.5) + cast * 0.3;
+      // the tower: crenellated stub of wall
+      ctx.fillStyle = look.gem;
+      roundedRect(-5.2, top - 9, 10.4, 9, 1.2); ctx.fill();
+      ctx.fillStyle = look.wood;
+      roundedRect(-5.2, top - 9, 4.4, 9, 1.2); ctx.fill();
+      ctx.fillStyle = look.woodLt;
+      for (let k = 0; k < 3; k++) ctx.fillRect(-5.2 + k * 3.9, top - 12, 2.4, 3.2); // merlons
+      ctx.strokeStyle = "rgba(20,16,12,0.5)"; ctx.lineWidth = 0.6;
+      ctx.beginPath(); ctx.moveTo(-5.2, top - 5.5); ctx.lineTo(5.2, top - 5.5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-5.2, top - 2.5); ctx.lineTo(5.2, top - 2.5); ctx.stroke();
+      // the hearth in the tower mouth
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = 0.5 * flare;
+      const hg = ctx.createRadialGradient(0, top - 8, 1, 0, top - 8, 13 * flare);
+      hg.addColorStop(0, look.core); hg.addColorStop(0.4, look.trim); hg.addColorStop(1, "rgba(120,60,10,0)");
+      ctx.fillStyle = hg;
+      ctx.beginPath(); ctx.arc(0, top - 8, 13 * flare, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = look.trim;
+      ctx.beginPath();
+      ctx.moveTo(0, top - 13 * flare);
+      ctx.bezierCurveTo(3, top - 9, 2.6, top - 6, 0, top - 5);
+      ctx.bezierCurveTo(-2.6, top - 6, -3, top - 9, 0, top - 13 * flare);
+      ctx.fill();
+      ctx.fillStyle = look.core;
+      ctx.beginPath(); ctx.ellipse(0, top - 7.4, 1.2, 2 * flare, 0, 0, Math.PI * 2); ctx.fill();
+      // embers drifting off the beacon
+      ctx.fillStyle = look.trim;
+      for (let k = 0; k < 2; k++) {
+        const p = (t * 0.8 + k * 0.5) % 1;
+        ctx.globalAlpha = (1 - p) * 0.8;
+        ctx.beginPath(); ctx.arc(Math.sin(t * 2 + k * 3) * 3.5, top - 12 - p * 10, 0.8, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case "hive": {
+      // a chitin hive-bulb, breathing, with soul-larvae circling it
+      const breathe = 1 + Math.sin(t * 2.8) * 0.07 + cast * 0.1;
+      // mandibles cradling the bulb
+      ctx.strokeStyle = look.woodLt; ctx.lineWidth = 1.8;
+      for (const s of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(s * 2.2, top + 2);
+        ctx.quadraticCurveTo(s * 6.5, top - 3, s * 3, top - 10.5);
+        ctx.stroke();
+      }
+      ctx.save();
+      ctx.translate(0, top - 6);
+      ctx.scale(breathe, breathe);
+      // the hive body: stacked, lopsided cells
+      ctx.fillStyle = look.gem;
+      ctx.beginPath(); ctx.ellipse(0, 0, 5.4, 6.4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = look.wood;
+      ctx.beginPath(); ctx.ellipse(1.4, 0.8, 3.8, 4.8, 0.2, 0, Math.PI * 2); ctx.fill();
+      // open cells, some occupied
+      ctx.fillStyle = "#101a12";
+      const cells = [[-1.8, -2.6], [1.4, -1.6], [-0.6, 1.2], [2, 2.4], [-2.4, 1]];
+      for (let k = 0; k < cells.length; k++) {
+        ctx.beginPath(); ctx.arc(cells[k][0], cells[k][1], 1.3, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = look.core;
+      for (let k = 0; k < cells.length; k++) {
+        const glow = Math.sin(t * 3 + k * 1.9);
+        if (glow < 0.3) continue;
+        ctx.globalAlpha = (glow - 0.3) * 1.2;
+        ctx.beginPath(); ctx.arc(cells[k][0], cells[k][1], 0.8, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
+      // the larvae themselves, drifting on their own errands
+      ctx.save(); ctx.globalCompositeOperation = "lighter";
+      for (let k = 0; k < 4; k++) {
+        const a = t * (0.9 + k * 0.22) + k * 1.57;
+        const rx = 9 + Math.sin(t * 1.7 + k) * 2.5;
+        const lx = Math.cos(a) * rx, ly = top - 6 + Math.sin(a) * rx * 0.55;
+        ctx.globalAlpha = 0.35 + 0.35 * Math.sin(t * 4 + k);
+        ctx.fillStyle = look.trim;
+        // a fat little grub: body plus a brighter head
+        ctx.beginPath(); ctx.ellipse(lx, ly, 1.8, 1.1, a, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = look.core;
+        ctx.beginPath(); ctx.arc(lx + Math.cos(a) * 1.2, ly + Math.sin(a) * 1.2, 0.7, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
       break;
     }
   }
@@ -1018,18 +1332,6 @@ export function drawHpBar(x, y, w, frac, color) {
   frac=clamp(frac,0,1); if (frac>=0.999) return;
   ctx.fillStyle="rgba(0,0,0,0.55)"; ctx.fillRect(x-w/2-1,y-1,w+2,5);
   ctx.fillStyle=color; ctx.fillRect(x-w/2,y,w*frac,3);
-}
-
-export function drawFocusHalo(x, y, rx, ry, col, alpha) {
-  ctx.save();
-  ctx.globalCompositeOperation="lighter";
-  const g=ctx.createRadialGradient(x,y,8,x,y,rx);
-  g.addColorStop(0,withA(col,alpha));
-  g.addColorStop(0.48,withA(col,alpha*0.28));
-  g.addColorStop(1,withA(col,0));
-  ctx.fillStyle=g;
-  ctx.beginPath(); ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2); ctx.fill();
-  ctx.restore();
 }
 
 export function drawHeart(x, y, s, col) {

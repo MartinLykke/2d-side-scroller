@@ -6,10 +6,10 @@ async function setup() {
   document.getElementById('btn-start')?.click();
   const [m, sp, cv, R, dev] = await Promise.all([
     import('/src/core/state.js'),
-    import('/src/systems/world/SpawnSystem.js?v=biomeactive4'),
+    import('/src/systems/world/SpawnSystem.js'),
     import('/src/core/canvas.js'),
-    import('/src/rendering/Renderer.js?v=biomevisual4'),
-    import('/src/systems/world/AssaultSystem.js?v=biomeactive4').catch(() => null),
+    import('/src/rendering/Renderer.js'),
+    import('/src/systems/world/AssaultSystem.js').catch(() => null),
   ]);
   window.__S = m;
   const { Game, state } = m;
